@@ -1406,6 +1406,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     const parsedRate = parseFloat(usdRate);
     const effectiveRate = !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 
+    let _closeDialog = false; // only close the dialog on success; keep open on any failure so user can retry
     setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
     try {
       const selectedRecipients = availableRecipients
@@ -1503,11 +1504,13 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           const failedCount = result.error ? (parseInt(result.error) || (result.success ? 0 : selectedRecipients.length)) : 0;
 
           if (result.success && !result.error) {
+            _closeDialog = true;
             toast({
               title: 'Sent with Both Attachments / تم الإرسال مع المرفقين',
               description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with Excel report (6 sheets) + signed PDF certificates attached. / تم إرسال ${bulkRequests.length} طلب مع ملف Excel (6 أوراق) وشهادات PDF الموقعة.`,
             });
           } else if (result.success && result.error) {
+            _closeDialog = true;
             toast({
               title: 'Partially Sent / تم الإرسال جزئياً',
               description: `${sentCount} of ${selectedRecipients.length} recipient(s) received the email. ${failedCount} failed.`,
@@ -1646,6 +1649,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         const failedCount = result.error ? (parseInt(result.error) || (result.success ? 0 : selectedRecipients.length)) : 0;
 
         if (result.success && !result.error) {
+          _closeDialog = true;
           toast({
             title: "Sent / تم الإرسال",
             description: pdfSkipGen
@@ -1657,6 +1661,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with Excel + signed PDF certificates attached. / تم إرسال ${bulkRequests.length} طلب مع Excel وشهادات PDF الموقعة.`,
           });
         } else if (result.success && result.error) {
+          _closeDialog = true;
           toast({
             title: `Partially Sent / تم الإرسال جزئياً`,
             description: `${sentCount} of ${selectedRecipients.length} recipient(s) received the email. ${failedCount} failed — check that all recipient email addresses are valid. / تم الإرسال إلى ${sentCount} من ${selectedRecipients.length}. فشل ${failedCount} — تحقق من صحة عناوين البريد.`,
@@ -1691,11 +1696,13 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         );
 
         if (result.success && !result.error) {
+          _closeDialog = true;
           toast({
             title: "Payment Request Sent / تم إرسال طلب الدفع",
             description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).`,
           });
         } else if (result.success && result.error) {
+          _closeDialog = true;
           toast({
             title: "Partially Sent / تم الإرسال جزئياً",
             description: `Some recipients did not receive the email. ${result.error}. Check that all email addresses are valid. / بعض المستلمين لم يستلموا البريد. تحقق من عناوين البريد الإلكتروني.`,
@@ -1713,7 +1720,13 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       console.error('[DownPayment] handleSendPaymentRequest failed:', err);
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
+      if (_closeDialog) {
+        // Success path — reset the dialog fully
+        setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
+      } else {
+        // Error path — keep the dialog open so the user can retry without re-selecting
+        setPaymentRequestDialog(prev => ({ ...prev, sending: false }));
+      }
     }
   };
 
