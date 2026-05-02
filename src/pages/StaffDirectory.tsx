@@ -336,6 +336,62 @@ function ProfileDetail({
             )}
           </div>
 
+          {/* ── Bank Account ── */}
+          {(() => {
+            const ba      = profile.bank_account;
+            const hasBank = !!(ba?.accountNumber || ba?.accountName);
+            return (
+              <div className="px-6 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Landmark className="h-3 w-3" />Bank Account
+                  </p>
+                  {hasBank
+                    ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><CheckCircle className="h-3 w-3" />Registered</span>
+                    : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600"><XCircle className="h-3 w-3" />Missing</span>}
+                </div>
+                {hasBank ? (
+                  <div className="rounded-md border bg-gradient-to-br from-slate-50 to-slate-50/0 dark:from-slate-900 dark:to-slate-900/0 p-4">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      {([
+                        ['Account Name',   ba?.accountName],
+                        ['Account Number', ba?.accountNumber, true],
+                        ['Bank Name',      ba?.bankName],
+                        ['Branch',         ba?.branch],
+                      ] as [string, string | undefined, boolean?][]).map(([label, val, mono]) => (
+                        <div key={label}>
+                          <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+                          <div className="flex items-center gap-1.5 group">
+                            <p className={`text-sm ${mono ? 'font-mono font-bold text-[#0F2041] dark:text-blue-300' : 'font-medium'} truncate`}>
+                              {val || <span className="text-muted-foreground font-normal text-xs">—</span>}
+                            </p>
+                            {val && (
+                              <button
+                                type="button"
+                                onClick={() => copy(val, label)}
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3">
+                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-300">No bank account registered</p>
+                      <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for this staff member.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ── Activity & Device ── */}
           <div className="px-6 py-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
