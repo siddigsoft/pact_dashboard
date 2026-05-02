@@ -267,8 +267,11 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type_acct
   ON public.notifications (type)
   WHERE type LIKE 'accounting_%';
 
-RAISE NOTICE 'acct_notify_role_users() helper function created successfully.';
-RAISE NOTICE 'All triggers applied conditionally — check NOTICE messages above for skipped tables.';
+DO $$
+BEGIN
+  RAISE NOTICE 'acct_notify_role_users() helper created. Check NOTICE messages above for skipped triggers.';
+END;
+$$;
 
 commit;
 
