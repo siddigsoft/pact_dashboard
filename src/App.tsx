@@ -130,6 +130,7 @@ const DCTPDMPublicPage = lazy(() => import('./pages/DCTPDMPublicPage'));
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
+const MMPCycleClose = lazy(() => import('./pages/MMPCycleClose'));
 const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
 const SafetyHub = lazy(() => import('./pages/SafetyHub'));
 const IncidentReports = lazy(() => import('./pages/IncidentReports'));
@@ -365,6 +366,7 @@ const AppRoutes = () => {
         <Route path="/mmp/:id/verification" element={<MMPVerificationPage />} />
         <Route path="/mmp/:id/permit-message" element={<MMPPermitMessagePage />} />
         <Route path="/mmp/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />
+        <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
         <Route path="/data-export-center" element={<DataExportCenter />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/call-analytics" element={<CallAnalytics />} />
