@@ -715,17 +715,25 @@ const MMPCycleClose = () => {
       {
         id: 'start', number: 1,
         title: 'Start Closing', titleAr: 'بدء الإغلاق',
-        desc: 'Closing process initiated. Uncovered sites have been flagged and supervisors notified.',
+        desc: 'Closing process initiated. The cycle is now locked for new visits — work through each step below in order to fully close and archive it.',
         passed: true, blocked: false,
         tab: null as string | null, actionLabel: null as string | null,
         sub: [] as typeof ri,
         remaining: 0,
-        howTo: [] as string[],
+        howTo: [
+          'This step is automatically done when you start the close process.',
+          'Work through Steps 2 → 5 in order. You can leave and come back any time — progress is saved.',
+          'Use "Check again" after completing work in another tab to update the green/red status here.',
+        ] as string[],
       },
       {
         id: 'reasons', number: 2,
         title: 'Assign Reasons — Uncovered Sites', titleAr: 'أسباب المواقع غير المغطاة',
-        desc: svItem?.description || 'Every unvisited site needs a reason before the cycle can close.',
+        desc: svItem?.passed
+          ? 'All unvisited sites have a documented reason — this gate is clear.'
+          : svRemaining > 0
+            ? `${svRemaining} site${svRemaining !== 1 ? 's' : ''} still need a reason recorded. Every unvisited site must have an explanation before the cycle can close.`
+            : (svItem?.description || 'Every unvisited site needs a reason before the cycle can close.'),
         passed: svItem?.passed ?? false,
         blocked: false,
         tab: 'uncovered', actionLabel: 'Open Uncovered Sites tab →',
@@ -763,8 +771,12 @@ const MMPCycleClose = () => {
       {
         id: 'wfp', number: 4,
         title: 'WFP Confirmation', titleAr: 'تأكيد WFP',
-        desc: wfpItem?.description || 'Upload and apply the WFP monthly monitoring Excel file.',
-        passed: wfpItem?.passed ?? false,
+        desc: wfpItem?.notConfigured
+          ? 'WFP confirmation is not configured for this MMP — this step is optional and skipped.'
+          : wfpItem?.passed
+            ? 'WFP confirmation file has been uploaded and applied — this gate is clear.'
+            : (wfpItem?.description || 'Upload and apply the WFP monthly monitoring Excel file to confirm site visits.'),
+        passed: wfpItem?.notConfigured ? true : (wfpItem?.passed ?? false),
         blocked: false,
         tab: 'wfp', actionLabel: 'Open WFP Confirmation tab →',
         sub: wfpItem ? [wfpItem] : [],
@@ -780,13 +792,15 @@ const MMPCycleClose = () => {
       {
         id: 'submit', number: 5,
         title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
-        desc: checklistMmpStatus === 'pending_approval'
-          ? 'Submitted — waiting for FOM / Director approval.'
-          : cycleReadiness.allPassed
-            ? 'All gates are green — you can now submit.'
-            : 'Complete all steps above first.',
-        passed: checklistMmpStatus === 'pending_approval',
-        blocked: checklistMmpStatus !== 'pending_approval' && !cycleReadiness.allPassed,
+        desc: checklistMmpStatus === 'closed'
+          ? 'Cycle was submitted and approved — it is permanently archived.'
+          : checklistMmpStatus === 'pending_approval'
+            ? 'Submitted — waiting for FOM / Director to approve or reject.'
+            : cycleReadiness.allPassed
+              ? 'All gates are green. Review the financial summary below, then tick the confirmation and submit.'
+              : 'Complete Steps 2–4 above first, then return here to submit.',
+        passed: checklistMmpStatus === 'pending_approval' || checklistMmpStatus === 'closed',
+        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && !cycleReadiness.allPassed,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
@@ -798,29 +812,29 @@ const MMPCycleClose = () => {
       },
       {
         id: 'approval', number: 6,
-        title: 'Final Approval & Review', titleAr: 'في انتظار الموافقة',
+        title: 'Final Approval & Archive', titleAr: 'في انتظار الموافقة',
         desc: checklistMmpStatus === 'closed'
-          ? 'Cycle approved and closed. It is now permanently archived.'
+          ? 'Cycle approved and archived. The financial settlement above is now frozen permanently.'
           : checklistMmpStatus === 'pending_approval'
             ? (isFOM || isAdmin || isSuperAdmin)
-              ? 'You have approval authority. Review the Cycle Financial Summary and Technical Details below, then approve or reject.'
-              : 'Awaiting FOM / Admin approval. Review the Cycle Financial Summary and Technical Details below while you wait.'
-            : 'Review the Cycle Financial Summary and Technical Details below at any time. The Approve & Close button will appear here once you submit in Step 5.',
+              ? 'Your approval is required. Scroll up to review the Cycle Financial Summary, then approve or reject below.'
+              : 'Submitted and waiting for FOM / Admin to approve. You will receive a notification when a decision is made.'
+            : 'This step unlocks once Step 5 is submitted. The FOM or Admin will review and approve or send back.',
         passed: checklistMmpStatus === 'closed',
         blocked: false,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: (isFOM || isAdmin || isSuperAdmin) ? [
-          'Review the Cycle Financial Summary above — check enumerator costs, advances, and obligations.',
-          'Click "Approve & Close Cycle" to archive the cycle, or "Reject & Send Back" to return it for corrections.',
-          'If rejecting, you must enter a reason so the admin knows what to fix.',
-          'Approved cycles are permanently archived and the MMP is unlocked for the next cycle.',
+          'Scroll up and review the "💰 Cycle Financial Settlement" card — verify enumerator costs, transport, advances, and the net payable amount.',
+          'If the figures look correct, click "Approve & Close Cycle" to permanently archive this cycle.',
+          'If something is wrong, click "Reject & Send Back" and enter the specific reason so the admin knows what to correct.',
+          'Once approved, the cycle status becomes Closed, the financial snapshot is frozen, and the MMP is unlocked for the next cycle.',
         ] : [
-          'Wait for the FOM, Admin, or Super Admin to log in and approve.',
-          'You will receive a notification when the cycle is approved or sent back.',
-          'If approved, the cycle status becomes "Closed" and is archived.',
-          'If rejected, the cycle returns to "Closing" state and you can make corrections.',
+          'The cycle has been submitted and is now waiting for FOM, Admin, or Super Admin to review.',
+          'You will receive an in-app notification when the cycle is approved or sent back for corrections.',
+          'If approved → the cycle status becomes Closed and appears in the Archive tab.',
+          'If rejected → the cycle returns to Closing state and you can correct the issues and re-submit.',
         ],
       },
     ];
@@ -3908,6 +3922,34 @@ const MMPCycleClose = () => {
                           </div>
                         ) : (
                           <>
+                            {/* Cycle is Closed — top banner */}
+                            {checklistMmpStatus === 'closed' && (
+                              <div className="flex items-center gap-3 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/30 px-4 py-3 mb-2">
+                                <div className="shrink-0 w-9 h-9 rounded-full bg-green-500 flex items-center justify-center">
+                                  <CheckCircle2 className="h-5 w-5 text-white" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-green-800 dark:text-green-200">Cycle Closed &amp; Archived</p>
+                                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                                    All steps are complete. The financial settlement has been frozen and this cycle is permanently archived.
+                                    {mmpFiles?.find(m => m.id === checklistMmpId)?.cycle_closed_at
+                                      ? ` Closed on ${new Date((mmpFiles.find(m => m.id === checklistMmpId) as any).cycle_closed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.`
+                                      : ''}
+                                  </p>
+                                </div>
+                                {isSuperAdmin && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="ml-auto shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 gap-1.5 text-xs"
+                                    onClick={() => { setChecklistMmpId(null); setReopenConfirmId(checklistMmpId!); setReopenReason(''); }}
+                                    data-testid="button-reopen-from-guide"
+                                  >
+                                    <RefreshCw className="h-3 w-3" /> Re-open
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                             {/* Progress bar + check-again */}
                             <div className="flex items-center gap-3 mb-4">
                               {(() => {
@@ -4111,72 +4153,6 @@ const MMPCycleClose = () => {
                                               : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
                                             }
                                           </Button>
-                                        </div>
-                                      )}
-                                      {/* Approve / Reject panel for step 6 — shown for FOM, Admin, Super Admin */}
-                                      {step.id === 'approval' && checklistMmpStatus === 'pending_approval' && (isFOM || isAdmin || isSuperAdmin) && (
-                                        <div className="mt-4 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/40 p-4 space-y-3">
-                                          {/* Header */}
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-lg">👉</span>
-                                            <div>
-                                              <p className="text-sm font-bold text-green-900 dark:text-green-100">Your action is required</p>
-                                              <p className="text-xs text-green-700 dark:text-green-300">You have approval authority for this cycle. Choose one action below.</p>
-                                            </div>
-                                          </div>
-
-                                          {/* Inline advance warning — replaces the overlapping toast */}
-                                          {pendingViaReportCount > 0 && (
-                                            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-3 py-2">
-                                              <span className="text-amber-600 text-sm mt-0.5">⚠️</span>
-                                              <div className="text-xs text-amber-800 dark:text-amber-200">
-                                                <span className="font-semibold">{pendingViaReportCount} advance(s) pending payment via report.</span>{' '}
-                                                These zero-disbursement approved advances are <span className="font-semibold">non-blocking</span> — you can close now. They must be settled in the next payment report after close.
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Step-by-step recap */}
-                                          <ol className="space-y-1 pl-1">
-                                            <li className="flex gap-2 text-xs text-green-800 dark:text-green-200">
-                                              <span className="font-bold shrink-0">1.</span>
-                                              Scroll up and review the <span className="font-semibold">Cycle Financial Summary</span> — check enumerator costs, advances, and any outstanding items.
-                                            </li>
-                                            <li className="flex gap-2 text-xs text-green-800 dark:text-green-200">
-                                              <span className="font-bold shrink-0">2.</span>
-                                              Click <span className="font-semibold text-green-700 dark:text-green-300">"Approve &amp; Close Cycle"</span> to permanently archive this cycle, or <span className="font-semibold text-red-700 dark:text-red-400">"Reject &amp; Send Back"</span> to return it for corrections.
-                                            </li>
-                                          </ol>
-
-                                          {/* Action buttons */}
-                                          <Button
-                                            className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-11 text-sm font-semibold shadow-md"
-                                            onClick={() => handleApproveCycle(checklistMmpId!)}
-                                            disabled={closingCycle}
-                                            data-testid="button-approve-cycle-wizard"
-                                          >
-                                            {closingCycle
-                                              ? <><Loader2 className="h-5 w-5 animate-spin" /> Approving &amp; Closing…</>
-                                              : <><CheckCircle2 className="h-5 w-5" /> Approve &amp; Close Cycle</>
-                                            }
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            className="w-full border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 gap-2 h-9 text-xs"
-                                            onClick={() => setBannerRejectMmpId(checklistMmpId!)}
-                                            data-testid="button-reject-cycle-wizard"
-                                          >
-                                            <XCircle className="h-4 w-4" />
-                                            Reject &amp; Send Back (requires a reason)
-                                          </Button>
-                                        </div>
-                                      )}
-
-                                      {/* Waiting state — for non-approvers when pending_approval */}
-                                      {step.id === 'approval' && checklistMmpStatus === 'pending_approval' && !(isFOM || isAdmin || isSuperAdmin) && (
-                                        <div className="mt-3 rounded-lg border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/30 px-3 py-2.5 space-y-1">
-                                          <p className="text-xs font-semibold text-purple-800 dark:text-purple-200">⏳ Waiting for FOM / Admin approval</p>
-                                          <p className="text-xs text-purple-700 dark:text-purple-300">You will be notified once the cycle is approved or sent back for corrections.</p>
                                         </div>
                                       )}
                                     </div>
@@ -4736,12 +4712,16 @@ const MMPCycleClose = () => {
                                       </div>
                                       <p className="text-xs text-muted-foreground mt-1">{step.desc}</p>
                                       {isCurrentStep && step.howTo.length > 0 && (
-                                        <div className="mt-3 rounded-lg bg-white dark:bg-amber-950/40 border border-amber-300/60 px-3 py-2.5">
-                                          <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 mb-1.5">What to do:</p>
+                                        <div className={`mt-3 rounded-lg border px-3 py-2.5 ${
+                                          step.id === 'approval'
+                                            ? 'bg-white dark:bg-purple-950/40 border-purple-300/70 dark:border-purple-700/60'
+                                            : 'bg-white dark:bg-amber-950/40 border-amber-300/60'
+                                        }`}>
+                                          <p className={`text-xs font-semibold mb-1.5 ${step.id === 'approval' ? 'text-purple-900 dark:text-purple-100' : 'text-amber-900 dark:text-amber-100'}`}>What to do:</p>
                                           <ol className="space-y-1">
                                             {step.howTo.map((instruction, i) => (
-                                              <li key={i} className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-                                                <span className="shrink-0 font-bold text-amber-600">{i + 1}.</span>
+                                              <li key={i} className={`flex items-start gap-2 text-xs ${step.id === 'approval' ? 'text-purple-800 dark:text-purple-200' : 'text-amber-800 dark:text-amber-200'}`}>
+                                                <span className={`shrink-0 font-bold ${step.id === 'approval' ? 'text-purple-600' : 'text-amber-600'}`}>{i + 1}.</span>
                                                 <span>{instruction}</span>
                                               </li>
                                             ))}
