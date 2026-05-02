@@ -4616,7 +4616,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 </Button>
                 <Button
                   onClick={handleSendPaymentRequest}
-                  disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+                  disabled={paymentRequestDialog.sending || paymentRequestDialog.loading || paymentRequestDialog.selectedRecipientIds.length === 0 || (paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length === 0)}
                   data-testid="button-confirm-send-payment-request"
                   className="bg-green-700 hover:bg-green-800 text-white"
                 >
@@ -4646,7 +4646,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 </Button>
                 <Button
                   onClick={handleSendPaymentRequest}
-                  disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+                  disabled={paymentRequestDialog.sending || paymentRequestDialog.loading || paymentRequestDialog.selectedRecipientIds.length === 0 || (paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length === 0)}
                   data-testid="button-send-payment-request"
                 >
                   {paymentRequestDialog.sending ? (
