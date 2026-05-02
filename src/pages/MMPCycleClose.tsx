@@ -569,6 +569,12 @@ const MMPCycleClose = () => {
     }
   }, []);
 
+  const [paymentRequestedAt, setPaymentRequestedAt] = useState<string | null>(null);
+  const [paymentsConfirmedAt, setPaymentsConfirmedAt] = useState<string | null>(null);
+  const [requestingPayment, setRequestingPayment] = useState(false);
+  const [confirmingPayments, setConfirmingPayments] = useState(false);
+  const [paymentRequestNote, setPaymentRequestNote] = useState('');
+
   const handleRequestPayments = useCallback(async (mmpId: string) => {
     setRequestingPayment(true);
     try {
@@ -943,12 +949,6 @@ const MMPCycleClose = () => {
 
   // Step 7 — Payment Request
   const [cycleSubmittedAt, setCycleSubmittedAt] = useState<string | null>(null);
-  const [paymentRequestedAt, setPaymentRequestedAt] = useState<string | null>(null);
-  const [paymentsConfirmedAt, setPaymentsConfirmedAt] = useState<string | null>(null);
-  const [requestingPayment, setRequestingPayment] = useState(false);
-  const [confirmingPayments, setConfirmingPayments] = useState(false);
-  const [paymentRequestNote, setPaymentRequestNote] = useState('');
-
   // Scroll guard — only auto-scroll once per step change, not on every render
   const guideScrolledStepRef = useRef<string | null>(null);
 
