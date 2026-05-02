@@ -253,6 +253,7 @@ const MMPCycleClose = () => {
   interface AdvanceSummary { status: string; count: number; totalCents: number; currency: string; }
   interface AdvanceDetail {
     id: string;
+    siteEntryId: string | null;
     requesterName: string;
     siteName: string;
     paymentType: string;
@@ -260,6 +261,25 @@ const MMPCycleClose = () => {
     paidAmount: number;
     remainingAmount: number;
     status: string;
+    currency: string;
+  }
+  interface SiteReviewEntry {
+    id: string;
+    siteName: string;
+    siteCode: string;
+    state: string;
+    locality: string;
+    status: string;
+    enumeratorName: string;
+    enumeratorFee: number;
+    transportFee: number;
+    totalFee: number;
+    costAcknowledged: boolean;
+    advanceId: string | null;
+    advanceRequested: number;
+    advancePaid: number;
+    advanceRemaining: number;
+    netToPay: number;
     currency: string;
   }
   interface WithdrawalDetail {
@@ -353,7 +373,7 @@ const MMPCycleClose = () => {
         for (let from = 0; ; from += PAGE) {
           const { data } = await supabase
             .from('down_payment_requests')
-            .select('id, status, requested_amount, total_paid_amount, remaining_amount, payment_type, site_name, currency, requested_by')
+            .select('id, mmp_site_entry_id, status, requested_amount, total_paid_amount, remaining_amount, payment_type, site_name, currency, requested_by')
             .in('mmp_site_entry_id', entryIds)
             .range(from, from + PAGE - 1);
           allAdv = [...allAdv, ...(data || [])];
@@ -384,6 +404,7 @@ const MMPCycleClose = () => {
 
         advanceDetails = allAdv.map((a: any) => ({
           id: a.id,
+          siteEntryId: a.mmp_site_entry_id ?? null,
           requesterName: nameMap[a.requested_by] || 'Unknown',
           siteName: a.site_name || '—',
           paymentType: a.payment_type || 'full_advance',
@@ -491,16 +512,229 @@ const MMPCycleClose = () => {
     }
   }, []);
 
+  const fetchAllSiteDetails = useCallback(async (mmpId: string) => {
+    setLoadingAllSites(true);
+    try {
+      const { data: siteEntries } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged')
+        .eq('mmp_file_id', mmpId)
+        .order('site_name');
+      if (!siteEntries || siteEntries.length === 0) { setAllSiteReviewData([]); return; }
+      const enumIds = [...new Set((siteEntries as any[]).map((e: any) => e.accepted_by).filter(Boolean))];
+      const nameMap: Record<string, string> = {};
+      if (enumIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name, display_name').in('id', enumIds);
+        (profiles || []).forEach((p: any) => { nameMap[p.id] = p.display_name || p.full_name || 'Unknown'; });
+      }
+      const siteIds = (siteEntries as any[]).map((e: any) => e.id);
+      const { data: advances } = await supabase
+        .from('down_payment_requests')
+        .select('id, mmp_site_entry_id, requested_amount, total_paid_amount, remaining_amount, status, currency')
+        .in('mmp_site_entry_id', siteIds);
+      const advMap: Record<string, any> = {};
+      (advances || []).forEach((a: any) => {
+        const sid = a.mmp_site_entry_id;
+        if (!sid) return;
+        const existing = advMap[sid];
+        const priority = ['approved', 'partially_paid', 'fully_paid'];
+        if (!existing || priority.includes(a.status)) advMap[sid] = a;
+      });
+      const data: SiteReviewEntry[] = (siteEntries as any[]).map((e: any) => {
+        const adv = advMap[e.id];
+        const enumFee = e.enumerator_fee ?? 0;
+        const transFee = e.transport_fee ?? 0;
+        const totalFee = e.cost ?? (enumFee + transFee);
+        const advReq = adv?.requested_amount ?? 0;
+        const advPaid = adv?.total_paid_amount ?? 0;
+        const advRem = adv?.remaining_amount ?? Math.max(0, advReq - advPaid);
+        const netToPay = Math.max(0, totalFee - advPaid);
+        return {
+          id: e.id, siteName: e.site_name || '—', siteCode: e.site_code || '—',
+          state: e.state || '—', locality: e.locality || '—', status: e.status || 'unknown',
+          enumeratorName: nameMap[e.accepted_by] || e.monitoring_by || 'Unassigned',
+          enumeratorFee: enumFee, transportFee: transFee, totalFee,
+          costAcknowledged: e.cost_acknowledged ?? false,
+          advanceId: adv?.id ?? null, advanceRequested: advReq, advancePaid: advPaid,
+          advanceRemaining: advRem, netToPay, currency: adv?.currency || 'SDG',
+        };
+      });
+      setAllSiteReviewData(data);
+    } catch (err) {
+      console.error('[SiteReview] fetchAllSiteDetails error:', err);
+    } finally {
+      setLoadingAllSites(false);
+    }
+  }, []);
+
+  const handleRequestPayments = useCallback(async (mmpId: string) => {
+    setRequestingPayment(true);
+    try {
+      const now = new Date().toISOString();
+      const mmp = (mmpFiles?.find(m => m.id === mmpId) as any);
+      const existing = mmp?.payment_tracking || {};
+      const { error } = await supabase.from('mmp_files').update({
+        payment_tracking: { ...existing, payment_requested_at: now, payment_requested_by: currentUser?.id, payment_note: paymentRequestNote || null },
+      } as any).eq('id', mmpId);
+      setPaymentRequestedAt(now);
+      if (!error) await refreshMMPFiles();
+      toast({ title: '📤 Payment Request Sent', description: 'Payment request logged. Return here to confirm once finance processes all payments.' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to request payments', variant: 'destructive' });
+    } finally {
+      setRequestingPayment(false);
+    }
+  }, [mmpFiles, currentUser, paymentRequestNote, refreshMMPFiles, toast]);
+
+  const handleConfirmPaymentsDone = useCallback(async (mmpId: string) => {
+    setConfirmingPayments(true);
+    try {
+      const now = new Date().toISOString();
+      const mmp = (mmpFiles?.find(m => m.id === mmpId) as any);
+      const existing = mmp?.payment_tracking || {};
+      const { error } = await supabase.from('mmp_files').update({
+        payment_tracking: { ...existing, payments_confirmed_at: now, payments_confirmed_by: currentUser?.id },
+      } as any).eq('id', mmpId);
+      setPaymentsConfirmedAt(now);
+      if (!error) await refreshMMPFiles();
+      toast({ title: '✅ Payments Confirmed', description: 'All payments confirmed. You can now submit this cycle for approval.' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to confirm payments', variant: 'destructive' });
+    } finally {
+      setConfirmingPayments(false);
+    }
+  }, [mmpFiles, currentUser, refreshMMPFiles, toast]);
+
+  const exportPaymentSheetExcel = useCallback(async () => {
+    if (!cycleSummaryData || !checklistMmpId) return;
+    const XLSX = await import('xlsx');
+    const mmpName = mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'Cycle';
+    const wb = XLSX.utils.book_new();
+    const advMap: Record<string, AdvanceDetail> = {};
+    cycleSummaryData.advanceDetails.forEach(a => { if (a.siteEntryId) advMap[a.siteEntryId] = a; });
+    const totalGross = cycleSummaryData.enumeratorCosts.reduce((s, e) => s + e.totalCost, 0);
+    const totalAdvPaid = Object.values(advMap).reduce((s, a) => s + a.paidAmount, 0);
+    const totalNet = Math.max(0, totalGross - totalAdvPaid);
+    const payRows = cycleSummaryData.enumeratorCosts.map(e => {
+      const adv = advMap[e.id];
+      const advPaid = adv?.paidAmount ?? 0;
+      return {
+        'Enumerator': e.enumeratorName, 'Site Name': e.siteName, 'Site Code': e.siteCode,
+        'State': e.state, 'Locality': e.locality, 'Visit Status': e.status.replace(/_/g, ' '),
+        'Enum. Fee (SDG)': e.enumeratorFee, 'Transport Fee (SDG)': e.transportFee,
+        'Gross Total (SDG)': e.totalCost,
+        'Advance Paid (SDG)': advPaid > 0 ? advPaid : 0,
+        'Advance Remaining (SDG)': adv && adv.remainingAmount > 0 ? adv.remainingAmount : 0,
+        'NET TO PAY (SDG)': Math.max(0, e.totalCost - advPaid),
+        'Cost Ack.': e.costAcknowledged ? 'Yes' : 'No',
+      };
+    });
+    payRows.push({
+      'Enumerator': 'TOTAL', 'Site Name': '', 'Site Code': '', 'State': '', 'Locality': '', 'Visit Status': '',
+      'Enum. Fee (SDG)': cycleSummaryData.totalEnumeratorFee, 'Transport Fee (SDG)': cycleSummaryData.totalTransportFee,
+      'Gross Total (SDG)': totalGross, 'Advance Paid (SDG)': totalAdvPaid,
+      'Advance Remaining (SDG)': Object.values(advMap).reduce((s, a) => s + Math.max(0, a.remainingAmount), 0),
+      'NET TO PAY (SDG)': totalNet, 'Cost Ack.': '',
+    } as any);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payRows), 'Payment Sheet');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+      { 'Item': 'MMP Cycle', 'Value': mmpName },
+      { 'Item': 'Generated', 'Value': new Date().toLocaleDateString('en-GB') },
+      { 'Item': 'Total Dispatched Sites', 'Value': cycleSummaryData.enumeratorCosts.length },
+      { 'Item': 'Gross Fees (SDG)', 'Value': totalGross },
+      { 'Item': 'Advances Already Paid (SDG)', 'Value': totalAdvPaid },
+      { 'Item': 'NET AMOUNT TO PAY (SDG)', 'Value': totalNet },
+      { 'Item': 'Approved Op. Costs (SDG)', 'Value': cycleSummaryData.totalApprovedCents / 100 },
+    ]), 'Summary');
+    XLSX.writeFile(wb, `${mmpName}-payment-sheet-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }, [cycleSummaryData, checklistMmpId, mmpFiles]);
+
+  const exportPaymentSheetPDF = useCallback(async () => {
+    if (!cycleSummaryData || !checklistMmpId) return;
+    const mmpName = mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'Cycle';
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF('landscape');
+    const genDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    doc.setFillColor(17, 24, 39);
+    doc.rect(0, 0, 297, 28, 'F');
+    doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+    doc.text('PACT Field Operations', 14, 12);
+    doc.setFontSize(12); doc.setFont('helvetica', 'normal');
+    doc.text('Field Staff Payment Sheet', 14, 21);
+    doc.setFontSize(9); doc.text(`Generated: ${genDate}`, 200, 12); doc.text(`MMP: ${mmpName}`, 200, 20);
+    const advMap: Record<string, AdvanceDetail> = {};
+    cycleSummaryData.advanceDetails.forEach(a => { if (a.siteEntryId) advMap[a.siteEntryId] = a; });
+    const totalGross = cycleSummaryData.enumeratorCosts.reduce((s, e) => s + e.totalCost, 0);
+    const totalAdvPaid = Object.values(advMap).reduce((s, a) => s + a.paidAmount, 0);
+    const totalNet = Math.max(0, totalGross - totalAdvPaid);
+    const cur = cycleSummaryData.currency;
+    let y = 35;
+    autoTable(doc, {
+      startY: y,
+      head: [['Gross Total Fees', 'Advances Already Paid', 'NET TO PAY', 'Approved Op. Costs']],
+      body: [[`${totalGross.toLocaleString()} ${cur}`, totalAdvPaid > 0 ? `−${totalAdvPaid.toLocaleString()} ${cur}` : '—', `${totalNet.toLocaleString()} ${cur}`, `${(cycleSummaryData.totalApprovedCents / 100).toLocaleString()} ${cur}`]],
+      theme: 'grid',
+      headStyles: { fillColor: [17, 24, 39], fontSize: 10, fontStyle: 'bold', textColor: 255 },
+      bodyStyles: { fontSize: 11, fontStyle: 'bold' },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+    if (y > 155) { doc.addPage(); y = 20; }
+    doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+    doc.text('Payment Breakdown — Per Site', 14, y); y += 5;
+    autoTable(doc, {
+      startY: y,
+      head: [['Enumerator', 'Site', 'State', 'Enum. Fee', 'Transport', 'Gross', 'Adv. Paid', 'NET TO PAY', 'Status']],
+      body: cycleSummaryData.enumeratorCosts.map(e => {
+        const adv = advMap[e.id];
+        const advPaid = adv?.paidAmount ?? 0;
+        return [e.enumeratorName, e.siteName.substring(0, 24), e.state,
+          e.enumeratorFee > 0 ? e.enumeratorFee.toLocaleString() : '—',
+          e.transportFee > 0 ? e.transportFee.toLocaleString() : '—',
+          e.totalCost.toLocaleString(),
+          advPaid > 0 ? `−${advPaid.toLocaleString()}` : '—',
+          Math.max(0, e.totalCost - advPaid).toLocaleString(),
+          e.status.replace(/_/g, ' ')];
+      }),
+      foot: [['TOTAL', '', '', cycleSummaryData.totalEnumeratorFee.toLocaleString(), cycleSummaryData.totalTransportFee.toLocaleString(), totalGross.toLocaleString(), totalAdvPaid > 0 ? `−${totalAdvPaid.toLocaleString()}` : '—', totalNet.toLocaleString(), '']],
+      theme: 'striped',
+      headStyles: { fillColor: [5, 150, 105], fontSize: 8, fontStyle: 'bold', textColor: 255 },
+      footStyles: { fillColor: [209, 250, 229], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      didParseCell: (data) => {
+        if ((data.section === 'body' || data.section === 'foot') && data.column.index === 7) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [5, 150, 105] as any;
+        }
+      },
+    });
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150);
+      doc.text(`PACT Command Center — Confidential — Page ${i} of ${pageCount}`, 14, 200);
+    }
+    doc.save(`${mmpName}-payment-sheet-${new Date().toISOString().slice(0, 10)}.pdf`);
+  }, [cycleSummaryData, checklistMmpId, mmpFiles]);
+
   useEffect(() => {
     if (checklistMmpId) {
-      const status = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status ?? 'active';
+      const mmp = mmpFiles?.find(m => m.id === checklistMmpId) as any;
+      const status = mmp?.cycle_status ?? 'active';
+      const tracking = mmp?.payment_tracking || {};
+      setPaymentRequestedAt(tracking.payment_requested_at || null);
+      setPaymentsConfirmedAt(tracking.payments_confirmed_at || null);
+      setPaymentRequestNote('');
       if (status === 'closing' || status === 'pending_approval') {
         fetchCycleSummary(checklistMmpId);
+        fetchAllSiteDetails(checklistMmpId);
       }
     } else {
       setCycleSummaryData(null);
+      setAllSiteReviewData([]);
+      setPaymentRequestedAt(null);
+      setPaymentsConfirmedAt(null);
     }
-  }, [checklistMmpId, mmpFiles, fetchCycleSummary]);
+  }, [checklistMmpId, mmpFiles, fetchCycleSummary, fetchAllSiteDetails]);
 
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
@@ -509,6 +743,19 @@ const MMPCycleClose = () => {
   const [feeEditOpen, setFeeEditOpen] = useState(false);
   const [feeEdits, setFeeEdits] = useState<Record<string, { enum: number; transport: number }>>({});
   const [savingFees, setSavingFees] = useState(false);
+
+  // Step 2 — Site & Advance Review
+  const [allSiteReviewData, setAllSiteReviewData] = useState<SiteReviewEntry[]>([]);
+  const [loadingAllSites, setLoadingAllSites] = useState(false);
+  const [siteReviewSearch, setSiteReviewSearch] = useState('');
+  const [siteReviewStatusFilter, setSiteReviewStatusFilter] = useState('all');
+
+  // Step 6 — Payment Request
+  const [paymentRequestedAt, setPaymentRequestedAt] = useState<string | null>(null);
+  const [paymentsConfirmedAt, setPaymentsConfirmedAt] = useState<string | null>(null);
+  const [requestingPayment, setRequestingPayment] = useState(false);
+  const [confirmingPayments, setConfirmingPayments] = useState(false);
+  const [paymentRequestNote, setPaymentRequestNote] = useState('');
 
   // Scroll guard — only auto-scroll once per step change, not on every render
   const guideScrolledStepRef = useRef<string | null>(null);
@@ -725,6 +972,11 @@ const MMPCycleClose = () => {
     const csRemaining = csItem && !csItem.passed ? csItem.total : 0;
     const wfpItem = get('wfp_confirmation');
 
+    const paymentStepPassed = paymentsConfirmedAt !== null;
+    const wfpPassed = wfpItem?.notConfigured ? true : (wfpItem?.passed ?? false);
+    const reasonsPassed = svItem?.passed ?? false;
+    const paymentStepBlocked = !reasonsPassed || !financePassed || !wfpPassed;
+
     return [
       {
         id: 'start', number: 1,
@@ -736,19 +988,36 @@ const MMPCycleClose = () => {
         remaining: 0,
         howTo: [
           'This step is automatically done when you start the close process.',
-          'Work through Steps 2 → 5 in order. You can leave and come back any time — progress is saved.',
-          'Use "Check again" after completing work in another tab to update the green/red status here.',
+          'Work through Steps 2 → 7 in order. You can leave and come back any time — progress is saved.',
+          'Use "Check again" after completing work in another tab to update the status here.',
         ] as string[],
       },
       {
-        id: 'reasons', number: 2,
+        id: 'site_review', number: 2,
+        title: 'Review All Sites & Advances', titleAr: 'مراجعة المواقع والسلف',
+        desc: 'Review all MMP sites, their current visit status, and any transport advances paid per site. This is a read-only overview to help you understand the full financial picture before proceeding.',
+        passed: true,
+        blocked: false,
+        tab: null, actionLabel: null,
+        sub: [],
+        remaining: 0,
+        howTo: [
+          'Review the full site list below — all sites assigned to this MMP are shown.',
+          'The "Advance" column shows whether a transport advance was issued and how much was paid.',
+          'Advance amounts already paid will be automatically deducted from the Payment Sheet in Step 6.',
+          'Sites with 0 fees set will need fee entry before the payment sheet is generated.',
+          'No action needed here — this step is informational and always marked Done.',
+        ],
+      },
+      {
+        id: 'reasons', number: 3,
         title: 'Assign Reasons — Uncovered Sites', titleAr: 'أسباب المواقع غير المغطاة',
         desc: svItem?.passed
           ? 'All unvisited sites have a documented reason — this gate is clear.'
           : svRemaining > 0
             ? `${svRemaining} site${svRemaining !== 1 ? 's' : ''} still need a reason recorded. Every unvisited site must have an explanation before the cycle can close.`
             : (svItem?.description || 'Every unvisited site needs a reason before the cycle can close.'),
-        passed: svItem?.passed ?? false,
+        passed: reasonsPassed,
         blocked: false,
         tab: 'uncovered', actionLabel: 'Open Uncovered Sites tab →',
         sub: svItem ? [svItem] : [],
@@ -763,7 +1032,7 @@ const MMPCycleClose = () => {
         ],
       },
       {
-        id: 'finance', number: 3,
+        id: 'finance', number: 4,
         title: 'Clear Finance', titleAr: 'تسوية المالية',
         desc: financePassed
           ? 'All financial items are cleared — cost submissions, advances, withdrawals, and cost recovery are all settled.'
@@ -783,14 +1052,14 @@ const MMPCycleClose = () => {
         ],
       },
       {
-        id: 'wfp', number: 4,
+        id: 'wfp', number: 5,
         title: 'WFP Confirmation', titleAr: 'تأكيد WFP',
         desc: wfpItem?.notConfigured
           ? 'WFP confirmation is not configured for this MMP — this step is optional and skipped.'
           : wfpItem?.passed
-            ? 'WFP confirmation file has been uploaded and applied — this gate is clear.'
-            : (wfpItem?.description || 'Upload and apply the WFP monthly monitoring Excel file to confirm site visits.'),
-        passed: wfpItem?.notConfigured ? true : (wfpItem?.passed ?? false),
+            ? 'WFP confirmation file has been uploaded and applied — matched sites promoted to WFP Confirmed status.'
+            : (wfpItem?.description || 'Upload and apply the WFP monthly monitoring Excel file. Matched sites (any status) will be promoted to WFP Confirmed automatically.'),
+        passed: wfpPassed,
         blocked: false,
         tab: 'wfp', actionLabel: 'Open WFP Confirmation tab →',
         sub: wfpItem ? [wfpItem] : [],
@@ -798,49 +1067,75 @@ const MMPCycleClose = () => {
         howTo: [
           'Click "Open WFP Confirmation tab →" button below.',
           'Upload the WFP cleaned Excel file for this month.',
-          'Review the matching results shown in the table.',
-          'Click "Apply" to confirm the matched visits.',
-          'Come back here and click "Check again" to confirm.',
+          'Review the matching results — strong, fuzzy, and manual matches are shown.',
+          'Review any weak/fuzzy matches and accept or reject them manually.',
+          'Click "Apply" — all confirmed sites will be promoted to WFP Confirmed status (even if they were not yet marked completed).',
+          'Come back here and click "Check again" to confirm the gate turns green.',
         ],
       },
       {
-        id: 'submit', number: 5,
+        id: 'payment_request', number: 6,
+        title: 'Payment Sheet & Request', titleAr: 'ورقة الدفع وطلب السداد',
+        desc: paymentsConfirmedAt
+          ? `Payments confirmed on ${new Date(paymentsConfirmedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} — this step is complete.`
+          : paymentRequestedAt
+            ? `Payment request sent on ${new Date(paymentRequestedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. Once finance processes all payments, return here to confirm.`
+            : 'Review the per-site payment sheet showing gross fees minus any advances paid. Export PDF/Excel, request payments from finance, then confirm when all payments are done.',
+        passed: paymentStepPassed,
+        blocked: paymentStepBlocked,
+        tab: null, actionLabel: null,
+        sub: [],
+        remaining: 0,
+        howTo: [
+          'Review the payment sheet below — each site shows: Gross Fee − Advance Already Paid = Net to Pay.',
+          'Set enumerator and transport fees for any site showing 0 using the fee editor.',
+          'Export the Payment Sheet PDF and/or Excel file for finance processing.',
+          'Click "Send Payment Request" to formally log that payment has been requested from finance.',
+          'Once finance processes all payments, return here and click "Confirm All Payments Done".',
+          'This step is complete once you confirm — you can then submit for final approval.',
+        ],
+      },
+      {
+        id: 'submit', number: 7,
         title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
         desc: checklistMmpStatus === 'closed'
           ? 'Cycle was submitted and approved — it is permanently archived.'
           : checklistMmpStatus === 'pending_approval'
             ? 'Submitted — waiting for FOM / Director to approve or reject.'
-            : cycleReadiness.allPassed
-              ? 'All gates are green. Review the financial summary below, then tick the confirmation and submit.'
-              : 'Complete Steps 2–4 above first, then return here to submit.',
+            : cycleReadiness.allPassed && paymentStepPassed
+              ? 'All gates are green and payments confirmed. Review the financial summary below, then tick the confirmation and submit.'
+              : !paymentStepPassed
+                ? 'Complete Step 6 (confirm payments done) before submitting.'
+                : 'Complete Steps 3–5 above first, then return here to submit.',
         passed: checklistMmpStatus === 'pending_approval' || checklistMmpStatus === 'closed',
-        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && !cycleReadiness.allPassed,
+        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && (!cycleReadiness.allPassed || !paymentStepPassed),
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: [
+          'Ensure all previous steps are green — reasons, finance, WFP, and payments confirmed.',
           'Tick the confirmation checkbox below.',
           'Click the green "Submit Cycle for Final Approval" button.',
           'The FOM and Country Director will be notified for review.',
         ],
       },
       {
-        id: 'approval', number: 6,
+        id: 'approval', number: 8,
         title: 'Final Approval & Archive', titleAr: 'في انتظار الموافقة',
         desc: checklistMmpStatus === 'closed'
           ? 'Cycle approved and archived. The financial settlement above is now frozen permanently.'
           : checklistMmpStatus === 'pending_approval'
             ? (isFOM || isAdmin || isSuperAdmin)
-              ? 'Your approval is required. Scroll up to review the Cycle Financial Summary, then approve or reject below.'
+              ? 'Your approval is required. Scroll down to review the Cycle Financial Summary, then approve or reject below.'
               : 'Submitted and waiting for FOM / Admin to approve. You will receive a notification when a decision is made.'
-            : 'This step unlocks once Step 5 is submitted. The FOM or Admin will review and approve or send back.',
+            : 'This step unlocks once Step 7 is submitted. The FOM or Admin will review and approve or send back.',
         passed: checklistMmpStatus === 'closed',
         blocked: false,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: (isFOM || isAdmin || isSuperAdmin) ? [
-          'Scroll up and review the "💰 Cycle Financial Settlement" card — verify enumerator costs, transport, advances, and the net payable amount.',
+          'Scroll down and review the "💰 Cycle Financial Settlement" card — verify enumerator costs, transport, advances, and the net payable amount.',
           'If the figures look correct, click "Approve & Close Cycle" to permanently archive this cycle.',
           'If something is wrong, click "Reject & Send Back" and enter the specific reason so the admin knows what to correct.',
           'Once approved, the cycle status becomes Closed, the financial snapshot is frozen, and the MMP is unlocked for the next cycle.',
@@ -852,7 +1147,7 @@ const MMPCycleClose = () => {
         ],
       },
     ];
-  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin]);
+  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin, paymentsConfirmedAt, paymentRequestedAt]);
 
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
@@ -1308,7 +1603,7 @@ const MMPCycleClose = () => {
 
       for (const r of confirmed) {
         await supabase.from('mmp_site_entries')
-          .update({ status: 'completed' })
+          .update({ status: 'wfp_confirmed' })
           .eq('id', r.site_entry_id!);
 
         await logPaymentEvent({
@@ -4077,7 +4372,321 @@ const MMPCycleClose = () => {
                                           {step.actionLabel}
                                         </Button>
                                       )}
-                                      {/* Submit button for step 5 */}
+                                      {/* ── Site & Advance Review (Step 2) ── */}
+                                      {step.id === 'site_review' && (
+                                        <div className="mt-3 space-y-2">
+                                          {/* Search + filter bar */}
+                                          <div className="flex gap-2 flex-wrap">
+                                            <input
+                                              type="text"
+                                              placeholder="Search site or enumerator…"
+                                              value={siteReviewSearch}
+                                              onChange={e => setSiteReviewSearch(e.target.value)}
+                                              className="flex-1 min-w-[160px] rounded-md border border-input bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                              data-testid="input-site-review-search"
+                                            />
+                                            <select
+                                              value={siteReviewStatusFilter}
+                                              onChange={e => setSiteReviewStatusFilter(e.target.value)}
+                                              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                              data-testid="select-site-review-status-filter"
+                                            >
+                                              <option value="all">All Statuses</option>
+                                              <option value="wfp_confirmed">WFP Confirmed</option>
+                                              <option value="completed">Completed</option>
+                                              <option value="verified">Verified</option>
+                                              <option value="submitted">Submitted</option>
+                                              <option value="dispatched">Dispatched</option>
+                                              <option value="not_covered">Not Covered</option>
+                                              <option value="pending">Pending / Other</option>
+                                            </select>
+                                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1 px-2" onClick={() => fetchAllSiteDetails(checklistMmpId!)} disabled={loadingAllSites} data-testid="button-site-review-refresh">
+                                              {loadingAllSites ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                              Refresh
+                                            </Button>
+                                          </div>
+                                          {loadingAllSites ? (
+                                            <div className="flex items-center gap-2 py-6 justify-center text-muted-foreground text-xs">
+                                              <Loader2 className="h-4 w-4 animate-spin" /> Loading all sites…
+                                            </div>
+                                          ) : (() => {
+                                            const q = siteReviewSearch.toLowerCase();
+                                            const filtered = allSiteReviewData.filter(s => {
+                                              const matchQ = !q || s.siteName.toLowerCase().includes(q) || s.enumeratorName.toLowerCase().includes(q) || s.siteCode.toLowerCase().includes(q);
+                                              if (!matchQ) return false;
+                                              if (siteReviewStatusFilter === 'all') return true;
+                                              if (siteReviewStatusFilter === 'pending') return !['wfp_confirmed','completed','verified','submitted','dispatched','not_covered'].includes(s.status);
+                                              return s.status === siteReviewStatusFilter;
+                                            });
+                                            const totalSites = allSiteReviewData.length;
+                                            const completedCount = allSiteReviewData.filter(s => ['wfp_confirmed','completed','verified'].includes(s.status)).length;
+                                            const advancedCount = allSiteReviewData.filter(s => s.advanceId !== null).length;
+                                            const totalAdvPaid = allSiteReviewData.reduce((s, e) => s + e.advancePaid, 0);
+                                            const totalNet = allSiteReviewData.reduce((s, e) => s + e.netToPay, 0);
+                                            const cur = allSiteReviewData[0]?.currency || 'SDG';
+                                            const statusCls: Record<string, string> = {
+                                              wfp_confirmed: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
+                                              completed: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+                                              verified: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+                                              submitted: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+                                              dispatched: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+                                              not_covered: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+                                            };
+                                            return (
+                                              <div className="space-y-2">
+                                                {/* KPI bar */}
+                                                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                                                  {[
+                                                    { label: 'Total Sites', val: totalSites, cls: 'bg-muted/50' },
+                                                    { label: 'Completed / Confirmed', val: completedCount, cls: 'bg-green-50 dark:bg-green-950/30' },
+                                                    { label: 'With Advance', val: advancedCount, cls: 'bg-amber-50 dark:bg-amber-950/30' },
+                                                    { label: 'Total Advance Paid', val: `${totalAdvPaid.toLocaleString()} ${cur}`, cls: 'bg-blue-50 dark:bg-blue-950/30' },
+                                                  ].map(k => (
+                                                    <div key={k.label} className={`rounded-lg px-3 py-2 text-center ${k.cls}`}>
+                                                      <div className="text-xs text-muted-foreground">{k.label}</div>
+                                                      <div className="font-bold text-sm">{k.val}</div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                {totalNet > 0 && (
+                                                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 flex items-center gap-2">
+                                                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">Estimated Net to Pay (Gross − Advances):</span>
+                                                    <span className="font-bold text-green-800 dark:text-green-200">{totalNet.toLocaleString()} {cur}</span>
+                                                  </div>
+                                                )}
+                                                {/* Table */}
+                                                <div className="rounded-lg border overflow-hidden">
+                                                  <div className="overflow-x-auto max-h-72">
+                                                    <table className="w-full text-xs">
+                                                      <thead className="sticky top-0 z-10">
+                                                        <tr className="bg-muted/80 border-b">
+                                                          <th className="px-3 py-1.5 text-left font-semibold min-w-[130px]">Site</th>
+                                                          <th className="px-3 py-1.5 text-left font-semibold min-w-[100px]">Enumerator</th>
+                                                          <th className="px-3 py-1.5 text-center font-semibold">Status</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold">Enum. Fee</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold">Transport</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold">Gross</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-amber-700">Adv. Paid</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Net to Pay</th>
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody>
+                                                        {filtered.length === 0 ? (
+                                                          <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">No sites match the current filter</td></tr>
+                                                        ) : filtered.map(s => (
+                                                          <tr key={s.id} className="border-b last:border-0 hover:bg-muted/10">
+                                                            <td className="px-3 py-2">
+                                                              <div className="font-medium truncate max-w-[150px]" title={s.siteName}>{s.siteName}</div>
+                                                              <div className="text-[10px] text-muted-foreground">{s.siteCode} · {s.state}</div>
+                                                            </td>
+                                                            <td className="px-3 py-2 text-muted-foreground truncate max-w-[110px]">{s.enumeratorName}</td>
+                                                            <td className="px-3 py-2 text-center">
+                                                              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusCls[s.status] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
+                                                                {s.status.replace(/_/g, ' ')}
+                                                              </span>
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right font-mono">{s.enumeratorFee > 0 ? s.enumeratorFee.toLocaleString() : '—'}</td>
+                                                            <td className="px-3 py-2 text-right font-mono">{s.transportFee > 0 ? s.transportFee.toLocaleString() : '—'}</td>
+                                                            <td className="px-3 py-2 text-right font-mono font-semibold">{s.totalFee > 0 ? s.totalFee.toLocaleString() : '—'}</td>
+                                                            <td className="px-3 py-2 text-right font-mono text-amber-700">{s.advancePaid > 0 ? `−${s.advancePaid.toLocaleString()}` : '—'}</td>
+                                                            <td className={`px-3 py-2 text-right font-mono font-bold ${s.netToPay > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                                                              {s.netToPay > 0 ? s.netToPay.toLocaleString() : s.totalFee > 0 ? '0 (settled)' : '—'}
+                                                            </td>
+                                                          </tr>
+                                                        ))}
+                                                      </tbody>
+                                                      <tfoot>
+                                                        <tr className="bg-muted/30 font-semibold border-t">
+                                                          <td className="px-3 py-1.5" colSpan={3}>Total ({filtered.length} shown)</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono">{filtered.reduce((s, e) => s + e.enumeratorFee, 0).toLocaleString()}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono">{filtered.reduce((s, e) => s + e.transportFee, 0).toLocaleString()}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono">{filtered.reduce((s, e) => s + e.totalFee, 0).toLocaleString()}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono text-amber-700">−{filtered.reduce((s, e) => s + e.advancePaid, 0).toLocaleString()}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{filtered.reduce((s, e) => s + e.netToPay, 0).toLocaleString()}</td>
+                                                        </tr>
+                                                      </tfoot>
+                                                    </table>
+                                                  </div>
+                                                </div>
+                                                {filtered.length < allSiteReviewData.length && (
+                                                  <p className="text-xs text-muted-foreground text-center">Showing {filtered.length} of {allSiteReviewData.length} sites — adjust filters to see more</p>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                      )}
+
+                                      {/* ── Payment Sheet & Request (Step 6) ── */}
+                                      {step.id === 'payment_request' && !step.blocked && (
+                                        <div className="mt-3 space-y-3">
+                                          {/* Payment status banner */}
+                                          {paymentsConfirmedAt ? (
+                                            <div className="flex items-center gap-2 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 px-3 py-2.5">
+                                              <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                                              <div className="text-xs">
+                                                <span className="font-semibold text-green-800 dark:text-green-200">Payments confirmed</span>
+                                                <span className="text-green-700 dark:text-green-300"> · {new Date(paymentsConfirmedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                              </div>
+                                            </div>
+                                          ) : paymentRequestedAt ? (
+                                            <div className="flex items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5">
+                                              <Loader2 className="h-4 w-4 text-amber-600 shrink-0 animate-spin" />
+                                              <div className="text-xs">
+                                                <span className="font-semibold text-amber-800 dark:text-amber-200">Payment request sent</span>
+                                                <span className="text-amber-700 dark:text-amber-300"> · {new Date(paymentRequestedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                <span className="block text-amber-600 dark:text-amber-400 mt-0.5">Return here to confirm once finance processes all payments.</span>
+                                              </div>
+                                            </div>
+                                          ) : null}
+
+                                          {/* Per-site payment sheet */}
+                                          {cycleSummaryData && (() => {
+                                            const advMap: Record<string, AdvanceDetail> = {};
+                                            cycleSummaryData.advanceDetails.forEach(a => { if (a.siteEntryId) advMap[a.siteEntryId] = a; });
+                                            const totalGross = cycleSummaryData.enumeratorCosts.reduce((s, e) => s + e.totalCost, 0);
+                                            const totalAdvPaid = Object.values(advMap).reduce((s, a) => s + a.paidAmount, 0);
+                                            const totalNet = Math.max(0, totalGross - totalAdvPaid);
+                                            const cur = cycleSummaryData.currency;
+                                            return (
+                                              <div className="space-y-2">
+                                                {/* Summary KPIs */}
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                  <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
+                                                    <div className="text-xs text-muted-foreground">Gross Fees</div>
+                                                    <div className="font-bold text-sm">{totalGross.toLocaleString()} {cur}</div>
+                                                  </div>
+                                                  <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-center">
+                                                    <div className="text-xs text-amber-700 dark:text-amber-300">Advances Paid</div>
+                                                    <div className="font-bold text-sm text-amber-800 dark:text-amber-200">−{totalAdvPaid.toLocaleString()} {cur}</div>
+                                                  </div>
+                                                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
+                                                    <div className="text-xs text-green-700 dark:text-green-300 font-semibold">NET TO PAY</div>
+                                                    <div className="font-bold text-base text-green-800 dark:text-green-200">{totalNet.toLocaleString()} {cur}</div>
+                                                  </div>
+                                                </div>
+
+                                                {/* Per-site payment table */}
+                                                {cycleSummaryData.enumeratorCosts.length > 0 ? (
+                                                  <div className="rounded-lg border overflow-hidden">
+                                                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 text-xs font-semibold flex items-center gap-2">
+                                                      <span>💳 Payment Breakdown — Per Site</span>
+                                                      <Badge variant="secondary" className="text-[10px]">{cycleSummaryData.enumeratorCosts.length} sites</Badge>
+                                                    </div>
+                                                    <div className="overflow-x-auto max-h-64">
+                                                      <table className="w-full text-xs">
+                                                        <thead className="sticky top-0">
+                                                          <tr className="bg-muted/60 border-b">
+                                                            <th className="px-3 py-1.5 text-left font-semibold min-w-[110px]">Enumerator / Site</th>
+                                                            <th className="px-3 py-1.5 text-right font-semibold">Enum. Fee</th>
+                                                            <th className="px-3 py-1.5 text-right font-semibold">Transport</th>
+                                                            <th className="px-3 py-1.5 text-right font-semibold">Gross</th>
+                                                            <th className="px-3 py-1.5 text-right font-semibold text-amber-700">Adv. Paid</th>
+                                                            <th className="px-3 py-1.5 text-right font-semibold text-green-700">NET TO PAY</th>
+                                                            <th className="px-3 py-1.5 text-center font-semibold">Status</th>
+                                                          </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                          {cycleSummaryData.enumeratorCosts.map(e => {
+                                                            const adv = advMap[e.id];
+                                                            const advPaid = adv?.paidAmount ?? 0;
+                                                            const net = Math.max(0, e.totalCost - advPaid);
+                                                            return (
+                                                              <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10">
+                                                                <td className="px-3 py-2">
+                                                                  <div className="font-medium truncate max-w-[140px]" title={e.enumeratorName}>{e.enumeratorName}</div>
+                                                                  <div className="text-[10px] text-muted-foreground truncate max-w-[140px]" title={e.siteName}>{e.siteName}</div>
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right font-mono">{e.enumeratorFee > 0 ? e.enumeratorFee.toLocaleString() : '—'}</td>
+                                                                <td className="px-3 py-2 text-right font-mono">{e.transportFee > 0 ? e.transportFee.toLocaleString() : '—'}</td>
+                                                                <td className="px-3 py-2 text-right font-mono font-semibold">{e.totalCost.toLocaleString()}</td>
+                                                                <td className="px-3 py-2 text-right font-mono text-amber-700">{advPaid > 0 ? `−${advPaid.toLocaleString()}` : '—'}</td>
+                                                                <td className={`px-3 py-2 text-right font-mono font-bold ${net > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                                                                  {net > 0 ? net.toLocaleString() : '0 (settled)'}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                  <span className="text-[10px] text-muted-foreground">{e.status.replace(/_/g, ' ')}</span>
+                                                                </td>
+                                                              </tr>
+                                                            );
+                                                          })}
+                                                        </tbody>
+                                                        <tfoot>
+                                                          <tr className="bg-muted/30 font-semibold border-t">
+                                                            <td className="px-3 py-1.5">TOTAL</td>
+                                                            <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.totalEnumeratorFee.toLocaleString()}</td>
+                                                            <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.totalTransportFee.toLocaleString()}</td>
+                                                            <td className="px-3 py-1.5 text-right font-mono">{totalGross.toLocaleString()}</td>
+                                                            <td className="px-3 py-1.5 text-right font-mono text-amber-700">{totalAdvPaid > 0 ? `−${totalAdvPaid.toLocaleString()}` : '—'}</td>
+                                                            <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{totalNet.toLocaleString()} {cur}</td>
+                                                            <td />
+                                                          </tr>
+                                                        </tfoot>
+                                                      </table>
+                                                    </div>
+                                                  </div>
+                                                ) : (
+                                                  <p className="text-xs text-muted-foreground text-center py-3">No dispatched sites with fees set — the payment sheet will populate once sites are dispatched and fees entered.</p>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+
+                                          {/* Export buttons */}
+                                          <div className="flex gap-2">
+                                            <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs" onClick={exportPaymentSheetExcel} disabled={!cycleSummaryData} data-testid="button-export-payment-sheet-excel">
+                                              <FileSpreadsheet className="h-3.5 w-3.5" /> Export Excel
+                                            </Button>
+                                            <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30" onClick={exportPaymentSheetPDF} disabled={!cycleSummaryData} data-testid="button-export-payment-sheet-pdf">
+                                              <FileText className="h-3.5 w-3.5" /> Export PDF
+                                            </Button>
+                                          </div>
+
+                                          {/* Payment note */}
+                                          {!paymentsConfirmedAt && (
+                                            <textarea
+                                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                                              rows={2}
+                                              placeholder="Optional: add a note for finance (e.g. priority sites, special instructions)…"
+                                              value={paymentRequestNote}
+                                              onChange={e => setPaymentRequestNote(e.target.value)}
+                                              data-testid="textarea-payment-request-note"
+                                            />
+                                          )}
+
+                                          {/* Action buttons */}
+                                          {!paymentsConfirmedAt && (
+                                            <div className="flex gap-2">
+                                              {!paymentRequestedAt ? (
+                                                <Button
+                                                  size="sm"
+                                                  className="flex-1 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                                                  onClick={() => handleRequestPayments(checklistMmpId!)}
+                                                  disabled={requestingPayment}
+                                                  data-testid="button-request-payments"
+                                                >
+                                                  {requestingPayment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                                                  Send Payment Request to Finance
+                                                </Button>
+                                              ) : (
+                                                <Button
+                                                  size="sm"
+                                                  className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                                                  onClick={() => handleConfirmPaymentsDone(checklistMmpId!)}
+                                                  disabled={confirmingPayments}
+                                                  data-testid="button-confirm-payments-done"
+                                                >
+                                                  {confirmingPayments ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                                  Confirm All Payments Done ✓
+                                                </Button>
+                                              )}
+                                            </div>
+                                          )}
+                                          <p className="text-[10px] text-muted-foreground">Note: payment tracking is saved to the database. If the column doesn't exist yet, apply the migration in <code>supabase/mmp_payment_tracking_migration.sql</code>.</p>
+                                        </div>
+                                      )}
+
+                                      {/* Submit button for step 7 */}
                                       {step.id === 'submit' && cycleReadiness.allPassed && !cycleReadiness.loading && (
                                         <div className="mt-3 space-y-3">
                                           {/* Pre-submit payment summary */}
