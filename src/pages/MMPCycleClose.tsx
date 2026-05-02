@@ -4072,6 +4072,7 @@ const MMPCycleClose = () => {
                                             const cur = cycleSummaryData.currency;
                                             const PAYABLE = ['wfp_confirmed','verified','completed','approved'];
                                             const payableEntries = cycleSummaryData.enumeratorCosts.filter(e => PAYABLE.includes(e.status));
+                                            const dispatchedTotal = cycleSummaryData.enumeratorCosts.length;
                                             const enumFee = payableEntries.reduce((s, e) => s + (e.enumeratorFee ?? 0), 0);
                                             const transport = payableEntries.reduce((s, e) => s + (e.transportFee ?? 0), 0);
                                             const opCosts = cycleSummaryData.totalApprovedCents / 100;
@@ -4090,9 +4091,17 @@ const MMPCycleClose = () => {
                                                     };
                                                   })()
                                                 : {};
+                                            const feeGap = completedSites > 0 && payableEntries.length < completedSites;
+                                            const usdRate = liveExchangeRate;
+                                            const usdLine = (sdg: number) => usdRate && sdg > 0
+                                              ? <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium ml-1">≈ USD {(sdg / usdRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                              : null;
                                             return (
                                               <div className="rounded-xl border-2 border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 p-3 space-y-2">
                                                 <p className="text-xs font-bold text-indigo-900 dark:text-indigo-100">📋 Closing Summary — Review Before Submitting</p>
+                                                {usdRate && (
+                                                  <p className="text-[10px] text-blue-600 dark:text-blue-400">Rate: 1 USD = {usdRate.toLocaleString()} SDG</p>
+                                                )}
                                                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                                                   <div className="rounded bg-white/60 dark:bg-black/20 p-2">
                                                     <div className="text-sm font-bold text-green-700 dark:text-green-300">{completedSites}</div>
@@ -4107,30 +4116,55 @@ const MMPCycleClose = () => {
                                                     <div className="text-muted-foreground">Total Sites</div>
                                                   </div>
                                                 </div>
-                                                <div className="space-y-1 text-xs border-t border-indigo-200 dark:border-indigo-800 pt-2">
-                                                  <div className="flex justify-between">
-                                                    <span className="text-muted-foreground">Enumerator fees ({payableEntries.length} sites)</span>
-                                                    <span className="font-mono font-semibold">{enumFee.toLocaleString()} {cur}</span>
+
+                                                {/* Dispatch / fee gap warning */}
+                                                {feeGap && (
+                                                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-2.5 py-2 text-[11px]">
+                                                    <span className="text-amber-600 mt-0.5 shrink-0">⚠️</span>
+                                                    <span className="text-amber-800 dark:text-amber-200">
+                                                      <strong>{completedSites} sites were visited</strong> but only <strong>{payableEntries.length} of {dispatchedTotal} dispatched site{dispatchedTotal !== 1 ? 's' : ''}</strong> have a payable status with fee records. {payableEntries.length === 0 ? 'No fees will be paid out.' : 'Only the dispatched sites are included in the payment total below.'}
+                                                    </span>
                                                   </div>
-                                                  <div className="flex justify-between">
-                                                    <span className="text-muted-foreground">Transport fees</span>
-                                                    <span className="font-mono font-semibold">{transport.toLocaleString()} {cur}</span>
+                                                )}
+
+                                                <div className="space-y-1.5 text-xs border-t border-indigo-200 dark:border-indigo-800 pt-2">
+                                                  <div className="flex justify-between items-baseline">
+                                                    <span className="text-muted-foreground">
+                                                      Enumerator fees
+                                                      <span className="ml-1 text-[10px] text-indigo-600 dark:text-indigo-400">({payableEntries.length} dispatched site{payableEntries.length !== 1 ? 's' : ''} with payable status)</span>
+                                                    </span>
+                                                    <span className="font-mono font-semibold shrink-0 ml-2">
+                                                      {enumFee.toLocaleString()} {cur}{usdLine(enumFee)}
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex justify-between items-baseline">
+                                                    <span className="text-muted-foreground flex items-center gap-1">
+                                                      Transport fees
+                                                      {transport === 0 && dispatchedTotal > 0 && (
+                                                        <span className="text-[10px] text-amber-600 dark:text-amber-400">(not set in dispatch)</span>
+                                                      )}
+                                                    </span>
+                                                    <span className="font-mono font-semibold shrink-0 ml-2">
+                                                      {transport.toLocaleString()} {cur}{usdLine(transport)}
+                                                    </span>
                                                   </div>
                                                   {opCosts > 0 && (
-                                                    <div className="flex justify-between">
+                                                    <div className="flex justify-between items-baseline">
                                                       <span className="text-muted-foreground">Approved op. costs</span>
-                                                      <span className="font-mono font-semibold">{opCosts.toLocaleString()} {cur}</span>
+                                                      <span className="font-mono font-semibold shrink-0 ml-2">{opCosts.toLocaleString()} {cur}{usdLine(opCosts)}</span>
                                                     </div>
                                                   )}
                                                   {totalRecover > 0 && (
-                                                    <div className="flex justify-between text-orange-700 dark:text-orange-400">
+                                                    <div className="flex justify-between items-baseline text-orange-700 dark:text-orange-400">
                                                       <span>Less: outstanding advances to recover</span>
-                                                      <span className="font-mono font-semibold">−{totalRecover.toLocaleString()} {cur}</span>
+                                                      <span className="font-mono font-semibold shrink-0 ml-2">−{totalRecover.toLocaleString()} {cur}{usdLine(totalRecover)}</span>
                                                     </div>
                                                   )}
-                                                  <div className={`flex justify-between border-t pt-1 mt-1 font-bold ${net >= 0 ? 'text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'}`}>
+                                                  <div className={`flex justify-between items-baseline border-t pt-1.5 mt-1 font-bold ${net >= 0 ? 'text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'}`}>
                                                     <span>{net >= 0 ? 'Net to Pay Field Staff' : 'Net to Recover from Field'}</span>
-                                                    <span className="font-mono">{Math.abs(net).toLocaleString()} {cur}</span>
+                                                    <span className="font-mono shrink-0 ml-2">
+                                                      {Math.abs(net).toLocaleString()} {cur}{usdLine(Math.abs(net))}
+                                                    </span>
                                                   </div>
                                                 </div>
                                               </div>
