@@ -106,6 +106,85 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 
 type BulkSummaryEntry = { count: number; requested: number; approved: number };
 
+// ── Module-scope pure helpers ─────────────────────────────────────────────────
+// These don't close over any component state so they're stable references
+// (same function identity across every render). Moving them here is the key
+// prerequisite for wrapping RequestCard in useMemo([]) below.
+
+function isApprovedOrPaid(status: string) {
+  return ['approved', 'partially_paid', 'fully_paid'].includes(status);
+}
+
+function getStatusBadge(status: string) {
+  const statusMap: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; label: string; labelAr: string }> = {
+    pending_supervisor: { variant: 'secondary', icon: Clock, label: 'Pending Supervisor', labelAr: 'بانتظار المشرف' },
+    pending_admin: { variant: 'outline', icon: Clock, label: 'Pending Admin', labelAr: 'بانتظار الإدارة' },
+    approved: { variant: 'default', icon: CheckCircle2, label: 'Approved', labelAr: 'تمت الموافقة' },
+    rejected: { variant: 'destructive', icon: XCircle, label: 'Rejected', labelAr: 'مرفوض' },
+    partially_paid: { variant: 'outline', icon: DollarSign, label: 'Partially Paid', labelAr: 'مدفوع جزئياً' },
+    fully_paid: { variant: 'default', icon: CheckCircle2, label: 'Fully Paid', labelAr: 'مدفوع بالكامل' },
+    cancelled: { variant: 'secondary', icon: X, label: 'Cancelled', labelAr: 'ملغي' },
+  };
+  const config = statusMap[status] || { variant: 'secondary' as const, icon: Clock, label: status.replace(/_/g, ' '), labelAr: '' };
+  const Icon = config.icon;
+  return (
+    <Badge variant={config.variant} className="gap-1">
+      <Icon className="h-3 w-3" />
+      {config.label} / {config.labelAr}
+    </Badge>
+  );
+}
+
+function WorkflowTimeline({ request }: { request: DownPaymentRequest }) {
+  const status = request.status;
+  const supervisorPassed = status !== 'pending_supervisor';
+  const adminPassed = status === 'approved' || status === 'partially_paid' || status === 'fully_paid';
+  const isPaid = status === 'partially_paid' || status === 'fully_paid';
+  const receiptConfirmed = !!(request.metadata as any)?.receipt_confirmation?.confirmed;
+  const isRejected = status === 'rejected';
+  const steps = [
+    { key: 'submitted', label: 'T1', done: true },
+    { key: 'supervisor', label: 'T2', done: supervisorPassed && !isRejected },
+    { key: 'admin', label: 'Signed', done: adminPassed },
+    { key: 'paid', label: 'Paid', done: isPaid },
+    { key: 'confirmed', label: 'Confirmed', done: receiptConfirmed },
+  ];
+  const getRejectedStep = () => {
+    if (!isRejected) return -1;
+    if (request.adminProcessedBy && request.adminStatus === 'rejected') return 2;
+    if (request.supervisorApprovedBy && request.supervisorStatus === 'rejected') return 1;
+    return 1;
+  };
+  const rejectedStep = getRejectedStep();
+  return (
+    <div className="flex items-center gap-1 text-xs flex-wrap" data-testid={`timeline-${request.id}`}>
+      {steps.map((step, idx) => (
+        <div key={step.key} className="flex items-center gap-0.5">
+          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+            rejectedStep === idx
+              ? 'bg-red-500'
+              : isRejected && idx > rejectedStep
+                ? 'bg-muted-foreground/30'
+                : step.done
+                  ? 'bg-emerald-500'
+                  : 'bg-muted-foreground/30'
+          }`} />
+          <span className={`text-xs ${
+            rejectedStep === idx
+              ? 'text-red-500 font-medium'
+              : step.done
+                ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+                : 'text-muted-foreground'
+          }`}>{step.label}</span>
+          {idx < steps.length - 1 && (
+            <span className="text-muted-foreground/50 mx-0.5">&rarr;</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function VirtualizedRequestList({
   requests,
   renderCard,
@@ -311,6 +390,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     reason: string;
     processing: boolean;
   }>({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
+
+  // Stable ref holding all mutable closure values RequestCard needs.
+  // Allows RequestCard to be wrapped in useMemo([]) — same function reference
+  // on every render — so React does reconciliation instead of unmount+remount
+  // for all 500+ list cards when only dialog state changes.
+  const _cardCtxRef = useRef<any>(null);
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
 
@@ -1835,8 +1920,6 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     refreshRequests();
   };
 
-  const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
-
   const TabFilterBar = ({ testIdPrefix }: { testIdPrefix: string }) => (
     <div className="flex items-center gap-3 mb-3 flex-wrap">
       {allUniqueRequesters.length > 1 && (
@@ -1869,83 +1952,25 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     </div>
   );
 
-  const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; label: string; labelAr: string }> = {
-      pending_supervisor: { variant: 'secondary', icon: Clock, label: 'Pending Supervisor', labelAr: 'بانتظار المشرف' },
-      pending_admin: { variant: 'outline', icon: Clock, label: 'Pending Admin', labelAr: 'بانتظار الإدارة' },
-      approved: { variant: 'default', icon: CheckCircle2, label: 'Approved', labelAr: 'تمت الموافقة' },
-      rejected: { variant: 'destructive', icon: XCircle, label: 'Rejected', labelAr: 'مرفوض' },
-      partially_paid: { variant: 'outline', icon: DollarSign, label: 'Partially Paid', labelAr: 'مدفوع جزئياً' },
-      fully_paid: { variant: 'default', icon: CheckCircle2, label: 'Fully Paid', labelAr: 'مدفوع بالكامل' },
-      cancelled: { variant: 'secondary', icon: X, label: 'Cancelled', labelAr: 'ملغي' },
-    };
-
-    const config = statusMap[status] || { variant: 'secondary' as const, icon: Clock, label: status.replace(/_/g, ' '), labelAr: '' };
-    const Icon = config.icon;
-
-    return (
-      <Badge variant={config.variant} className="gap-1">
-        <Icon className="h-3 w-3" />
-        {config.label} / {config.labelAr}
-      </Badge>
-    );
+  // ── Populate _cardCtxRef each render so RequestCard reads fresh values ────────
+  _cardCtxRef.current = {
+    duplicateSiteNames, requests, resolveUserName, selectedIds, toggleSelection,
+    openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
+    handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
+    isSuperAdmin, markPaidProcessing, userRole, currentUser,
   };
 
-  const WorkflowTimeline = ({ request }: { request: DownPaymentRequest }) => {
-    const status = request.status;
-    const supervisorPassed = status !== 'pending_supervisor';
-    const adminPassed = status === 'approved' || status === 'partially_paid' || status === 'fully_paid';
-    const isPaid = status === 'partially_paid' || status === 'fully_paid';
-    const receiptConfirmed = !!(request.metadata as any)?.receipt_confirmation?.confirmed;
-    const isRejected = status === 'rejected';
-    
-    const steps = [
-      { key: 'submitted', label: 'T1', done: true },
-      { key: 'supervisor', label: 'T2', done: supervisorPassed && !isRejected },
-      { key: 'admin', label: 'Signed', done: adminPassed },
-      { key: 'paid', label: 'Paid', done: isPaid },
-      { key: 'confirmed', label: 'Confirmed', done: receiptConfirmed },
-    ];
-    
-    const getRejectedStep = () => {
-      if (!isRejected) return -1;
-      if (request.adminProcessedBy && request.adminStatus === 'rejected') return 2;
-      if (request.supervisorApprovedBy && request.supervisorStatus === 'rejected') return 1;
-      return 1;
-    };
-    
-    const rejectedStep = getRejectedStep();
-    
-    return (
-      <div className="flex items-center gap-1 text-xs flex-wrap" data-testid={`timeline-${request.id}`}>
-        {steps.map((step, idx) => (
-          <div key={step.key} className="flex items-center gap-0.5">
-            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-              rejectedStep === idx 
-                ? 'bg-red-500' 
-                : isRejected && idx > rejectedStep
-                  ? 'bg-muted-foreground/30'
-                  : step.done 
-                    ? 'bg-emerald-500' 
-                    : 'bg-muted-foreground/30'
-            }`} />
-            <span className={`text-xs ${
-              rejectedStep === idx
-                ? 'text-red-500 font-medium'
-                : step.done 
-                  ? 'text-emerald-600 dark:text-emerald-400 font-medium' 
-                  : 'text-muted-foreground'
-            }`}>{step.label}</span>
-            {idx < steps.length - 1 && (
-              <span className="text-muted-foreground/50 mx-0.5">&rarr;</span>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const RequestCard = ({ request, showCheckbox = false, showConfirmationDetails = false }: { request: DownPaymentRequest; showCheckbox?: boolean; showConfirmationDetails?: boolean }) => {
+  // useMemo([], []) → RequestCard has a STABLE function reference on every render.
+  // React sees the same component type → reconciliation (cheap) instead of
+  // unmount + remount (expensive) for all 500+ list cards when dialog state changes.
+  const RequestCard = useMemo(() => function RequestCardInner({ request, showCheckbox = false, showConfirmationDetails = false }: { request: DownPaymentRequest; showCheckbox?: boolean; showConfirmationDetails?: boolean }) {
+    // Always read the latest values from the ref — never stale.
+    const {
+      duplicateSiteNames, requests, resolveUserName, selectedIds, toggleSelection,
+      openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
+      handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
+      isSuperAdmin, markPaidProcessing, userRole, currentUser,
+    } = _cardCtxRef.current;
     const [showAuditDetails, setShowAuditDetails] = useState(false);
     const [resending, setResending] = useState(false);
     const shortId = request.id.substring(0, 8).toUpperCase();
@@ -2768,7 +2793,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       </CardContent>
     </Card>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty deps → same function reference forever → no unmount/remount
 
   const StatsCards = () => (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" data-testid="stats-cards-container">
