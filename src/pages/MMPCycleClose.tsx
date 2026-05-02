@@ -861,7 +861,7 @@ const MMPCycleClose = () => {
     doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 180, 180);
     doc.text(`MMP: ${mmpName}  ·  ${genDate}${feesLockedRate ? `  ·  Rate: 1 USD = ${feesLockedRate.toLocaleString()} SDG` : ''}`, 100, 11);
     const sigBoxes = [
-      { label: 'Prepared By', role: 'Coordinator / Field Operations' },
+      { label: 'Prepared By', role: 'Admin / Field Operations' },
       { label: 'Reviewed & Verified By', role: 'Field Operations Manager (FOM)' },
       { label: 'Authorized By', role: 'Finance Director' },
     ];
@@ -1148,7 +1148,9 @@ const MMPCycleClose = () => {
   const isSupervisor = hasAnyRole(['supervisor']);
   const isFOM = hasAnyRole(['fom']);
   const canManageCycle = isAdmin || isSuperAdmin;
-  const canAssignReasons = isAdmin || isSupervisor || isFOM;
+  // Only Admin / Super Admin manage cycle close steps.
+  // FOM role is limited to receiving notifications and confirming (approve/reject) in Step 9.
+  const canAssignReasons = canManageCycle;
 
   // Five-step guided close flow derived from readiness items
   const guideSteps = useMemo(() => {
@@ -2379,46 +2381,8 @@ const MMPCycleClose = () => {
       const mmpName = mmp?.name || 'MMP';
       const mmpHub = mmp?.hub || mmp?.region || '';
 
-      let supervisorQuery = supabase
-        .from('profiles')
-        .select('id, full_name, hub_id')
-        .in('role', ['Supervisor', 'supervisor'])
-        .eq('status', 'approved');
-
-      if (mmpHub) {
-        const { data: hubData } = await supabase
-          .from('hubs')
-          .select('id')
-          .ilike('name', `%${mmpHub}%`)
-          .limit(1);
-
-        if (hubData && hubData.length > 0) {
-          supervisorQuery = supervisorQuery.eq('hub_id', hubData[0].id);
-        }
-      }
-
-      const { data: supervisors } = await supervisorQuery;
-
-      if (supervisors && supervisors.length > 0) {
-        await Promise.allSettled(
-          supervisors.map(sup =>
-            NotificationTriggerService.send({
-              userId: sup.id,
-              title: `Cycle Closing: Reasons Required`,
-              message: `MMP "${mmpName}" is being closed. Please provide reasons for uncovered sites in your hub.`,
-              titleAr: `إغلاق الدورة: الأسباب مطلوبة`,
-              messageAr: `يتم إغلاق MMP "${mmpName}". يرجى تقديم أسباب للمواقع غير المغطاة في مركزك.`,
-              type: 'warning',
-              category: 'assignments',
-              priority: 'high',
-              link: '/mmp/cycle-close?tab=uncovered',
-              relatedEntityId: mmpId,
-              relatedEntityType: 'mmpFile',
-            })
-          )
-        );
-      }
-
+      // Notify FOM users that a cycle close has been initiated and their approval will be required.
+      // Supervisors and coordinators are not engaged in the cycle close flow.
       let fomQuery = supabase
         .from('profiles')
         .select('id, full_name, hub_id')
@@ -2444,14 +2408,14 @@ const MMPCycleClose = () => {
           foms.map(fom =>
             NotificationTriggerService.send({
               userId: fom.id,
-              title: `Cycle Closing: Reasons Required`,
-              message: `MMP "${mmpName}" is being closed. Please ensure your supervisors provide reasons for uncovered sites.`,
-              titleAr: `إغلاق الدورة: الأسباب مطلوبة`,
-              messageAr: `يتم إغلاق MMP "${mmpName}". يرجى التأكد من أن المشرفين يقدمون أسباباً للمواقع غير المغطاة.`,
-              type: 'warning',
+              title: `Cycle Close Initiated — Your Approval Required`,
+              message: `Admin has initiated the cycle close process for MMP "${mmpName}". Once all steps are complete, you will be asked to review and approve or reject the cycle.`,
+              titleAr: `بدء إغلاق الدورة — موافقتك مطلوبة`,
+              messageAr: `بدأ المدير عملية إغلاق الدورة لـ MMP "${mmpName}". بمجرد اكتمال جميع الخطوات، ستُطلب منك مراجعة الدورة والموافقة عليها أو رفضها.`,
+              type: 'info',
               category: 'assignments',
               priority: 'high',
-              link: '/mmp/cycle-close?tab=uncovered',
+              link: '/mmp/cycle-close',
               relatedEntityId: mmpId,
               relatedEntityType: 'mmpFile',
             })
@@ -3098,9 +3062,43 @@ const MMPCycleClose = () => {
       } as any).eq('id', mmpId);
       setCycleSubmittedAt(submittedNow);
 
+      // Notify FOM users that the cycle is ready for their approval confirmation
+      const mmpForNotify = mmpFiles?.find(m => m.id === mmpId);
+      const mmpNameForNotify = mmpForNotify?.name || 'MMP';
+      const mmpHubForNotify = (mmpForNotify as any)?.hub || (mmpForNotify as any)?.region || '';
+      let fomApprovalQuery = supabase
+        .from('profiles')
+        .select('id')
+        .in('role', ['fom', 'Field Operation Manager (FOM)'])
+        .eq('status', 'approved');
+      if (mmpHubForNotify) {
+        const { data: hubRows } = await supabase.from('hubs').select('id').ilike('name', `%${mmpHubForNotify}%`).limit(1);
+        if (hubRows && hubRows.length > 0) fomApprovalQuery = fomApprovalQuery.eq('hub_id', hubRows[0].id);
+      }
+      const { data: fomApprovers } = await fomApprovalQuery;
+      if (fomApprovers && fomApprovers.length > 0) {
+        await Promise.allSettled(
+          fomApprovers.map(fom =>
+            NotificationTriggerService.send({
+              userId: fom.id,
+              title: `Action Required: Approve MMP Cycle Close`,
+              message: `MMP "${mmpNameForNotify}" cycle close has been submitted and is awaiting your approval. Please review and confirm or reject.`,
+              titleAr: `إجراء مطلوب: الموافقة على إغلاق دورة MMP`,
+              messageAr: `تم تقديم إغلاق دورة MMP "${mmpNameForNotify}" وهو في انتظار موافقتك. يرجى المراجعة والتأكيد أو الرفض.`,
+              type: 'warning',
+              category: 'approvals',
+              priority: 'urgent',
+              link: '/mmp/cycle-close',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+            })
+          )
+        ).catch(() => {});
+      }
+
       setReconciliationAcknowledged(false);
       setPendingScopedClose(null);
-      toast({ title: 'Submitted for Approval', description: 'The cycle has been submitted for FOM/Director approval.' });
+      toast({ title: 'Submitted for Approval', description: 'The cycle has been submitted. FOM has been notified to review and confirm.' });
       await refreshMMPFiles();
       await fetchUncoveredSites();
     } catch (err: any) {
@@ -3143,6 +3141,10 @@ const MMPCycleClose = () => {
   };
 
   const handleApproveCycle = async (mmpId: string, skipFinanceCheck = false, overrideJustification?: string) => {
+    if (!isFOM && !isAdmin) {
+      toast({ title: 'Access Denied', description: 'Only FOM, Admin, and Super Admin can approve a cycle.', variant: 'destructive' });
+      return;
+    }
     if (!skipFinanceCheck) {
       const { ok: financeOk, issues: financeIssues } = await checkFinanceReadinessForClose(mmpId).then(r => r);
       if (!financeOk) {
@@ -3257,6 +3259,10 @@ const MMPCycleClose = () => {
   };
 
   const handleRejectCycle = async (mmpId: string, note: string) => {
+    if (!isFOM && !isAdmin) {
+      toast({ title: 'Access Denied', description: 'Only FOM, Admin, and Super Admin can reject a cycle.', variant: 'destructive' });
+      return;
+    }
     try {
       const { error } = await supabase
         .from('mmp_files')
@@ -3753,11 +3759,13 @@ const MMPCycleClose = () => {
     return allRelevant.filter(m => mmpIds.has(m.id));
   }, [uncoveredSites, activeMmps, closingMmps]);
 
-  if (!canManageCycle && !canAssignReasons) {
+  // FOM can view the page only to action the approval step (Step 9).
+  // All other roles without canManageCycle are blocked.
+  if (!canManageCycle && !isFOM) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-card rounded-xl shadow text-center" data-testid="access-denied">
         <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-        <p className="text-muted-foreground">You do not have permission to view this page.</p>
+        <p className="text-muted-foreground">Only Admins, Super Admins, and Field Operation Managers (FOM) can access this page.</p>
       </div>
     );
   }
@@ -3772,7 +3780,9 @@ const MMPCycleClose = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold" data-testid="text-page-title">MMP Cycle Close</h1>
-              {(isAdmin || isFOM) && <Badge variant="outline"><Shield className="h-3 w-3 mr-1" /> {isAdmin ? 'Admin' : 'FOM'} View</Badge>}
+              {isSuperAdmin && <Badge variant="outline" className="border-purple-400 text-purple-700 dark:text-purple-300"><Shield className="h-3 w-3 mr-1" /> Super Admin View</Badge>}
+              {!isSuperAdmin && isAdmin && <Badge variant="outline"><Shield className="h-3 w-3 mr-1" /> Admin View</Badge>}
+              {!isAdmin && isFOM && <Badge variant="outline" className="border-blue-400 text-blue-700 dark:text-blue-300"><Shield className="h-3 w-3 mr-1" /> FOM View — Approval Only</Badge>}
             </div>
             <p className="text-muted-foreground text-sm mt-0.5">
               Manage MMP cycle lifecycle, track coverage gaps, and close monitoring periods
@@ -3971,21 +3981,21 @@ const MMPCycleClose = () => {
         description="This page manages the complete end-of-cycle process for Monthly Monitoring Plans (MMPs). After each monitoring month ends, teams use this page to account for every site — visited or not — resolve all finance obligations tied to that cycle, and formally archive the period. The six tabs guide you from reviewing live coverage stats → assigning reasons to missed sites → passing a readiness checklist → submitting for approval → and finally archiving with full reports. Closed cycles are permanently stored for trend analysis, scorecard benchmarking, and cross-cycle comparison."
         descriptionAr="تُدير هذه الصفحة عملية إغلاق دورة خطط المراقبة الشهرية (MMP) من البداية إلى النهاية. بعد انتهاء كل شهر مراقبة، تستخدم الفرق هذه الصفحة لمحاسبة كل موقع — سواء تمت زيارته أم لا — وحسم جميع الالتزامات المالية المرتبطة بالدورة، وأرشفة الفترة رسمياً. تقودك الأجزاء الستة من مراجعة إحصائيات التغطية المباشرة → تعيين أسباب المواقع التي لم تُزَر → اجتياز قائمة الجاهزية → تقديم الدورة للموافقة → وأخيراً الأرشفة مع التقارير الكاملة. تُحفظ الدورات المغلقة بشكل دائم لتحليل الاتجاهات والمقارنة عبر الدورات."
         workflowSteps={[
-          { step: 1, role: 'Admin', action: 'Initiate cycle close', description: 'On the Active Cycles tab, find the MMP for the completed month. Click "Start Close". The system immediately auto-flags every site that was not completed or officially cancelled.' },
-          { step: 2, role: 'Supervisor', action: 'Assign reasons to uncovered sites', description: 'Switch to the Uncovered Sites tab. Assign a reason to each flagged site (security incident, access denied, flooding, budget cut, data collector absent, etc.). Use Bulk Assign to apply one reason to many sites at once.' },
-          { step: 3, role: 'Admin', action: 'Pass the readiness checklist', description: 'Click the MMP row to open the Cycle Close panel. The Readiness Checklist must show all green ticks: site visits resolved, no pending cost submissions, transport advances reconciled, withdrawal requests processed, cost recoveries addressed, and WFP file applied.' },
-          { step: 4, role: 'Admin', action: 'Resolve finance blocks', description: 'If any finance gate is red: go to Finance → Cost Submissions to approve/reject pending items; go to Reconciliation to mark advances as reconciled. If a gate shows amber "(not configured)", see the guide below for what SQL migration to run.' },
-          { step: 5, role: 'Admin', action: 'Submit for approval', description: 'Once the checklist score reaches 100%, click "Submit for Approval". A notification is sent to the FOM and Country Director.' },
-          { step: 6, role: 'FOM', action: 'Approve or reject', description: 'FOM reviews the final coverage report, quality scores, and finance summary. They click Approve (with optional comment) or Reject with a reason to send back to the admin.' },
+          { step: 1, role: 'Admin / Super Admin', action: 'Initiate cycle close', description: 'On the Active Cycles tab, find the MMP for the completed month. Click "Start Close". The system immediately auto-flags every site that was not completed or officially cancelled. FOM is notified automatically.' },
+          { step: 2, role: 'Admin / Super Admin', action: 'Assign reasons to uncovered sites', description: 'Switch to the Uncovered Sites tab. Assign a reason to each flagged site (security incident, access denied, flooding, budget cut, data collector absent, etc.). Use Bulk Assign to apply one reason to many sites at once.' },
+          { step: 3, role: 'Admin / Super Admin', action: 'Pass the readiness checklist', description: 'Click the MMP row to open the Cycle Close panel. The Readiness Checklist must show all green ticks: site visits resolved, no pending cost submissions, transport advances reconciled, withdrawal requests processed, cost recoveries addressed, and WFP file applied.' },
+          { step: 4, role: 'Admin / Super Admin', action: 'Resolve finance blocks', description: 'If any finance gate is red: go to Finance → Cost Submissions to approve/reject pending items; go to Reconciliation to mark advances as reconciled. If a gate shows amber "(not configured)", see the guide below for what SQL migration to run.' },
+          { step: 5, role: 'Admin / Super Admin', action: 'Submit for approval', description: 'Once the checklist score reaches 100%, click "Submit for Approval". FOM receives an urgent approval-request notification.' },
+          { step: 6, role: 'FOM / Super Admin', action: 'Confirm — Approve or Reject', description: 'FOM (or Super Admin) reviews the final coverage report, quality scores, and finance summary. They click Approve & Close Cycle or Reject & Send Back with a written reason.' },
           { step: 7, role: 'System', action: 'Archive the cycle', description: 'On approval the cycle status becomes Closed. All stats (coverage %, COMPLETED, UNCOVERED, OVERDUE counts, reason breakdowns, quality scores) are permanently archived and appear in the Closed Cycles and Comparison tabs.' },
         ]}
         workflowStepsAr={[
-          { step: 1, role: 'المدير', action: 'بدء إغلاق الدورة', description: 'في تبويب الدورات النشطة، ابحث عن خطة المراقبة الشهرية للشهر المكتمل. انقر "بدء الإغلاق". يقوم النظام فوراً بتحديد كل موقع لم يُكتمل أو يُلغَ رسمياً.' },
-          { step: 2, role: 'المشرف', action: 'تعيين أسباب المواقع غير المغطاة', description: 'انتقل إلى تبويب المواقع غير المغطاة. عيّن سبباً لكل موقع (حادث أمني، رفض الوصول، فيضانات، تخفيضات الميزانية، غياب جامع البيانات، إلخ). استخدم "التعيين الجماعي" لتطبيق سبب واحد على مواقع متعددة دفعةً واحدة.' },
-          { step: 3, role: 'المدير', action: 'اجتياز قائمة جاهزية الإغلاق', description: 'انقر على صف خطة المراقبة لفتح لوحة إغلاق الدورة. يجب أن تظهر قائمة الجاهزية بعلامات خضراء: المواقع محسومة، لا توجد تقديمات تكلفة معلقة، تسوية السلف المالية، معالجة طلبات السحب، معالجة استرداد التكاليف، وتطبيق ملف WFP.' },
-          { step: 4, role: 'المدير', action: 'حسم إشكاليات المالية', description: 'إذا كان أي بند مالي أحمر: اذهب إلى المالية → تقديمات التكاليف لاعتماد أو رفض البنود المعلقة؛ اذهب إلى التسوية لتحديد السلف كمسوّاة. إذا كان البند يعرض تحذير "(غير مُهيَّأ)" بالأصفر، راجع الدليل أدناه لمعرفة الترحيل المطلوب.' },
-          { step: 5, role: 'المدير', action: 'تقديم للموافقة', description: 'بمجرد وصول نسبة القائمة إلى 100%، انقر "تقديم للموافقة". يُرسَل إشعار إلى مدير العمليات الميدانية والمدير القُطري.' },
-          { step: 6, role: 'المشرف والمدير', action: 'موافقة أو رفض', description: 'يراجع مدير العمليات الميدانية تقرير التغطية النهائي ودرجات الجودة والملخص المالي. ينقر موافقة (مع تعليق اختياري) أو رفض مع سبب لإعادتها إلى المدير.' },
+          { step: 1, role: 'المدير / المدير العام', action: 'بدء إغلاق الدورة', description: 'في تبويب الدورات النشطة، ابحث عن خطة المراقبة الشهرية للشهر المكتمل. انقر "بدء الإغلاق". يقوم النظام فوراً بتحديد كل موقع لم يُكتمل أو يُلغَ رسمياً. يُرسَل إشعار تلقائي لمدير العمليات الميدانية.' },
+          { step: 2, role: 'المدير / المدير العام', action: 'تعيين أسباب المواقع غير المغطاة', description: 'انتقل إلى تبويب المواقع غير المغطاة. عيّن سبباً لكل موقع (حادث أمني، رفض الوصول، فيضانات، تخفيضات الميزانية، غياب جامع البيانات، إلخ). استخدم "التعيين الجماعي" لتطبيق سبب واحد على مواقع متعددة دفعةً واحدة.' },
+          { step: 3, role: 'المدير / المدير العام', action: 'اجتياز قائمة جاهزية الإغلاق', description: 'انقر على صف خطة المراقبة لفتح لوحة إغلاق الدورة. يجب أن تظهر قائمة الجاهزية بعلامات خضراء: المواقع محسومة، لا توجد تقديمات تكلفة معلقة، تسوية السلف المالية، معالجة طلبات السحب، معالجة استرداد التكاليف، وتطبيق ملف WFP.' },
+          { step: 4, role: 'المدير / المدير العام', action: 'حسم إشكاليات المالية', description: 'إذا كان أي بند مالي أحمر: اذهب إلى المالية → تقديمات التكاليف لاعتماد أو رفض البنود المعلقة؛ اذهب إلى التسوية لتحديد السلف كمسوّاة.' },
+          { step: 5, role: 'المدير / المدير العام', action: 'تقديم للموافقة', description: 'بمجرد وصول نسبة القائمة إلى 100%، انقر "تقديم للموافقة". يُرسَل إشعار عاجل لمدير العمليات الميدانية لطلب التأكيد.' },
+          { step: 6, role: 'مدير العمليات / المدير العام', action: 'تأكيد — موافقة أو رفض', description: 'يراجع مدير العمليات الميدانية (أو المدير العام) تقرير التغطية النهائي ودرجات الجودة والملخص المالي. ينقر موافقة وإغلاق الدورة أو رفض مع سبب مكتوب لإعادتها.' },
           { step: 7, role: 'النظام', action: 'أرشفة الدورة', description: 'عند الموافقة، يصبح وضع الدورة "مغلقة". تُؤرشَف جميع الإحصائيات (نسبة التغطية، الأعداد، تفاصيل الأسباب، درجات الجودة) بشكل دائم وتظهر في تبويبي الدورات المغلقة والمقارنة.' },
         ]}
       />
