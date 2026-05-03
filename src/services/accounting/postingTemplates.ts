@@ -48,7 +48,7 @@ export const COA_ACCOUNTS: Record<string, string> = {
   '1300': 'Mobile Money Wallet — EBS',
   '1500': 'Staff Advances',
   '1510': 'Travel Advances',
-  '1520': 'Procurement Advances',
+  '1520': 'Salary Advance Receivable',
   '2100': 'Accounts Payable — Vendors',
   '2110': 'Accrued Expenses',
   '2200': 'Payroll Payable',
@@ -56,6 +56,7 @@ export const COA_ACCOUNTS: Record<string, string> = {
   '2220': 'Pension Contributions Payable',
   '2230': 'Zakat Payable',
   '2300': 'Withholding Tax Payable',
+  '2350': 'EOSB Provision Liability',
   '2600': 'Staff Electronic Wallet Payable',
   '2610': 'Site Visit Incentives Payable',
   '2620': 'Task Rewards Payable',
@@ -67,11 +68,12 @@ export const COA_ACCOUNTS: Record<string, string> = {
   '5310': 'Per Diem & Subsistence',
   '5320': 'Training & Workshops',
   '5400': 'Beneficiary Cash Transfers',
-  '5600': 'Programme Consultants',
+  '5600': 'Grant Programme Expense',
   '5700': 'Programme Vehicle & Fuel',
   '5800': 'Programme Communications',
   '6100': 'Management Salaries',
   '6110': 'Management Benefits',
+  '6200': 'EOSB Expense — Staff Gratuity',
   '6310': 'Legal Fees',
 };
 
@@ -395,6 +397,143 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
       },
     ],
     notes: 'Clears the AP payable and reduces the bank balance.',
+  },
+
+  // ── Phase 3 bridges ───────────────────────────────────────────────────────
+
+  // ── 10. EOSB Accruals → Monthly Provision Posted ─────────────────────────
+  {
+    id:               'eosb_accruals_posted',
+    sourceTable:      'eosb_accruals',
+    eventType:        'accrual_posted',
+    triggerStatus:    'INSERT',
+    triggerCondition: 'INSERT on eosb_accruals (any row, positive amount)',
+    labelEn:          'EOSB Monthly Provision Recognised',
+    labelAr:          'إثبات مخصص مكافأة نهاية الخدمة الشهري',
+    featureFlag:      'acct.bridge.eosb_accruals',
+    lines: [
+      {
+        accountCode:  '6200',
+        accountName:  'EOSB Expense — Staff Gratuity',
+        debitCredit:  'DR',
+        amountSource: 'eosb_accruals.amount (monthly accrual)',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'EOSB Expense — [staff_name] [month]',
+      },
+      {
+        accountCode:  '2350',
+        accountName:  'EOSB Provision Liability',
+        debitCredit:  'CR',
+        amountSource: 'eosb_accruals.amount (monthly accrual)',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'EOSB Provision — [staff_name] [month]',
+      },
+    ],
+    notes: 'Posted by "Post Monthly Provision" in HR → EOSB Panel. Sudan Labour Law formula: ' +
+           '21 days/yr (≤5 yrs), 30 days/yr (>5 yrs). Liability clears on staff settlement.',
+  },
+
+  // ── 11. HR Salary Advances → Disbursed ────────────────────────────────────
+  {
+    id:               'hr_salary_advances_disbursed',
+    sourceTable:      'hr_salary_advances',
+    eventType:        'advance_disbursed',
+    triggerStatus:    'INSERT (status = active)',
+    triggerCondition: 'INSERT on hr_salary_advances with status = \'active\' and amount > 0',
+    labelEn:          'HR Salary Advance Disbursed',
+    labelAr:          'صرف سلفة راتب (موارد بشرية)',
+    featureFlag:      'acct.bridge.hr_salary_advances',
+    lines: [
+      {
+        accountCode:  '1520',
+        accountName:  'Salary Advance Receivable',
+        debitCredit:  'DR',
+        amountSource: 'hr_salary_advances.amount',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Advance Receivable: [staff_name]',
+      },
+      {
+        accountCode:  '1200',
+        accountName:  'Cash at Bank — SDG',
+        debitCredit:  'CR',
+        amountSource: 'hr_salary_advances.amount',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Cash disbursed for salary advance',
+      },
+    ],
+    notes: 'Fires on INSERT when the advance is issued. Receivable clears as instalments are recovered.',
+  },
+
+  // ── 12. HR Salary Advance Recoveries → Recovery Instalment ───────────────
+  {
+    id:               'hr_salary_advance_recoveries_posted',
+    sourceTable:      'hr_salary_advance_recoveries',
+    eventType:        'advance_recovered',
+    triggerStatus:    'INSERT (amount > 0)',
+    triggerCondition: 'INSERT on hr_salary_advance_recoveries with amount > 0',
+    labelEn:          'Salary Advance Recovery Received',
+    labelAr:          'استرداد سلفة راتب',
+    featureFlag:      'acct.bridge.hr_salary_advance_recoveries',
+    lines: [
+      {
+        accountCode:  '1200',
+        accountName:  'Cash at Bank — SDG',
+        debitCredit:  'DR',
+        amountSource: 'hr_salary_advance_recoveries.amount',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Advance recovery received',
+      },
+      {
+        accountCode:  '1520',
+        accountName:  'Salary Advance Receivable',
+        debitCredit:  'CR',
+        amountSource: 'hr_salary_advance_recoveries.amount',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Clearing Salary Advance Receivable: [staff_name]',
+      },
+    ],
+    notes: 'Each payroll-deduction or manual repayment instalment fires this bridge. ' +
+           'Multiple instalments reduce the receivable balance until fully cleared.',
+  },
+
+  // ── 13. Grant Expenses → Posted ──────────────────────────────────────────
+  {
+    id:               'acct_grant_expenses_posted',
+    sourceTable:      'acct_grant_expenses',
+    eventType:        'grant_expense_posted',
+    triggerStatus:    'INSERT (amount > 0)',
+    triggerCondition: 'INSERT on acct_grant_expenses with amount > 0',
+    labelEn:          'Grant Expense Recognised',
+    labelAr:          'إثبات مصروف المنحة',
+    featureFlag:      'acct.bridge.acct_grant_expenses',
+    lines: [
+      {
+        accountCode:  '5600',
+        accountName:  'Grant Programme Expense',
+        debitCredit:  'DR',
+        amountSource: 'acct_grant_expenses.amount',
+        currency:     'SDG',
+        glFunction:   'program',
+        description:  'Grant Expense — [grant_name]: [description]',
+      },
+      {
+        accountCode:  '2100',
+        accountName:  'Accounts Payable — Vendors',
+        debitCredit:  'CR',
+        amountSource: 'acct_grant_expenses.amount',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'AP Payable — Grant Expense [id]',
+      },
+    ],
+    notes: 'Fires when a grant expense entry is recorded in Accounting → Grants. ' +
+           'Links back to the grant via grant_id for donor reporting.',
   },
 ];
 

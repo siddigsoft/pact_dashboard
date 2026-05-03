@@ -905,17 +905,9 @@ create table if not exists public.acct_po_lines (
   unique (po_id, line_no)
 );
 
--- Guard: tables may have been created by earlier migrations without these columns.
--- ALTER TABLE ... ADD COLUMN IF NOT EXISTS is always safe to run.
+-- Guard: if the table existed before Phase 2, pr_id may be absent — add it safely.
 alter table public.acct_purchase_orders
-  add column if not exists pr_id            uuid references public.acct_purchase_requisitions(id),
-  add column if not exists vendor_id        uuid,
-  add column if not exists delivery_date    date,
-  add column if not exists payment_terms    text,
-  add column if not exists delivery_terms   text,
-  add column if not exists approved_by      uuid references public.profiles(id),
-  add column if not exists approved_at      timestamptz,
-  add column if not exists metadata         jsonb default '{}';
+  add column if not exists pr_id uuid references public.acct_purchase_requisitions(id);
 
 create index if not exists idx_acct_po_status on public.acct_purchase_orders(status);
 create index if not exists idx_acct_po_vendor on public.acct_purchase_orders(vendor_id);
@@ -948,11 +940,6 @@ create table if not exists public.acct_grn_lines (
   total_value     numeric(14,2) generated always as (received_qty * unit_price) stored,
   unique (grn_id, line_no)
 );
-
--- Guard: acct_grn_receipts may have been created without po_id / journal_entry_id.
-alter table public.acct_grn_receipts
-  add column if not exists po_id            uuid references public.acct_purchase_orders(id),
-  add column if not exists journal_entry_id uuid references public.acct_journal_entries(id);
 
 create index if not exists idx_acct_grn_po     on public.acct_grn_receipts(po_id);
 create index if not exists idx_acct_grn_status on public.acct_grn_receipts(status);
@@ -994,17 +981,6 @@ create table if not exists public.acct_invoice_lines (
   tax_rate        numeric(6,4) default 0,
   unique (invoice_id, line_no)
 );
-
--- Guard: acct_invoices may have been created without po_id, grn_id, journal_entry_id.
-alter table public.acct_invoices
-  add column if not exists po_id            uuid references public.acct_purchase_orders(id),
-  add column if not exists grn_id           uuid references public.acct_grn_receipts(id),
-  add column if not exists due_date         date,
-  add column if not exists paid_amount      numeric(20,2) not null default 0,
-  add column if not exists journal_entry_id uuid references public.acct_journal_entries(id),
-  add column if not exists approved_by      uuid references public.profiles(id),
-  add column if not exists approved_at      timestamptz,
-  add column if not exists metadata         jsonb default '{}';
 
 create index if not exists idx_acct_inv_vendor on public.acct_invoices(vendor_id);
 create index if not exists idx_acct_inv_status on public.acct_invoices(status);
