@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS acct_budget_approvals (
   total_budget     NUMERIC(18, 2),   -- snapshot at submission time
   line_count       INTEGER,          -- snapshot at submission time
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(period_id, fund_id)         -- one approval record per period+fund combo
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Budget change audit log (tracks every individual line change)
@@ -48,6 +47,18 @@ CREATE TABLE IF NOT EXISTS acct_budget_audit_log (
   change_note      TEXT,
   changed_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Unique constraint: one approval record per period per fund.
+-- Two partial indexes handle the NULL fund_id case correctly because
+-- PostgreSQL UNIQUE treats every NULL as distinct, which would allow
+-- duplicate rows when fund_id IS NULL.
+CREATE UNIQUE INDEX IF NOT EXISTS uidx_budget_approvals_period_fund_notnull
+  ON acct_budget_approvals(period_id, fund_id)
+  WHERE fund_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uidx_budget_approvals_period_fund_null
+  ON acct_budget_approvals(period_id)
+  WHERE fund_id IS NULL;
 
 -- Index for fast period-level queries
 CREATE INDEX IF NOT EXISTS idx_budget_approvals_period
@@ -132,14 +143,24 @@ CREATE TRIGGER trg_audit_budget_line
 ALTER TABLE acct_budget_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE acct_budget_audit_log ENABLE ROW LEVEL SECURITY;
 
--- Finance/admin roles can read approvals
+-- Authenticated users can read approvals
 CREATE POLICY "acct_budget_approvals_select"
   ON acct_budget_approvals FOR SELECT
   USING (auth.role() = 'authenticated');
 
--- Finance/admin roles can insert/update approvals
-CREATE POLICY "acct_budget_approvals_write"
-  ON acct_budget_approvals FOR ALL
+-- INSERT: WITH CHECK (not USING) is required for inserts to be validated
+CREATE POLICY "acct_budget_approvals_insert"
+  ON acct_budget_approvals FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- UPDATE/DELETE: USING clause applies to existing rows
+CREATE POLICY "acct_budget_approvals_update"
+  ON acct_budget_approvals FOR UPDATE
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "acct_budget_approvals_delete"
+  ON acct_budget_approvals FOR DELETE
   USING (auth.role() = 'authenticated');
 
 -- All authenticated users can read the audit log

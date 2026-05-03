@@ -251,14 +251,16 @@ export default function AccountingFixedAssets() {
         const gainLoss = proceeds - bookValue;
         const cost = Number(disposeTarget.acquisition_cost);
         const glDesc = `Asset Disposal — ${disposeTarget.name_en} | Method: ${disposeForm.method} | Proceeds: ${disposeTarget.currency} ${proceeds.toFixed(2)} | ${gainLoss >= 0 ? 'Gain' : 'Loss'}: ${disposeTarget.currency} ${Math.abs(gainLoss).toFixed(2)}`;
+        // Total = cost + gain (or just cost when loss/zero — gain is 0 in that case)
+        const jeTotal = cost + Math.max(0, gainLoss);
         const { data: je } = await supabase.from('acct_journal_entries').insert({
           description_en: glDesc,
           description_ar: `التخلص من الأصل — ${disposeTarget.name_ar ?? disposeTarget.name_en}`,
           entry_date: disposeForm.date,
           posting_date: disposeForm.date,
           status: 'draft',
-          total_debit: cost,
-          total_credit: cost,
+          total_debit: jeTotal,
+          total_credit: jeTotal,
           reference_number: `DISP-${disposeTarget.asset_tag ?? disposeTarget.id.slice(0, 8)}`,
         }).select('id').single();
         if (je?.id && (disposeTarget as any).dep_account_id) {

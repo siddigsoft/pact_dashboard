@@ -297,6 +297,9 @@ function LeaveEntitlementsPanel() {
       }
       rows.sort((a, b) => b.carryForward - a.carryForward);
       setCfPreview(rows);
+    } catch (e: any) {
+      toast({ title: 'Failed to load preview', description: e.message, variant: 'destructive' });
+      setCfPreview([]);
     } finally {
       setCfPreviewLoading(false);
     }
@@ -321,8 +324,6 @@ function LeaveEntitlementsPanel() {
           updated++;
         } else {
           // Use same base as current year's entitlement
-          const curEnt = (profiles ?? []).find(p => p.id === row.userId);
-          void curEnt; // profile used for name only
           const curEntData = (entitlements ?? []).find((e: Entitlement) => e.user_id === row.userId);
           await supabase.from('leave_entitlements').insert({
             user_id: row.userId,
