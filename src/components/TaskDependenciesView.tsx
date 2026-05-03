@@ -6,7 +6,7 @@ import {
   removeTaskDependency,
   addTaskDependency,
 } from '@/services/task-dependencies.service';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import {
   AlertCircle, CheckCircle, Link2, ArrowRight, Trash2, Lock, Plus, Search, Loader2,

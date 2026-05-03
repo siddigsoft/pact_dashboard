@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import * as TaskCommentsService from '@/services/task-comments.service';
 import type { TaskComment, MentionNotification } from '@/services/task-comments.service';
 

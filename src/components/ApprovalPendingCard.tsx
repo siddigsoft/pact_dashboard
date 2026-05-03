@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { getPendingApprovalsForUser, approveTask, rejectTask, addApprovalComment } from '@/services/approval-workflows.service';
 import { CheckCircle, XCircle, AlertCircle, MessageSquare, Clock } from 'lucide-react';
 

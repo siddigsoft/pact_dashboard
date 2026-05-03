@@ -7,7 +7,7 @@
  * const history = await getTaskAuditTrail(taskId);
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface TaskChangeRecord {
   id: string;

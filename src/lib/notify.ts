@@ -7,7 +7,7 @@
  *
  * NOTE: Both invokes are fire-and-forget so the caller's UX never blocks.
  */
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface DispatchNotificationOptions {
   /** Event key — must exist in the eventTemplates map of dispatch-notification. */

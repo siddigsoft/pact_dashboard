@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { getActiveEscalationsForUser, resolveEscalation, acknowledgeEscalation } from '@/services/sla-escalation.service';
 import { AlertTriangle, CheckCircle, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';

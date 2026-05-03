@@ -7,7 +7,7 @@
  * const comments = await getTaskComments(taskId);
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface TaskComment {
   id: string;

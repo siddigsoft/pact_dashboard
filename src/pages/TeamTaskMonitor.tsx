@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, differenceInDays, isToday, isPast, isSameDay, addWeeks, subWeeks, addMonths, subMonths } from 'date-fns';
 import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Plus, Clock, CheckCircle2, BarChart2, MessageSquare, Bell, Phone, Mail, Filter, Search, RefreshCw, Eye, User, Layers, ChevronDown, ChevronUp, Flag, Briefcase, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
 import { useNotifications } from '@/context/notifications/NotificationContext';

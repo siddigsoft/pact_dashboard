@@ -16,7 +16,7 @@
  * doesn't get notified about their own change.
  */
 import { useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useUser } from '@/context/user/UserContext';
 import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';

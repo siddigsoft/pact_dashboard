@@ -110,6 +110,9 @@ export default function AccountingGrants() {
   // Edit milestone status inline
   const [editingMilestone, setEditingMilestone] = useState<string | null>(null);
 
+  // GL bridge log for expenses — map of expense_id → status
+  const [expenseGlLog, setExpenseGlLog] = useState<Record<string, string>>({});
+
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from('acct_grants' as any).select('*').order('end_date', { ascending: true }).limit(500);
@@ -145,12 +148,31 @@ export default function AccountingGrants() {
     setSelectedGrant(g);
     setDetailTab('expenses');
     setDetailLoading(true);
+    setExpenseGlLog({});
     const [exRes, msRes] = await Promise.all([
       supabase.from('acct_grant_expenses' as any).select('*').eq('grant_id', g.id).order('expense_date', { ascending: false }).limit(500).catch(() => ({ data: [] })),
       supabase.from('acct_grant_milestones' as any).select('*').eq('grant_id', g.id).order('due_date').limit(200).catch(() => ({ data: [] })),
     ]);
-    setExpenses(((exRes as any).data ?? []) as GrantExpense[]);
+    const loadedExpenses = ((exRes as any).data ?? []) as GrantExpense[];
+    setExpenses(loadedExpenses);
     setMilestones(((msRes as any).data ?? []) as GrantMilestone[]);
+
+    // Fetch GL bridge statuses for these expense rows
+    if (loadedExpenses.length > 0) {
+      const ids = loadedExpenses.map(e => e.id);
+      const { data: glData } = await supabase
+        .from('acct_gl_bridge_log' as any)
+        .select('source_id, status')
+        .eq('source_table', 'acct_grant_expenses')
+        .in('source_id', ids.slice(0, 500))
+        .order('created_at', { ascending: false });
+      const map: Record<string, string> = {};
+      for (const row of (glData ?? []) as any[]) {
+        if (!map[row.source_id]) map[row.source_id] = row.status;
+      }
+      setExpenseGlLog(map);
+    }
+
     setDetailLoading(false);
   }, []);
 
@@ -608,19 +630,39 @@ export default function AccountingGrants() {
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Description</th>
                           <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Amount</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground w-24">GL Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {expenses.map((e, i) => (
-                          <tr key={e.id} className={cn('border-b', i % 2 !== 0 && 'bg-muted/10')} data-testid={`row-expense-${e.id}`}>
-                            <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{e.description ?? '—'}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-medium">{formatNumber(e.amount, 2)}</td>
-                          </tr>
-                        ))}
+                        {expenses.map((e, i) => {
+                          const glStatus = expenseGlLog[e.id];
+                          return (
+                            <tr key={e.id} className={cn('border-b', i % 2 !== 0 && 'bg-muted/10')} data-testid={`row-expense-${e.id}`}>
+                              <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{e.description ?? '—'}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-medium">{formatNumber(e.amount, 2)}</td>
+                              <td className="px-3 py-2">
+                                {glStatus === 'success' ? (
+                                  <Badge variant="outline" className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-300 gap-1">
+                                    <CheckCircle2 className="h-3 w-3" />Posted
+                                  </Badge>
+                                ) : glStatus === 'error' ? (
+                                  <Badge variant="outline" className="text-[10px] bg-rose-100 text-rose-700 border-rose-300 gap-1">
+                                    <XCircle className="h-3 w-3" />Error
+                                  </Badge>
+                                ) : glStatus === 'skipped' ? (
+                                  <Badge variant="outline" className="text-[10px] text-slate-500">Skipped</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] text-slate-400">Pending</Badge>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                         <tr className="bg-muted/20 font-semibold">
                           <td className="px-3 py-2" colSpan={2}>Total</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatNumber(expenses.reduce((s, e) => s + e.amount, 0), 2)}</td>
+                          <td className="px-3 py-2" />
                         </tr>
                       </tbody>
                     </table>

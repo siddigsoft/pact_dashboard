@@ -7,7 +7,7 @@
  * const status = await getDeliveryStatus(notificationId);
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface DeliveryLog {
   id: string;

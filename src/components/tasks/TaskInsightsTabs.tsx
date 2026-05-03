@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApprovalPendingCard } from '@/components/ApprovalPendingCard';
 import { TaskDependenciesView } from '@/components/TaskDependenciesView';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { getBlockingTasks, getDependentTasks } from '@/services/task-dependencies.service';
 import { CheckCircle2, GitBranch, History, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
