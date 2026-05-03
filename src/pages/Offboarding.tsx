@@ -190,7 +190,8 @@ export default function Offboarding() {
     const allDone = CHECKLIST_ITEMS.every(i => c.checklist?.[i.key]);
     if (!allDone) { toast({ title: 'Complete the checklist first / أكمل قائمة المهام أولاً', variant: 'destructive' }); return; }
     // Mark inactive in profiles
-    await supabase.from('profiles').update({ is_active: false }).eq('id', c.user_id);
+    const { error: profileErr } = await supabase.from('profiles').update({ is_active: false }).eq('id', c.user_id);
+    if (profileErr) { toast({ title: 'Failed to deactivate profile', description: profileErr.message, variant: 'destructive' }); return; }
     const { error } = await supabase.from('offboarding_cases').update({
       status: 'completed', completed_at: new Date().toISOString(),
     }).eq('id', c.id);

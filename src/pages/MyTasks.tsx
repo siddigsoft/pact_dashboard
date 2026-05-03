@@ -1621,15 +1621,17 @@ function useProjectTaskAcknowledge(taskId: string, userId: string | undefined) {
       .limit(1);
 
     if (existing && existing.length > 0) {
-      await supabase.from('field_task_comments').update({ body: trimmed }).eq('id', existing[0].id);
+      const { error: upErr } = await supabase.from('field_task_comments').update({ body: trimmed }).eq('id', existing[0].id);
+      if (upErr) { console.error('Failed to save comment:', upErr.message); return; }
     } else {
       const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
-      await supabase.from('field_task_comments').insert({
+      const { error: insErr } = await supabase.from('field_task_comments').insert({
         task_id: taskId,
         author_id: userId,
         author_name: authorName ?? prof?.full_name ?? 'User',
         body: trimmed,
       });
+      if (insErr) { console.error('Failed to save comment:', insErr.message); return; }
     }
     setComment(trimmed);
   };

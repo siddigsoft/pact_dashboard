@@ -276,7 +276,8 @@ export default function PerformanceReviews() {
 
   async function markCompleted(id: string) {
     const rev = reviews.find(r => r.id === id);
-    await supabase.from('performance_reviews').update({ status: 'completed', reviewed_at: new Date().toISOString(), reviewer_id: currentUser?.id }).eq('id', id);
+    const { error: completeErr } = await supabase.from('performance_reviews').update({ status: 'completed', reviewed_at: new Date().toISOString(), reviewer_id: currentUser?.id }).eq('id', id);
+    if (completeErr) { toast({ title: 'Failed to complete review', description: completeErr.message, variant: 'destructive' }); return; }
     // Notify the reviewee that their review has been completed
     if (rev?.reviewee_id) {
       await NotificationTriggerService.send({
@@ -300,7 +301,8 @@ export default function PerformanceReviews() {
   }
 
   async function deleteReview(id: string) {
-    await supabase.from('performance_reviews').delete().eq('id', id);
+    const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
+    if (error) { toast({ title: 'Failed to delete review', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Review deleted' });
     setReviews(p => p.filter(r => r.id !== id));
   }

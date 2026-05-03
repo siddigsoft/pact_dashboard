@@ -217,7 +217,8 @@ export default function CRMOpportunities() {
     const idx = STAGES.findIndex(s => s.value === o.stage);
     if (idx === -1 || idx >= STAGES.length - 1) return;
     const newStage = STAGES[idx + 1].value;
-    await supabase.from('crm_opportunities').update({ stage: newStage, updated_at: new Date().toISOString() }).eq('id', o.id);
+    const { error } = await supabase.from('crm_opportunities').update({ stage: newStage, updated_at: new Date().toISOString() }).eq('id', o.id);
+    if (error) { toast({ title: 'Failed to advance stage', description: error.message, variant: 'destructive' }); return; }
     load();
     if (newStage === 'won') {
       await createProjectFromOpp({ ...o, stage: newStage });

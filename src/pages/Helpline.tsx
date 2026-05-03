@@ -135,7 +135,8 @@ export default function Helpline() {
   async function toggleActive(id: string, current: boolean) {
     const session = await ensureValidSession();
     if (!session.success) return;
-    await supabase.from('support_contacts').update({ is_active: !current }).eq('id', id);
+    const { error } = await supabase.from('support_contacts').update({ is_active: !current }).eq('id', id);
+    if (error) { toast({ title: 'Failed to update contact', description: error.message, variant: 'destructive' }); return; }
     fetchContacts();
   }
 
