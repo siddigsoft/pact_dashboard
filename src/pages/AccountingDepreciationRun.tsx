@@ -60,6 +60,7 @@ export default function AccountingDepreciationRun() {
 
   const [assets, setAssets] = useState<AssetWithDepr[]>([]);
   const [runs, setRuns] = useState<DeprRun[]>([]);
+  const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [migrationNeeded, setMigrationNeeded] = useState(false);
   const [search, setSearch] = useState('');
@@ -76,8 +77,22 @@ export default function AccountingDepreciationRun() {
     if (assetRes.error?.code === '42P01') { setMigrationNeeded(true); setLoading(false); return; }
     if (runRes.error?.code === '42P01') { setMigrationNeeded(true); setLoading(false); return; }
     setMigrationNeeded(false);
+    const fetchedRuns = (runRes.data ?? []) as DeprRun[];
     setAssets(((assetRes.data ?? []) as Asset[]).map(calcDepr));
-    setRuns((runRes.data ?? []) as DeprRun[]);
+    setRuns(fetchedRuns);
+    if (fetchedRuns.length > 0) {
+      const { data: logData } = await supabase
+        .from('acct_gl_bridge_log' as any)
+        .select('source_id, status')
+        .eq('source_table', 'acct_depreciation_runs')
+        .in('source_id', fetchedRuns.map(r => r.id))
+        .order('created_at', { ascending: false });
+      const map = new Map<string, string>();
+      for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
+        if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+      }
+      setGlLogMap(map);
+    }
     setLoading(false);
   }, []);
 
@@ -233,11 +248,14 @@ export default function AccountingDepreciationRun() {
                           <th className="text-right px-4 py-2 font-medium text-muted-foreground w-24">Assets</th>
                           <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Total Depr</th>
                           <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Status</th>
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">GL</th>
                           <th className="text-left px-4 py-2 font-medium text-muted-foreground">Notes</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {runs.map((r, i) => (
+                        {runs.map((r, i) => {
+                          const glStatus = glLogMap.get(r.id);
+                          return (
                           <tr key={r.id} className={cn('border-b hover:bg-muted/20', i % 2 === 0 ? '' : 'bg-muted/10')}>
                             <td className="px-4 py-2">{r.run_date}</td>
                             <td className="px-4 py-2">{r.period_label}</td>
@@ -246,9 +264,16 @@ export default function AccountingDepreciationRun() {
                             <td className="px-4 py-2">
                               <Badge variant="outline" className={cn('text-[10px]', r.status === 'completed' ? 'text-emerald-700 border-emerald-300' : 'text-amber-700 border-amber-300')}>{r.status}</Badge>
                             </td>
+                            <td className="px-4 py-2">
+                              {glStatus === 'success' && <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300">Posted</Badge>}
+                              {glStatus === 'error'   && <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300">Error</Badge>}
+                              {glStatus === 'skipped' && <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300">Skipped</Badge>}
+                              {!glStatus             && <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200">Pending</Badge>}
+                            </td>
                             <td className="px-4 py-2 text-muted-foreground">{r.notes ?? '—'}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </CardContent>

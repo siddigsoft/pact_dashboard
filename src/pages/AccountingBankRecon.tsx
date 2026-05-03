@@ -222,13 +222,17 @@ export default function AccountingBankRecon() {
   };
 
   const toggleExclude = async (line: StatementLine) => {
-    await supabase.from('acct_bank_statement_lines').update({ is_excluded: !line.is_excluded }).eq('id', line.id);
+    const { error: err } = await supabase.from('acct_bank_statement_lines').update({ is_excluded: !line.is_excluded }).eq('id', line.id);
+    if (err) { toast({ title: 'Error', description: err.message, variant: 'destructive' }); return; }
+    toast({ title: line.is_excluded ? 'Line included' : 'Line excluded' });
     void loadStatements();
   };
 
   const deleteLine = async (id: string) => {
     if (!confirm('Delete this statement line?')) return;
-    await supabase.from('acct_bank_statement_lines').delete().eq('id', id);
+    const { error: err } = await supabase.from('acct_bank_statement_lines').delete().eq('id', id);
+    if (err) { toast({ title: 'Error', description: err.message, variant: 'destructive' }); return; }
+    toast({ title: 'Statement line deleted' });
     void loadStatements();
   };
 

@@ -121,7 +121,9 @@ export default function AccountingVendors() {
   };
 
   const toggleActive = async (v: Vendor) => {
-    await supabase.from('acct_vendors').update({ is_active: !v.is_active }).eq('id', v.id);
+    const { error: err } = await supabase.from('acct_vendors').update({ is_active: !v.is_active }).eq('id', v.id);
+    if (err) { toast({ title: 'Error', description: err.message, variant: 'destructive' }); return; }
+    toast({ title: v.is_active ? 'Vendor deactivated' : 'Vendor activated' });
     await loadVendors();
     if (selectedId === v.id && v.is_active) setSelectedId(null);
   };

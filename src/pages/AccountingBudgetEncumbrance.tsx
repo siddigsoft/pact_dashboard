@@ -56,6 +56,7 @@ export default function AccountingBudgetEncumbrance() {
   const [accounts, setAccounts]         = useState<Account[]>([]);
   const [budgetLines, setBudgetLines]   = useState<BudgetLine[]>([]);
   const [actuals, setActuals]           = useState<ActualByAccount[]>([]);
+  const [glLogMap, setGlLogMap]         = useState<Map<string, string>>(new Map());
   const [loading, setLoading]           = useState(true);
   const [tableExists, setTableExists]   = useState<boolean | null>(null);
 
@@ -94,6 +95,21 @@ export default function AccountingBudgetEncumbrance() {
       actualMap.set(l.account_id, cur + (l.debit_credit === 'DR' ? l.functional_amount : -l.functional_amount));
     }
     setActuals(Array.from(actualMap.entries()).map(([account_id, actual]) => ({ account_id, actual })));
+
+    const fetchedEnc = (enc ?? []) as Encumbrance[];
+    if (fetchedEnc.length > 0) {
+      const { data: logData } = await supabase
+        .from('acct_gl_bridge_log' as any)
+        .select('source_id, status')
+        .eq('source_table', 'acct_budget_encumbrances')
+        .in('source_id', fetchedEnc.map(e => e.id))
+        .order('created_at', { ascending: false });
+      const map = new Map<string, string>();
+      for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
+        if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+      }
+      setGlLogMap(map);
+    }
     setLoading(false);
   }, []);
 
@@ -301,7 +317,7 @@ export default function AccountingBudgetEncumbrance() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 border-b">
                   <tr>
-                    {['Source', 'Fund', 'GL Account', 'Amount', 'Currency', 'Status', 'Date', ''].map(h => (
+                    {['Source', 'Fund', 'GL Account', 'Amount', 'Currency', 'Status', 'GL', 'Date', ''].map(h => (
                       <th key={h} className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">{h}</th>
                     ))}
                   </tr>
@@ -311,6 +327,7 @@ export default function AccountingBudgetEncumbrance() {
                     const fund = funds.find(f => f.id === e.fund_id);
                     const account = accounts.find(a => a.id === e.gl_account_id);
                     const scfg = STATUS_CFG[e.status] ?? STATUS_CFG.open;
+                    const glStatus = glLogMap.get(e.id);
                     return (
                       <tr key={e.id} className="hover:bg-muted/30" data-testid={`row-enc-${e.id}`}>
                         <td className="px-4 py-3">
@@ -323,6 +340,12 @@ export default function AccountingBudgetEncumbrance() {
                         <td className="px-4 py-3 text-xs">{e.currency}</td>
                         <td className="px-4 py-3">
                           <Badge variant="outline" className={cn('text-[10px]', scfg.color)}>{scfg.label}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {glStatus === 'success' && <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300">Posted</Badge>}
+                          {glStatus === 'error'   && <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300">Error</Badge>}
+                          {glStatus === 'skipped' && <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300">Skipped</Badge>}
+                          {!glStatus             && <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200">Pending</Badge>}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">{format(parseISO(e.created_at), 'dd MMM yyyy')}</td>
                         <td className="px-4 py-3">
