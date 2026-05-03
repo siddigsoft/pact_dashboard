@@ -91,6 +91,7 @@ export default function AccountingAPInvoices() {
   const [detailInv, setDetailInv] = useState<APInvoice | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [actioning, setActioning] = useState(false);
+  const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,12 +103,32 @@ export default function AccountingAPInvoices() {
       supabase.from('acct_funds').select('id, code, name_en').order('code'),
       supabase.from('acct_accounts').select('id, code, name_en').order('code'),
     ]);
-    setInvoices((invData ?? []) as APInvoice[]);
+    const loaded = (invData ?? []) as APInvoice[];
+    setInvoices(loaded);
     setPOs((poData ?? []) as PO[]);
     setGRNs((grnData ?? []) as GRN[]);
     setVendors((vData ?? []) as Vendor[]);
     setFunds((fData ?? []) as Fund[]);
     setAccounts((aData ?? []) as Account[]);
+
+    if (loaded.length > 0) {
+      const bridgeIds = loaded
+        .filter(i => ['approved', 'posted', 'paid'].includes(i.status))
+        .map(i => i.id);
+      if (bridgeIds.length > 0) {
+        const { data: logData } = await supabase
+          .from('acct_gl_bridge_log' as any)
+          .select('source_id, status')
+          .eq('source_table', 'acct_invoices')
+          .in('source_id', bridgeIds)
+          .order('created_at', { ascending: false });
+        const map = new Map<string, string>();
+        for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
+          if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+        }
+        setGlLogMap(map);
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -275,7 +296,7 @@ export default function AccountingAPInvoices() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 border-b">
                   <tr>
-                    {['Invoice #', 'Vendor', 'Status', 'Match', 'Total', 'Currency', 'Due Date', 'Overdue', ''].map(h => (
+                    {['Invoice #', 'Vendor', 'Status', 'Match', 'Total', 'Currency', 'Due Date', 'Overdue', 'GL', ''].map(h => (
                       <th key={h} className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">{h}</th>
                     ))}
                   </tr>
@@ -317,6 +338,15 @@ export default function AccountingAPInvoices() {
                               {daysOverdue}d
                             </Badge>
                           ) : null}
+                        </td>
+                        <td className="px-4 py-3">
+                          {['approved', 'posted', 'paid'].includes(inv.status) && (() => {
+                            const gl = glLogMap.get(inv.id);
+                            if (gl === 'success') return <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300 whitespace-nowrap">GL Posted</Badge>;
+                            if (gl === 'error')   return <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300 whitespace-nowrap">GL Error</Badge>;
+                            if (gl === 'skipped') return <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300 whitespace-nowrap">GL Skipped</Badge>;
+                            return <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200 whitespace-nowrap">GL Pending</Badge>;
+                          })()}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1" onClick={e => e.stopPropagation()}>

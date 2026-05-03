@@ -76,6 +76,7 @@ export default function AccountingCostAllocation() {
   const [loading, setLoading]           = useState(true);
   const [migrationNeeded, setMigrationNeeded] = useState(false);
   const [running, setRunning]           = useState(false);
+  const [glLogMap, setGlLogMap]         = useState<Map<string, string>>(new Map());
 
   // Add rule dialog
   const [showAdd, setShowAdd]   = useState(false);
@@ -121,6 +122,24 @@ export default function AccountingCostAllocation() {
       weight_pct: t.weight_pct,
     }));
     setTargets(mappedTargets);
+
+    const loadedRuns = (runsRes.data ?? []) as AllocationRun[];
+    if (loadedRuns.length > 0) {
+      const completedIds = loadedRuns.filter(r => r.status === 'completed').map(r => r.id);
+      if (completedIds.length > 0) {
+        const { data: logData } = await supabase
+          .from('acct_gl_bridge_log' as any)
+          .select('source_id, status')
+          .eq('source_table', 'acct_allocation_runs')
+          .in('source_id', completedIds)
+          .order('created_at', { ascending: false });
+        const map = new Map<string, string>();
+        for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
+          if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+        }
+        setGlLogMap(map);
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -469,6 +488,7 @@ export default function AccountingCostAllocation() {
                           <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Total Allocated</th>
                           <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Journal Entry</th>
                           <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Status</th>
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">GL</th>
                           <th className="text-left px-4 py-2 font-medium text-muted-foreground">Notes</th>
                         </tr>
                       </thead>
@@ -487,6 +507,15 @@ export default function AccountingCostAllocation() {
                               <Badge variant="outline" className={cn('text-[10px]', r.status === 'completed' ? 'text-emerald-700 border-emerald-300' : 'text-amber-700 border-amber-300')}>
                                 {r.status}
                               </Badge>
+                            </td>
+                            <td className="px-4 py-2">
+                              {r.status === 'completed' && (() => {
+                                const gl = glLogMap.get(r.id);
+                                if (gl === 'success') return <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300">GL Posted</Badge>;
+                                if (gl === 'error')   return <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300">GL Error</Badge>;
+                                if (gl === 'skipped') return <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300">GL Skipped</Badge>;
+                                return <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200">GL Pending</Badge>;
+                              })()}
                             </td>
                             <td className="px-4 py-2 text-muted-foreground">{r.notes ?? '—'}</td>
                           </tr>
