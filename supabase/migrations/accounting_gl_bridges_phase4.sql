@@ -43,7 +43,7 @@ on conflict (key) do nothing;
 -- =============================================================================
 
 insert into public.acct_accounts
-  (code, name_en, name_ar, account_type, account_subtype, is_postable, is_active)
+  (code, name_en, name_ar, account_type, subtype, is_postable, is_active)
 values
   -- 1600: Accumulated Depreciation (contra-asset — reduces PPE book value)
   ('1600', 'Accumulated Depreciation',
