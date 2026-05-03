@@ -21,7 +21,9 @@ import {
   AlertTriangle,
   Download,
   Loader2,
-  FileText
+  FileText,
+  BookOpen,
+  RefreshCw,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -93,6 +95,165 @@ const safeFormatDate = (dateStr: string | null) => {
     return isValid(d) ? format(d, 'dd MMM yyyy') : '-';
   } catch { return '-'; }
 };
+
+interface GLLine {
+  id: string;
+  line_no: number;
+  debit_credit: 'DR' | 'CR';
+  functional_amount: number;
+  description: string | null;
+  posting_date: string;
+  entry_no: number;
+  account_code: string;
+  account_name: string;
+}
+
+function GLBridgeSection({ projectId, projectName, costIds }: { projectId: string; projectName: string; costIds: string[] }) {
+  const [glLines, setGlLines] = useState<GLLine[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const fetchGL = async () => {
+    setLoading(true);
+    try {
+      // Strategy: look for journal entries whose source_id matches any of this project's op-cost IDs
+      // or whose description_en contains the project name
+      const promises: Promise<any>[] = [];
+
+      // 1. By source_id = projectId (if project is linked directly to JE)
+      promises.push(
+        supabase
+          .from('acct_journal_entries')
+          .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
+          .eq('source_id', projectId)
+          .in('status', ['posted', 'draft'])
+          .order('posting_date', { ascending: false })
+          .limit(100)
+      );
+
+      // 2. By source_id matching any cost submission ID
+      if (costIds.length > 0) {
+        promises.push(
+          supabase
+            .from('acct_journal_entries')
+            .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
+            .in('source_id', costIds.slice(0, 100))
+            .in('status', ['posted', 'draft'])
+            .order('posting_date', { ascending: false })
+            .limit(200)
+        );
+      }
+
+      const results = await Promise.all(promises.map(p => p.catch(() => ({ data: [] }))));
+
+      // Flatten and deduplicate by line id
+      const seen = new Set<string>();
+      const lines: GLLine[] = [];
+      for (const res of results) {
+        for (const je of ((res as any).data ?? []) as any[]) {
+          for (const l of (je.acct_journal_lines ?? []) as any[]) {
+            if (seen.has(l.id)) continue;
+            seen.add(l.id);
+            lines.push({
+              id: l.id,
+              line_no: l.line_no,
+              debit_credit: l.debit_credit,
+              functional_amount: Number(l.functional_amount ?? 0),
+              description: l.description,
+              posting_date: je.posting_date,
+              entry_no: je.entry_no,
+              account_code: l.acct_accounts?.code ?? '—',
+              account_name: l.acct_accounts?.name_en ?? '—',
+            });
+          }
+        }
+      }
+      lines.sort((a, b) => b.posting_date.localeCompare(a.posting_date) || a.entry_no - b.entry_no);
+      setGlLines(lines);
+    } catch {
+      // Silently ignore — GL tables may not exist in all environments
+    }
+    setLoading(false);
+    setLoaded(true);
+  };
+
+  const totalDR = glLines.filter(l => l.debit_credit === 'DR').reduce((s, l) => s + l.functional_amount, 0);
+  const totalCR = glLines.filter(l => l.debit_credit === 'CR').reduce((s, l) => s + l.functional_amount, 0);
+
+  return (
+    <Card data-testid="card-gl-bridge">
+      <CardHeader className="p-4 pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-indigo-500" />
+            GL Journal Activity
+          </CardTitle>
+          <Button size="sm" variant="outline" onClick={fetchGL} disabled={loading} className="h-7 text-xs" data-testid="button-load-gl">
+            {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+            {loaded ? 'Refresh' : 'Load GL'}
+          </Button>
+        </div>
+        {!loaded && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Shows GL journal lines linked to this project or its cost submissions.
+          </p>
+        )}
+      </CardHeader>
+      {loaded && (
+        <CardContent className="p-4 pt-0 space-y-3">
+          {glLines.length === 0 ? (
+            <div className="text-center text-muted-foreground text-xs py-6 border border-dashed rounded-lg">
+              No GL journal entries found linked to this project. GL Bridge entries are created when operational costs are posted through the Journals module.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border p-2.5">
+                  <div className="text-muted-foreground">Total Debits</div>
+                  <div className="font-bold text-sm mt-0.5 text-indigo-700 dark:text-indigo-400">{totalDR.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                </div>
+                <div className="rounded-md border p-2.5">
+                  <div className="text-muted-foreground">Total Credits</div>
+                  <div className="font-bold text-sm mt-0.5 text-slate-700 dark:text-slate-300">{totalCR.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                </div>
+              </div>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Date</th>
+                      <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">JE #</th>
+                      <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Account</th>
+                      <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Description</th>
+                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground w-16">DR/CR</th>
+                      <th className="text-right px-3 py-1.5 font-medium text-muted-foreground w-28">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {glLines.map((l, i) => (
+                      <tr key={l.id} className={`border-b ${i % 2 !== 0 ? 'bg-muted/10' : ''}`} data-testid={`row-gl-${l.id}`}>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{l.posting_date}</td>
+                        <td className="px-3 py-1.5 font-mono">#{l.entry_no}</td>
+                        <td className="px-3 py-1.5 max-w-[120px] truncate font-mono">{l.account_code}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground max-w-[160px] truncate">{l.description ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          <Badge variant="outline" className={`text-[10px] ${l.debit_credit === 'DR' ? 'text-indigo-700 border-indigo-300' : 'text-slate-600 border-slate-300'}`}>
+                            {l.debit_credit}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-medium">{l.functional_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 
 export default function ProjectCostTab({ projectId, projectName, budgetTotalCents, currency = 'SDG' }: ProjectCostTabProps) {
   const navigate = useNavigate();
@@ -373,6 +534,13 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
           </CardContent>
         </Card>
       )}
+
+      {/* ── GL Bridge — journal entries linked to this project ─── */}
+      <GLBridgeSection
+        projectId={projectId}
+        projectName={projectName}
+        costIds={costs.map(c => c.id)}
+      />
     </div>
   );
 }

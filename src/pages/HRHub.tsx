@@ -1,7 +1,9 @@
 import { Suspense, lazy, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, FileDown, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X } from 'lucide-react';
+import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, FileDown, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X, ShieldCheck, CreditCard } from 'lucide-react';
+import EOSBPanel from '@/components/hr/EOSBPanel';
+import SalaryAdvancesPanel from '@/components/hr/SalaryAdvancesPanel';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
@@ -24,7 +26,7 @@ const PerformancePanel  = lazy(() => import('./PerformanceReviews'));
 const SalaryIncrPanel   = lazy(() => import('./SalaryIncrements'));
 const TrainingPanel     = lazy(() => import('@/components/hr/TrainingCertifications'));
 
-type HRTab = 'overview' | 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training';
+type HRTab = 'overview' | 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training' | 'eosb' | 'salary-advances';
 
 const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: string; bg: string; adminOnly: boolean }[] = [
   { id: 'overview',          label: 'HR Overview',         icon: BarChart2,  accent: '#6366f1', bg: 'rgba(99,102,241,0.12)',  adminOnly: true  },
@@ -36,6 +38,8 @@ const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: strin
   { id: 'performance',       label: 'Performance Reviews',  icon: BarChart2,  accent: '#fb923c', bg: 'rgba(251,146,60,0.12)',  adminOnly: true  },
   { id: 'salary-increments', label: 'Salary Increments',   icon: Calculator, accent: '#4ade80', bg: 'rgba(74,222,128,0.12)',  adminOnly: true  },
   { id: 'hr-tools',          label: 'HR Analytics',         icon: GitBranch,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
+  { id: 'eosb',              label: 'EOSB / Gratuity',      icon: ShieldCheck, accent: '#0d9488', bg: 'rgba(13,148,136,0.12)', adminOnly: true  },
+  { id: 'salary-advances',   label: 'Salary Advances',      icon: CreditCard, accent: '#e11d48', bg: 'rgba(225,29,72,0.12)',  adminOnly: true  },
 ];
 
 const ADMIN_ROLES = [
@@ -177,6 +181,8 @@ export default function HRHub() {
         )}
         {tab === 'hr-tools' && isAdmin && <HRToolsPanel />}
         {tab === 'overview' && isAdmin && <HROverviewPanel />}
+        {tab === 'eosb' && isAdmin && <EOSBPanel />}
+        {tab === 'salary-advances' && isAdmin && <SalaryAdvancesPanel />}
       </div>
     </div>
   );
