@@ -41,9 +41,9 @@ values
    'expense','program_expense',
    (select id from public.acct_accounts where code='5000' limit 1), true),
 
-  -- 6200: EOSB Expense (staff cost — monthly provision charge)
+  -- 6200: EOSB Expense (management expense — monthly provision charge)
   ('6200','EOSB Expense — Staff Gratuity','مصروف مكافأة نهاية الخدمة',
-   'expense','staff_cost',
+   'expense','mng_expense',
    (select id from public.acct_accounts where code='6000' limit 1), true)
 
 on conflict (code) do nothing;
