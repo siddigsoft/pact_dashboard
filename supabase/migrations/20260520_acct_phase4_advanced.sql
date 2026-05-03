@@ -85,15 +85,18 @@ CREATE OR REPLACE FUNCTION acct_get_exchange_rate(
 $$;
 
 -- ── 3. Tax Summary View / RPC ─────────────────────────────────
--- Returns aggregated tax by tax_code from ap_invoices.
--- Requires ap_invoices to have tax_code_id column (add if missing).
+-- Returns aggregated tax by tax_code from acct_invoices.
+-- Requires acct_invoices to have tax_code_id column (add if missing).
 
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'ap_invoices' AND column_name = 'tax_code_id'
+    WHERE table_schema = 'public'
+      AND table_name   = 'acct_invoices'
+      AND column_name  = 'tax_code_id'
   ) THEN
-    ALTER TABLE ap_invoices ADD COLUMN tax_code_id uuid REFERENCES acct_tax_codes(id) ON DELETE SET NULL;
+    ALTER TABLE public.acct_invoices
+      ADD COLUMN tax_code_id uuid REFERENCES public.acct_tax_codes(id) ON DELETE SET NULL;
   END IF;
 END $$;
 
@@ -113,8 +116,8 @@ RETURNS TABLE (
     COALESCE(SUM(ai.subtotal), 0)::numeric,
     COALESCE(SUM(ai.tax_amount), 0)::numeric,
     COUNT(ai.id)
-  FROM acct_tax_codes tc
-  LEFT JOIN ap_invoices ai
+  FROM public.acct_tax_codes tc
+  LEFT JOIN public.acct_invoices ai
     ON ai.tax_code_id = tc.id
    AND ai.status IN ('posted', 'paid')
   GROUP BY tc.id, tc.code, tc.tax_type, tc.rate_pct
@@ -178,5 +181,5 @@ ON CONFLICT (key) DO NOTHING;
 -- Functions:
 --   acct_get_exchange_rate(from, to, date)
 --   acct_tax_summary()
--- Columns added to ap_invoices:
+-- Columns added to acct_invoices:
 --   tax_code_id
