@@ -16,7 +16,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { POSTING_TEMPLATES, COA_ACCOUNTS, type PostingTemplate } from '@/services/accounting/postingTemplates';
 import { format } from 'date-fns';
 

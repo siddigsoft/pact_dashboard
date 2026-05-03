@@ -167,11 +167,11 @@ CREATE POLICY acct_budget_encumbrances_write ON acct_budget_encumbrances FOR ALL
 
 -- ── 6. Feature flags for Phase 4 ─────────────────────────────
 
-INSERT INTO feature_flags (key, description, is_enabled, rolled_out_pct, updated_at) VALUES
-  ('acct.multi_currency.enabled',   'Allow journals in non-base currency with auto-revaluation.', false, 100, now()),
-  ('acct.tax.auto_apply',           'Automatically apply tax codes to new AP invoices based on vendor country.', false, 100, now()),
-  ('acct.encumbrance.enabled',      'Track budget encumbrances from PRs and POs.', false, 100, now()),
-  ('acct.period_auto_close',        'Automatically soft-close periods 5 days after their end date.', false, 100, now())
+INSERT INTO feature_flags (key, description, is_enabled) VALUES
+  ('acct.multi_currency.enabled',   'Allow journals in non-base currency with auto-revaluation.', false),
+  ('acct.tax.auto_apply',           'Automatically apply tax codes to new AP invoices based on vendor country.', false),
+  ('acct.encumbrance.enabled',      'Track budget encumbrances from PRs and POs.', false),
+  ('acct.period_auto_close',        'Automatically soft-close periods 5 days after their end date.', false)
 ON CONFLICT (key) DO NOTHING;
 
 -- ── Done ─────────────────────────────────────────────────────

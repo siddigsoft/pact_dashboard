@@ -42,6 +42,20 @@ const STATUS_BADGE: Record<string, string> = {
 };
 const CAT_ICONS: Record<string, string> = { vehicle: '🚗', building: '🏢', it_hardware: '💻', software: '💿', equipment: '⚙️', furniture: '🪑', other: '📦' };
 
+async function getGLPrereqs() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [{ data: fund }, { data: period }, { data: authData }] = await Promise.all([
+    supabase.from('acct_funds').select('id').eq('is_active', true).limit(1).single(),
+    supabase.from('acct_fiscal_periods' as any).select('id').lte('start_date', today).gte('end_date', today).eq('status', 'open').limit(1).single(),
+    supabase.auth.getUser(),
+  ]);
+  return {
+    fundId: (fund as any)?.id as string | null ?? null,
+    periodId: (period as any)?.id as string | null ?? null,
+    userId: authData?.user?.id ?? null,
+  };
+}
+
 function calcDepreciation(asset: Asset, asOfDate: Date): { monthlyDep: number; accumulated: number; bookValue: number; depreciationPct: number } {
   const cost = Number(asset.acquisition_cost);
   const salvage = Number(asset.salvage_value);
@@ -179,6 +193,12 @@ export default function AccountingFixedAssets() {
     if (!active.length) { toast({ title: 'No active assets found', variant: 'destructive' }); return; }
     setDepRunBusy(true);
     setDepRunResults([]);
+    const prereqs = await getGLPrereqs();
+    if (!prereqs.periodId || !prereqs.userId) {
+      toast({ title: 'GL prerequisites missing', description: prereqs.periodId ? 'Could not resolve current user.' : 'No open fiscal period found for today. Create or open a fiscal period first.', variant: 'destructive' });
+      setDepRunBusy(false);
+      return;
+    }
     const periodStart = new Date(depRunStart);
     const periodEnd = new Date(depRunEnd);
     const monthsFraction = Math.max(0.01, (periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
@@ -191,17 +211,19 @@ export default function AccountingFixedAssets() {
         const { data: entry, error: eErr } = await supabase.from('acct_journal_entries').insert({
           description_en: `Depreciation — ${asset.name_en} (${depRunStart.slice(0, 7)})`,
           description_ar: `استهلاك — ${asset.name_ar ?? asset.name_en}`,
-          entry_date: depRunStart,
           posting_date: depRunEnd,
           status: 'draft',
-          total_debit: depAmount,
-          total_credit: depAmount,
+          source_type: 'fixed_assets',
+          source_id: asset.id,
+          period_id: prereqs.periodId,
+          idempotency_key: crypto.randomUUID(),
+          created_by: prereqs.userId,
         }).select('id').single();
         if (eErr) throw new Error(eErr.message);
-        if (entry && asset.dep_account_id) {
+        if (entry && asset.dep_account_id && prereqs.fundId) {
           await supabase.from('acct_journal_lines').insert([
-            { journal_entry_id: entry.id, account_id: asset.dep_account_id, debit_credit: 'DR', amount: depAmount, functional_amount: depAmount, functional_currency: asset.currency, description: `Dep expense — ${asset.name_en}` },
-            { journal_entry_id: entry.id, account_id: asset.dep_account_id, debit_credit: 'CR', amount: depAmount, functional_amount: depAmount, functional_currency: asset.currency, description: `Accum dep — ${asset.name_en}` },
+            { entry_id: entry.id, line_no: 1, account_id: asset.dep_account_id, fund_id: prereqs.fundId, function: 'none', debit_credit: 'DR', original_amount: depAmount, original_currency: asset.currency, functional_amount: depAmount, functional_currency: asset.currency, description: `Dep expense — ${asset.name_en}` },
+            { entry_id: entry.id, line_no: 2, account_id: asset.dep_account_id, fund_id: prereqs.fundId, function: 'none', debit_credit: 'CR', original_amount: depAmount, original_currency: asset.currency, functional_amount: depAmount, functional_currency: asset.currency, description: `Accum dep — ${asset.name_en}` },
           ]);
         }
         results.push({ asset: asset.name_en, amount: depAmount, entryId: entry?.id ?? null, error: null });
@@ -251,31 +273,31 @@ export default function AccountingFixedAssets() {
         const gainLoss = proceeds - bookValue;
         const cost = Number(disposeTarget.acquisition_cost);
         const glDesc = `Asset Disposal — ${disposeTarget.name_en} | Method: ${disposeForm.method} | Proceeds: ${disposeTarget.currency} ${proceeds.toFixed(2)} | ${gainLoss >= 0 ? 'Gain' : 'Loss'}: ${disposeTarget.currency} ${Math.abs(gainLoss).toFixed(2)}`;
-        // Total = cost + gain (or just cost when loss/zero — gain is 0 in that case)
-        const jeTotal = cost + Math.max(0, gainLoss);
+        const dispPrereqs = await getGLPrereqs();
         const { data: je } = await supabase.from('acct_journal_entries').insert({
           description_en: glDesc,
           description_ar: `التخلص من الأصل — ${disposeTarget.name_ar ?? disposeTarget.name_en}`,
-          entry_date: disposeForm.date,
           posting_date: disposeForm.date,
           status: 'draft',
-          total_debit: jeTotal,
-          total_credit: jeTotal,
-          reference_number: `DISP-${disposeTarget.asset_tag ?? disposeTarget.id.slice(0, 8)}`,
+          source_type: 'fixed_assets',
+          source_id: disposeTarget.id,
+          period_id: dispPrereqs.periodId,
+          idempotency_key: crypto.randomUUID(),
+          created_by: dispPrereqs.userId,
         }).select('id').single();
-        if (je?.id && (disposeTarget as any).dep_account_id) {
+        if (je?.id && (disposeTarget as any).dep_account_id && dispPrereqs.fundId) {
           // DR Accumulated Depreciation
           // DR Cash/Proceeds (if > 0)
           // DR Loss on Disposal (if loss)
           // CR Fixed Asset Cost
           // CR Gain on Disposal (if gain)
           const lines: any[] = [
-            { journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: accumulated, functional_amount: accumulated, functional_currency: disposeTarget.currency, description: `Accum dep cleared — ${disposeTarget.name_en}` },
-            { journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'CR', amount: cost, functional_amount: cost, functional_currency: disposeTarget.currency, description: `Fixed asset derecognised — ${disposeTarget.name_en}` },
+            { entry_id: je.id, line_no: 1, account_id: (disposeTarget as any).dep_account_id, fund_id: dispPrereqs.fundId, function: 'none', debit_credit: 'DR', original_amount: accumulated, original_currency: disposeTarget.currency, functional_amount: accumulated, functional_currency: disposeTarget.currency, description: `Accum dep cleared — ${disposeTarget.name_en}` },
+            { entry_id: je.id, line_no: 2, account_id: (disposeTarget as any).dep_account_id, fund_id: dispPrereqs.fundId, function: 'none', debit_credit: 'CR', original_amount: cost, original_currency: disposeTarget.currency, functional_amount: cost, functional_currency: disposeTarget.currency, description: `Fixed asset derecognised — ${disposeTarget.name_en}` },
           ];
-          if (proceeds > 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: proceeds, functional_amount: proceeds, functional_currency: disposeTarget.currency, description: `Proceeds on disposal` });
-          if (gainLoss > 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'CR', amount: gainLoss, functional_amount: gainLoss, functional_currency: disposeTarget.currency, description: `Gain on disposal` });
-          if (gainLoss < 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: -gainLoss, functional_amount: -gainLoss, functional_currency: disposeTarget.currency, description: `Loss on disposal` });
+          if (proceeds > 0) lines.push({ entry_id: je.id, line_no: lines.length + 1, account_id: (disposeTarget as any).dep_account_id, fund_id: dispPrereqs.fundId, function: 'none', debit_credit: 'DR', original_amount: proceeds, original_currency: disposeTarget.currency, functional_amount: proceeds, functional_currency: disposeTarget.currency, description: `Proceeds on disposal` });
+          if (gainLoss > 0) lines.push({ entry_id: je.id, line_no: lines.length + 1, account_id: (disposeTarget as any).dep_account_id, fund_id: dispPrereqs.fundId, function: 'none', debit_credit: 'CR', original_amount: gainLoss, original_currency: disposeTarget.currency, functional_amount: gainLoss, functional_currency: disposeTarget.currency, description: `Gain on disposal` });
+          if (gainLoss < 0) lines.push({ entry_id: je.id, line_no: lines.length + 1, account_id: (disposeTarget as any).dep_account_id, fund_id: dispPrereqs.fundId, function: 'none', debit_credit: 'DR', original_amount: -gainLoss, original_currency: disposeTarget.currency, functional_amount: -gainLoss, functional_currency: disposeTarget.currency, description: `Loss on disposal` });
           await supabase.from('acct_journal_lines').insert(lines);
         }
         if (je?.id) {
@@ -319,24 +341,26 @@ export default function AccountingFixedAssets() {
         const { accumulated, bookValue } = calcDepreciation(writeOffTarget, today);
         const cost = Number(writeOffTarget.acquisition_cost);
         const entryDate = new Date().toISOString().slice(0, 10);
+        const woPrereqs = await getGLPrereqs();
         const { data: je } = await supabase.from('acct_journal_entries').insert({
           description_en: `Asset Write-off — ${writeOffTarget.name_en}${writeOffReason ? ' | ' + writeOffReason : ''} | Book Value: ${writeOffTarget.currency} ${bookValue.toFixed(2)}`,
           description_ar: `شطب الأصل — ${writeOffTarget.name_ar ?? writeOffTarget.name_en}`,
-          entry_date: entryDate,
           posting_date: entryDate,
           status: 'draft',
-          total_debit: cost,
-          total_credit: cost,
-          reference_number: `WO-${writeOffTarget.asset_tag ?? writeOffTarget.id.slice(0, 8)}`,
+          source_type: 'fixed_assets',
+          source_id: writeOffTarget.id,
+          period_id: woPrereqs.periodId,
+          idempotency_key: crypto.randomUUID(),
+          created_by: woPrereqs.userId,
         }).select('id').single();
-        if (je?.id && (writeOffTarget as any).dep_account_id) {
+        if (je?.id && (writeOffTarget as any).dep_account_id && woPrereqs.fundId) {
           // DR Accumulated Depreciation
           // DR Loss on Write-off (book value)
           // CR Fixed Asset Cost
           await supabase.from('acct_journal_lines').insert([
-            { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'DR', amount: accumulated, functional_amount: accumulated, functional_currency: writeOffTarget.currency, description: `Accum dep cleared — ${writeOffTarget.name_en}` },
-            { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'DR', amount: bookValue, functional_amount: bookValue, functional_currency: writeOffTarget.currency, description: `Loss on write-off — ${writeOffTarget.name_en}` },
-            { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'CR', amount: cost, functional_amount: cost, functional_currency: writeOffTarget.currency, description: `Fixed asset derecognised — ${writeOffTarget.name_en}` },
+            { entry_id: je.id, line_no: 1, account_id: (writeOffTarget as any).dep_account_id, fund_id: woPrereqs.fundId, function: 'none', debit_credit: 'DR', original_amount: accumulated, original_currency: writeOffTarget.currency, functional_amount: accumulated, functional_currency: writeOffTarget.currency, description: `Accum dep cleared — ${writeOffTarget.name_en}` },
+            { entry_id: je.id, line_no: 2, account_id: (writeOffTarget as any).dep_account_id, fund_id: woPrereqs.fundId, function: 'none', debit_credit: 'DR', original_amount: bookValue, original_currency: writeOffTarget.currency, functional_amount: bookValue, functional_currency: writeOffTarget.currency, description: `Loss on write-off — ${writeOffTarget.name_en}` },
+            { entry_id: je.id, line_no: 3, account_id: (writeOffTarget as any).dep_account_id, fund_id: woPrereqs.fundId, function: 'none', debit_credit: 'CR', original_amount: cost, original_currency: writeOffTarget.currency, functional_amount: cost, functional_currency: writeOffTarget.currency, description: `Fixed asset derecognised — ${writeOffTarget.name_en}` },
           ]);
         }
         if (je?.id) {

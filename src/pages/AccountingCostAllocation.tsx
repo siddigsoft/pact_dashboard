@@ -20,6 +20,20 @@ import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
 
+async function getGLPrereqs() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [{ data: fund }, { data: period }, { data: authData }] = await Promise.all([
+    supabase.from('acct_funds').select('id').eq('is_active', true).limit(1).single(),
+    supabase.from('acct_fiscal_periods' as any).select('id').lte('start_date', today).gte('end_date', today).eq('status', 'open').limit(1).single(),
+    supabase.auth.getUser(),
+  ]);
+  return {
+    fundId: (fund as any)?.id as string | null ?? null,
+    periodId: (period as any)?.id as string | null ?? null,
+    userId: authData?.user?.id ?? null,
+  };
+}
+
 interface AllocationRule {
   id: string; pool_name: string; source_account_id: string; source_account_code: string;
   source_account_name: string; basis_type: 'equal' | 'budget_pct' | 'headcount';
@@ -170,26 +184,32 @@ export default function AccountingCostAllocation() {
     try {
       const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
-      // 1. Get next journal entry number
-      const { data: lastJE } = await supabase
-        .from('acct_journal_entries')
-        .select('entry_no')
-        .order('entry_no', { ascending: false })
-        .limit(1);
-      const nextNo = ((lastJE?.[0] as any)?.entry_no ?? 0) + 1;
+      // 1. Resolve GL prerequisites (fiscal period, fund, current user)
+      const prereqs = await getGLPrereqs();
+      if (!prereqs.periodId || !prereqs.userId) {
+        toast({ title: 'GL prerequisites missing', description: prereqs.periodId ? 'Could not resolve current user.' : 'No open fiscal period found for today. Create or open a fiscal period first.', variant: 'destructive' });
+        setRunning(false);
+        return;
+      }
+      if (!prereqs.fundId) {
+        toast({ title: 'No active fund found', description: 'Create at least one active fund in the Funds module before running cost allocation.', variant: 'destructive' });
+        setRunning(false);
+        return;
+      }
 
       // 2. Create draft journal entry header
+      const today = new Date().toISOString().slice(0, 10);
       const { data: je, error: jeErr } = await supabase
         .from('acct_journal_entries')
         .insert({
-          entry_no: nextNo,
-          posting_date: new Date().toISOString().slice(0, 10),
+          posting_date: today,
           description_en: `Cost Allocation Run — ${rulesWithTargets.length} pool(s) — ${format(new Date(), 'MMM yyyy')}`,
           description_ar: 'تشغيل توزيع التكاليف',
           status: 'draft',
           source_type: 'cost_allocation',
-          total_debit: 0,
-          total_credit: 0,
+          period_id: prereqs.periodId,
+          idempotency_key: crypto.randomUUID(),
+          created_by: prereqs.userId,
         })
         .select('id')
         .single();
@@ -227,9 +247,13 @@ export default function AccountingCostAllocation() {
 
         // CR source — clear the pool
         lines.push({
-          journal_entry_id: je.id,
+          entry_id: je.id,
           account_id: rule.source_account_id,
+          fund_id: prereqs.fundId,
+          function: 'none',
           debit_credit: 'CR',
+          original_amount: poolBalance,
+          original_currency: 'USD',
           functional_amount: poolBalance,
           functional_currency: 'USD',
           description: `Pool clearing: ${rule.pool_name}`,
@@ -240,9 +264,13 @@ export default function AccountingCostAllocation() {
         for (const tgt of ruleTargets) {
           const share = parseFloat(((tgt.weight_pct / totalWeight) * poolBalance).toFixed(2));
           lines.push({
-            journal_entry_id: je.id,
+            entry_id: je.id,
             account_id: tgt.target_account_id,
+            fund_id: prereqs.fundId,
+            function: 'program',
             debit_credit: 'DR',
+            original_amount: share,
+            original_currency: 'USD',
             functional_amount: share,
             functional_currency: 'USD',
             description: `Allocated from pool: ${rule.pool_name}`,
@@ -259,13 +287,7 @@ export default function AccountingCostAllocation() {
         return;
       }
 
-      // 3. Update JE totals
-      await supabase.from('acct_journal_entries').update({
-        total_debit: totalAllocated,
-        total_credit: totalAllocated,
-      }).eq('id', je.id);
-
-      // 4. Insert all lines
+      // 3. Insert all lines
       const { error: lineErr } = await supabase.from('acct_journal_lines').insert(lines);
       if (lineErr) {
         toast({ title: 'Failed to insert journal lines', description: lineErr.message, variant: 'destructive' });
