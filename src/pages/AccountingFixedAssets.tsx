@@ -278,7 +278,17 @@ export default function AccountingFixedAssets() {
           if (gainLoss < 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: -gainLoss, functional_amount: -gainLoss, functional_currency: disposeTarget.currency, description: `Loss on disposal` });
           await supabase.from('acct_journal_lines').insert(lines);
         }
-        if (je?.id) toast({ title: 'Draft GL entry created', description: `Post to GL › journal ${je.id.slice(0, 8)}… — assign accounts in GL module` });
+        if (je?.id) {
+          // Log to GL bridge audit trail
+          await supabase.from('acct_gl_bridge_log' as any).insert({
+            source_table: 'acct_fixed_assets',
+            source_id: disposeTarget.id,
+            event_type: 'asset_disposed',
+            status: 'success',
+            journal_entry_id: je.id,
+          }).then(() => {});
+          toast({ title: 'Draft GL entry created', description: `Post to GL › journal ${je.id.slice(0, 8)}… — assign accounts in GL module` });
+        }
       } catch (e: any) { console.warn('GL posting skipped:', e.message); }
       setDisposeDialog(false);
       setDisposeTarget(null);
@@ -329,7 +339,17 @@ export default function AccountingFixedAssets() {
             { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'CR', amount: cost, functional_amount: cost, functional_currency: writeOffTarget.currency, description: `Fixed asset derecognised — ${writeOffTarget.name_en}` },
           ]);
         }
-        if (je?.id) toast({ title: 'Draft GL entry created', description: `Write-off journal ${je.id.slice(0, 8)}… — assign accounts in GL module` });
+        if (je?.id) {
+          // Log to GL bridge audit trail
+          await supabase.from('acct_gl_bridge_log' as any).insert({
+            source_table: 'acct_fixed_assets',
+            source_id: writeOffTarget.id,
+            event_type: 'asset_written_off',
+            status: 'success',
+            journal_entry_id: je.id,
+          }).then(() => {});
+          toast({ title: 'Draft GL entry created', description: `Write-off journal ${je.id.slice(0, 8)}… — assign accounts in GL module` });
+        }
       } catch (e: any) { console.warn('GL posting skipped:', e.message); }
       setWriteOffDialog(false);
       setWriteOffTarget(null);

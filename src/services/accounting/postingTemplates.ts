@@ -56,6 +56,8 @@ export const COA_ACCOUNTS: Record<string, string> = {
   '2220': 'Pension Contributions Payable',
   '2230': 'Zakat Payable',
   '2300': 'Withholding Tax Payable',
+  '2105': 'PO Encumbrance Reserve',
+  '2240': 'Leave Payable',
   '2350': 'EOSB Provision Liability',
   '2600': 'Staff Electronic Wallet Payable',
   '2610': 'Site Visit Incentives Payable',
@@ -75,6 +77,7 @@ export const COA_ACCOUNTS: Record<string, string> = {
   '6110': 'Management Benefits',
   '6200': 'EOSB Expense — Staff Gratuity',
   '6310': 'Legal Fees',
+  '6400': 'Depreciation Expense',
 };
 
 // ─── Category → account code map for ops cost submissions ────────────────────
@@ -534,6 +537,233 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
     ],
     notes: 'Fires when a grant expense entry is recorded in Accounting → Grants. ' +
            'Links back to the grant via grant_id for donor reporting.',
+  },
+
+  // ── Phase 4 bridges ───────────────────────────────────────────────────────
+
+  // ── 14. Depreciation Runs → Completed ────────────────────────────────────
+  {
+    id:               'acct_depreciation_runs_posted',
+    sourceTable:      'acct_depreciation_runs',
+    eventType:        'depreciation_run_posted',
+    triggerStatus:    'INSERT (status = completed)',
+    triggerCondition: 'INSERT on acct_depreciation_runs where status = \'completed\'',
+    labelEn:          'Depreciation Run Logged to GL Bridge',
+    labelAr:          'تسجيل دورة الاستهلاك في جسر دفتر الأستاذ',
+    featureFlag:      'acct.bridge.acct_depreciation_runs',
+    lines: [
+      {
+        accountCode:  '6400',
+        accountName:  'Depreciation Expense',
+        debitCredit:  'DR',
+        amountSource: 'acct_depreciation_runs.total_depreciation',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Depreciation Expense — [period_label]',
+      },
+      {
+        accountCode:  '1600',
+        accountName:  'Accumulated Depreciation',
+        debitCredit:  'CR',
+        amountSource: 'acct_depreciation_runs.total_depreciation',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Accumulated Depreciation — [period_label]',
+      },
+    ],
+    notes: 'Visibility-only bridge: the UI (AccountingFixedAssets) posts per-asset draft journals. ' +
+           'The trigger logs the run event to acct_gl_bridge_log; journal_entry_id may be null ' +
+           'when the run page does not consolidate per-asset journals into a single entry.',
+  },
+
+  // ── 15. Cost Allocation Runs → Completed ─────────────────────────────────
+  {
+    id:               'acct_allocation_runs_posted',
+    sourceTable:      'acct_allocation_runs',
+    eventType:        'allocation_run_posted',
+    triggerStatus:    'INSERT (status = completed)',
+    triggerCondition: 'INSERT on acct_allocation_runs where status = \'completed\' and journal_entry_id IS NOT NULL',
+    labelEn:          'Cost Allocation Run Logged to GL Bridge',
+    labelAr:          'تسجيل دورة توزيع التكاليف في جسر دفتر الأستاذ',
+    featureFlag:      'acct.bridge.acct_allocation_runs',
+    lines: [
+      {
+        accountCode:  '[per-rule target account]',
+        accountName:  'Allocated Cost Target Account',
+        debitCredit:  'DR',
+        amountSource: 'rule.weight_pct × source amount per target',
+        currency:     'SDG',
+        glFunction:   'program',
+        description:  'Cost Allocation — [rule_name] → [target]',
+      },
+      {
+        accountCode:  '[per-rule source account]',
+        accountName:  'Cost Allocation Source Account',
+        debitCredit:  'CR',
+        amountSource: 'rule.weight_pct × source amount per target',
+        currency:     'SDG',
+        glFunction:   'program',
+        description:  'Cost Allocation Clearing — [rule_name]',
+      },
+    ],
+    notes: 'Visibility-only bridge: the UI (AccountingCostAllocation) posts the multi-line journal ' +
+           'and stores journal_entry_id on the run row. The trigger logs the existing journal_entry_id ' +
+           'to acct_gl_bridge_log so it appears in the GL Audit trail.',
+  },
+
+  // ── 16. Fixed Assets → Disposed ──────────────────────────────────────────
+  {
+    id:               'acct_fixed_assets_disposed',
+    sourceTable:      'acct_fixed_assets',
+    eventType:        'asset_disposed',
+    triggerStatus:    'UI action (status → disposed)',
+    triggerCondition: 'handleDispose() in AccountingFixedAssets.tsx; inserts to acct_gl_bridge_log after journal created',
+    labelEn:          'Fixed Asset Disposal Journal Logged',
+    labelAr:          'تسجيل قيد التخلص من الأصل',
+    featureFlag:      'acct.bridge.acct_fixed_assets',
+    lines: [
+      {
+        accountCode:  '1600',
+        accountName:  'Accumulated Depreciation',
+        debitCredit:  'DR',
+        amountSource: 'calculated accumulated depreciation at disposal date',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Accum depreciation cleared — [asset_name]',
+      },
+      {
+        accountCode:  '[proceeds account if > 0]',
+        accountName:  'Cash / Receivable (Disposal Proceeds)',
+        debitCredit:  'DR',
+        amountSource: 'disposal_proceeds',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Proceeds on disposal — [asset_name]',
+      },
+      {
+        accountCode:  '[dep_account_id → asset cost account]',
+        accountName:  'Fixed Asset — Cost (derecognition)',
+        debitCredit:  'CR',
+        amountSource: 'acquisition_cost',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Fixed asset derecognised — [asset_name]',
+      },
+    ],
+    notes: 'Draft journal posted from UI on dispose action. Gain/loss on disposal line added as needed. ' +
+           'Bridge log insert is in AccountingFixedAssets.tsx handleDispose() after journal creation.',
+  },
+
+  // ── 17. Fixed Assets → Written Off ───────────────────────────────────────
+  {
+    id:               'acct_fixed_assets_written_off',
+    sourceTable:      'acct_fixed_assets',
+    eventType:        'asset_written_off',
+    triggerStatus:    'UI action (status → written_off)',
+    triggerCondition: 'handleWriteOff() in AccountingFixedAssets.tsx; inserts to acct_gl_bridge_log after journal created',
+    labelEn:          'Fixed Asset Write-off Journal Logged',
+    labelAr:          'تسجيل قيد شطب الأصل',
+    featureFlag:      'acct.bridge.acct_fixed_assets',
+    lines: [
+      {
+        accountCode:  '1600',
+        accountName:  'Accumulated Depreciation',
+        debitCredit:  'DR',
+        amountSource: 'calculated accumulated depreciation at write-off date',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Accum depreciation cleared — [asset_name]',
+      },
+      {
+        accountCode:  '[loss account]',
+        accountName:  'Loss on Write-off',
+        debitCredit:  'DR',
+        amountSource: 'book_value (acquisition_cost − accumulated)',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Loss on write-off — [asset_name]',
+      },
+      {
+        accountCode:  '[dep_account_id → asset cost account]',
+        accountName:  'Fixed Asset — Cost (derecognition)',
+        debitCredit:  'CR',
+        amountSource: 'acquisition_cost',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Fixed asset derecognised — [asset_name]',
+      },
+    ],
+    notes: 'Draft journal posted from UI on write-off action. Book value = acquisition cost − accumulated depreciation. ' +
+           'Bridge log insert is in AccountingFixedAssets.tsx handleWriteOff() after journal creation.',
+  },
+
+  // ── 18. Budget Encumbrances → Created ────────────────────────────────────
+  {
+    id:               'acct_budget_encumbrances_created',
+    sourceTable:      'acct_budget_encumbrances',
+    eventType:        'encumbrance_created',
+    triggerStatus:    'INSERT (status = open, amount > 0)',
+    triggerCondition: 'INSERT on acct_budget_encumbrances where status = \'open\' and amount > 0',
+    labelEn:          'Budget Encumbrance Posted',
+    labelAr:          'إثبات الالتزام الميزاني',
+    featureFlag:      'acct.bridge.acct_budget_encumbrances',
+    lines: [
+      {
+        accountCode:  '[gl_account_id → code, fallback 5050]',
+        accountName:  'Programme / Operating Expense (Encumbrance)',
+        debitCredit:  'DR',
+        amountSource: 'acct_budget_encumbrances.amount',
+        currency:     'SDG',
+        glFunction:   'program',
+        description:  'Budget Encumbrance — [source_type] [source_id]',
+      },
+      {
+        accountCode:  '2105',
+        accountName:  'PO Encumbrance Reserve',
+        debitCredit:  'CR',
+        amountSource: 'acct_budget_encumbrances.amount',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'PO Encumbrance Reserve — [source_type]',
+      },
+    ],
+    notes: 'Disabled by default — enable acct.bridge.acct_budget_encumbrances once COA and GENERAL fund ' +
+           'are configured. Reversal journal should be posted when encumbrance is liquidated or cancelled.',
+  },
+
+  // ── 19. Leave Requests → Approved ────────────────────────────────────────
+  {
+    id:               'leave_requests_approved',
+    sourceTable:      'leave_requests',
+    eventType:        'leave_approved',
+    triggerStatus:    'UPDATE (status → approved)',
+    triggerCondition: 'AFTER UPDATE on leave_requests when status changes TO \'approved\' and days_count > 0',
+    labelEn:          'Leave Liability Recognised',
+    labelAr:          'إثبات التزام الإجازة',
+    featureFlag:      'acct.bridge.leave_requests',
+    lines: [
+      {
+        accountCode:  '6110',
+        accountName:  'Management Benefits',
+        debitCredit:  'DR',
+        amountSource: '(eosb_accruals.base_salary ÷ 30) × leave_requests.days_count',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  '[leave_type] Leave Expense — [staff_name] ([days] days)',
+      },
+      {
+        accountCode:  '2240',
+        accountName:  'Leave Payable',
+        debitCredit:  'CR',
+        amountSource: '(eosb_accruals.base_salary ÷ 30) × leave_requests.days_count',
+        currency:     'SDG',
+        glFunction:   'none',
+        description:  'Leave Payable — [staff_name]',
+      },
+    ],
+    notes: 'Disabled by default — enable acct.bridge.leave_requests once EOSB accruals are populated. ' +
+           'Daily rate = latest base_salary from eosb_accruals ÷ 30. Logs "skipped" if no salary found. ' +
+           'Leave liability clears when leave encashment or payroll deduction is processed.',
   },
 ];
 
