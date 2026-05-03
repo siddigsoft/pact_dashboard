@@ -102,24 +102,26 @@ END $$;
 
 CREATE OR REPLACE FUNCTION acct_tax_summary()
 RETURNS TABLE (
-  tax_code     text,
-  tax_type     text,
-  rate_pct     numeric,
-  base_amount  numeric,
-  tax_amount   numeric,
+  tax_code      text,
+  tax_type      text,
+  rate_pct      numeric,
+  base_amount   numeric,
+  tax_amount    numeric,
   invoice_count bigint
 ) LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  -- base_amount = sum of invoice line totals linked to invoices tagged with this tax code
+  -- tax_amount  = sum of (line total × line tax_rate) for those invoices
   SELECT
     tc.code,
     tc.tax_type,
     tc.rate_pct,
-    COALESCE(SUM(ai.subtotal), 0)::numeric,
-    COALESCE(SUM(ai.tax_amount), 0)::numeric,
-    COUNT(ai.id)
+    COALESCE(SUM(il.total_price),                    0)::numeric  AS base_amount,
+    COALESCE(SUM(il.total_price * il.tax_rate),      0)::numeric  AS tax_amount,
+    COUNT(DISTINCT ai.id)                                          AS invoice_count
   FROM public.acct_tax_codes tc
-  LEFT JOIN public.acct_invoices ai
-    ON ai.tax_code_id = tc.id
-   AND ai.status IN ('posted', 'paid')
+  LEFT JOIN public.acct_invoices      ai ON ai.tax_code_id = tc.id
+                                        AND ai.status IN ('approved','paid','partial_paid')
+  LEFT JOIN public.acct_invoice_lines il ON il.invoice_id  = ai.id
   GROUP BY tc.id, tc.code, tc.tax_type, tc.rate_pct
   ORDER BY tc.code;
 $$;
