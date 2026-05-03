@@ -110,7 +110,7 @@ export default function SalaryAdvancesPanel() {
       const { data } = await supabase
         .from('acct_gl_bridge_log' as any)
         .select('source_id, status, event_type')
-        .in('source_table', ['hr_salary_advances', 'hr_salary_advance_recoveries'])
+        .in('source_table', ['hr_salary_advances', 'hr_salary_advance_recoveries', 'salary_advances', 'salary_advance_recoveries'])
         .in('source_id', advIds.slice(0, 500))
         .order('created_at', { ascending: false });
       const map: Record<string, GlBridgeEntry> = {};

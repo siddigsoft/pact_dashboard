@@ -121,6 +121,7 @@ export default function LeaveRequests() {
   const [reviewProfileLoading, setReviewProfileLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
+  const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
 
   const load = async () => {
     setLoading(true);
@@ -137,11 +138,29 @@ export default function LeaveRequests() {
       (profiles || []).forEach((p: any) => { profileMap[p.id] = p.full_name; });
     }
 
-    setRequests((reqs || []).map((r: any) => ({
+    const mappedReqs = (reqs || []).map((r: any) => ({
       ...r,
       user_name: profileMap[r.user_id] || 'Unknown',
       reviewer_name: r.reviewed_by ? profileMap[r.reviewed_by] || null : null,
-    })));
+    }));
+    setRequests(mappedReqs);
+
+    if (isAdmin && mappedReqs.length > 0) {
+      const approvedIds = mappedReqs.filter((r: any) => r.status === 'approved').map((r: any) => r.id);
+      if (approvedIds.length > 0) {
+        const { data: logData } = await supabase
+          .from('acct_gl_bridge_log' as any)
+          .select('source_id, status')
+          .eq('source_table', 'leave_requests')
+          .in('source_id', approvedIds)
+          .order('created_at', { ascending: false });
+        const map = new Map<string, string>();
+        for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
+          if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+        }
+        setGlLogMap(map);
+      }
+    }
     setLoading(false);
   };
 
@@ -752,6 +771,13 @@ export default function LeaveRequests() {
                         <Badge className={cn('text-[11px] px-2 flex items-center gap-1', stCfg.badge)}>
                           {stCfg.icon}{stCfg.label}
                         </Badge>
+                        {isAdmin && req.status === 'approved' && (() => {
+                          const gl = glLogMap.get(req.id);
+                          if (gl === 'success') return <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300 px-1.5">GL Posted</Badge>;
+                          if (gl === 'error')   return <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300 px-1.5">GL Error</Badge>;
+                          if (gl === 'skipped') return <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300 px-1.5">GL Skipped</Badge>;
+                          return <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200 px-1.5">GL Pending</Badge>;
+                        })()}
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1">

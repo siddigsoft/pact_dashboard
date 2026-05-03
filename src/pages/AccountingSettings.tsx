@@ -53,6 +53,11 @@ const DEFAULT_FLAGS: Omit<FeatureFlag, 'updated_at'>[] = [
   { key: 'acct.multi_currency.enabled',  description: 'Allow journals in non-base currency with auto-revaluation.', is_enabled: false, rolled_out_pct: 100 },
   { key: 'acct.po_three_way_match',      description: 'Require PO + GRN + Invoice 3-way match before payment.', is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.auto_period_close',       description: 'Automatically close fiscal periods 5 days after period end.', is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.acct_depreciation_runs',   description: 'Phase 4: Log GL bridge entry when a depreciation run completes. Enable after applying accounting_gl_bridges_phase4.sql.',          is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.acct_allocation_runs',     description: 'Phase 4: Log GL visibility entry for cost allocation runs. Enable after applying accounting_gl_bridges_phase4.sql.',               is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.acct_budget_encumbrances', description: 'Phase 4: Post encumbrance journal (DR Expense / CR 2105) on PO/PR creation. Enable only after Chart of Accounts and a GENERAL fund are configured.', is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.leave_requests',           description: 'Phase 4: Post leave liability journal (DR Leave Expense / CR 2240 Leave Payable) when a leave request is approved.',               is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.posting_engine.enabled',          description: 'Master GL posting engine switch. Disabling this blocks all Phase 4 bridge postings.',                                              is_enabled: true,  rolled_out_pct: 100 },
 ];
 
 const MODULE_TABLES: { table: string; label: string; icon: React.ElementType; link?: string }[] = [

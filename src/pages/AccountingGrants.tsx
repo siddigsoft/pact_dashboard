@@ -245,7 +245,8 @@ export default function AccountingGrants() {
   };
 
   const updateMilestoneStatus = async (msId: string, newStatus: string) => {
-    await supabase.from('acct_grant_milestones' as any).update({ status: newStatus }).eq('id', msId);
+    const { error } = await supabase.from('acct_grant_milestones' as any).update({ status: newStatus }).eq('id', msId);
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     setMilestones(prev => prev.map(m => m.id === msId ? { ...m, status: newStatus } : m));
     setEditingMilestone(null);
   };
