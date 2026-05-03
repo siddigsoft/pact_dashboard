@@ -238,10 +238,23 @@ begin
   return new;
 end $$;
 
-drop trigger if exists acct_bridge_budget_encumbrances on public.acct_budget_encumbrances;
-create trigger acct_bridge_budget_encumbrances
-  after insert on public.acct_budget_encumbrances
-  for each row execute function public.acct_trig_budget_encumbrances();
+-- Guard: only bind trigger if acct_budget_encumbrances exists
+-- (created in 20260520_acct_phase4_advanced.sql — apply that first if missing)
+do $guard$ begin
+  if exists (
+    select 1 from information_schema.tables
+     where table_schema = 'public'
+       and table_name   = 'acct_budget_encumbrances'
+  ) then
+    execute 'drop trigger if exists acct_bridge_budget_encumbrances on public.acct_budget_encumbrances';
+    execute 'create trigger acct_bridge_budget_encumbrances
+               after insert on public.acct_budget_encumbrances
+               for each row execute function public.acct_trig_budget_encumbrances()';
+    raise notice 'acct_budget_encumbrances trigger created.';
+  else
+    raise notice 'SKIP: acct_budget_encumbrances does not exist — run 20260520_acct_phase4_advanced.sql first, then re-run this script to activate the encumbrance bridge.';
+  end if;
+end $guard$;
 
 -- =============================================================================
 -- PART F: Trigger — leave_requests (leave liability posting)
