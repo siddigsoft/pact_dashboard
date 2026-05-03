@@ -9,7 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, RefreshCw, Download, Plus, CreditCard, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import {
+  Loader2, RefreshCw, Download, Plus, CreditCard,
+  ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, XCircle,
+} from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +28,11 @@ interface Recovery {
   id: string; advance_id: string; recovery_date: string; amount: number;
   payroll_period: string | null; notes: string | null;
 }
+interface GlBridgeEntry {
+  source_id: string;
+  status: 'success' | 'error' | 'skipped';
+  event_type: string;
+}
 
 const STATUS_CFG: Record<string, { label: string; class: string }> = {
   active:           { label: 'Active',          class: 'bg-amber-100 text-amber-700 border-amber-300' },
@@ -32,7 +40,7 @@ const STATUS_CFG: Record<string, { label: string; class: string }> = {
   written_off:      { label: 'Written Off',     class: 'bg-rose-100 text-rose-700 border-rose-300' },
 };
 
-const BLANK_ADVANCE = { user_id: '', amount: '', currency: 'USD', issue_date: '', reason: '', monthly_recovery: '', notes: '' };
+const BLANK_ADVANCE  = { user_id: '', amount: '', currency: 'USD', issue_date: '', reason: '', monthly_recovery: '', notes: '' };
 const BLANK_RECOVERY = { recovery_date: '', amount: '', payroll_period: '', notes: '' };
 
 export default function SalaryAdvancesPanel() {
@@ -93,6 +101,28 @@ export default function SalaryAdvancesPanel() {
     staleTime: 30_000,
   });
 
+  // GL Bridge log — fetch statuses for all advances + recoveries
+  const { data: glLog } = useQuery({
+    queryKey: ['advances_gl_log'],
+    queryFn: async () => {
+      if (!advances?.length) return {} as Record<string, GlBridgeEntry>;
+      const advIds = advances.map(a => a.id);
+      const { data } = await supabase
+        .from('acct_gl_bridge_log' as any)
+        .select('source_id, status, event_type')
+        .in('source_table', ['hr_salary_advances', 'hr_salary_advance_recoveries'])
+        .in('source_id', advIds.slice(0, 500))
+        .order('created_at', { ascending: false });
+      const map: Record<string, GlBridgeEntry> = {};
+      for (const row of ((data ?? []) as any[]) as GlBridgeEntry[]) {
+        if (!map[row.source_id]) map[row.source_id] = row;
+      }
+      return map;
+    },
+    enabled: !!advances?.length,
+    staleTime: 30_000,
+  });
+
   const filtered = (advances ?? []).filter(a => {
     if (statusFilter !== 'all' && a.status !== statusFilter) return false;
     if (search) {
@@ -129,10 +159,11 @@ export default function SalaryAdvancesPanel() {
     });
     setSaving(false);
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Advance recorded' });
+    toast({ title: 'Advance recorded — GL journal posted automatically', description: 'DR: Salary Advances Receivable (1520) / CR: Cash at Bank (1200)' });
     setShowAdd(false);
     setForm(BLANK_ADVANCE);
     void refetch();
+    void queryClient.invalidateQueries({ queryKey: ['advances_gl_log'] });
   };
 
   const saveRecovery = async () => {
@@ -158,22 +189,24 @@ export default function SalaryAdvancesPanel() {
 
     setSavingRecovery(false);
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Recovery recorded' });
+    toast({ title: 'Recovery recorded — GL journal posted automatically', description: 'DR: Cash at Bank (1200) / CR: Salary Advances Receivable (1520)' });
     setRecoveryAdvId(null);
     setRecoveryForm(BLANK_RECOVERY);
     void queryClient.invalidateQueries({ queryKey: ['salary_advances'] });
     void queryClient.invalidateQueries({ queryKey: ['advance_recoveries'] });
+    void queryClient.invalidateQueries({ queryKey: ['advances_gl_log'] });
   };
 
   const exportXlsx = () => {
     const data = filtered.map(a => ({
-      'Staff':       a.staff_name,
-      'Issue Date':  a.issue_date,
-      'Amount':      a.amount,
-      'Currency':    a.currency,
-      'Outstanding': getOutstanding(a.id, a.amount),
-      'Status':      STATUS_CFG[a.status]?.label ?? a.status,
-      'Reason':      a.reason ?? '',
+      'Staff':           a.staff_name,
+      'Issue Date':      a.issue_date,
+      'Amount':          a.amount,
+      'Currency':        a.currency,
+      'Outstanding':     getOutstanding(a.id, a.amount),
+      'Status':          STATUS_CFG[a.status]?.label ?? a.status,
+      'GL Posted':       glLog?.[a.id]?.status === 'success' ? 'Yes' : glLog?.[a.id]?.status === 'error' ? 'Error' : 'Pending',
+      'Reason':          a.reason ?? '',
       'Monthly Recovery Plan': a.monthly_recovery ?? '',
     }));
     const wb = XLSX.utils.book_new();
@@ -193,7 +226,7 @@ export default function SalaryAdvancesPanel() {
           </div>
           <div>
             <h2 className="text-xl font-bold">Salary Advances</h2>
-            <p className="text-sm text-muted-foreground">سلف الرواتب — Issue, track, and recover salary advances</p>
+            <p className="text-sm text-muted-foreground">سلف الرواتب — Automatic GL posting: DR 1520 / CR 1200 on issue; DR 1200 / CR 1520 on recovery</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -216,11 +249,20 @@ export default function SalaryAdvancesPanel() {
           <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-800">Migration required</p>
-            <p className="text-xs text-amber-700 mt-1">Run <code className="bg-amber-100 px-1 rounded">supabase/migrations/hr_advances_grant_milestones.sql</code> to enable Salary Advances.</p>
+            <p className="text-xs text-amber-700 mt-1">Run <code className="bg-amber-100 px-1 rounded">supabase/migrations/hr_advances_grant_milestones.sql</code> and <code className="bg-amber-100 px-1 rounded">accounting_gl_bridges_phase3.sql</code> to enable Salary Advances with GL auto-posting.</p>
           </div>
         </div>
       ) : (
         <>
+          {/* GL Bridge Info */}
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 dark:bg-indigo-950/10 px-4 py-2.5 text-xs text-indigo-800 dark:text-indigo-300 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-indigo-600" />
+            <span>
+              <strong>Automatic GL Bridge active.</strong> Every advance issued → DR: Salary Advances Receivable (1520) / CR: Cash at Bank (1200).
+              Every recovery → DR: Cash at Bank (1200) / CR: Salary Advances Receivable (1520). All entries are timestamped and logged.
+            </span>
+          </div>
+
           {/* KPI cards */}
           <div className="grid grid-cols-3 gap-3">
             <Card><CardContent className="p-3">
@@ -261,6 +303,7 @@ export default function SalaryAdvancesPanel() {
                 const advRecoveries = (recoveries ?? []).filter(r => r.advance_id === a.id);
                 const expanded = expandedId === a.id;
                 const cfg = STATUS_CFG[a.status] ?? STATUS_CFG['active'];
+                const gl = glLog?.[a.id];
 
                 return (
                   <Card key={a.id} data-testid={`card-advance-${a.id}`}>
@@ -274,6 +317,18 @@ export default function SalaryAdvancesPanel() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{a.staff_name}</span>
                             <Badge variant="outline" className={cn('text-[10px]', cfg.class)}>{cfg.label}</Badge>
+                            {/* GL posting badge */}
+                            {gl?.status === 'success' ? (
+                              <Badge variant="outline" className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-300 gap-1">
+                                <CheckCircle2 className="h-3 w-3" />GL Posted
+                              </Badge>
+                            ) : gl?.status === 'error' ? (
+                              <Badge variant="outline" className="text-[10px] bg-rose-100 text-rose-700 border-rose-300 gap-1">
+                                <XCircle className="h-3 w-3" />GL Error
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] text-slate-400">GL Pending</Badge>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
                             Issued {a.issue_date} · {a.currency} {a.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
@@ -293,6 +348,22 @@ export default function SalaryAdvancesPanel() {
 
                       {expanded && (
                         <div className="px-4 pb-4 pt-3 border-t mt-0 space-y-3">
+                          {/* GL detail */}
+                          {gl && (
+                            <div className={cn('rounded-lg px-3 py-2 text-xs flex items-start gap-2',
+                              gl.status === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200' :
+                              gl.status === 'error'   ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-300 border border-rose-200' :
+                              'bg-slate-50 text-slate-600 border border-slate-200'
+                            )}>
+                              {gl.status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
+                              <span>
+                                <strong>GL Bridge:</strong> {gl.status === 'success'
+                                  ? 'Journal entry posted — DR: Salary Advances Receivable (1520) / CR: Cash at Bank (1200)'
+                                  : 'GL posting failed — check GL Bridge Audit page for details'}
+                              </span>
+                            </div>
+                          )}
+
                           {a.monthly_recovery && (
                             <div className="text-xs text-muted-foreground">Recovery plan: <strong>{a.monthly_recovery} {a.currency}/month</strong></div>
                           )}
@@ -310,6 +381,9 @@ export default function SalaryAdvancesPanel() {
                                     <span className="w-24 shrink-0">{rec.recovery_date}</span>
                                     <span className="flex-1">{rec.payroll_period ?? '—'}</span>
                                     <span className="font-medium text-foreground">{rec.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                    {glLog?.[rec.id]?.status === 'success' && (
+                                      <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -336,6 +410,9 @@ export default function SalaryAdvancesPanel() {
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Issue Salary Advance</DialogTitle></DialogHeader>
+          <div className="text-xs text-muted-foreground rounded border px-3 py-2 bg-muted/30 mb-2">
+            Saving this will automatically post: <strong>DR: Salary Advances Receivable (1520) / CR: Cash at Bank (1200)</strong> to the General Ledger.
+          </div>
           <div className="space-y-3 py-2">
             <div>
               <Label className="text-xs mb-1 block">Staff Member *</Label>
@@ -359,7 +436,7 @@ export default function SalaryAdvancesPanel() {
               <Input type="date" value={form.issue_date} onChange={e => setForm(p => ({ ...p, issue_date: e.target.value }))} className="h-8 text-sm" data-testid="input-advance-date" />
             </div>
             <div>
-              <Label className="text-xs mb-1 block">Monthly Recovery Amount</Label>
+              <Label className="text-xs mb-1 block">Monthly Recovery Amount (Payroll Deduction)</Label>
               <Input type="number" min="0" step="0.01" value={form.monthly_recovery} onChange={e => setForm(p => ({ ...p, monthly_recovery: e.target.value }))} className="h-8 text-sm" placeholder="Deducted from payroll each month" />
             </div>
             <div>
@@ -384,6 +461,9 @@ export default function SalaryAdvancesPanel() {
       <Dialog open={!!recoveryAdvId} onOpenChange={open => { if (!open) setRecoveryAdvId(null); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Record Recovery</DialogTitle></DialogHeader>
+          <div className="text-xs text-muted-foreground rounded border px-3 py-2 bg-muted/30 mb-2">
+            Saving will post: <strong>DR: Cash at Bank (1200) / CR: Salary Advances Receivable (1520)</strong>.
+          </div>
           <div className="space-y-3 py-2">
             <div>
               <Label className="text-xs mb-1 block">Recovery Date *</Label>

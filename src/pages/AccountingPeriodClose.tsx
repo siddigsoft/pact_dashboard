@@ -77,6 +77,8 @@ export default function AccountingPeriodClose() {
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ period: Period; next: string; label: string; warn?: string } | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [runAllocation, setRunAllocation] = useState(false);
+  const [allocationResult, setAllocationResult] = useState<{ processed: number; errors: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,19 +150,49 @@ export default function AccountingPeriodClose() {
       toast({ title: 'Type "confirm" to proceed', variant: 'destructive' }); return;
     }
     setTransitioning(period.id);
+    setAllocationResult(null);
     const update: Record<string, unknown> = { status: next };
     if (['soft_closed', 'hard_closed', 'locked'].includes(next)) update.closed_at = new Date().toISOString();
     else update.closed_at = null;
     const { error } = await supabase.from('acct_fiscal_periods').update(update).eq('id', period.id);
+    if (error) {
+      setTransitioning(null);
+      setConfirmDialog(null);
+      setConfirmText('');
+      toast({ title: 'Failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    // Run cost allocation if requested and closing (not re-opening)
+    if (runAllocation && ['soft_closed', 'hard_closed'].includes(next)) {
+      const { data: allocData, error: allocError } = await supabase.rpc(
+        'run_period_close_allocation' as any,
+        { p_period_id: period.id }
+      );
+      if (allocError) {
+        toast({
+          title: 'Period closed, but allocation failed',
+          description: allocError.message,
+          variant: 'destructive',
+        });
+      } else {
+        const res = allocData as any;
+        setAllocationResult({ processed: res?.processed ?? 0, errors: res?.errors ?? 0 });
+        toast({
+          title: `Period ${STATUS_CFG[next]?.label ?? next} + Allocation run`,
+          description: `${res?.processed ?? 0} allocation rules processed, ${res?.errors ?? 0} errors.`,
+        });
+      }
+    } else {
+      toast({ title: `Period ${STATUS_CFG[next]?.label ?? next}` });
+    }
+
     setTransitioning(null);
     setConfirmDialog(null);
     setConfirmText('');
-    if (error) toast({ title: 'Failed', description: error.message, variant: 'destructive' });
-    else {
-      toast({ title: `Period ${STATUS_CFG[next]?.label ?? next}` });
-      void load();
-      if (expanded.has(period.id)) void loadHealth({ ...period, status: next as any });
-    }
+    setRunAllocation(false);
+    void load();
+    if (expanded.has(period.id)) void loadHealth({ ...period, status: next as any });
   };
 
   const stats = useMemo(() => {
@@ -430,6 +462,28 @@ export default function AccountingPeriodClose() {
                       placeholder="confirm"
                       data-testid="input-confirm-close"
                     />
+                  </div>
+                )}
+                {['soft_closed', 'hard_closed'].includes(confirmDialog.next) && (
+                  <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-indigo-200 bg-indigo-50 dark:bg-indigo-950/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={runAllocation}
+                      onChange={e => setRunAllocation(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-indigo-400 text-indigo-600"
+                      data-testid="checkbox-run-allocation"
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Run Cost Allocation</div>
+                      <div className="text-xs text-indigo-700 dark:text-indigo-400 mt-0.5">
+                        Automatically execute all active cost allocation rules for this period and post journal entries to the GL. Results appear in GL Bridge Audit.
+                      </div>
+                    </div>
+                  </label>
+                )}
+                {allocationResult && (
+                  <div className="rounded border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+                    Allocation complete: {allocationResult.processed} rules processed, {allocationResult.errors} errors.
                   </div>
                 )}
               </div>

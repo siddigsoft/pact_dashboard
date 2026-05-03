@@ -13,13 +13,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, Award, RefreshCw, Download, Plus, AlertTriangle,
-  CheckCircle2, Clock, XCircle, Receipt, Flag, Pencil,
+  CheckCircle2, Clock, XCircle, Receipt, Flag, Pencil, FileText,
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Grant {
   id: string; grant_name: string; donor_name: string; reference_number: string | null;
@@ -232,6 +234,127 @@ export default function AccountingGrants() {
     downloadCsv(`grants-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  const generateGrantPdf = async (g: GrantWithSpend) => {
+    setGeneratingPdf(true);
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      let y = 15;
+
+      // Header band
+      doc.setFillColor(180, 120, 20);
+      doc.rect(0, 0, pageW, 28, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Grant Progress Report', 14, 12);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${format(new Date(), 'dd MMMM yyyy HH:mm')}`, 14, 20);
+      doc.text('PACT Command Center', pageW - 14, 20, { align: 'right' });
+
+      y = 36;
+      doc.setTextColor(0, 0, 0);
+
+      // Grant info block
+      doc.setFillColor(249, 250, 251);
+      doc.rect(10, y, pageW - 20, 34, 'F');
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(g.grant_name, 14, y + 8);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(`Donor: ${g.donor_name}`, 14, y + 16);
+      doc.text(`Reference: ${g.reference_number ?? 'N/A'}`, 14, y + 22);
+      doc.text(`Period: ${g.start_date} → ${g.end_date}`, 14, y + 28);
+      if (g.description) doc.text(`Description: ${g.description}`, 14, y + 34);
+
+      y += 42;
+      doc.setTextColor(0, 0, 0);
+
+      // Financial Summary table
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Financial Summary', 14, y);
+      y += 4;
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Metric', 'Amount', 'Currency']],
+        body: [
+          ['Total Awarded', formatNumber(g.award_amount, 2), g.currency],
+          ['Total Spent',   formatNumber(g.spent, 2),       g.currency],
+          ['Remaining',     formatNumber(g.remaining, 2),   g.currency],
+          ['Burn Rate',     `${g.burnRate}%`,               ''],
+          ['Days Remaining', g.daysLeft >= 0 ? `${g.daysLeft} days` : 'Expired', ''],
+        ],
+        headStyles:  { fillColor: [180, 120, 20], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'center' } },
+        margin: { left: 14, right: 14 },
+        tableWidth: 'auto',
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 10;
+
+      // Expenses table
+      if (expenses.length > 0) {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Expense Ledger', 14, y);
+        y += 4;
+
+        autoTable(doc, {
+          startY: y,
+          head: [['Date', 'Description', 'Amount']],
+          body: expenses.map(e => [e.expense_date, e.description ?? '—', formatNumber(e.amount, 2)]),
+          foot: [['', 'TOTAL', formatNumber(expenses.reduce((s, e) => s + e.amount, 0), 2)]],
+          headStyles:  { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+          footStyles:  { fillColor: [240, 242, 255], fontStyle: 'bold', fontSize: 9 },
+          bodyStyles:  { fontSize: 9 },
+          columnStyles: { 2: { halign: 'right' } },
+          margin: { left: 14, right: 14 },
+        });
+
+        y = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // Milestones table
+      if (milestones.length > 0) {
+        if (y > 220) { doc.addPage(); y = 15; }
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Reporting Milestones', 14, y);
+        y += 4;
+
+        autoTable(doc, {
+          startY: y,
+          head: [['Milestone', 'Due Date', 'Status', 'Submitted']],
+          body: milestones.map(m => [m.title, m.due_date, m.status.replace('_', ' ').toUpperCase(), m.submitted_date ?? '—']),
+          headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+          bodyStyles: { fontSize: 9 },
+          margin: { left: 14, right: 14 },
+        });
+      }
+
+      // Footer on every page
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Page ${i} of ${pageCount} · PACT Command Center · Confidential`, pageW / 2, 290, { align: 'center' });
+      }
+
+      doc.save(`Grant_Report_${g.grant_name.replace(/[^a-zA-Z0-9]/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
@@ -426,6 +549,25 @@ export default function AccountingGrants() {
               <span className="text-sm font-normal text-muted-foreground ml-1">— {selectedGrant?.donor_name}</span>
             </DialogTitle>
           </DialogHeader>
+
+          {/* PDF Export button */}
+          {!detailLoading && selectedGrant && (
+            <div className="flex justify-end pb-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => generateGrantPdf(selectedGrant)}
+                disabled={generatingPdf}
+                data-testid="button-grant-pdf"
+              >
+                {generatingPdf
+                  ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  : <FileText className="h-4 w-4 mr-1" />
+                }
+                PDF Report
+              </Button>
+            </div>
+          )}
 
           {detailLoading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
