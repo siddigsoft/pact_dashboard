@@ -12,6 +12,212 @@
 begin;
 
 -- =============================================================================
+-- PART 0: Self-contained prerequisites
+-- Creates the bridge log table and posting function if Phase 2 was not yet run.
+-- All statements are idempotent — safe to run even if Phase 2 already exists.
+-- =============================================================================
+
+-- 0a. GL Bridge audit log table
+create table if not exists public.acct_gl_bridge_log (
+  id               uuid primary key default gen_random_uuid(),
+  source_table     text not null,
+  source_id        uuid not null,
+  event_type       text not null,
+  status           text not null check (status in ('success','error','skipped')),
+  journal_entry_id uuid references public.acct_journal_entries(id),
+  error_message    text,
+  created_at       timestamptz not null default now()
+);
+
+create index if not exists idx_acct_bridge_log_source
+  on public.acct_gl_bridge_log (source_table, source_id);
+create index if not exists idx_acct_bridge_log_status
+  on public.acct_gl_bridge_log (status);
+create index if not exists idx_acct_bridge_log_created
+  on public.acct_gl_bridge_log (created_at desc);
+
+alter table public.acct_gl_bridge_log enable row level security;
+
+drop policy if exists bridge_log_select on public.acct_gl_bridge_log;
+create policy bridge_log_select on public.acct_gl_bridge_log
+  for select to authenticated using (
+    exists (
+      select 1 from public.profiles
+       where id = auth.uid()
+         and lower(role) in ('super_admin','superadmin','admin','finance','accountant','auditor','financialadmin')
+    )
+  );
+
+drop policy if exists bridge_log_insert_service on public.acct_gl_bridge_log;
+create policy bridge_log_insert_service on public.acct_gl_bridge_log
+  for insert to authenticated with check (true);
+
+-- 0b. Feature flags table (idempotent — in case Phase 1 not yet run either)
+create table if not exists public.feature_flags (
+  key         text primary key,
+  description text,
+  is_enabled  boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+-- 0c. Master posting engine flag (must exist for bridge function gate check)
+insert into public.feature_flags (key, description, is_enabled)
+values ('acct.posting_engine.enabled', 'Master GL posting engine switch', true)
+on conflict (key) do nothing;
+
+-- 0d. Core GL Bridge posting function
+-- Called by all trigger functions. SECURITY DEFINER so triggers can post journals.
+-- Idempotent on source_table::source_id::event_type.
+create or replace function public.acct_bridge_post_journal(
+  p_source_table   text,
+  p_source_id      uuid,
+  p_event_type     text,
+  p_posting_date   date,
+  p_description_en text,
+  p_description_ar text,
+  p_lines          jsonb,
+  p_posted_by      uuid default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entry_id      uuid;
+  v_idempotency   text;
+  v_period_id     uuid;
+  v_fund_id       uuid;
+  v_poster_id     uuid;
+  v_line          jsonb;
+  v_line_no       int  := 0;
+  v_account_id    uuid;
+  v_balance       numeric(20,4);
+  v_engine_on     boolean;
+  v_bridge_on     boolean;
+begin
+  -- Gate: master engine switch
+  select is_enabled into v_engine_on
+    from public.feature_flags where key = 'acct.posting_engine.enabled';
+  if not coalesce(v_engine_on, false) then
+    raise exception 'BRIDGE_SKIP: acct.posting_engine.enabled is OFF';
+  end if;
+
+  -- Gate: per-source bridge flag
+  select is_enabled into v_bridge_on
+    from public.feature_flags where key = 'acct.bridge.' || p_source_table;
+  if not coalesce(v_bridge_on, false) then
+    raise exception 'BRIDGE_SKIP: acct.bridge.% is OFF', p_source_table;
+  end if;
+
+  -- Idempotency: skip if already posted for this source+event
+  v_idempotency := p_source_table || '::' || p_source_id::text || '::' || p_event_type;
+  select id into v_entry_id
+    from public.acct_journal_entries
+   where idempotency_key = v_idempotency;
+  if found then
+    return v_entry_id;
+  end if;
+
+  -- Resolve open fiscal period containing posting date
+  select id into v_period_id
+    from public.acct_fiscal_periods
+   where status in ('open','soft_closed')
+     and start_date <= p_posting_date
+     and end_date   >= p_posting_date
+   order by start_date desc
+   limit 1;
+  if v_period_id is null then
+    raise exception 'BRIDGE_NO_PERIOD: no open fiscal period for date %', p_posting_date;
+  end if;
+
+  -- Resolve default fund
+  select id into v_fund_id
+    from public.acct_funds where code = 'GENERAL' and is_active = true limit 1;
+  if v_fund_id is null then
+    select id into v_fund_id from public.acct_funds where is_active = true order by created_at limit 1;
+  end if;
+  if v_fund_id is null then
+    raise exception 'BRIDGE_NO_FUND: no active fund found';
+  end if;
+
+  -- Resolve poster
+  v_poster_id := p_posted_by;
+  if v_poster_id is null then
+    select id into v_poster_id from public.profiles
+     where lower(role) in ('super_admin','superadmin') order by created_at limit 1;
+  end if;
+  if v_poster_id is null then
+    raise exception 'BRIDGE_NO_POSTER: no super_admin profile found';
+  end if;
+
+  -- Validate minimum lines
+  if jsonb_array_length(p_lines) < 2 then
+    raise exception 'BRIDGE_INSUFFICIENT_LINES: must supply at least 2 lines';
+  end if;
+
+  -- Insert journal entry
+  insert into public.acct_journal_entries (
+    period_id, posting_date, description_en, description_ar,
+    source_type, source_id, status, idempotency_key,
+    posted_at, posted_by, created_by
+  ) values (
+    v_period_id, p_posting_date, p_description_en, p_description_ar,
+    p_source_table, p_source_id, 'posted', v_idempotency,
+    now(), v_poster_id, v_poster_id
+  )
+  on conflict (idempotency_key) do nothing
+  returning id into v_entry_id;
+
+  if v_entry_id is null then
+    select id into v_entry_id from public.acct_journal_entries where idempotency_key = v_idempotency;
+    return v_entry_id;
+  end if;
+
+  -- Insert journal lines
+  for v_line in select value from jsonb_array_elements(p_lines)
+  loop
+    v_line_no := v_line_no + 1;
+    select id into v_account_id
+      from public.acct_accounts
+     where code = (v_line->>'account_code') and is_postable = true;
+    if v_account_id is null then
+      raise exception 'BRIDGE_ACCOUNT_NOT_FOUND: code=%', (v_line->>'account_code');
+    end if;
+    insert into public.acct_journal_lines (
+      entry_id, line_no, account_id, fund_id, function,
+      original_amount, original_currency,
+      functional_amount, functional_currency,
+      debit_credit, description
+    ) values (
+      v_entry_id, v_line_no, v_account_id, v_fund_id,
+      coalesce(v_line->>'function', 'program'),
+      (v_line->>'amount')::numeric,
+      coalesce(v_line->>'currency', 'SDG'),
+      (v_line->>'amount')::numeric,
+      'SDG',
+      v_line->>'debit_credit',
+      v_line->>'description'
+    );
+  end loop;
+
+  -- Balance check: Σ DR = Σ CR
+  select sum(case when debit_credit = 'DR' then functional_amount else -functional_amount end)
+    into v_balance
+    from public.acct_journal_lines where entry_id = v_entry_id;
+  if abs(coalesce(v_balance, 1)) > 0.005 then
+    raise exception 'BRIDGE_IMBALANCE: DR/CR mismatch by % for entry %', v_balance, v_entry_id;
+  end if;
+
+  perform pg_notify('acct_journal_posted', v_entry_id::text);
+  return v_entry_id;
+end $$;
+
+comment on function public.acct_bridge_post_journal(text, uuid, text, date, text, text, jsonb, uuid) is
+  'Internal SECURITY DEFINER function for GL bridge triggers. '
+  'Idempotent on source_table::source_id::event_type. '
+  'Defined here so Phase 3 is self-contained even if Phase 2 was not yet applied.';
+
+-- =============================================================================
 -- PART A: Add hire_date column to profiles (safe — IF NOT EXISTS)
 -- =============================================================================
 ALTER TABLE public.profiles
