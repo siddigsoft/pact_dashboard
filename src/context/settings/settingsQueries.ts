@@ -7,7 +7,7 @@ import type {
   UserSettings,
   DataVisibilitySettings,
   DashboardSettings,
-} from './SettingsContext';
+} from './settingsTypes';
 
 export const settingsQueryKeys = {
   all: ['settings'] as const,

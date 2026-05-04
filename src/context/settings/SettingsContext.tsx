@@ -4,25 +4,15 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useRealtimeResource } from '@/hooks/useRealtimeResource';
+import { MenuPreferences, DashboardPreferences, DEFAULT_MENU_PREFERENCES, DEFAULT_DASHBOARD_PREFERENCES, DashboardZone, ROLE_DEFAULT_ZONES } from '@/types/user-preferences';
 import {
   useUserSettingsQuery,
   useDataVisibilitySettingsQuery,
   useDashboardSettingsQuery,
   settingsQueryKeys,
 } from './settingsQueries';
-
-// Define types for settings tables
-export type UserSettings = {
-  id?: string;
-  user_id?: string;
-  settings?: {
-    theme?: 'light' | 'dark' | 'system';
-    defaultPage?: string;
-    language?: string;
-    [key: string]: any;
-  };
-  last_updated?: string;
-};
+import type { UserSettings, DataVisibilitySettings, DashboardSettings } from './settingsTypes';
+export type { UserSettings, DataVisibilitySettings, DashboardSettings } from './settingsTypes';
 
 export type QuietHoursSettings = {
   enabled: boolean;
@@ -52,31 +42,6 @@ export type AppearanceSettings = {
   darkMode: boolean;
   theme: string;
 };
-
-
-export type DataVisibilitySettings = {
-  id?: string;
-  user_id?: string;
-  options?: {
-    showSensitiveData?: boolean;
-    shareLocationWithTeam?: boolean;
-    displayPersonalMetrics?: boolean;
-    [key: string]: any;
-  };
-  last_updated?: string;
-};
-
-export type DashboardSettings = {
-  id?: string;
-  user_id?: string;
-  layout?: {
-    [key: string]: any;
-  };
-  widget_order?: string[];
-  last_updated?: string;
-};
-
-import { MenuPreferences, DashboardPreferences, DEFAULT_MENU_PREFERENCES, DEFAULT_DASHBOARD_PREFERENCES, DashboardZone, ROLE_DEFAULT_ZONES } from '@/types/user-preferences';
 
 type SettingsContextType = {
   userSettings: UserSettings | null;
