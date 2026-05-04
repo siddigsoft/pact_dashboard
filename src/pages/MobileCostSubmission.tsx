@@ -37,6 +37,7 @@ import { generateApprovalCertificatePdf, generateApprovalCertificateBase64 } fro
 import { exportSubmissionsToExcel, exportSubmissionsToPDF, exportOutstandingToExcel, exportOutstandingToPDF, exportReconciledToExcel, exportReconciledToPDF } from "@/utils/costSubmissionExport";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import { EmailNotificationService } from "@/services/email-notification.service";
+import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 import { EmailCCInput } from "@/components/EmailCCInput";
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from "@/utils/financialStatementPdf";
 import { generateFinancialStatementExcel } from "@/utils/financialStatementExcel";
@@ -96,6 +97,63 @@ interface OperationalCostSubmission {
   reconciliation_notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+const MGMT_ROLES = ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'];
+
+async function notifyManagementTeam(
+  event: 'cost_submitted' | 'cost_tier_approved' | 'cost_approved' | 'cost_rejected' | 'cost_paid',
+  detail: { submitterName: string; refNum: string; amountStr: string; tier?: number; notes?: string },
+  excludeUserId?: string
+): Promise<void> {
+  type Msg = { title: string; titleAr: string; message: string; type: 'info' | 'success' | 'warning' | 'error'; priority: 'normal' | 'high' };
+  const msgMap: Record<string, Msg> = {
+    cost_submitted:    { title: `New Cost Submission — ${detail.refNum}`, titleAr: `تقديم تكلفة جديدة — ${detail.refNum}`, message: `${detail.submitterName} submitted a cost request (${detail.amountStr}) — Ref: ${detail.refNum}.`, type: 'info', priority: 'normal' },
+    cost_tier_approved:{ title: `Cost Submission Pending Your Review — ${detail.refNum}`, titleAr: `طلب مراجعة تكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) passed Tier ${detail.tier ?? 1} and is now awaiting your approval. Ref: ${detail.refNum}`, type: 'info', priority: 'high' },
+    cost_approved:     { title: `Cost Submission Fully Approved — ${detail.refNum}`, titleAr: `تمت الموافقة على التكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) has been fully approved. Ref: ${detail.refNum}`, type: 'success', priority: 'normal' },
+    cost_rejected:     { title: `Cost Submission Rejected — ${detail.refNum}`, titleAr: `تم رفض طلب التكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) was rejected${detail.notes ? '. Reason: ' + detail.notes : ''}. Ref: ${detail.refNum}`, type: 'warning', priority: 'normal' },
+    cost_paid:         { title: `Cost Submission Marked as Paid — ${detail.refNum}`, titleAr: `تم تحديد التكلفة كمدفوعة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) has been marked as paid. Ref: ${detail.refNum}`, type: 'success', priority: 'normal' },
+  };
+  const msg = msgMap[event];
+  if (!msg) return;
+  try {
+    const { data: mgmt } = await supabase.from('profiles').select('id').in('role', MGMT_ROLES).eq('status', 'approved');
+    const ids = (mgmt || []).map((u: any) => u.id as string).filter(id => id !== excludeUserId);
+    if (!ids.length) return;
+    await Promise.allSettled(ids.map(uid => NotificationTriggerService.send({
+      userId: uid, title: msg.title, titleAr: msg.titleAr, message: msg.message,
+      type: msg.type, category: 'financial', priority: msg.priority,
+      link: '/cost-submission', relatedEntityType: 'costSubmission',
+      sendEmail: true, emailActionUrl: '/cost-submission', emailActionLabel: 'View Submission',
+    })));
+  } catch (e) { console.warn('[CostNotify] Management notification failed (non-fatal):', e); }
+}
+
+async function notifySubmitterOfCostStatus(
+  submittedBy: string,
+  event: 'cost_tier_approved' | 'cost_approved' | 'cost_rejected' | 'cost_paid',
+  detail: { refNum: string; amountStr: string; tier?: number; notes?: string }
+): Promise<void> {
+  if (!submittedBy) return;
+  type Msg = { title: string; titleAr: string; message: string; messageAr: string; type: 'info' | 'success' | 'warning' | 'error' };
+  const msgMap: Record<string, Msg> = {
+    cost_tier_approved:{ title: `Cost Submission Under Review — ${detail.refNum}`, titleAr: `طلبك قيد المراجعة — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) passed Tier ${detail.tier ?? 1} and is now awaiting final review. Ref: ${detail.refNum}`, messageAr: `تمت الموافقة على طلبك (${detail.amountStr}) في المرحلة ${detail.tier ?? 1} وهو قيد المراجعة النهائية. المرجع: ${detail.refNum}`, type: 'info' },
+    cost_approved:     { title: `Cost Submission Approved ✓ — ${detail.refNum}`, titleAr: `تمت الموافقة على طلبك — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) has been fully approved. Ref: ${detail.refNum}`, messageAr: `تمت الموافقة النهائية على طلبك (${detail.amountStr}). المرجع: ${detail.refNum}`, type: 'success' },
+    cost_rejected:     { title: `Cost Submission Rejected — ${detail.refNum}`, titleAr: `تم رفض طلبك — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) was rejected${detail.notes ? '. Reason: ' + detail.notes : ''}. Ref: ${detail.refNum}`, messageAr: `تم رفض طلبك (${detail.amountStr})${detail.notes ? '. السبب: ' + detail.notes : ''}. المرجع: ${detail.refNum}`, type: 'error' },
+    cost_paid:         { title: `Cost Submission Paid — ${detail.refNum}`, titleAr: `تم صرف مبلغ طلبك — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) has been marked as paid. Ref: ${detail.refNum}`, messageAr: `تم تحديد طلبك (${detail.amountStr}) كمدفوع. المرجع: ${detail.refNum}`, type: 'success' },
+  };
+  const msg = msgMap[event];
+  if (!msg) return;
+  try {
+    await NotificationTriggerService.send({
+      userId: submittedBy, title: msg.title, titleAr: msg.titleAr,
+      message: msg.message, messageAr: msg.messageAr,
+      type: msg.type, category: 'financial',
+      priority: event === 'cost_rejected' ? 'high' : 'normal',
+      link: '/cost-submission', relatedEntityType: 'costSubmission',
+      sendEmail: true, emailActionUrl: '/cost-submission', emailActionLabel: 'View My Submissions',
+    });
+  } catch (e) { console.warn('[CostNotify] Submitter notification failed (non-fatal):', e); }
 }
 
 const STATUS_AR_MAP_OC: Record<string, string> = {
@@ -519,6 +577,18 @@ const MobileCostSubmission = () => {
           toast({ title: `Approved (Tier ${tier}) / تمت الموافقة (المرحلة ${tierAr})`, description: `"${refNum}" (${amountStr}) approved. / تمت الموافقة.`, duration: 8000 });
         }
         fetchOperationalCosts();
+        // Fire in-app + email notifications to submitter and management (non-blocking)
+        const notifDetail = { submitterName, refNum, amountStr, tier, notes: approvalNotes };
+        if (action === 'reject') {
+          void notifySubmitterOfCostStatus(submission.submitted_by, 'cost_rejected', { refNum, amountStr, notes: approvalNotes });
+          void notifyManagementTeam('cost_rejected', notifDetail, currentUser?.id);
+        } else if (isFinal) {
+          void notifySubmitterOfCostStatus(submission.submitted_by, 'cost_approved', { refNum, amountStr });
+          void notifyManagementTeam('cost_approved', notifDetail, currentUser?.id);
+        } else {
+          void notifySubmitterOfCostStatus(submission.submitted_by, 'cost_tier_approved', { refNum, amountStr, tier });
+          void notifyManagementTeam('cost_tier_approved', notifDetail, currentUser?.id);
+        }
       }
     } catch {
       toast({ title: "Action Failed / فشل الإجراء", description: "An unexpected error occurred.", variant: "destructive" });
@@ -646,6 +716,13 @@ const MobileCostSubmission = () => {
       } else {
         toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "Payment recorded. / تم تسجيل الدفع." });
         fetchOperationalCosts();
+        // Fire in-app + email notifications to submitter and management (non-blocking)
+        const paidSubmitter = users.find(u => u.id === oc.submitted_by);
+        const paidSubmitterName = paidSubmitter?.name || paidSubmitter?.email || 'Unknown';
+        const paidRefNum = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
+        const paidAmountStr = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
+        void notifySubmitterOfCostStatus(oc.submitted_by, 'cost_paid', { refNum: paidRefNum, amountStr: paidAmountStr });
+        void notifyManagementTeam('cost_paid', { submitterName: paidSubmitterName, refNum: paidRefNum, amountStr: paidAmountStr }, currentUser?.id);
       }
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to mark as paid.", variant: "destructive" });

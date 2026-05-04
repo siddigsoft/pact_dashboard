@@ -80,6 +80,38 @@ export function useDownPayment() {
   return context;
 }
 
+/** Fire-and-forget: send in-app + email to every FOM / Country Director / SuperAdmin */
+async function notifyManagementOfDownPayment(
+  event: 'dp_submitted' | 'dp_sup_approved' | 'dp_sup_rejected' | 'dp_admin_approved' | 'dp_admin_rejected' | 'dp_paid',
+  detail: { requesterName: string; siteName: string; amount: number; currency: string; reason?: string },
+  excludeUserId?: string
+): Promise<void> {
+  type Msg = { title: string; titleAr: string; message: string; type: 'info' | 'success' | 'warning' | 'error'; priority: 'normal' | 'high' };
+  const msgMap: Record<string, Msg> = {
+    dp_submitted:      { title: `New Advance Request — ${detail.siteName}`, titleAr: `طلب سلفة جديد — ${detail.siteName}`, message: `${detail.requesterName} submitted an advance request for "${detail.siteName}" (${detail.amount.toLocaleString()} ${detail.currency}) — awaiting supervisor approval.`, type: 'info', priority: 'normal' },
+    dp_sup_approved:   { title: `Advance Approved by Supervisor — ${detail.siteName}`, titleAr: `وافق المشرف على السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} was approved by supervisor and is now awaiting admin approval.`, type: 'info', priority: 'high' },
+    dp_sup_rejected:   { title: `Advance Rejected by Supervisor — ${detail.siteName}`, titleAr: `رفض المشرف طلب السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} was rejected by supervisor${detail.reason ? '. Reason: ' + detail.reason : ''}.`, type: 'warning', priority: 'normal' },
+    dp_admin_approved: { title: `Advance Fully Approved — ${detail.siteName}`, titleAr: `تمت الموافقة النهائية على السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} has been fully approved and is ready for payment.`, type: 'success', priority: 'normal' },
+    dp_admin_rejected: { title: `Advance Rejected by Admin — ${detail.siteName}`, titleAr: `رفضت الإدارة طلب السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} was rejected by admin${detail.reason ? '. Reason: ' + detail.reason : ''}.`, type: 'warning', priority: 'normal' },
+    dp_paid:           { title: `Advance Disbursed — ${detail.siteName}`, titleAr: `تم صرف السلفة — ${detail.siteName}`, message: `Transport advance of ${detail.amount.toLocaleString()} ${detail.currency} for "${detail.siteName}" by ${detail.requesterName} has been disbursed.`, type: 'success', priority: 'normal' },
+  };
+  const msg = msgMap[event];
+  if (!msg) return;
+  try {
+    const { data: mgmt } = await supabase.from('profiles').select('id')
+      .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
+      .eq('status', 'approved');
+    const ids = (mgmt || []).map((u: any) => u.id as string).filter(id => id !== excludeUserId);
+    if (!ids.length) return;
+    await Promise.allSettled(ids.map(uid => NotificationTriggerService.send({
+      userId: uid, title: msg.title, titleAr: msg.titleAr, message: msg.message,
+      type: msg.type, category: 'financial', priority: msg.priority,
+      link: '/down-payment-approval', relatedEntityType: 'downPayment',
+      sendEmail: true, emailActionUrl: '/down-payment-approval', emailActionLabel: 'View Approvals',
+    })));
+  } catch (e) { console.warn('[DownPayment] Management notification failed (non-fatal):', e); }
+}
+
 export function DownPaymentProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useUser();
   const { toast } = useToast();
@@ -354,6 +386,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         console.warn('[DownPayment] Supervisor notification failed (non-fatal):', notifErr);
       }
 
+      // Notify management (FOM / Country Director / SuperAdmin) of the new submission
+      notifyManagementOfDownPayment(
+        'dp_submitted',
+        {
+          requesterName: currentUser?.fullName || currentUser?.email || 'A team member',
+          siteName: request.siteName || 'Unknown Site',
+          amount: request.requestedAmount,
+          currency: 'SDG',
+        },
+        currentUser?.id
+      ).catch(console.warn);
+
       toastRef.current({
         title: 'Request Submitted',
         description: 'Your down-payment request has been submitted for approval',
@@ -481,6 +525,17 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           'SDG',
           bypassFired ? 'admin' : 'supervisor'
         ).catch(console.error);
+        // In-app notification to FOM / Country Director / SuperAdmin (email above covers FOM + SuperAdmin)
+        notifyManagementOfDownPayment(
+          bypassFired ? 'dp_admin_approved' : 'dp_sup_approved',
+          {
+            requesterName: request.requestedByName || 'Field Staff',
+            siteName: request.siteName || 'Unknown Site',
+            amount: approvedAmount,
+            currency: 'SDG',
+          },
+          data.approvedBy
+        ).catch(console.warn);
         toast({
           title: bypassFired ? 'Request Fully Approved' : 'Request Approved',
           description: bypassFired
@@ -550,6 +605,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           emailActionLabel: 'View Details'
         });
       }
+
+      // Notify management of supervisor rejection
+      notifyManagementOfDownPayment(
+        'dp_sup_rejected',
+        {
+          requesterName: request?.requestedByName || 'Field Staff',
+          siteName: request?.siteName || 'Unknown Site',
+          amount: request?.requestedAmount || 0,
+          currency: 'SDG',
+          reason: data.rejectionReason,
+        },
+        data.rejectedBy
+      ).catch(console.warn);
 
       toastRef.current({
         title: 'Request Rejected',
@@ -688,6 +756,17 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           'SDG',
           'admin'
         ).catch(console.error);
+        // In-app notification to FOM / Country Director / SuperAdmin (email above covers FOM + SuperAdmin)
+        notifyManagementOfDownPayment(
+          'dp_admin_approved',
+          {
+            requesterName: request.requestedByName || 'Field Staff',
+            siteName: request.siteName || 'Unknown Site',
+            amount: approvedAmount,
+            currency: 'SDG',
+          },
+          data.approvedBy
+        ).catch(console.warn);
         toastRef.current({
           title: 'Request Approved',
           description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,
@@ -755,6 +834,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           emailActionLabel: 'View Details'
         });
       }
+
+      // Notify management of admin rejection
+      notifyManagementOfDownPayment(
+        'dp_admin_rejected',
+        {
+          requesterName: request?.requestedByName || 'Field Staff',
+          siteName: request?.siteName || 'Unknown Site',
+          amount: request?.requestedAmount || 0,
+          currency: 'SDG',
+          reason: data.rejectionReason,
+        },
+        data.rejectedBy
+      ).catch(console.warn);
 
       toastRef.current({
         title: 'Request Rejected',
@@ -937,6 +1029,37 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       } catch (fcmErr) {
         console.warn('[DownPayment] FCM notification failed (non-fatal):', fcmErr);
       }
+
+      // In-app notification to requester (FCM push already handled above)
+      NotificationTriggerService.send({
+        userId: request.requestedBy,
+        title: newStatus === 'fully_paid'
+          ? 'Advance Fully Disbursed / تم صرف السلفة بالكامل'
+          : 'Advance Partially Disbursed / تم صرف جزء من السلفة',
+        message: newStatus === 'fully_paid'
+          ? `Your full transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid.`
+          : `A partial transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid. Remaining: ${newRemainingAmount.toLocaleString()} SDG.`,
+        type: 'success',
+        category: 'financial',
+        priority: 'high',
+        link: '/wallet',
+        relatedEntityId: data.requestId,
+        relatedEntityType: 'downPayment',
+        sendEmail: true,
+        emailActionUrl: '/wallet',
+        emailActionLabel: 'View Wallet',
+      }).catch(console.error);
+
+      // Notify management (FOM / Country Director / SuperAdmin) that payment was disbursed
+      notifyManagementOfDownPayment(
+        'dp_paid',
+        {
+          requesterName: request.requestedByName || 'Field Staff',
+          siteName: request.siteName || 'Unknown Site',
+          amount: data.amount,
+          currency: 'SDG',
+        }
+      ).catch(console.warn);
 
       await refreshRequests();
       return true;

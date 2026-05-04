@@ -1837,7 +1837,7 @@ PACT Command Center | مركز قيادة باكت`;
       const { data: fomUsers } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .in('role', ['fom', 'super_admin'])
+        .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
         .eq('status', 'approved');
 
       if (!fomUsers || fomUsers.length === 0) {
@@ -1906,7 +1906,7 @@ PACT Command Center | مركز قيادة باكت`;
       const { data: fomUsers } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .in('role', ['fom', 'super_admin'])
+        .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
         .eq('status', 'approved');
 
       if (!fomUsers || fomUsers.length === 0) {
