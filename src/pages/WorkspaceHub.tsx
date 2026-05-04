@@ -307,7 +307,8 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
   }
 
   async function revokePermission(id: string) {
-    await supabase.from('workspace_permissions').delete().eq('id', id);
+    const { error } = await supabase.from('workspace_permissions').delete().eq('id', id);
+    if (error) { toast({ title: 'Failed to revoke permission', description: error.message, variant: 'destructive' }); return; }
     refetchPerms();
   }
 
@@ -699,7 +700,8 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
   }
 
   async function togglePin() {
-    await supabase.from('workspace_files').update({ is_pinned: !file.is_pinned }).eq('id', file.id);
+    const { error } = await supabase.from('workspace_files').update({ is_pinned: !file.is_pinned }).eq('id', file.id);
+    if (error) { toast({ title: 'Failed to update pin', description: error.message, variant: 'destructive' }); return; }
     onRefresh();
   }
 
@@ -1195,21 +1197,24 @@ export default function WorkspaceHub() {
   }
 
   async function restoreFile(file: WFile) {
-    await supabase.from('workspace_files').update({ archived: false, updated_at: new Date().toISOString() }).eq('id', file.id);
+    const { error } = await supabase.from('workspace_files').update({ archived: false, updated_at: new Date().toISOString() }).eq('id', file.id);
+    if (error) { toast({ title: 'Failed to restore file', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'restored', metadata: {} });
     refetchArchived(); refetchFiles();
     toast({ title: 'File restored', description: file.name });
   }
 
   async function restoreFolder(folder: WFolder) {
-    await supabase.from('workspace_folders').update({ archived: false }).eq('id', folder.id);
+    const { error } = await supabase.from('workspace_folders').update({ archived: false }).eq('id', folder.id);
+    if (error) { toast({ title: 'Failed to restore folder', description: error.message, variant: 'destructive' }); return; }
     refetchArchivedFolders(); refetchFolders();
     toast({ title: 'Folder restored', description: folder.name });
   }
 
   async function permanentlyDeleteFile(file: WFile) {
     await supabase.storage.from('workspace-files').remove([file.storage_path]);
-    await supabase.from('workspace_files').delete().eq('id', file.id);
+    const { error } = await supabase.from('workspace_files').delete().eq('id', file.id);
+    if (error) { toast({ title: 'Failed to delete file', description: error.message, variant: 'destructive' }); return; }
     refetchArchived();
     toast({ title: 'File permanently deleted' });
   }
@@ -1217,7 +1222,9 @@ export default function WorkspaceHub() {
   async function bulkDeleteFiles() {
     const ids = [...selectedFileIds];
     const toDelete = allFiles.filter(f => ids.includes(f.id));
-    await Promise.all(toDelete.map(f => supabase.from('workspace_files').update({ archived: true }).eq('id', f.id)));
+    const results = await Promise.all(toDelete.map(f => supabase.from('workspace_files').update({ archived: true }).eq('id', f.id)));
+    const failed = results.filter(r => r.error);
+    if (failed.length > 0) { toast({ title: 'Some files could not be moved to trash', description: failed[0].error?.message, variant: 'destructive' }); return; }
     setSelectedFileIds(new Set());
     refetchFiles();
     toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved to trash` });
@@ -1248,7 +1255,8 @@ export default function WorkspaceHub() {
 
   async function deleteFile(file: WFile) {
     await supabase.storage.from('workspace-files').remove([file.storage_path]);
-    await supabase.from('workspace_files').update({ archived: true }).eq('id', file.id);
+    const { error } = await supabase.from('workspace_files').update({ archived: true }).eq('id', file.id);
+    if (error) { toast({ title: 'Failed to remove file', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: {} });
     if (selectedFile?.id === file.id) setSelectedFile(null);
     refetchFiles();
@@ -1256,14 +1264,16 @@ export default function WorkspaceHub() {
   }
 
   async function changeFileSecurity(file: WFile, level: SecurityLevel) {
-    await supabase.from('workspace_files').update({ security_level: level, updated_at: new Date().toISOString() }).eq('id', file.id);
+    const { error } = await supabase.from('workspace_files').update({ security_level: level, updated_at: new Date().toISOString() }).eq('id', file.id);
+    if (error) { toast({ title: 'Failed to update security level', description: error.message, variant: 'destructive' }); return; }
     refetchFiles();
     if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, security_level: level } : null);
     toast({ title: 'Security level updated', description: `${file.name} → ${SEC_CFG[level].label}` });
   }
 
   async function changeFolderSecurity(folderId: string, folderName: string, level: SecurityLevel) {
-    await supabase.from('workspace_folders').update({ security_level: level }).eq('id', folderId);
+    const { error } = await supabase.from('workspace_folders').update({ security_level: level }).eq('id', folderId);
+    if (error) { toast({ title: 'Failed to update folder security', description: error.message, variant: 'destructive' }); return; }
     refetchFolders();
     toast({ title: 'Folder security updated', description: `${folderName} → ${SEC_CFG[level].label}` });
   }
@@ -1296,14 +1306,16 @@ export default function WorkspaceHub() {
 
   async function toggleDownload(file: WFile) {
     const next = !file.allow_download;
-    await supabase.from('workspace_files').update({ allow_download: next, updated_at: new Date().toISOString() }).eq('id', file.id);
+    const { error } = await supabase.from('workspace_files').update({ allow_download: next, updated_at: new Date().toISOString() }).eq('id', file.id);
+    if (error) { toast({ title: 'Failed to update download setting', description: error.message, variant: 'destructive' }); return; }
     refetchFiles();
     if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, allow_download: next } : null);
     toast({ title: next ? 'Downloads enabled' : 'Downloads disabled', description: file.name });
   }
 
   async function moveFileTo(fileId: string, folderId: string | null) {
-    await supabase.from('workspace_files').update({ folder_id: folderId, updated_at: new Date().toISOString() }).eq('id', fileId);
+    const { error } = await supabase.from('workspace_files').update({ folder_id: folderId, updated_at: new Date().toISOString() }).eq('id', fileId);
+    if (error) { toast({ title: 'Failed to move file', description: error.message, variant: 'destructive' }); return; }
     refetchFiles();
     setDragFileId(null);
     setDragOverFolderId(null);
@@ -1312,7 +1324,8 @@ export default function WorkspaceHub() {
 
   async function saveFolderCustomize() {
     if (!folderCustomizeTarget) return;
-    await supabase.from('workspace_folders').update({ color: customColor, icon: customIcon }).eq('id', folderCustomizeTarget.id);
+    const { error } = await supabase.from('workspace_folders').update({ color: customColor, icon: customIcon }).eq('id', folderCustomizeTarget.id);
+    if (error) { toast({ title: 'Failed to update folder', description: error.message, variant: 'destructive' }); return; }
     refetchFolders();
     setFolderCustomizeTarget(null);
     toast({ title: 'Folder updated' });

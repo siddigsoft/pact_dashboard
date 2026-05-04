@@ -159,6 +159,7 @@ const RoleManagement = () => {
       .eq('user_id', data.user_id);
     if (clearErr) {
       console.error('Clear user roles failed:', clearErr);
+      toast({ title: 'Failed to assign role', description: clearErr.message, variant: 'destructive' });
       return;
     }
 
