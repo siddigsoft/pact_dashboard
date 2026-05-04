@@ -183,11 +183,13 @@ const EditMMP: FC = () => {
         });
 
         if (site.id) {
-          await supabase.from('mmp_site_entries').update(updateData).eq('id', site.id);
+          const { error: updErr } = await supabase.from('mmp_site_entries').update(updateData).eq('id', site.id);
+          if (updErr) throw updErr;
         } else {
-          await supabase
+          const { error: insErr } = await supabase
             .from('mmp_site_entries')
             .insert([{ ...updateData, mmp_file_id: id }]);
+          if (insErr) throw insErr;
         }
       }
 
