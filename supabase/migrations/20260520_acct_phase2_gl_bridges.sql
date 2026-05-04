@@ -23,8 +23,17 @@
 -- salary_advances              │ disbursed       │ 1500 Staff Adv  │ 1200 Cash Bank
 -- wallet_transactions          │ type=reward     │ 5310 Per Diem   │ 2600 Wallet Pay
 -- =============================================================================
+--
+-- NOTE: No outer BEGIN/COMMIT wrapper intentionally.
+-- Each statement auto-commits so locks are released immediately.
+-- This prevents deadlocks when the live app holds AccessShareLock on tables
+-- (e.g. profiles via RLS) that this migration also needs to lock exclusively.
+-- All statements are idempotent — safe to re-run if any step fails.
+-- =============================================================================
 
-begin;
+-- Fail fast if a lock cannot be acquired rather than waiting and deadlocking.
+set lock_timeout = '5s';
+set deadlock_timeout = '500ms';
 
 -- =============================================================================
 -- PART A: Additional COA accounts for Phase 2 bridges
@@ -1453,5 +1462,3 @@ end $$;
 -- select * from public.acct_recon_subledger_check();           -- all passed = true (if 0 balances)
 -- select public.feature_enabled('acct.bridge.payroll_runs');   -- expect true
 -- select public.feature_enabled('acct.p2p.enabled');           -- expect true
-
-commit;

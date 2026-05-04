@@ -7,9 +7,17 @@
 --              hr_advances_grant_milestones.sql       (hr_salary_advances, acct_grant_expenses)
 -- Apply      : MANUAL — paste into Supabase SQL editor
 -- Idempotent : YES — all blocks use CREATE OR REPLACE / IF NOT EXISTS / ON CONFLICT
+--
+-- NOTE: No outer BEGIN/COMMIT wrapper intentionally.
+-- Each statement auto-commits so locks are released immediately.
+-- This prevents deadlocks caused by the live app reading `profiles` for RLS
+-- while this migration holds an exclusive lock on the same table.
+-- If any statement fails, simply re-run — all statements are idempotent.
 -- =============================================================================
 
-begin;
+-- Fail fast if a lock cannot be acquired rather than waiting and deadlocking.
+set lock_timeout = '5s';
+set deadlock_timeout = '500ms';
 
 -- =============================================================================
 -- PART 0: Self-contained prerequisites
@@ -876,8 +884,6 @@ order by s.last_event_at desc;
 comment on view public.acct_gl_bridge_coverage is
   'Operational view showing GL bridge health per source module. '
   'Used by the GL Audit page to display coverage matrix.';
-
-commit;
 
 -- =============================================================================
 -- RUNBOOK
