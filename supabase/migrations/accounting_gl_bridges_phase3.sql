@@ -748,7 +748,7 @@ as $$
     l.event_type,
     l.status,
     l.journal_entry_id,
-    je.reference_number  as je_reference,
+    je.entry_no::text    as je_reference,
     je.description_en    as je_description,
     l.error_message,
     l.created_at
