@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PactLogo from "@/assets/logo.png";
 import { supabase } from "@/integrations/supabase/client";
+import { useAppContext } from "@/context/AppContext";
 import {
   Activity,
   MapPin,
@@ -48,6 +49,15 @@ const Index = () => {
     efficiencyTrend: 0,
   });
   const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { currentUser, authReady } = useAppContext();
+
+  // If user is already logged in, skip the landing page and go straight to dashboard
+  useEffect(() => {
+    if (authReady && currentUser) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [authReady, currentUser, navigate]);
 
   useEffect(() => {
     // Fetch real stats from database
