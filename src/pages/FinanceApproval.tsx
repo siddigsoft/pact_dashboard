@@ -494,6 +494,34 @@ export default function FinanceApproval() {
             }
           );
         }
+        // Notify management (FOM/CD/SA) that withdrawal has been paid
+        {
+          const financeUser = (users || []).find((u: any) => u.id === (selectedRequest as any).userId);
+          const requesterName = financeUser?.name || financeUser?.fullName || getUserName(selectedRequest.userId, selectedRequest);
+          const amt = `${selectedRequest.currency || 'SDG'} ${selectedRequest.amount.toLocaleString()}`;
+          const processedBy = (users || []).find((u: any) => u.id === selectedRequest.userId);
+          const processorName = processedBy?.name || processedBy?.fullName || 'Finance';
+          supabase.from('profiles').select('id')
+            .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
+            .eq('status', 'approved')
+            .then(({ data }) => {
+              (data || []).forEach(u => {
+                NotificationTriggerService.send({
+                  userId: u.id,
+                  title: 'Withdrawal Processed & Paid',
+                  message: `Withdrawal of ${amt} by ${requesterName} has been processed and paid by Finance.`,
+                  type: 'success',
+                  category: 'financial',
+                  priority: 'normal',
+                  link: '/finance-approval',
+                  relatedEntityId: selectedRequest.id,
+                  relatedEntityType: 'transaction',
+                  sendEmail: true,
+                  emailActionLabel: 'View Details',
+                }).catch(console.warn);
+              });
+            }).catch(console.warn);
+        }
       } else if (dialogType === 'reject') {
         await adminRejectWithdrawal(selectedRequest.id, notes);
         
@@ -511,6 +539,31 @@ export default function FinanceApproval() {
               transactionId: selectedRequest.id
             }
           );
+        }
+        // Notify management (FOM/CD/SA) that Finance rejected a withdrawal
+        {
+          const financeUser = (users || []).find((u: any) => u.id === (selectedRequest as any).userId);
+          const requesterName = financeUser?.name || financeUser?.fullName || getUserName(selectedRequest.userId, selectedRequest);
+          const amt = `${selectedRequest.currency || 'SDG'} ${selectedRequest.amount.toLocaleString()}`;
+          supabase.from('profiles').select('id')
+            .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
+            .eq('status', 'approved')
+            .then(({ data }) => {
+              (data || []).forEach(u => {
+                NotificationTriggerService.send({
+                  userId: u.id,
+                  title: 'Withdrawal Rejected by Finance',
+                  message: `Withdrawal request of ${amt} by ${requesterName} has been rejected by Finance.`,
+                  type: 'error',
+                  category: 'financial',
+                  priority: 'normal',
+                  link: '/finance-approval',
+                  relatedEntityId: selectedRequest.id,
+                  relatedEntityType: 'transaction',
+                  sendEmail: false,
+                }).catch(console.warn);
+              });
+            }).catch(console.warn);
         }
       }
       await fetchAllRequests();

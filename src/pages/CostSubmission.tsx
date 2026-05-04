@@ -64,6 +64,40 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { getStatesInHub, normalizeHubId, hubs } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
+const MGMT_ROLES = ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'];
+
+async function notifyMgmtOfCostEvent(
+  eventTitle: string,
+  eventMessage: string,
+  submissionId: string,
+  excludeUserId?: string
+): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('role', MGMT_ROLES)
+      .eq('status', 'approved');
+    (data || []).filter(u => u.id !== excludeUserId).forEach(u => {
+      NotificationTriggerService.send({
+        userId: u.id,
+        title: eventTitle,
+        message: eventMessage,
+        type: 'info',
+        category: 'financial',
+        priority: 'normal',
+        link: '/cost-submission',
+        relatedEntityType: 'costSubmission',
+        relatedEntityId: submissionId,
+        sendEmail: true,
+        emailActionLabel: 'View Submission',
+      }).catch(console.warn);
+    });
+  } catch (e) {
+    console.warn('[CostSubmission] notifyMgmtOfCostEvent failed:', e);
+  }
+}
+
 const PROJECT_PALETTE = [
   { bg: 'rgba(59,130,246,0.25)',  border: '#3B82F6', text: '#93C5FD' },  // blue
   { bg: 'rgba(16,185,129,0.25)', border: '#10B981', text: '#6EE7B7' },  // emerald
@@ -1373,6 +1407,28 @@ const CostSubmission = () => {
       }).in('id', allGroupIds);
       if (error) throw error;
       toast({ title: 'Sent back for revision', description: `${allGroupIds.length > 1 ? `${allGroupIds.length} items` : 'Request'} returned to the submitter.` });
+
+      if (oc.submitted_by) {
+        const sbRef = oc.reference_number || oc.id.slice(0, 8).toUpperCase();
+        const sbAmt = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
+        const sbApproverName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Approver';
+        NotificationTriggerService.send({
+          userId: oc.submitted_by,
+          title: `Cost Submission Returned for Revision — ${sbRef}`,
+          titleAr: `إعادة الطلب للمراجعة — ${sbRef}`,
+          message: `Your cost submission "${sbRef}" (${sbAmt}) has been returned for revision by ${sbApproverName}. Please review the comments and resubmit. Comment: ${sendBackComment}`,
+          messageAr: `تم إعادة طلبك "${sbRef}" (${sbAmt}) للمراجعة من قِبل ${sbApproverName}. يرجى الاطلاع على التعليقات وإعادة التقديم.`,
+          type: 'warning',
+          category: 'financial',
+          priority: 'high',
+          link: '/cost-submission',
+          relatedEntityType: 'costSubmission',
+          relatedEntityId: oc.id,
+          sendEmail: true,
+          emailActionLabel: 'View & Resubmit',
+        }).catch(console.warn);
+      }
+
       setSendBackDialog({ open: false, item: null });
       setSendBackComment('');
       setViewingSubmission(null);
@@ -1474,6 +1530,17 @@ const CostSubmission = () => {
           sendEmail: true,
           emailActionLabel: 'View Submission',
         }).catch(console.error);
+        // Notify management that a payment was disbursed
+        const paidRef = oc.reference_number || oc.id.slice(0, 8).toUpperCase();
+        const submitterName = (users || []).find((u: any) => u.id === oc.submitted_by)?.name
+          || (users || []).find((u: any) => u.id === oc.submitted_by)?.fullName
+          || 'Staff';
+        void notifyMgmtOfCostEvent(
+          `Cost Submission Paid — ${paidRef}`,
+          `Cost submission "${paidRef}" (${oc.currency} ${amount}) by ${submitterName} has been disbursed by ${(currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance'}.`,
+          oc.id,
+          currentUser?.id
+        );
         setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
         fetchOperationalCosts();
       }
@@ -1570,6 +1637,19 @@ const CostSubmission = () => {
           emailActionLabel: 'View Submissions',
         }).catch(console.error);
       });
+
+      // Notify management of the batch disbursement
+      if (successCount > 0) {
+        const batchTotal = subs.slice(0, successCount).reduce((s, sub) => s + sub.amount_cents / 100, 0);
+        const batchCurrency = subs[0]?.currency || 'SDG';
+        const disbursedBy = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance';
+        void notifyMgmtOfCostEvent(
+          `Batch Payment Disbursed — ${successCount} Submission${successCount > 1 ? 's' : ''}`,
+          `${successCount} cost submission${successCount > 1 ? 's' : ''} totalling ${batchCurrency} ${batchTotal.toLocaleString()} have been batch-paid by ${disbursedBy}.`,
+          subs[0]?.id || '',
+          currentUser?.id
+        );
+      }
 
       toast({
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,

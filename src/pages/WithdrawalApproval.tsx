@@ -143,7 +143,34 @@ export default function WithdrawalApproval() {
         description: `${successCount} request(s) approved${failCount > 0 ? `, ${failCount} failed` : ''}`,
         variant: failCount > 0 ? 'destructive' : 'default',
       });
-      
+
+      if (successCount > 0) {
+        const approvedReqs = (supervisedWithdrawalRequests as SupervisedRequest[]).filter(r =>
+          Array.from(selectedRequestIds).includes(r.id)
+        );
+        const batchTotal = approvedReqs.reduce((s, r) => s + r.amount, 0);
+        const batchCurrency = approvedReqs[0]?.currency || 'SDG';
+        const approverName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Supervisor';
+        supabase.from('profiles').select('id')
+          .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
+          .eq('status', 'approved')
+          .then(({ data }) => {
+            (data || []).filter(u => u.id !== currentUser?.id).forEach(u => {
+              NotificationTriggerService.send({
+                userId: u.id,
+                title: `Batch Withdrawal Approved — ${successCount} Request${successCount > 1 ? 's' : ''}`,
+                message: `${successCount} withdrawal request${successCount > 1 ? 's' : ''} totalling ${batchCurrency} ${batchTotal.toLocaleString()} have been approved by ${approverName} and forwarded to Finance.`,
+                type: 'info',
+                category: 'financial',
+                priority: 'normal',
+                link: '/finance-approval',
+                sendEmail: true,
+                emailActionLabel: 'View in Finance',
+              }).catch(console.warn);
+            });
+          }).catch(console.warn);
+      }
+
       await refreshSupervisedWithdrawalRequests();
       setSelectedRequestIds(new Set());
       setDialogType(null);
@@ -291,6 +318,32 @@ export default function WithdrawalApproval() {
             }
           );
         }
+        // Notify management (FOM/CD/SA) of supervisor approval forwarded to Finance
+        {
+          const approverName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Supervisor';
+          const userName = getUserName(selectedRequest.userId, selectedRequest);
+          const amt = `${selectedRequest.currency || 'SDG'} ${selectedRequest.amount.toLocaleString()}`;
+          supabase.from('profiles').select('id')
+            .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
+            .eq('status', 'approved')
+            .then(({ data }) => {
+              (data || []).filter(u => u.id !== currentUser?.id).forEach(u => {
+                NotificationTriggerService.send({
+                  userId: u.id,
+                  title: 'Withdrawal Forwarded to Finance',
+                  message: `Withdrawal request of ${amt} by ${userName} has been approved by ${approverName} and forwarded to Finance for processing.`,
+                  type: 'info',
+                  category: 'financial',
+                  priority: 'normal',
+                  link: '/finance-approval',
+                  relatedEntityId: selectedRequest.id,
+                  relatedEntityType: 'transaction',
+                  sendEmail: true,
+                  emailActionLabel: 'View in Finance',
+                }).catch(console.warn);
+              });
+            }).catch(console.warn);
+        }
       } else if (reasonDialogMode === 'reject') {
         await rejectWithdrawalRequest(selectedRequest.id, combinedNotes || notes);
         
@@ -308,6 +361,31 @@ export default function WithdrawalApproval() {
               transactionId: selectedRequest.id
             }
           );
+        }
+        // Notify management (FOM/CD/SA) of supervisor rejection
+        {
+          const approverName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Supervisor';
+          const userName = getUserName(selectedRequest.userId, selectedRequest);
+          const amt = `${selectedRequest.currency || 'SDG'} ${selectedRequest.amount.toLocaleString()}`;
+          supabase.from('profiles').select('id')
+            .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
+            .eq('status', 'approved')
+            .then(({ data }) => {
+              (data || []).filter(u => u.id !== currentUser?.id).forEach(u => {
+                NotificationTriggerService.send({
+                  userId: u.id,
+                  title: 'Withdrawal Rejected by Supervisor',
+                  message: `Withdrawal request of ${amt} by ${userName} has been rejected by ${approverName}.`,
+                  type: 'error',
+                  category: 'financial',
+                  priority: 'normal',
+                  link: '/withdrawal-approval',
+                  relatedEntityId: selectedRequest.id,
+                  relatedEntityType: 'transaction',
+                  sendEmail: false,
+                }).catch(console.warn);
+              });
+            }).catch(console.warn);
         }
       }
       await refreshSupervisedWithdrawalRequests();
