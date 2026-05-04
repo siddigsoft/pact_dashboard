@@ -113,13 +113,18 @@ export default function AccountingJournals() {
   const today = new Date().toISOString().slice(0, 10);
 
   // ── Backdate helpers ──────────────────────────────────
-  const selectedPeriod  = periods.find(p => p.id === newPeriodId);
-  const isBackdate      = !!newDate && newDate < today;
-  const periodNotOpen   = !!selectedPeriod && selectedPeriod.status !== 'open';
-  const dateMismatch    = !!selectedPeriod && !!newDate && (
+  const selectedPeriod     = periods.find(p => p.id === newPeriodId);
+  const isBackdate         = !!newDate && newDate < today;
+  const periodSoftClosed   = selectedPeriod?.status === 'soft_closed';
+  const periodHardBlocked  = selectedPeriod?.status === 'hard_closed' || selectedPeriod?.status === 'locked';
+  const periodNotOpen      = !!selectedPeriod && selectedPeriod.status !== 'open';
+  const dateMismatch       = !!selectedPeriod && !!newDate && (
     newDate < selectedPeriod.start_date || newDate > selectedPeriod.end_date
   );
-  const needsReason     = isBackdate || periodNotOpen;
+  // Reason required when backdating to an open period, or posting to a soft-closed period
+  const needsReason        = isBackdate || periodSoftClosed;
+  // Hard-blocked: cannot post at all — must reopen the period first
+  const isBlocked          = periodHardBlocked;
 
   // Auto-suggest the period that contains the chosen date
   const handleDateChange = (d: string) => {
@@ -163,6 +168,10 @@ export default function AccountingJournals() {
 
   const submitEntry = async () => {
     if (!newPeriodId) { toast({ title: 'Select a period', variant: 'destructive' }); return; }
+    if (isBlocked) {
+      toast({ title: 'Period is closed', description: `Cannot post to a ${selectedPeriod?.status} period. Reopen the period first.`, variant: 'destructive' });
+      return;
+    }
     if (!newDescEn.trim()) { toast({ title: 'English description is required', variant: 'destructive' }); return; }
     if (needsReason && !backdateReason.trim()) {
       toast({ title: 'Backdate reason is required', description: 'Explain why this entry is being posted to a past date or closed period.', variant: 'destructive' });
@@ -534,30 +543,61 @@ export default function AccountingJournals() {
               </div>
             </div>
 
-            {/* ── Backdate / period warning ── */}
-            {(isBackdate || periodNotOpen || dateMismatch) && (
+            {/* ── Period / backdate warnings ── */}
+            {(isBlocked || isBackdate || periodSoftClosed || dateMismatch) && (
               <div className="space-y-2">
-                {(isBackdate || periodNotOpen) && (
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300" data-testid="banner-backdate-warning">
-                    <Clock className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+
+                {/* Hard block — posting is not allowed */}
+                {isBlocked && (
+                  <div className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-700 px-3 py-2.5 text-sm text-rose-800 dark:text-rose-300" data-testid="banner-period-blocked">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-rose-600 dark:text-rose-400" />
                     <div>
                       <p className="font-semibold leading-tight">
-                        {periodNotOpen && isBackdate ? 'Backdated entry to a closed period'
-                          : periodNotOpen ? 'Posting to a closed/locked period'
-                          : 'Backdated entry'}
+                        Period is {selectedPeriod?.status === 'locked' ? 'locked' : 'hard-closed'} — posting not allowed
                       </p>
                       <p className="text-xs mt-0.5 opacity-80">
-                        {isBackdate && `Posting date is ${Math.round((new Date(today).getTime() - new Date(newDate).getTime()) / 86400000)} day(s) before today. `}
-                        {periodNotOpen && `Selected period is "${selectedPeriod?.status}". `}
-                        A reason is required and will be appended to the journal description for audit purposes.
+                        {selectedPeriod?.status === 'locked'
+                          ? 'This period is locked and cannot accept any new entries. Contact your system administrator to unlock it.'
+                          : 'This period has been hard-closed. Go to Fiscal Years & Periods and reopen it to soft-closed before posting.'}
                       </p>
                     </div>
                   </div>
                 )}
+
+                {/* Soft-closed warning — allowed with reason */}
+                {!isBlocked && periodSoftClosed && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300" data-testid="banner-soft-closed-warning">
+                    <Clock className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-semibold leading-tight">
+                        {isBackdate ? 'Backdated entry to a soft-closed period' : 'Posting to a soft-closed period'}
+                      </p>
+                      <p className="text-xs mt-0.5 opacity-80">
+                        {isBackdate && `Posting date is ${Math.round((new Date(today).getTime() - new Date(newDate).getTime()) / 86400000)} day(s) before today. `}
+                        This period is soft-closed. Posting is permitted but requires a documented reason for audit purposes.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Plain backdate to an open period */}
+                {!isBlocked && !periodSoftClosed && isBackdate && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300" data-testid="banner-backdate-warning">
+                    <Clock className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-semibold leading-tight">Backdated entry</p>
+                      <p className="text-xs mt-0.5 opacity-80">
+                        Posting date is {Math.round((new Date(today).getTime() - new Date(newDate).getTime()) / 86400000)} day(s) before today. A reason is required for audit purposes.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Date outside selected period range */}
                 {dateMismatch && (
                   <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-700 px-3 py-2 text-xs text-rose-700 dark:text-rose-300" data-testid="banner-date-mismatch">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    Posting date <strong>{newDate}</strong> is outside the selected period range ({selectedPeriod?.start_date} → {selectedPeriod?.end_date}). Consider adjusting the date or period.
+                    Posting date <strong>{newDate}</strong> is outside the selected period range ({selectedPeriod?.start_date} → {selectedPeriod?.end_date}). Adjust the date or select the correct period.
                   </div>
                 )}
               </div>
@@ -731,14 +771,16 @@ export default function AccountingJournals() {
             <Button variant="outline" onClick={() => setNewOpen(false)} disabled={submitting}>Cancel</Button>
             <Button
               onClick={() => void submitEntry()}
-              disabled={submitting || !newBalanced || (needsReason && !backdateReason.trim())}
+              disabled={submitting || !newBalanced || isBlocked || (needsReason && !backdateReason.trim())}
               data-testid="button-submit-entry"
             >
               {submitting
                 ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Posting…</>
-                : isBackdate || periodNotOpen
-                  ? <><Clock className="w-4 h-4 mr-1" /> Post Backdated Entry</>
-                  : 'Post Journal Entry'}
+                : isBlocked
+                  ? 'Period Closed — Cannot Post'
+                  : isBackdate || periodSoftClosed
+                    ? <><Clock className="w-4 h-4 mr-1" /> Post Backdated Entry</>
+                    : 'Post Journal Entry'}
             </Button>
           </DialogFooter>
         </DialogContent>
