@@ -452,6 +452,26 @@ export default function DownPaymentApproval() {
   const [disbEnumerator, setDisbEnumerator] = useState('all');
   const [disbGroupBy, setDisbGroupBy] = useState('none');
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
+
+  // Fetch GL bridge log for fully_paid down_payment_requests
+  useEffect(() => {
+    const fullyPaidIds = requests.filter(r => r.status === 'fully_paid').map(r => r.id);
+    if (fullyPaidIds.length === 0) { setGlLogMap(new Map()); return; }
+    supabase
+      .from('acct_gl_bridge_log' as any)
+      .select('source_id, status')
+      .eq('source_table', 'down_payment_requests')
+      .in('source_id', fullyPaidIds.slice(0, 500))
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        const map = new Map<string, string>();
+        for (const row of (data ?? []) as { source_id: string; status: string }[]) {
+          if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+        }
+        setGlLogMap(map);
+      });
+  }, [requests]);
 
   const handleMarkFullyPaid = useCallback(async (req: DownPaymentRequest) => {
     if (!window.confirm(`Mark "${req.requestedByName || 'this advance'}" (${(req.approvedAmount ?? req.requestedAmount).toLocaleString()} SDG) as Fully Paid?\n\nThis will unblock the cycle close gate.`)) return;
@@ -1078,6 +1098,15 @@ export default function DownPaymentApproval() {
                     {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yy') : '—'}
                   </TableCell>
                   <TableCell>
+                    {req.status === 'fully_paid' && (() => {
+                      const gl = glLogMap.get(req.id);
+                      if (gl === 'success') return <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300 whitespace-nowrap">GL Posted</Badge>;
+                      if (gl === 'error')   return <Badge variant="outline" className="text-[10px] text-rose-700 border-rose-300 whitespace-nowrap">GL Error</Badge>;
+                      if (gl === 'skipped') return <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300 whitespace-nowrap">GL Skipped</Badge>;
+                      return <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200 whitespace-nowrap">GL Pending</Badge>;
+                    })()}
+                  </TableCell>
+                  <TableCell>
                     {req.status === 'approved' && isAdmin && (
                       <Button
                         size="sm"
@@ -1294,6 +1323,7 @@ export default function DownPaymentApproval() {
                                       <TableHead className="text-right">Remaining</TableHead>
                                       <TableHead>Status</TableHead>
                                       <TableHead>Updated</TableHead>
+                                      <TableHead>GL</TableHead>
                                       <TableHead>Actions</TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -1322,6 +1352,7 @@ export default function DownPaymentApproval() {
                               <TableHead className="text-right">Remaining</TableHead>
                               <TableHead>Status</TableHead>
                               <TableHead>Updated</TableHead>
+                              <TableHead>GL</TableHead>
                               <TableHead>Actions</TableHead>
                             </TableRow>
                           </TableHeader>
