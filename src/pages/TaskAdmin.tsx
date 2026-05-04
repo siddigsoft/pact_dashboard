@@ -1131,7 +1131,8 @@ function RewardApprovalsPanel() {
     setSaving(id);
     try {
       const notes = reviewNotes[id] || null;
-      await supabase.from('task_reward_approvals').update({ status, reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString(), reviewer_notes: notes }).eq('id', id);
+      const { error: reviewErr } = await supabase.from('task_reward_approvals').update({ status, reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString(), reviewer_notes: notes }).eq('id', id);
+      if (reviewErr) throw reviewErr;
       if (status === 'approved') {
         try {
           await supabase.functions.invoke('credit-task-reward', { body: { task_id: taskId, user_id: userId, override_amount: amount, override_currency: currency, approval_id: id } });

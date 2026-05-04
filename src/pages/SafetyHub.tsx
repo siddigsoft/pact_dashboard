@@ -95,7 +95,7 @@ export default function SafetyHub() {
         .eq('id', user?.id)
         .single();
 
-      await supabase.from('incident_reports').insert({
+      const { error: sosErr } = await supabase.from('incident_reports').insert({
         title: 'SOS ALERT',
         description: `Emergency SOS triggered by ${profile?.full_name || user?.email}`,
         severity: 'critical',
@@ -104,6 +104,7 @@ export default function SafetyHub() {
         location: 'Location pending GPS',
         incident_type: 'sos',
       });
+      if (sosErr) throw sosErr;
 
       toast({
         title: '🚨 SOS Alert Sent',

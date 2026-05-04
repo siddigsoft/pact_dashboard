@@ -106,14 +106,15 @@ export default function IncidentReports() {
 
   async function updateStatus(id: string, status: string) {
     try {
-      await supabase.from('incident_reports').update({
+      const { error } = await supabase.from('incident_reports').update({
         status,
         ...(status === 'resolved' ? { resolved_at: new Date().toISOString() } : {}),
       }).eq('id', id);
+      if (error) throw error;
       toast({ title: 'Status updated' });
       fetchReports();
-    } catch {
-      toast({ title: 'Failed to update status', variant: 'destructive' });
+    } catch (e: any) {
+      toast({ title: 'Failed to update status', description: e.message, variant: 'destructive' });
     }
   }
 

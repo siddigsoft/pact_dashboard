@@ -103,11 +103,12 @@ export default function EquipmentPage() {
     const session = await ensureValidSession();
     if (!session.success) return;
     try {
-      await supabase.from('equipment').update({ status, last_checked: new Date().toISOString() }).eq('id', id);
+      const { error } = await supabase.from('equipment').update({ status, last_checked: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
       toast({ title: 'Status updated' });
       fetchEquipment();
-    } catch {
-      toast({ title: 'Failed to update', variant: 'destructive' });
+    } catch (e: any) {
+      toast({ title: 'Failed to update', description: e.message, variant: 'destructive' });
     }
   }
 

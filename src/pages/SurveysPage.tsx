@@ -127,9 +127,10 @@ export default function SurveysPage() {
       if (sErr || !newSurvey) throw sErr ?? new Error('Failed');
       const { data: qs } = await supabase.from('survey_questions').select('*').eq('survey_id', survey.id).order('order_index');
       if (qs?.length) {
-        await supabase.from('survey_questions').insert(
+        const { error: qErr } = await supabase.from('survey_questions').insert(
           qs.map(q => ({ ...q, id: undefined, survey_id: newSurvey.id }))
         );
+        if (qErr) throw qErr;
       }
       return newSurvey;
     },
