@@ -394,7 +394,7 @@ export default function AccountingJournals() {
                       <th className="text-left px-3 py-2">Period</th>
                       <th className="text-left px-3 py-2">Source</th>
                       <th className="text-left px-3 py-2">Description</th>
-                      <th className="text-left px-3 py-2">Status</th>
+                      <th className="text-left px-3 py-2">GL Status</th>
                       <th className="text-right px-3 py-2">Actions</th>
                     </tr>
                   </thead>
@@ -410,7 +410,15 @@ export default function AccountingJournals() {
                           {e.description_ar && <div className="truncate text-xs text-muted-foreground" dir="rtl" lang="ar">{e.description_ar}</div>}
                         </td>
                         <td className="px-3 py-2">
-                          <Badge variant="outline" className={cn('text-[10px]', ACCT_STATUS_TONE[e.status] ?? '')}>{e.status}</Badge>
+                          {e.status === 'posted'
+                            ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30">GL Posted</Badge>
+                            : e.status === 'reversed'
+                            ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30">GL Reversed</Badge>
+                            : e.status === 'rejected'
+                            ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-rose-100 text-rose-800 dark:bg-rose-900/30">GL Rejected</Badge>
+                            : e.status === 'pending_approval'
+                            ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-blue-100 text-blue-800 dark:bg-blue-900/30">GL Pending</Badge>
+                            : <Badge className="text-[10px] px-1.5 py-0 border-0 bg-slate-100 text-slate-600 dark:bg-slate-800">GL Draft</Badge>}
                         </td>
                         <td className="px-3 py-2 text-right">
                           <Button variant="ghost" size="sm" onClick={() => void openDetails(e)} data-testid={`button-view-${e.id}`}>
@@ -659,7 +667,17 @@ export default function AccountingJournals() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Entry #{openEntry?.entry_no}
-              {openEntry && <Badge variant="outline" className={cn('text-[10px]', ACCT_STATUS_TONE[openEntry.status] ?? '')}>{openEntry.status}</Badge>}
+              {openEntry && (
+                openEntry.status === 'posted'
+                  ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30">GL Posted</Badge>
+                  : openEntry.status === 'reversed'
+                  ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30">GL Reversed</Badge>
+                  : openEntry.status === 'rejected'
+                  ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-rose-100 text-rose-800 dark:bg-rose-900/30">GL Rejected</Badge>
+                  : openEntry.status === 'pending_approval'
+                  ? <Badge className="text-[10px] px-1.5 py-0 border-0 bg-blue-100 text-blue-800 dark:bg-blue-900/30">GL Pending</Badge>
+                  : <Badge className="text-[10px] px-1.5 py-0 border-0 bg-slate-100 text-slate-600 dark:bg-slate-800">GL Draft</Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
           {openEntry && (

@@ -79,6 +79,7 @@ export default function AccountingPurchaseOrders() {
   const [saving, setSaving] = useState(false);
   const [rejNote, setRejNote] = useState('');
   const [rejDialog, setRejDialog] = useState(false);
+  const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -109,6 +110,23 @@ export default function AccountingPurchaseOrders() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const bridgedIds = pos
+      .filter(p => ['approved', 'ordered', 'received', 'completed'].includes(p.status))
+      .map(p => p.id);
+    if (!bridgedIds.length) { setGlLogMap(new Map()); return; }
+    supabase
+      .from('acct_gl_bridge_log')
+      .select('source_id, status')
+      .eq('source_table', 'acct_purchase_orders')
+      .in('source_id', bridgedIds)
+      .then(({ data }) => {
+        const m = new Map<string, string>();
+        (data ?? []).forEach(r => { if (!m.has(r.source_id)) m.set(r.source_id, r.status); });
+        setGlLogMap(m);
+      });
+  }, [pos]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -173,6 +191,15 @@ export default function AccountingPurchaseOrders() {
     return <Badge className={cn('text-[10px] px-1.5 py-0 border-0', cfg.color)}><cfg.icon className="h-3 w-3 mr-0.5" />{cfg.label}</Badge>;
   };
 
+  const GlBadge = ({ poId, poStatus }: { poId: string; poStatus: string }) => {
+    if (!['approved', 'ordered', 'received', 'completed'].includes(poStatus)) return null;
+    const s = glLogMap.get(poId);
+    if (s === 'success') return <Badge className="text-[10px] px-1.5 py-0 border-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30">GL Posted</Badge>;
+    if (s === 'error')   return <Badge className="text-[10px] px-1.5 py-0 border-0 bg-rose-100 text-rose-800 dark:bg-rose-900/30">GL Error</Badge>;
+    if (s === 'skipped') return <Badge className="text-[10px] px-1.5 py-0 border-0 bg-slate-100 text-slate-600 dark:bg-slate-800">GL Skipped</Badge>;
+    return <Badge className="text-[10px] px-1.5 py-0 border-0 bg-gray-50 text-gray-400 dark:bg-gray-900/20">GL Pending</Badge>;
+  };
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="purchase-orders-page">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
@@ -233,6 +260,7 @@ export default function AccountingPurchaseOrders() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs text-muted-foreground">{po.po_number}</span>
                       <StatusBadge status={po.status} />
+                      <GlBadge poId={po.id} poStatus={po.status} />
                     </div>
                     <div className="font-medium text-sm mt-0.5">{po.title}</div>
                     {vendor && <div className="text-xs text-muted-foreground">{vendor.name_en}</div>}
@@ -258,7 +286,10 @@ export default function AccountingPurchaseOrders() {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-sm">{selected.po_number}</CardTitle>
-                    <div className="mt-1"><StatusBadge status={selected.status} /></div>
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      <StatusBadge status={selected.status} />
+                      <GlBadge poId={selected.id} poStatus={selected.status} />
+                    </div>
                   </div>
                   {canApprove && (selected.status === 'draft' || selected.status === 'submitted') && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => { e.stopPropagation(); openDialog(selected); }} data-testid="button-edit-selected"><Pencil className="h-3.5 w-3.5" /></Button>
