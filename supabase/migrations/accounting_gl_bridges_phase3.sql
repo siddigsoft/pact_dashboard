@@ -16,8 +16,8 @@
 -- =============================================================================
 
 -- Fail fast if a lock cannot be acquired rather than waiting and deadlocking.
+-- (deadlock_timeout requires superuser — omitted; lock_timeout is sufficient)
 set lock_timeout = '5s';
-set deadlock_timeout = '500ms';
 
 -- =============================================================================
 -- PART 0: Self-contained prerequisites
