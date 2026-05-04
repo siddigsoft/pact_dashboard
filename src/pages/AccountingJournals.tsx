@@ -10,11 +10,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2, AlertTriangle, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
@@ -99,23 +100,44 @@ export default function AccountingJournals() {
   const [linesLoading, setLinesLoading] = useState(false);
 
   // ── New entry form ──────────────────────────────────────
-  const [newOpen, setNewOpen]           = useState(false);
-  const [newPeriodId, setNewPeriodId]   = useState('');
-  const [newDate, setNewDate]           = useState('');
-  const [newDescEn, setNewDescEn]       = useState('');
-  const [newDescAr, setNewDescAr]       = useState('');
-  const [newLines, setNewLines]         = useState<NewLine[]>([BLANK_LINE(), BLANK_LINE()]);
-  const [submitting, setSubmitting]     = useState(false);
-  const [newCountryId, setNewCountryId] = useState<string>('all');
+  const [newOpen, setNewOpen]               = useState(false);
+  const [newPeriodId, setNewPeriodId]       = useState('');
+  const [newDate, setNewDate]               = useState('');
+  const [newDescEn, setNewDescEn]           = useState('');
+  const [newDescAr, setNewDescAr]           = useState('');
+  const [newLines, setNewLines]             = useState<NewLine[]>([BLANK_LINE(), BLANK_LINE()]);
+  const [submitting, setSubmitting]         = useState(false);
+  const [newCountryId, setNewCountryId]     = useState<string>('all');
+  const [backdateReason, setBackdateReason] = useState('');
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // ── Backdate helpers ──────────────────────────────────
+  const selectedPeriod  = periods.find(p => p.id === newPeriodId);
+  const isBackdate      = !!newDate && newDate < today;
+  const periodNotOpen   = !!selectedPeriod && selectedPeriod.status !== 'open';
+  const dateMismatch    = !!selectedPeriod && !!newDate && (
+    newDate < selectedPeriod.start_date || newDate > selectedPeriod.end_date
+  );
+  const needsReason     = isBackdate || periodNotOpen;
+
+  // Auto-suggest the period that contains the chosen date
+  const handleDateChange = (d: string) => {
+    setNewDate(d);
+    if (!d) return;
+    const match = periods.find(p => d >= p.start_date && d <= p.end_date);
+    if (match && match.id !== newPeriodId) setNewPeriodId(match.id);
+  };
 
   const openNewEntry = () => {
     const firstOpen = periods.find(p => p.status === 'open');
     setNewPeriodId(firstOpen?.id ?? '');
-    setNewDate(new Date().toISOString().slice(0, 10));
+    setNewDate(today);
     setNewDescEn('');
     setNewDescAr('');
     setNewCountryId(defaultCountryId);
     setNewLines([BLANK_LINE(), BLANK_LINE()]);
+    setBackdateReason('');
     setNewOpen(true);
   };
 
@@ -142,6 +164,10 @@ export default function AccountingJournals() {
   const submitEntry = async () => {
     if (!newPeriodId) { toast({ title: 'Select a period', variant: 'destructive' }); return; }
     if (!newDescEn.trim()) { toast({ title: 'English description is required', variant: 'destructive' }); return; }
+    if (needsReason && !backdateReason.trim()) {
+      toast({ title: 'Backdate reason is required', description: 'Explain why this entry is being posted to a past date or closed period.', variant: 'destructive' });
+      return;
+    }
     if (newLines.length < 2) { toast({ title: 'At least 2 lines required', variant: 'destructive' }); return; }
     if (!newBalanced) { toast({ title: 'Debits and credits must balance', variant: 'destructive' }); return; }
     for (const [i, l] of newLines.entries()) {
@@ -151,10 +177,13 @@ export default function AccountingJournals() {
     }
     setSubmitting(true);
     const funcCcy = selectedCountry?.currency_code ?? 'USD';
+    const descEn = needsReason && backdateReason.trim()
+      ? `${newDescEn.trim()} [Backdated: ${backdateReason.trim()}]`
+      : newDescEn.trim();
     const payload = {
       period_id:      newPeriodId,
       posting_date:   newDate,
-      description_en: newDescEn.trim(),
+      description_en: descEn,
       description_ar: newDescAr.trim() || null,
       source_type:    'manual',
       lines: newLines.map((l, idx) => ({
@@ -501,9 +530,39 @@ export default function AccountingJournals() {
               </div>
               <div className="space-y-1">
                 <Label>Posting Date *</Label>
-                <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
+                <Input type="date" value={newDate} onChange={e => handleDateChange(e.target.value)} data-testid="input-new-date" />
               </div>
             </div>
+
+            {/* ── Backdate / period warning ── */}
+            {(isBackdate || periodNotOpen || dateMismatch) && (
+              <div className="space-y-2">
+                {(isBackdate || periodNotOpen) && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300" data-testid="banner-backdate-warning">
+                    <Clock className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-semibold leading-tight">
+                        {periodNotOpen && isBackdate ? 'Backdated entry to a closed period'
+                          : periodNotOpen ? 'Posting to a closed/locked period'
+                          : 'Backdated entry'}
+                      </p>
+                      <p className="text-xs mt-0.5 opacity-80">
+                        {isBackdate && `Posting date is ${Math.round((new Date(today).getTime() - new Date(newDate).getTime()) / 86400000)} day(s) before today. `}
+                        {periodNotOpen && `Selected period is "${selectedPeriod?.status}". `}
+                        A reason is required and will be appended to the journal description for audit purposes.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {dateMismatch && (
+                  <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-700 px-3 py-2 text-xs text-rose-700 dark:text-rose-300" data-testid="banner-date-mismatch">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Posting date <strong>{newDate}</strong> is outside the selected period range ({selectedPeriod?.start_date} → {selectedPeriod?.end_date}). Consider adjusting the date or period.
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Description (English) *</Label>
@@ -514,6 +573,25 @@ export default function AccountingJournals() {
                 <Input dir="rtl" lang="ar" placeholder="رواتب أغسطس 2026…" value={newDescAr} onChange={e => setNewDescAr(e.target.value)} data-testid="input-new-desc-ar" />
               </div>
             </div>
+
+            {/* ── Backdate reason (required when backdating or posting to closed period) ── */}
+            {needsReason && (
+              <div className="space-y-1" data-testid="field-backdate-reason">
+                <Label className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Reason for Backdating *
+                </Label>
+                <Textarea
+                  placeholder="e.g. Correction of August payroll entry omitted during period close. Approved by Finance Manager."
+                  value={backdateReason}
+                  onChange={e => setBackdateReason(e.target.value)}
+                  rows={2}
+                  className="text-sm border-amber-300 focus-visible:ring-amber-400 dark:border-amber-700"
+                  data-testid="textarea-backdate-reason"
+                />
+                <p className="text-[11px] text-muted-foreground">This reason will be appended to the journal description as an audit trail.</p>
+              </div>
+            )}
 
             {/* Balance indicator */}
             <div className={cn(
@@ -653,10 +731,14 @@ export default function AccountingJournals() {
             <Button variant="outline" onClick={() => setNewOpen(false)} disabled={submitting}>Cancel</Button>
             <Button
               onClick={() => void submitEntry()}
-              disabled={submitting || !newBalanced}
+              disabled={submitting || !newBalanced || (needsReason && !backdateReason.trim())}
               data-testid="button-submit-entry"
             >
-              {submitting ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Posting…</> : 'Post Journal Entry'}
+              {submitting
+                ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Posting…</>
+                : isBackdate || periodNotOpen
+                  ? <><Clock className="w-4 h-4 mr-1" /> Post Backdated Entry</>
+                  : 'Post Journal Entry'}
             </Button>
           </DialogFooter>
         </DialogContent>
