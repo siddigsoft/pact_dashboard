@@ -597,8 +597,8 @@ const UserDetail: FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <h2 className="text-2xl font-bold mb-2">Loading user details...</h2>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <h2 className="text-xl font-bold">Loading profile…</h2>
         </div>
       </div>
     );
@@ -607,14 +607,10 @@ const UserDetail: FC = () => {
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Loading user details...</h2>
-          <p className="text-gray-500">If this persists, the user may not exist.</p>
-          <Button 
-            className="mt-4" 
-            variant="outline" 
-            onClick={() => navigate("/users")}
-          >
+        <div className="text-center space-y-4">
+          <h2 className="text-xl font-bold">User not found</h2>
+          <p className="text-muted-foreground text-sm">If this persists, the user may not exist.</p>
+          <Button variant="outline" onClick={() => navigate("/users")}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Users
           </Button>
         </div>
@@ -623,1015 +619,637 @@ const UserDetail: FC = () => {
   }
 
   return (
-    <div className="container max-w-6xl mx-auto p-3 pt-20 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-24 sm:pb-8">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <Button 
-            onClick={() => navigate("/users")} 
-            variant="outline" 
-            size="icon"
-            className="h-10 w-10 rounded-xl border-muted-foreground/20 hover:bg-muted shadow-sm"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">User Profile</h1>
-            <p className="text-sm text-muted-foreground">View and manage user details</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigate('/signatures')} data-testid="button-goto-signatures">
-            <FileSignature className="h-4 w-4 mr-2" />
-            Signatures
-          </Button>
-          {isAdmin && !editMode && (
-            <Button onClick={handleEdit} variant="default" className="min-h-[44px] px-6 shadow-sm rounded-xl gap-2">
-              <Edit className="h-4 w-4" />
-              Edit User
-            </Button>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen bg-muted/20 pb-24">
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* Profile Card */}
-        <Card className="lg:col-span-1 shadow-lg border overflow-hidden rounded-xl">
-          <div className="h-20 bg-gradient-to-br from-primary/30 via-primary/15 to-primary/5 relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)]" />
+      {/* ── Hero Banner ─────────────────────────────────────────────────────── */}
+      <div className="relative bg-gradient-to-br from-primary via-primary/85 to-primary/60 pt-16">
+        {/* back-navigation inside banner */}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 pb-0 flex items-center justify-between">
+          <button
+            onClick={() => navigate("/users")}
+            className="flex items-center gap-1.5 text-primary-foreground/80 hover:text-primary-foreground text-sm transition-colors"
+            data-testid="button-back-users"
+          >
+            <ArrowLeft className="h-4 w-4" /> Users
+          </button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/signatures')}
+              className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10 gap-1.5"
+              data-testid="button-goto-signatures"
+            >
+              <FileSignature className="h-4 w-4" />
+              <span className="hidden sm:inline">Signatures</span>
+            </Button>
+            {isAdmin && !editMode && (
+              <Button
+                onClick={handleEdit}
+                size="sm"
+                className="bg-white text-primary hover:bg-white/90 gap-1.5 shadow-sm font-semibold"
+                data-testid="button-edit-user"
+              >
+                <Edit className="h-4 w-4" />
+                Edit Profile
+              </Button>
+            )}
+            {editMode && (
+              <>
+                <Button
+                  onClick={() => {
+                    const roleEscalation = user && editForm.role !== user.role && ['Admin', 'SuperAdmin'].includes(editForm.role || '');
+                    if (roleEscalation && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true);
+                    else handleEditSave();
+                  }}
+                  disabled={isSaving}
+                  size="sm"
+                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm"
+                >
+                  {isSaving ? "Saving…" : "Save Changes"}
+                </Button>
+                <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10">
+                  Cancel
+                </Button>
+              </>
+            )}
           </div>
-          <CardContent className="pb-4 sm:pb-6 px-4 sm:px-6 flex flex-col items-center -mt-10">
-            <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shadow-xl border-4 border-background ring-4 ring-primary/10 mb-3">
+        </div>
+
+        {/* Avatar + name row */}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-16 flex flex-col sm:flex-row items-center sm:items-end gap-4">
+          <div className="relative shrink-0">
+            <Avatar className="h-24 w-24 sm:h-28 sm:w-28 shadow-2xl border-4 border-white/30 ring-4 ring-white/10">
               {user.avatar ? (
                 <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
               ) : (
-                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-xl sm:text-2xl font-bold">
+                <AvatarFallback className="bg-white/20 text-white text-3xl font-bold backdrop-blur-sm">
                   {getInitials(user.name)}
                 </AvatarFallback>
               )}
             </Avatar>
-            <div className="text-center w-full">
-              {editMode ? (
-                <Input
-                  className="font-bold text-base sm:text-lg text-center mb-2 h-11 min-h-[44px] rounded-lg"
-                  value={editForm.name || ""}
-                  onChange={e => handleEditChange("name", e.target.value)}
-                />
-              ) : (
-                <h2 className="text-base sm:text-lg font-bold leading-tight mb-1 break-words" title={user.name}>{user.name}</h2>
-              )}
-              <div className="flex flex-wrap justify-center items-center gap-1.5 mt-2">
-                {editMode ? (
-                  <select
-                    className="border rounded-lg px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs bg-background disabled:opacity-60 disabled:cursor-not-allowed"
-                    value={editForm.role || ""}
-                    onChange={e => handleEditChange("role", e.target.value)}
-                    disabled={isProtectedOwner(user?.id)}
-                    title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
-                  >
-                    <option value="" disabled>Select role</option>
-                    {availableRoles.map(role => (
-                      <option key={role} value={role}>{toRoleLabel(role) || role}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <>
-                    <RoleBadge role={user.role} size="sm" />
-                    <UserClassificationBadge userId={user.id} />
-                    <Badge 
-                      className="px-3 py-1" 
-                      variant={user.isApproved ? "default" : "destructive"}
-                    >
-                      {user.isApproved ? "Active" : "Pending"}
-                    </Badge>
-                  </>
-                )}
-              </div>
+            <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-white shadow ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          </div>
+          <div className="text-center sm:text-left flex-1 min-w-0 pb-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight truncate">{user.name}</h1>
+            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 mt-2">
+              <RoleBadge role={user.role} size="sm" />
+              <UserClassificationBadge userId={user.id} />
+              <Badge variant={user.isApproved ? "default" : "destructive"} className="text-xs bg-white/20 text-white border-white/30 backdrop-blur-sm">
+                {user.isApproved ? "Active" : "Pending"}
+              </Badge>
             </div>
-            <div className="w-full mt-3 sm:mt-4 md:mt-6 space-y-2 sm:space-y-3">
-              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {editMode ? (
-                    <Input
-                      type="email"
-                      value={editForm.email || ""}
-                      onChange={e => handleEditChange("email", e.target.value)}
-                      className="h-10 text-sm sm:text-base"
-                      placeholder="user@example.com"
-                    />
-                  ) : (
-                    <span className="text-sm block truncate" title={user.email}>{user.email}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {editMode ? (
-                    <Input
-                      value={editForm.phone || ""}
-                      onChange={e => handleEditChange("phone", e.target.value)}
-                      className="h-10 text-sm sm:text-base"
-                      placeholder="+249 xxx xxx xxx"
-                    />
-                  ) : (
-                    <span className="text-sm sm:text-base">{user.phone || "N/A"}</span>
-                  )}
-                </div>
-              </div>
-              {editMode ? (
-                <>
-                  <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <Select
-                        value={editForm.hubId || ""}
-                        onValueChange={(value) => handleEditChange("hubId", value)}
-                      >
-                        <SelectTrigger className="h-10 text-sm sm:text-base">
-                          <SelectValue placeholder="Select hub" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {hubs.map((hub) => (
-                            <SelectItem key={hub.id} value={hub.id}>
-                              {hub.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <Select
-                        value={editForm.stateId || ""}
-                        onValueChange={(value) => handleEditChange("stateId", value)}
-                        disabled={!editForm.hubId}
-                      >
-                        <SelectTrigger className="h-10 text-sm sm:text-base">
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableStates.map((state) => (
-                            <SelectItem key={state.id} value={state.id}>
-                              {state.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <Select
-                        value={editForm.localityId || "__none__"}
-                        onValueChange={(value) => handleEditChange("localityId", value === "__none__" ? undefined : value)}
-                        disabled={!editForm.stateId}
-                      >
-                        <SelectTrigger className="h-10 text-sm sm:text-base">
-                          <SelectValue placeholder="Select locality (optional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {availableLocalities.map((locality) => (
-                            <SelectItem key={locality.id} value={locality.id}>
-                              {locality.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm sm:text-base break-words">{getUserLocation(user)}</span>
-                  </div>
-                </div>
+            <div className="flex flex-wrap justify-center sm:justify-start gap-x-4 gap-y-1 mt-3 text-primary-foreground/75 text-sm">
+              {user.email && (
+                <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{user.email}</span>
               )}
-              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                <Award className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-sm sm:text-base">Rating: {user.performance?.rating ?? "-"}/5</span>
-              </div>
-              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-sm sm:text-base break-words">
-                  Last Active: {user.lastActive ? new Date(user.lastActive).toLocaleString() : "N/A"}
-                </span>
-              </div>
+              {user.phone && (
+                <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{user.phone}</span>
+              )}
+              {getUserLocation(user) !== "Not set" && (
+                <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{getUserLocation(user)}</span>
+              )}
             </div>
-            {/* Action Buttons */}
-            {!user.isApproved && isAdmin && !editMode && (
-              <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
-                <Button onClick={handleApprove} disabled={isApproving} variant="default" className="min-h-[44px] px-6 w-full" data-testid="button-approve-user">
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Approve User
-                </Button>
-                <Button onClick={handleReject} disabled={isRejecting} variant="destructive" className="min-h-[44px] px-6 w-full" data-testid="button-reject-user">
-                  <UserX className="h-4 w-4 mr-2" />
-                  Reject User
-                </Button>
-              </div>
-            )}
-            {isAdmin && !editMode && (
-              <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
-                <Button 
-                  onClick={handleConfirmEmail} 
-                  disabled={isConfirmingEmail} 
-                  variant="outline" 
-                  className="min-h-[44px] px-6 w-full"
-                  data-testid="button-confirm-email"
-                >
-                  <ShieldCheck className="h-4 w-4 mr-2" />
-                  {isConfirmingEmail ? 'Confirming...' : 'Confirm Email Manually'}
-                </Button>
-              </div>
-            )}
-            {editMode && (
-              <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
-                <Button
-                  onClick={() => {
-                    // Intercept save when role is being escalated to Admin/SuperAdmin
-                    const roleEscalation = user &&
-                      editForm.role !== user.role &&
-                      ['Admin', 'SuperAdmin'].includes(editForm.role || '');
-                    if (roleEscalation && isProtectedOwner(currentUser?.id)) {
-                      setAdminRoleOtpOpen(true);
-                    } else {
-                      handleEditSave();
-                    }
-                  }}
-                  disabled={isSaving}
-                  variant="default"
-                  className="min-h-[44px] px-6 w-full"
-                >
-                  {isSaving ? "Saving..." : "Save Changes"}
-                </Button>
-                <Button onClick={handleEditCancel} variant="outline" className="min-h-[44px] px-6 w-full">
-                  Cancel
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Profile Completeness — visible to the user themselves or admins */}
+          {/* Admin quick-actions */}
+          {isAdmin && !editMode && (
+            <div className="flex flex-col gap-2 shrink-0">
+              {!user.isApproved && (
+                <>
+                  <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shadow" data-testid="button-approve-user">
+                    <UserCheck className="h-3.5 w-3.5" />{isApproving ? 'Approving…' : 'Approve'}
+                  </Button>
+                  <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1.5 shadow" data-testid="button-reject-user">
+                    <UserX className="h-3.5 w-3.5" />{isRejecting ? 'Rejecting…' : 'Reject'}
+                  </Button>
+                </>
+              )}
+              <Button onClick={handleConfirmEmail} disabled={isConfirmingEmail} size="sm" variant="ghost" className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10 gap-1.5" data-testid="button-confirm-email">
+                <ShieldCheck className="h-3.5 w-3.5" />{isConfirmingEmail ? 'Confirming…' : 'Confirm Email'}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Content (overlaps the banner by pulling up with -mt) ──────────── */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 -mt-10">
+
+        {/* Profile completeness card */}
         {(currentUser?.id === user.id || isAdmin) && (
-          <div className="lg:col-span-3">
+          <div className="mb-4">
             <ProfileCompletenessIndicator user={user} />
           </div>
         )}
 
-        {/* Details Tabs */}
-        <Card className="lg:col-span-2 shadow-lg border overflow-hidden rounded-xl">
-          <CardHeader className="p-4 sm:p-5 border-b bg-gradient-to-r from-muted/50 to-transparent">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <UserIcon className="h-5 w-5 text-primary" />
-              </div>
-              <CardTitle className="text-lg font-bold tracking-tight">User Details</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-5">
-            <Tabs defaultValue="details" className="w-full">
-              <TabsList className="flex flex-row flex-nowrap gap-1 h-auto p-1.5 mb-5 bg-muted/40 rounded-xl w-full justify-start overflow-x-auto scrollbar-hide">
-                <TabsTrigger value="details" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
-                  <UserIcon className="h-4 w-4" />
-                  <span>Details</span>
-                </TabsTrigger>
-                <TabsTrigger value="employment" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
-                  <Briefcase className="h-4 w-4" />
-                  <span className="hidden sm:inline">Employment</span>
-                  <span className="sm:hidden">Emp</span>
-                </TabsTrigger>
-                <TabsTrigger value="performance" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
-                  <Award className="h-4 w-4" />
-                  <span className="hidden sm:inline">Performance</span>
-                  <span className="sm:hidden">Perf</span>
-                </TabsTrigger>
-                <TabsTrigger value="bankak" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
-                  <CreditCard className="h-4 w-4" />
-                  <span>Bank</span>
-                </TabsTrigger>
-                <TabsTrigger value="location" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
-                  <MapPin className="h-4 w-4" />
-                  <span className="hidden sm:inline">Location</span>
-                  <span className="sm:hidden">Loc</span>
-                </TabsTrigger>
-                {canManageClassifications && (
-                  <TabsTrigger value="classification" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>Class</span>
+        {/* ── Main Tab Panel ──────────────────────────────────────────────── */}
+        <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
+          <Tabs defaultValue="profile" className="w-full">
+            {/* Tab bar */}
+            <div className="border-b bg-background">
+              <TabsList className="flex flex-row flex-nowrap h-auto p-0 bg-transparent w-full justify-start overflow-x-auto scrollbar-hide rounded-none gap-0">
+                {[
+                  { value: 'profile',        icon: <UserIcon className="h-4 w-4" />,    label: 'Profile'       },
+                  { value: 'employment',     icon: <Briefcase className="h-4 w-4" />,   label: 'Employment'    },
+                  { value: 'location',       icon: <MapPin className="h-4 w-4" />,      label: 'Location'      },
+                  { value: 'performance',    icon: <Award className="h-4 w-4" />,       label: 'Performance'   },
+                  { value: 'bank',           icon: <CreditCard className="h-4 w-4" />,  label: 'Bank'          },
+                  ...(canManageClassifications
+                    ? [{ value: 'classification', icon: <ShieldCheck className="h-4 w-4" />, label: 'Classification' }]
+                    : []),
+                ].map(t => (
+                  <TabsTrigger
+                    key={t.value}
+                    value={t.value}
+                    className="flex items-center gap-1.5 px-4 py-3.5 text-xs sm:text-sm font-medium text-muted-foreground border-b-2 border-transparent rounded-none whitespace-nowrap
+                      data-[state=active]:text-primary data-[state=active]:border-primary data-[state=active]:bg-transparent
+                      hover:text-foreground hover:bg-muted/40 transition-all"
+                  >
+                    {t.icon}{t.label}
                   </TabsTrigger>
-                )}
+                ))}
               </TabsList>
-              
-              <TabsContent value="details" className="space-y-5 mt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Full Name</h3>
-                    {editMode ? (
-                      <Input
-                        value={editForm.name || ""}
-                        onChange={e => handleEditChange("name", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background rounded-lg"
-                      />
-                    ) : (
-                      <p className="font-semibold text-base">{user.name}</p>
-                    )}
-                  </div>
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Email</h3>
-                    {editMode ? (
-                      <Input
-                        type="email"
-                        value={editForm.email || ""}
-                        onChange={e => handleEditChange("email", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background rounded-lg"
-                      />
-                    ) : (
-                      <p className="font-semibold text-base break-all">{user.email}</p>
-                    )}
-                  </div>
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Role</h3>
-                    {editMode ? (
-                      <select
-                        className="border rounded-lg px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base bg-background disabled:opacity-60 disabled:cursor-not-allowed"
-                        value={editForm.role || ""}
-                        onChange={e => handleEditChange("role", e.target.value)}
-                        disabled={isProtectedOwner(user?.id)}
-                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
-                      >
-                        <option value="" disabled>Select role</option>
-                        {availableRoles.map(role => (
-                          <option key={role} value={role}>{toRoleLabel(role) || role}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="flex gap-2 items-center">
-                        <RoleBadge role={user.role} size="sm" />
-                        <UserClassificationBadge userId={user.id} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employee ID</h3>
-                    {editMode ? (
-                      <Input
-                        value={editForm.employeeId || ""}
-                        onChange={e => handleEditChange("employeeId", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background rounded-lg"
-                      />
-                    ) : (
-                      <p className="font-semibold text-base">{user.employeeId || <span className="text-muted-foreground italic">Not set</span>}</p>
-                    )}
-                  </div>
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Phone</h3>
-                    {editMode ? (
-                      <Input
-                        value={editForm.phone || ""}
-                        onChange={e => handleEditChange("phone", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background rounded-lg"
-                      />
-                    ) : (
-                      <p className="font-semibold text-base font-mono">{user.phone || <span className="text-muted-foreground italic font-sans">Not set</span>}</p>
-                    )}
-                  </div>
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Status</h3>
+            </div>
+
+            {/* ── PROFILE TAB ─────────────────────────────────────────────── */}
+            <TabsContent value="profile" className="p-5 sm:p-6 space-y-5 mt-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Full Name</h3>
+                  {editMode ? (
+                    <Input value={editForm.name || ""} onChange={e => handleEditChange("name", e.target.value)} className="h-11 bg-background rounded-lg" />
+                  ) : (
+                    <p className="font-semibold text-base">{user.name}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Email</h3>
+                  {editMode ? (
+                    <Input type="email" value={editForm.email || ""} onChange={e => handleEditChange("email", e.target.value)} className="h-11 bg-background rounded-lg" />
+                  ) : (
+                    <p className="font-semibold text-base break-all">{user.email}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Phone</h3>
+                  {editMode ? (
+                    <Input value={editForm.phone || ""} onChange={e => handleEditChange("phone", e.target.value)} className="h-11 bg-background rounded-lg" placeholder="+249 xxx xxx xxx" />
+                  ) : (
+                    <p className="font-semibold text-base font-mono">{user.phone || <span className="text-muted-foreground italic font-sans">Not set</span>}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employee ID</h3>
+                  {editMode ? (
+                    <Input value={editForm.employeeId || ""} onChange={e => handleEditChange("employeeId", e.target.value)} className="h-11 bg-background rounded-lg" />
+                  ) : (
+                    <p className="font-semibold text-base">{user.employeeId || <span className="text-muted-foreground italic">Not set</span>}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Role</h3>
+                  {editMode ? (
+                    <select
+                      className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
+                      value={editForm.role || ""}
+                      onChange={e => handleEditChange("role", e.target.value)}
+                      disabled={isProtectedOwner(user?.id)}
+                      title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                    >
+                      <option value="" disabled>Select role</option>
+                      {availableRoles.map(role => (
+                        <option key={role} value={role}>{toRoleLabel(role) || role}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <RoleBadge role={user.role} size="sm" />
+                      <UserClassificationBadge userId={user.id} />
+                    </div>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Status</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant={user.isApproved ? "default" : "destructive"} className="px-3 py-1.5 text-xs font-semibold rounded-full">
                       {user.isApproved ? 'Active' : 'Pending Approval'}
                     </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Last active: {user.lastActive ? new Date(user.lastActive).toLocaleDateString() : 'N/A'}
+                    </span>
                   </div>
                 </div>
-
-                {/* Location Section */}
-                <div className="pt-5 border-t">
-                  <h4 className="font-bold text-sm mb-4 flex items-center gap-2.5">
-                    <div className="p-1.5 rounded-md bg-primary/10">
-                      <MapPin className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                    Location Information
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Hub</h3>
-                      {editMode ? (
-                        <Select
-                          value={editForm.hubId || ""}
-                          onValueChange={(value) => handleEditChange("hubId", value)}
-                        >
-                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
-                            <SelectValue placeholder="Select hub" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {hubs.map((hub) => (
-                              <SelectItem key={hub.id} value={hub.id}>
-                                {hub.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="font-semibold text-base">{hubDisplayName || user.hubId || <span className="text-muted-foreground">Not set</span>}</p>
-                      )}
-                    </div>
-                    <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Secondary Hub</h3>
-                      {editMode ? (
-                        <Select
-                          value={editForm.secondaryHubId || "__none__"}
-                          onValueChange={(value) => handleEditChange("secondaryHubId", value === "__none__" ? undefined : value)}
-                        >
-                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
-                            <SelectValue placeholder="No secondary hub" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">No secondary hub</SelectItem>
-                            {hubs.filter(hub => hub.id !== editForm.hubId).map((hub) => (
-                              <SelectItem key={hub.id} value={hub.id}>
-                                {hub.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="font-semibold text-base">
-                          {user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : <span className="text-muted-foreground">None</span>}
-                        </p>
-                      )}
-                    </div>
-                    <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">State</h3>
-                      {editMode ? (
-                        <Select
-                          value={editForm.stateId || ""}
-                          onValueChange={(value) => handleEditChange("stateId", value)}
-                          disabled={!editForm.hubId}
-                        >
-                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
-                            <SelectValue placeholder="Select state" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableStates.map((state) => (
-                              <SelectItem key={state.id} value={state.id}>
-                                {state.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="font-semibold text-base">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : <span className="text-muted-foreground">Not set</span>}</p>
-                      )}
-                    </div>
-                    <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Locality</h3>
-                      {editMode ? (
-                        <Select
-                          value={editForm.localityId || "__none__"}
-                          onValueChange={(value) => handleEditChange("localityId", value === "__none__" ? undefined : value)}
-                          disabled={!editForm.stateId}
-                        >
-                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
-                            <SelectValue placeholder="Select locality (optional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">None</SelectItem>
-                            {availableLocalities.map((locality) => (
-                              <SelectItem key={locality.id} value={locality.id}>
-                                {locality.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="font-semibold text-base">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : <span className="text-muted-foreground">Not set</span>}</p>
-                      )}
-                    </div>
-                  </div>
+              </div>
+              {editMode && (
+                <div className="flex items-center gap-3 pt-2">
+                  <Button
+                    onClick={() => {
+                      const roleEscalation = user && editForm.role !== user.role && ['Admin', 'SuperAdmin'].includes(editForm.role || '');
+                      if (roleEscalation && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true);
+                      else handleEditSave();
+                    }}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Saving…" : "Save Changes"}
+                  </Button>
+                  <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
                 </div>
-              </TabsContent>
-              
-              {/* Employment Record Tab */}
-              <TabsContent value="employment" className="space-y-5 mt-2">
-                <div className="flex items-center gap-2 mb-2">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                  <h3 className="font-semibold text-base">Employment Record</h3>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Department */}
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                      <Building2 className="h-3.5 w-3.5" /> Department
-                    </h4>
-                    {isAdmin ? (
-                      <Select value={empDepartmentId || "none"} onValueChange={v => setEmpDepartmentId(v === "none" ? "" : v)}>
-                        <SelectTrigger className="h-11" data-testid="select-emp-department">
-                          <SelectValue placeholder="No department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No Department</SelectItem>
-                          {departments.map(d => (
-                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-base">
-                        {departments.find(d => d.id === empDepartmentId)?.name || "—"}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Employment type */}
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employment Type</h4>
-                    {isAdmin ? (
-                      <Select value={empType} onValueChange={setEmpType}>
-                        <SelectTrigger className="h-11" data-testid="select-emp-type">
-                          <SelectValue placeholder="Select contract type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="full-time">Full-Time</SelectItem>
-                          <SelectItem value="part-time">Part-Time</SelectItem>
-                          <SelectItem value="contractor">Contractor</SelectItem>
-                          <SelectItem value="intern">Intern</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-base capitalize">{empType || "—"}</p>
-                    )}
-                  </div>
-
-                  {/* Contract start */}
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract Start Date</h4>
-                    {isAdmin ? (
-                      <Input
-                        type="date"
-                        value={empContractStart}
-                        onChange={e => setEmpContractStart(e.target.value)}
-                        className="h-11"
-                        data-testid="input-contract-start"
-                      />
-                    ) : (
-                      <p className="font-semibold text-base">{empContractStart || "—"}</p>
-                    )}
-                  </div>
-
-                  {/* Contract end */}
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract End Date</h4>
-                    {isAdmin ? (
-                      <Input
-                        type="date"
-                        value={empContractEnd}
-                        onChange={e => setEmpContractEnd(e.target.value)}
-                        className="h-11"
-                        data-testid="input-contract-end"
-                      />
-                    ) : (
-                      <p className="font-semibold text-base">{empContractEnd || "—"}</p>
-                    )}
-                    {empContractEnd && (() => {
-                      const d = Math.ceil((new Date(empContractEnd).getTime() - Date.now()) / 86400000);
-                      if (d < 0) return <p className="text-xs text-destructive font-medium">Contract expired</p>;
-                      if (d <= 30) return <p className="text-xs text-amber-600 font-medium">Expires in {d} day{d === 1 ? "" : "s"}</p>;
-                      return null;
-                    })()}
-                  </div>
-
-                  {/* Reports to */}
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 sm:col-span-2">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                      <UserCheck className="h-3.5 w-3.5" /> Reports To (Manager)
-                    </h4>
-                    {isAdmin ? (
-                      <Select value={empReportsTo || "none"} onValueChange={v => setEmpReportsTo(v === "none" ? "" : v)}>
-                        <SelectTrigger className="h-11" data-testid="select-reports-to">
-                          <SelectValue placeholder="No manager" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No Manager</SelectItem>
-                          {allUsers.filter(u => u.id !== user.id).map(u => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.full_name || u.email || u.id}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-base">
-                        {allUsers.find(u => u.id === empReportsTo)?.full_name || "—"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Notification Preferences */}
-                {isAdmin && (
-                  <div className="bg-muted/20 rounded-xl p-4 border border-border/40 space-y-2">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                      Notification Preferences
-                    </h4>
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          className="sr-only"
-                          checked={taskDigestOptOut}
-                          onChange={e => setTaskDigestOptOut(e.target.checked)}
-                          data-testid="toggle-task-digest-opt-out"
-                        />
-                        <div
-                          onClick={() => setTaskDigestOptOut(v => !v)}
-                          className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${taskDigestOptOut ? 'bg-destructive' : 'bg-muted'} border border-border/60`}
-                        >
-                          <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${taskDigestOptOut ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Opt out of Daily Task Digest email</p>
-                        <p className="text-xs text-muted-foreground">When enabled, this user will not receive the daily task summary email.</p>
-                      </div>
-                    </label>
-                  </div>
-                )}
-
-                {isAdmin && (
-                  <div className="flex justify-end pt-2">
-                    <Button onClick={handleEmploymentSave} disabled={empSaving} data-testid="button-save-employment">
-                      {empSaving ? "Saving…" : "Save Employment Record"}
-                    </Button>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="performance">
-                {user.performance ? (
-                  <div className="space-y-3 sm:space-y-4">
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                      <div className="bg-muted/20 rounded-xl p-4 sm:p-5 min-h-[90px] flex flex-col justify-center border border-border/40">
-                        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-1.5">Rating</h3>
-                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-primary">{user.performance.rating}/5</p>
-                      </div>
-                      <div className="bg-muted/20 rounded-xl p-4 sm:p-5 min-h-[90px] flex flex-col justify-center border border-border/40">
-                        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-1.5">Completed Tasks</h3>
-                        <p className="text-xl sm:text-2xl md:text-3xl font-bold">{user.performance.totalCompletedTasks}</p>
-                      </div>
-                      <div className="bg-muted/20 rounded-xl p-4 sm:p-5 min-h-[90px] flex flex-col justify-center border border-border/40">
-                        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-1.5">On-Time Completion</h3>
-                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-emerald-600 dark:text-emerald-400">{user.performance.onTimeCompletion}%</p>
-                      </div>
-                      <div className="bg-muted/20 rounded-xl p-4 sm:p-5 min-h-[90px] flex flex-col justify-center border border-border/40">
-                        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-1.5">Current Workload</h3>
-                        <p className="text-xl sm:text-2xl md:text-3xl font-bold">{user.performance.currentWorkload || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-10 sm:py-14">
-                    <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto mb-4">
-                      <Award className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground/60" />
-                    </div>
-                    <p className="text-sm sm:text-base text-muted-foreground">No performance data available.</p>
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="bankak">
-                {user.bankAccount ? (
-                  <div className="space-y-4">
-                    <div className="bg-muted/20 rounded-xl p-4 sm:p-5 border border-border/40">
-                      <h3 className="font-bold text-sm mb-4 flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-md bg-primary/10">
-                          <CreditCard className="h-3.5 w-3.5 text-primary" />
-                        </div>
-                        Bank Account Details
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Name</p>
-                          <p className="font-semibold text-base break-words">{user.bankAccount.accountName}</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Number</p>
-                          <p className="font-semibold text-base font-mono">{user.bankAccount.accountNumber}</p>
-                        </div>
-                        <div className="sm:col-span-2 space-y-1.5">
-                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Branch</p>
-                          <p className="font-semibold text-base break-words">{user.bankAccount.branch}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {canEditBankAccount && (
-                      <Button onClick={() => setBankAccountFormOpen(true)} className="min-h-[44px] px-5 sm:px-6 w-full sm:w-auto rounded-xl gap-2 shadow-sm">
-                        <Edit className="h-4 w-4" />
-                        Edit Bank Account
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 sm:py-12">
-                    <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto mb-4">
-                      <CreditCard className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground/60" />
-                    </div>
-                    <p className="text-sm sm:text-base text-muted-foreground mb-5">No bank account details available.</p>
-                    {canEditBankAccount && (
-                      <Button onClick={() => setBankAccountFormOpen(true)} className="min-h-[44px] px-6 rounded-xl gap-2 shadow-sm">
-                        <Plus className="h-4 w-4" />
-                        Add Bank Account
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="location">
-                {user.location ? (
-                  <div className="space-y-4">
-                    <div className="bg-muted/20 rounded-xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 border border-border/40">
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Latitude</p>
-                        <p className="font-semibold text-base font-mono">{user.location.latitude}</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Longitude</p>
-                        <p className="font-semibold text-base font-mono">{user.location.longitude}</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Last Updated</p>
-                        <p className="font-semibold text-base">
-                          {user.location.lastUpdated ? new Date(user.location.lastUpdated).toLocaleString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Location Sharing</p>
-                        <p className="font-semibold text-base">
-                          {user.location.isSharing ? 'Enabled' : 'Disabled'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="h-[250px] sm:h-[300px] bg-muted/20 rounded-xl border border-border/40 flex items-center justify-center">
-                      <div className="text-center p-4">
-                        <div className="p-3 rounded-2xl bg-muted/30 w-fit mx-auto mb-3">
-                          <MapPin className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground/60" />
-                        </div>
-                        <p className="text-muted-foreground text-sm sm:text-base font-medium">Map view is not available in this view</p>
-                        <p className="text-xs text-muted-foreground/70 mt-1">Check the Field Team page for interactive map</p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-10 sm:py-14">
-                    <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto mb-4">
-                      <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground/60" />
-                    </div>
-                    <p className="text-sm sm:text-base text-muted-foreground">No location data available.</p>
-                  </div>
-                )}
-              </TabsContent>
-
-              {canManageClassifications && (
-                <TabsContent value="classification">
-                  <div className="space-y-6">
-                    {/* Header Section */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <ShieldCheck className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold">Classification & Compensation</h3>
-                          <p className="text-sm text-muted-foreground">Manage user classification level and retainer fees</p>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => setClassificationDialogOpen(true)}
-                        className="min-h-[44px] px-5 w-full sm:w-auto shadow-sm"
-                        data-testid="button-manage-classification"
-                      >
-                        {userClassification ? (
-                          <>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Update Classification
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Assign Classification
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    {/* Current Classification Card */}
-                    {userClassification ? (
-                      <Card className="overflow-hidden border-l-4 border-l-primary shadow-sm">
-                        <CardHeader className="p-4 sm:p-5 bg-gradient-to-r from-primary/5 to-transparent">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Award className="h-5 w-5 text-primary" />
-                              <CardTitle className="text-base font-semibold">Active Classification</CardTitle>
-                            </div>
-                            <Badge 
-                              variant={userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date() ? "destructive" : "default"}
-                              className="text-xs"
-                            >
-                              {userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date() ? 'Expired' : 'Active'}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                            <div className="bg-muted/50 rounded-lg p-3 text-center">
-                              <p className="text-xs text-muted-foreground mb-1">Level</p>
-                              <div className="flex justify-center">
-                                <ClassificationBadge 
-                                  level={userClassification.classificationLevel} 
-                                  size="md"
-                                  showTooltip={false}
-                                />
-                              </div>
-                            </div>
-                            <div className="bg-muted/50 rounded-lg p-3 text-center">
-                              <p className="text-xs text-muted-foreground mb-1">Role</p>
-                              <p className="font-semibold text-sm capitalize">{userClassification.roleScope}</p>
-                            </div>
-                            <div className="bg-muted/50 rounded-lg p-3 text-center">
-                              <p className="text-xs text-muted-foreground mb-1">Effective From</p>
-                              <p className="font-semibold text-sm">
-                                {new Date(userClassification.effectiveFrom).toLocaleDateString('en-US', { 
-                                  month: 'short', day: 'numeric', year: 'numeric' 
-                                })}
-                              </p>
-                            </div>
-                            <div className="bg-muted/50 rounded-lg p-3 text-center">
-                              <p className="text-xs text-muted-foreground mb-1">Valid Until</p>
-                              <p className="font-semibold text-sm">
-                                {userClassification.effectiveUntil 
-                                  ? new Date(userClassification.effectiveUntil).toLocaleDateString('en-US', { 
-                                      month: 'short', day: 'numeric', year: 'numeric' 
-                                    })
-                                  : 'Ongoing'}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          {/* Retainer Section */}
-                          {userClassification.hasRetainer && userClassification.retainerAmountCents ? (
-                            <div className="mt-4 pt-4 border-t">
-                              <div className="flex items-center gap-2 mb-3">
-                                <CreditCard className="h-4 w-4 text-muted-foreground" />
-                                <p className="text-sm font-medium">Retainer Details</p>
-                              </div>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/30 rounded-lg p-3">
-                                  <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/50">
-                                    <CreditCard className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Amount</p>
-                                    <p className="font-bold text-lg text-green-700 dark:text-green-400">
-                                      {(userClassification.retainerAmountCents / 100).toLocaleString()} {userClassification.retainerCurrency}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
-                                  <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/50">
-                                    <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Frequency</p>
-                                    <p className="font-semibold text-base capitalize">{userClassification.retainerFrequency}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="mt-4 pt-4 border-t">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <CreditCard className="h-4 w-4" />
-                                <p className="text-sm">No retainer fee configured</p>
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      <Card className="border-dashed border-2">
-                        <CardContent className="p-8 text-center">
-                          <div className="p-4 rounded-full bg-muted/50 inline-block mb-4">
-                            <ShieldCheck className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                          <h4 className="font-semibold text-lg mb-2">No Classification Assigned</h4>
-                          <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                            This user doesn't have a classification level yet. Assign one to enable fee calculations and retainer payments.
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Classification History */}
-                    <Card className="shadow-sm">
-                      <CardHeader className="p-4 sm:p-5 border-b bg-muted/30">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <CardTitle className="text-base font-semibold">Classification History</CardTitle>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="p-4 sm:p-5">
-                        {loadingHistory ? (
-                          <div className="flex flex-col items-center justify-center py-8">
-                            <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent mb-3"></div>
-                            <p className="text-sm text-muted-foreground">Loading history...</p>
-                          </div>
-                        ) : classificationHistory.length > 0 ? (
-                          <div className="relative">
-                            {/* Timeline line */}
-                            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border hidden sm:block" />
-                            
-                            <div className="space-y-3">
-                              {classificationHistory.map((history, index) => (
-                                <div 
-                                  key={history.id} 
-                                  className="relative flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors"
-                                >
-                                  {/* Timeline dot */}
-                                  <div className="hidden sm:flex absolute -left-0.5 top-5 h-3 w-3 rounded-full border-2 border-primary bg-background" />
-                                  
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                                      <ClassificationBadge 
-                                        level={history.classificationLevel} 
-                                        size="sm"
-                                        showTooltip={false}
-                                      />
-                                      <Badge variant="outline" className="text-xs capitalize">
-                                        {history.roleScope}
-                                      </Badge>
-                                      {index === 0 && classificationHistory.length > 1 && (
-                                        <Badge variant="secondary" className="text-xs">Previous</Badge>
-                                      )}
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                      <Calendar className="h-3.5 w-3.5" />
-                                      <span>
-                                        {new Date(history.effectiveFrom).toLocaleDateString('en-US', { 
-                                          month: 'short', day: 'numeric', year: 'numeric' 
-                                        })}
-                                        {' '}&rarr;{' '}
-                                        {history.effectiveUntil 
-                                          ? new Date(history.effectiveUntil).toLocaleDateString('en-US', { 
-                                              month: 'short', day: 'numeric', year: 'numeric' 
-                                            })
-                                          : 'Present'}
-                                      </span>
-                                    </div>
-                                    {history.changeReason && (
-                                      <p className="text-xs text-muted-foreground mt-2 pl-1 border-l-2 border-muted-foreground/30">
-                                        {history.changeReason}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <div className="p-3 rounded-full bg-muted mb-3">
-                              <Calendar className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                            <p className="text-sm text-muted-foreground">No classification history available</p>
-                            <p className="text-xs text-muted-foreground mt-1">History will appear here after the first assignment</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </TabsContent>
               )}
-            </Tabs>
-          </CardContent>
+            </TabsContent>
+
+            {/* ── EMPLOYMENT TAB ──────────────────────────────────────────── */}
+            <TabsContent value="employment" className="p-5 sm:p-6 space-y-5 mt-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5" /> Department
+                  </h4>
+                  {isAdmin ? (
+                    <Select value={empDepartmentId || "none"} onValueChange={v => setEmpDepartmentId(v === "none" ? "" : v)}>
+                      <SelectTrigger className="h-11" data-testid="select-emp-department"><SelectValue placeholder="No department" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Department</SelectItem>
+                        {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base">{departments.find(d => d.id === empDepartmentId)?.name || "—"}</p>
+                  )}
+                </div>
+
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employment Type</h4>
+                  {isAdmin ? (
+                    <Select value={empType} onValueChange={setEmpType}>
+                      <SelectTrigger className="h-11" data-testid="select-emp-type"><SelectValue placeholder="Select contract type" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full-time">Full-Time</SelectItem>
+                        <SelectItem value="part-time">Part-Time</SelectItem>
+                        <SelectItem value="contractor">Contractor</SelectItem>
+                        <SelectItem value="intern">Intern</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base capitalize">{empType || "—"}</p>
+                  )}
+                </div>
+
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract Start Date</h4>
+                  {isAdmin ? (
+                    <Input type="date" value={empContractStart} onChange={e => setEmpContractStart(e.target.value)} className="h-11" data-testid="input-contract-start" />
+                  ) : (
+                    <p className="font-semibold text-base">{empContractStart || "—"}</p>
+                  )}
+                </div>
+
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract End Date</h4>
+                  {isAdmin ? (
+                    <Input type="date" value={empContractEnd} onChange={e => setEmpContractEnd(e.target.value)} className="h-11" data-testid="input-contract-end" />
+                  ) : (
+                    <p className="font-semibold text-base">{empContractEnd || "—"}</p>
+                  )}
+                  {empContractEnd && (() => {
+                    const d = Math.ceil((new Date(empContractEnd).getTime() - Date.now()) / 86400000);
+                    if (d < 0) return <p className="text-xs text-destructive font-medium">Contract expired</p>;
+                    if (d <= 30) return <p className="text-xs text-amber-600 font-medium">Expires in {d} day{d === 1 ? "" : "s"}</p>;
+                    return null;
+                  })()}
+                </div>
+
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 sm:col-span-2">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    <UserCheck className="h-3.5 w-3.5" /> Reports To (Manager)
+                  </h4>
+                  {isAdmin ? (
+                    <Select value={empReportsTo || "none"} onValueChange={v => setEmpReportsTo(v === "none" ? "" : v)}>
+                      <SelectTrigger className="h-11" data-testid="select-reports-to"><SelectValue placeholder="No manager" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Manager</SelectItem>
+                        {allUsers.filter(u => u.id !== user.id).map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.full_name || u.email || u.id}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base">{allUsers.find(u => u.id === empReportsTo)?.full_name || "—"}</p>
+                  )}
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className="bg-muted/20 rounded-xl p-4 border border-border/40 space-y-2">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Notification Preferences</h4>
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <div className="relative">
+                      <input type="checkbox" className="sr-only" checked={taskDigestOptOut} onChange={e => setTaskDigestOptOut(e.target.checked)} data-testid="toggle-task-digest-opt-out" />
+                      <div onClick={() => setTaskDigestOptOut(v => !v)} className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${taskDigestOptOut ? 'bg-destructive' : 'bg-muted'} border border-border/60`}>
+                        <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${taskDigestOptOut ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Opt out of Daily Task Digest email</p>
+                      <p className="text-xs text-muted-foreground">User will not receive the daily task summary email.</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {isAdmin && (
+                <div className="flex justify-end pt-2">
+                  <Button onClick={handleEmploymentSave} disabled={empSaving} data-testid="button-save-employment">
+                    {empSaving ? "Saving…" : "Save Employment Record"}
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── LOCATION TAB ────────────────────────────────────────────── */}
+            <TabsContent value="location" className="p-5 sm:p-6 space-y-5 mt-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Hub</h3>
+                  {editMode ? (
+                    <Select value={editForm.hubId || ""} onValueChange={v => handleEditChange("hubId", v)}>
+                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select hub" /></SelectTrigger>
+                      <SelectContent>{hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base">{hubDisplayName || user.hubId || <span className="text-muted-foreground">Not set</span>}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Secondary Hub</h3>
+                  {editMode ? (
+                    <Select value={editForm.secondaryHubId || "__none__"} onValueChange={v => handleEditChange("secondaryHubId", v === "__none__" ? undefined : v)}>
+                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="No secondary hub" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No secondary hub</SelectItem>
+                        {hubs.filter(h => h.id !== editForm.hubId).map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base">{user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : <span className="text-muted-foreground">None</span>}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">State</h3>
+                  {editMode ? (
+                    <Select value={editForm.stateId || ""} onValueChange={v => handleEditChange("stateId", v)} disabled={!editForm.hubId}>
+                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select state" /></SelectTrigger>
+                      <SelectContent>{availableStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : <span className="text-muted-foreground">Not set</span>}</p>
+                  )}
+                </div>
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Locality</h3>
+                  {editMode ? (
+                    <Select value={editForm.localityId || "__none__"} onValueChange={v => handleEditChange("localityId", v === "__none__" ? undefined : v)} disabled={!editForm.stateId}>
+                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select locality (optional)" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {availableLocalities.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : <span className="text-muted-foreground">Not set</span>}</p>
+                  )}
+                </div>
+              </div>
+
+              {editMode && (
+                <div className="flex items-center gap-3 pt-2">
+                  <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving}>
+                    {isSaving ? "Saving…" : "Save Location"}
+                  </Button>
+                  <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
+                </div>
+              )}
+
+              {user.location && (
+                <div className="pt-2 space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />GPS Location Data
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Latitude', value: String(user.location.latitude) },
+                      { label: 'Longitude', value: String(user.location.longitude) },
+                      { label: 'Sharing', value: user.location.isSharing ? 'Enabled' : 'Disabled' },
+                      { label: 'Last Updated', value: user.location.lastUpdated ? new Date(user.location.lastUpdated).toLocaleDateString() : 'N/A' },
+                    ].map(item => (
+                      <div key={item.label} className="bg-muted/20 rounded-xl p-3 border border-border/40 space-y-1">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{item.label}</p>
+                        <p className="font-semibold text-sm font-mono">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── PERFORMANCE TAB ─────────────────────────────────────────── */}
+            <TabsContent value="performance" className="p-5 sm:p-6 mt-0">
+              {user.performance ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Rating', value: `${user.performance.rating}/5`, color: 'text-primary' },
+                    { label: 'Completed Tasks', value: String(user.performance.totalCompletedTasks), color: 'text-foreground' },
+                    { label: 'On-Time Completion', value: `${user.performance.onTimeCompletion}%`, color: 'text-emerald-600 dark:text-emerald-400' },
+                    { label: 'Current Workload', value: String(user.performance.currentWorkload || 0), color: 'text-foreground' },
+                  ].map(kpi => (
+                    <div key={kpi.label} className="bg-muted/20 rounded-xl p-5 flex flex-col justify-center border border-border/40">
+                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-2">{kpi.label}</h3>
+                      <p className={`text-2xl sm:text-3xl font-bold ${kpi.color}`}>{kpi.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16">
+                  <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto mb-4">
+                    <Award className="h-12 w-12 text-muted-foreground/40" />
+                  </div>
+                  <p className="text-muted-foreground">No performance data available yet.</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── BANK TAB ─────────────────────────────────────────────────── */}
+            <TabsContent value="bank" className="p-5 sm:p-6 mt-0">
+              {user.bankAccount ? (
+                <div className="space-y-4">
+                  <div className="bg-muted/20 rounded-xl p-5 border border-border/40 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Name</p>
+                      <p className="font-semibold text-base break-words">{user.bankAccount.accountName}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Number</p>
+                      <p className="font-semibold text-base font-mono">{user.bankAccount.accountNumber}</p>
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Branch</p>
+                      <p className="font-semibold text-base break-words">{user.bankAccount.branch}</p>
+                    </div>
+                  </div>
+                  {canEditBankAccount && (
+                    <Button onClick={() => setBankAccountFormOpen(true)} className="gap-2">
+                      <Edit className="h-4 w-4" />Edit Bank Account
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-16 space-y-4">
+                  <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto">
+                    <CreditCard className="h-12 w-12 text-muted-foreground/40" />
+                  </div>
+                  <p className="text-muted-foreground">No bank account details yet.</p>
+                  {canEditBankAccount && (
+                    <Button onClick={() => setBankAccountFormOpen(true)} className="gap-2">
+                      <Plus className="h-4 w-4" />Add Bank Account
+                    </Button>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── CLASSIFICATION TAB ─────────────────────────────────────── */}
+            {canManageClassifications && (
+              <TabsContent value="classification" className="p-5 sm:p-6 space-y-6 mt-0">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h3 className="text-base font-semibold">Classification & Compensation</h3>
+                    <p className="text-sm text-muted-foreground">Manage classification level and retainer fees</p>
+                  </div>
+                  <Button onClick={() => setClassificationDialogOpen(true)} className="gap-2 w-full sm:w-auto" data-testid="button-manage-classification">
+                    {userClassification ? <><Edit className="h-4 w-4" />Update</> : <><Plus className="h-4 w-4" />Assign</>}
+                  </Button>
+                </div>
+
+                {userClassification ? (
+                  <Card className="overflow-hidden border-l-4 border-l-primary">
+                    <CardHeader className="p-4 bg-gradient-to-r from-primary/5 to-transparent">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Award className="h-5 w-5 text-primary" />
+                          <CardTitle className="text-sm font-semibold">Active Classification</CardTitle>
+                        </div>
+                        <Badge variant={userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date() ? "destructive" : "default"} className="text-xs">
+                          {userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date() ? 'Expired' : 'Active'}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-muted/50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-muted-foreground mb-1">Level</p>
+                          <div className="flex justify-center">
+                            <ClassificationBadge level={userClassification.classificationLevel} size="md" showTooltip={false} />
+                          </div>
+                        </div>
+                        <div className="bg-muted/50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-muted-foreground mb-1">Role</p>
+                          <p className="font-semibold text-sm capitalize">{userClassification.roleScope}</p>
+                        </div>
+                        <div className="bg-muted/50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-muted-foreground mb-1">From</p>
+                          <p className="font-semibold text-sm">{new Date(userClassification.effectiveFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        </div>
+                        <div className="bg-muted/50 rounded-lg p-3 text-center">
+                          <p className="text-xs text-muted-foreground mb-1">Until</p>
+                          <p className="font-semibold text-sm">{userClassification.effectiveUntil ? new Date(userClassification.effectiveUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Ongoing'}</p>
+                        </div>
+                      </div>
+                      {userClassification.hasRetainer && userClassification.retainerAmountCents ? (
+                        <div className="pt-3 border-t grid grid-cols-2 gap-3">
+                          <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/30 rounded-lg p-3">
+                            <CreditCard className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Amount</p>
+                              <p className="font-bold text-green-700 dark:text-green-400">{(userClassification.retainerAmountCents / 100).toLocaleString()} {userClassification.retainerCurrency}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                            <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Frequency</p>
+                              <p className="font-semibold capitalize">{userClassification.retainerFrequency}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground pt-2 border-t">No retainer fee configured</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-dashed border-2">
+                    <CardContent className="p-10 text-center space-y-3">
+                      <div className="p-4 rounded-full bg-muted/50 inline-block">
+                        <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                      <h4 className="font-semibold text-lg">No Classification Assigned</h4>
+                      <p className="text-muted-foreground text-sm max-w-md mx-auto">Assign a classification level to enable fee calculations and retainer payments.</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card className="shadow-sm">
+                  <CardHeader className="p-4 border-b bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold">Classification History</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    {loadingHistory ? (
+                      <div className="flex items-center justify-center py-8 gap-3 text-muted-foreground">
+                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+                        <span className="text-sm">Loading history…</span>
+                      </div>
+                    ) : classificationHistory.length > 0 ? (
+                      <div className="space-y-3">
+                        {classificationHistory.map((history, index) => (
+                          <div key={history.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                <ClassificationBadge level={history.classificationLevel} size="sm" showTooltip={false} />
+                                <Badge variant="outline" className="text-xs capitalize">{history.roleScope}</Badge>
+                                {index === 0 && classificationHistory.length > 1 && <Badge variant="secondary" className="text-xs">Previous</Badge>}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(history.effectiveFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                {' → '}
+                                {history.effectiveUntil ? new Date(history.effectiveUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Present'}
+                              </p>
+                              {history.changeReason && <p className="text-xs text-muted-foreground mt-1.5 pl-2 border-l-2 border-muted-foreground/30">{history.changeReason}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">No classification history yet</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
+          </Tabs>
         </Card>
       </div>
 
       <Dialog open={bankAccountFormOpen} onOpenChange={setBankAccountFormOpen}>
         <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base sm:text-lg">
-              {user?.bankAccount ? "Edit Bank Account" : "Add Bank Account"}
-            </DialogTitle>
+            <DialogTitle>{user?.bankAccount ? "Edit Bank Account" : "Add Bank Account"}</DialogTitle>
           </DialogHeader>
-          <BankakAccountForm 
+          <BankakAccountForm
             onSubmit={handleBankAccountSubmit}
             isSubmitting={false}
             existingDetails={user?.bankAccount as any}
@@ -1654,10 +1272,7 @@ const UserDetail: FC = () => {
       <AdminRoleConfirmDialog
         open={adminRoleOtpOpen}
         onClose={() => setAdminRoleOtpOpen(false)}
-        onConfirmed={async () => {
-          setAdminRoleOtpOpen(false);
-          await handleEditSave();
-        }}
+        onConfirmed={async () => { setAdminRoleOtpOpen(false); await handleEditSave(); }}
         targetUserName={user?.name || 'this user'}
         targetRole={editForm.role || ''}
         currentUserName={currentUser?.name || 'Platform Owner'}
