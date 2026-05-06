@@ -493,11 +493,13 @@ export default function SurveyFill() {
   const { currentUser } = useUser();
   const { toast } = useToast();
 
-  const [answers, setAnswers]     = useState<Record<string, AnswerValue>>({});
-  const [submitted, setSubmitted] = useState(false);
-  const [errors, setErrors]       = useState<Record<string, string>>({});
-  const [lang, setLang]           = useState<'en' | 'ar'>('en');
+  const [answers, setAnswers]         = useState<Record<string, AnswerValue>>({});
+  const [submitted, setSubmitted]     = useState(false);
+  const [errors, setErrors]           = useState<Record<string, string>>({});
+  const [lang, setLang]               = useState<'en' | 'ar'>('en');
   const [currentPage, setCurrentPage] = useState(0);
+  const [respondentName, setRespondentName]   = useState('');
+  const [respondentEmail, setRespondentEmail] = useState('');
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey-fill', id],
@@ -560,8 +562,8 @@ export default function SurveyFill() {
         id: responseId,
         survey_id: id,
         respondent_id: currentUser?.id ?? null,
-        respondent_name: currentUser?.fullName ?? null,
-        respondent_email: currentUser?.email ?? null,
+        respondent_name: currentUser?.fullName ?? (respondentName.trim() || null),
+        respondent_email: currentUser?.email ?? (respondentEmail.trim() || null),
       });
       if (rErr) throw rErr;
 
@@ -1153,6 +1155,67 @@ export default function SurveyFill() {
               {lang === 'ar' ? (survey.description_ar || survey.description) : survey.description}
             </p>
           </div>
+        )}
+
+        {/* About You — respondent info capture, first page only */}
+        {safeCurrentPage === 0 && (
+          currentUser ? (
+            <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3">
+              <div className="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center shrink-0 text-indigo-800 text-xs font-bold">
+                {(currentUser.fullName || currentUser.email || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-indigo-800 truncate">
+                  {currentUser.fullName ?? currentUser.email}
+                </p>
+                {currentUser.fullName && currentUser.email && (
+                  <p className="text-[11px] text-indigo-500 truncate">{currentUser.email}</p>
+                )}
+              </div>
+              <span className="text-[10px] font-medium bg-indigo-200 text-indigo-700 rounded-full px-2 py-0.5 shrink-0">
+                {lang === 'ar' ? 'تقديم بوصفك' : 'Submitting as'}
+              </span>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                </div>
+                <span className="text-xs font-semibold text-slate-600">
+                  {lang === 'ar' ? 'معلوماتك (اختياري)' : 'Your information (optional)'}
+                </span>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    {lang === 'ar' ? 'الاسم الكامل' : 'Full name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={respondentName}
+                    onChange={e => setRespondentName(e.target.value)}
+                    placeholder={lang === 'ar' ? 'أدخل اسمك' : 'Enter your name'}
+                    className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+                    data-testid="input-respondent-name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    {lang === 'ar' ? 'البريد الإلكتروني' : 'Email address'}
+                  </label>
+                  <input
+                    type="email"
+                    value={respondentEmail}
+                    onChange={e => setRespondentEmail(e.target.value)}
+                    placeholder={lang === 'ar' ? 'أدخل بريدك الإلكتروني' : 'Enter your email'}
+                    className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+                    data-testid="input-respondent-email"
+                  />
+                </div>
+              </div>
+            </div>
+          )
         )}
 
         {/* Response limit banner */}

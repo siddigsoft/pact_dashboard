@@ -1030,12 +1030,27 @@ export default function SurveyDetail() {
                   return (
                     <div key={r.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                       <div className="flex items-center gap-3 p-4">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-indigo-700">{displayName.charAt(0).toUpperCase()}</span>
+                        <div className={cn('w-9 h-9 rounded-full flex items-center justify-center shrink-0', r.respondent_name ? 'bg-indigo-100' : 'bg-slate-100')}>
+                          <span className={cn('text-xs font-bold', r.respondent_name ? 'text-indigo-700' : 'text-slate-400')}>
+                            {displayName.charAt(0).toUpperCase()}
+                          </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800">{displayName}</p>
-                          <p className="text-[11px] text-slate-400">{format(new Date(r.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{displayName}</p>
+                            {!r.respondent_name && !r.respondent_email && (
+                              <span className="text-[10px] bg-slate-100 text-slate-400 rounded-full px-2 py-0.5 shrink-0">anonymous</span>
+                            )}
+                            {r.respondent_id && (
+                              <span className="text-[10px] bg-indigo-50 text-indigo-500 rounded-full px-2 py-0.5 shrink-0">verified</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[11px] text-slate-400">{format(new Date(r.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
+                            {r.respondent_email && (
+                              <span className="text-[11px] text-slate-400 truncate">· {r.respondent_email}</span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button
@@ -2334,20 +2349,27 @@ function SubmissionDialog({
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-              <span className="text-sm font-bold text-indigo-700">{displayName.charAt(0).toUpperCase()}</span>
+            <div className={cn('w-10 h-10 rounded-full flex items-center justify-center shrink-0', response.respondent_name ? 'bg-indigo-100' : 'bg-slate-100')}>
+              <span className={cn('text-sm font-bold', response.respondent_name ? 'text-indigo-700' : 'text-slate-400')}>
+                {displayName.charAt(0).toUpperCase()}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-base">{displayName}</DialogTitle>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {format(new Date(response.submitted_at), 'dd MMM yyyy, HH:mm')}
-                {response.respondent_email && response.respondent_name && (
-                  <span className="ml-2 text-slate-300">·</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <DialogTitle className="text-base">{displayName}</DialogTitle>
+                {!response.respondent_name && !response.respondent_email && (
+                  <span className="text-[10px] bg-slate-100 text-slate-400 rounded-full px-2 py-0.5">anonymous</span>
                 )}
-                {response.respondent_email && response.respondent_name && (
-                  <span className="ml-2">{response.respondent_email}</span>
+                {response.respondent_id && (
+                  <span className="text-[10px] bg-indigo-50 text-indigo-500 rounded-full px-2 py-0.5">verified account</span>
                 )}
-              </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                <p className="text-xs text-slate-400">{format(new Date(response.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
+                {response.respondent_email && (
+                  <p className="text-xs text-slate-400">· {response.respondent_email}</p>
+                )}
+              </div>
             </div>
             {canManage && (
               <button
