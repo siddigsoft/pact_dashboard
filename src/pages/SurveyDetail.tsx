@@ -48,7 +48,9 @@ interface SkipLogic {
 interface Survey {
   id: string;
   title: string;
+  title_ar: string | null;
   description: string | null;
+  description_ar: string | null;
   status: SurveyStatus;
   created_by: string | null;
   created_at: string;
@@ -61,9 +63,11 @@ interface Question {
   survey_id: string;
   type: QuestionType;
   label: string;
+  label_ar: string | null;
   description: string | null;
-  required: boolean;
+  description_ar: string | null;
   options: string[] | null;
+  options_ar: string[] | null;
   order_index: number;
   settings: Record<string, unknown>;
   group_id: string | null;
@@ -177,9 +181,11 @@ export default function SurveyDetail() {
   const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
 
   const [tab, setTab] = useState<'builder' | 'responses' | 'analytics'>('builder');
-  const [editTitle, setEditTitle] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [savingMeta, setSavingMeta] = useState(false);
+  const [editTitle, setEditTitle]     = useState('');
+  const [editTitleAr, setEditTitleAr] = useState('');
+  const [editDesc, setEditDesc]       = useState('');
+  const [editDescAr, setEditDescAr]   = useState('');
+  const [savingMeta, setSavingMeta]   = useState(false);
   const [addTypeOpen, setAddTypeOpen] = useState(false);
   const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
   const [editQId, setEditQId] = useState<string | null>(null);
@@ -193,7 +199,9 @@ export default function SurveyDetail() {
       const { data, error } = await supabase.from('surveys').select('*').eq('id', id!).single();
       if (error) throw error;
       setEditTitle(data.title);
+      setEditTitleAr(data.title_ar ?? '');
       setEditDesc(data.description ?? '');
+      setEditDescAr(data.description_ar ?? '');
       return data as Survey;
     },
   });
@@ -236,7 +244,9 @@ export default function SurveyDetail() {
     try {
       const { error } = await supabase.from('surveys').update({
         title: editTitle.trim(),
+        title_ar: editTitleAr.trim() || null,
         description: editDesc.trim() || null,
+        description_ar: editDescAr.trim() || null,
         updated_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
@@ -608,14 +618,24 @@ export default function SurveyDetail() {
           {canManage && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Survey Details</h3>
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="edit-title">Title</Label>
+                  <Label htmlFor="edit-title">Title <span className="text-slate-400 font-normal text-[10px]">(English)</span></Label>
                   <Input id="edit-title" value={editTitle} onChange={e => setEditTitle(e.target.value)} data-testid="input-survey-title" />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="edit-desc">Description</Label>
+                  <Label htmlFor="edit-title-ar" className="flex items-center gap-1">
+                    العنوان <span className="text-slate-400 font-normal text-[10px]">(Arabic)</span>
+                  </Label>
+                  <Input id="edit-title-ar" dir="rtl" lang="ar" value={editTitleAr} onChange={e => setEditTitleAr(e.target.value)} placeholder="العنوان بالعربية…" data-testid="input-survey-title-ar" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-desc">Description <span className="text-slate-400 font-normal text-[10px]">(English)</span></Label>
                   <Textarea id="edit-desc" value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={2} data-testid="input-survey-desc" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-desc-ar">الوصف <span className="text-slate-400 font-normal text-[10px]">(Arabic)</span></Label>
+                  <Textarea id="edit-desc-ar" dir="rtl" lang="ar" value={editDescAr} onChange={e => setEditDescAr(e.target.value)} rows={2} placeholder="الوصف بالعربية…" data-testid="input-survey-desc-ar" />
                 </div>
               </div>
               <Button size="sm" onClick={saveMeta} disabled={savingMeta || !editTitle.trim()} data-testid="btn-save-meta">
@@ -835,8 +855,10 @@ function GroupPanel({
   saving: boolean; deleting: boolean; onAddToGroup: () => void;
   children?: React.ReactNode;
 }) {
-  const [labelDraft, setLabelDraft] = useState(group.label);
-  const [descDraft, setDescDraft] = useState(group.description ?? '');
+  const [labelDraft, setLabelDraft]     = useState(group.label);
+  const [labelArDraft, setLabelArDraft] = useState(group.label_ar ?? '');
+  const [descDraft, setDescDraft]       = useState(group.description ?? '');
+  const [descArDraft, setDescArDraft]   = useState(group.description_ar ?? '');
   const existingSkip = group.settings?.skip_logic as SkipLogic | undefined;
   const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
   const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
@@ -873,7 +895,9 @@ function GroupPanel({
       : undefined;
     onUpdate({
       label: labelDraft.trim() || group.label,
+      label_ar: labelArDraft.trim() || null,
       description: descDraft.trim() || null,
+      description_ar: descArDraft.trim() || null,
       settings: { ...group.settings, skip_logic: skipLogic },
     });
     onEdit();
@@ -917,13 +941,23 @@ function GroupPanel({
       {/* Edit panel */}
       {isEditing && (
         <div className="border-b border-indigo-100 p-4 space-y-3 bg-white/80">
-          <div className="space-y-1">
-            <Label className="text-xs">Group name</Label>
-            <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} placeholder="Group label…" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Description <span className="text-slate-400 font-normal">(optional)</span></Label>
-            <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown to respondents above the group…" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Group name <span className="text-slate-400 font-normal">(English)</span></Label>
+              <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} placeholder="Group label…" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">اسم المجموعة <span className="text-slate-400 font-normal">(Arabic)</span></Label>
+              <Input dir="rtl" lang="ar" value={labelArDraft} onChange={e => setLabelArDraft(e.target.value)} placeholder="اسم المجموعة بالعربية…" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Description <span className="text-slate-400 font-normal">(English, optional)</span></Label>
+              <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown to respondents above the group…" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">الوصف <span className="text-slate-400 font-normal">(Arabic, optional)</span></Label>
+              <Input dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} placeholder="الوصف بالعربية…" />
+            </div>
           </div>
           {/* Skip logic for the group */}
           <div className="border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40">
@@ -1002,11 +1036,14 @@ function QuestionCard({
   onDelete: () => void; onDuplicate: () => void; onMoveUp: () => void; onMoveDown: () => void;
   saving: boolean; deleting: boolean;
 }) {
-  const [labelDraft, setLabelDraft] = useState(q.label);
-  const [descDraft, setDescDraft] = useState(q.description ?? '');
-  const [reqDraft, setReqDraft] = useState(q.required);
-  const [optsDraft, setOptsDraft] = useState<string[]>(q.options ?? []);
-  const [newOpt, setNewOpt] = useState('');
+  const [labelDraft, setLabelDraft]     = useState(q.label);
+  const [labelArDraft, setLabelArDraft] = useState(q.label_ar ?? '');
+  const [descDraft, setDescDraft]       = useState(q.description ?? '');
+  const [descArDraft, setDescArDraft]   = useState(q.description_ar ?? '');
+  const [reqDraft, setReqDraft]         = useState(q.required);
+  const [optsDraft, setOptsDraft]       = useState<string[]>(q.options ?? []);
+  const [optsArDraft, setOptsArDraft]   = useState<string[]>(q.options_ar ?? []);
+  const [newOpt, setNewOpt]             = useState('');
   const [scaleMin, setScaleMin] = useState(Number(q.settings?.min ?? 1));
   const [scaleMax, setScaleMax] = useState(Number(q.settings?.max ?? 10));
 
@@ -1028,11 +1065,17 @@ function QuestionCard({
       ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
       : undefined;
     const scaleSettings = q.type === 'scale' ? { min: scaleMin, max: scaleMax } : {};
+    const paddedOptsAr = hasOptions
+      ? optsDraft.map((_, i) => optsArDraft[i] ?? '')
+      : null;
     onUpdate({
       label: labelDraft.trim() || q.label,
+      label_ar: labelArDraft.trim() || null,
       description: descDraft.trim() || null,
+      description_ar: descArDraft.trim() || null,
       required: reqDraft,
       options: hasOptions ? optsDraft.filter(Boolean) : null,
+      options_ar: paddedOptsAr,
       settings: { ...q.settings, ...scaleSettings, skip_logic: skipLogic },
     });
     onEdit();
@@ -1096,13 +1139,23 @@ function QuestionCard({
       {isEditing && (
         <div className="border-t border-indigo-100 p-4 space-y-4 bg-indigo-50/30">
           <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Question text</Label>
-              <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} data-testid={`input-label-${q.id}`} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Helper text <span className="text-slate-400 font-normal">(optional)</span></Label>
-              <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown below the question…" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Question text <span className="text-slate-400 font-normal">(English)</span></Label>
+                <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} data-testid={`input-label-${q.id}`} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">نص السؤال <span className="text-slate-400 font-normal">(Arabic)</span></Label>
+                <Input dir="rtl" lang="ar" value={labelArDraft} onChange={e => setLabelArDraft(e.target.value)} placeholder="نص السؤال بالعربية…" data-testid={`input-label-ar-${q.id}`} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Helper text <span className="text-slate-400 font-normal">(English, optional)</span></Label>
+                <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown below the question…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">نص المساعدة <span className="text-slate-400 font-normal">(Arabic, optional)</span></Label>
+                <Input dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} placeholder="نص المساعدة بالعربية…" />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id={`req-${q.id}`} checked={reqDraft} onChange={e => setReqDraft(e.target.checked)} className="rounded" />
@@ -1119,17 +1172,25 @@ function QuestionCard({
                     value={opt}
                     onChange={e => { const next = [...optsDraft]; next[i] = e.target.value; setOptsDraft(next); }}
                     className="h-7 text-sm flex-1"
+                    placeholder={`Option ${i + 1} (English)`}
                   />
-                  <button onClick={() => setOptsDraft(optsDraft.filter((_, j) => j !== i))} className="p-1 text-slate-400 hover:text-red-500">
+                  <Input
+                    dir="rtl" lang="ar"
+                    value={optsArDraft[i] ?? ''}
+                    onChange={e => { const next = [...optsArDraft]; next[i] = e.target.value; setOptsArDraft(next); }}
+                    className="h-7 text-sm flex-1"
+                    placeholder={`الخيار ${i + 1} (عربي)`}
+                  />
+                  <button onClick={() => { setOptsDraft(optsDraft.filter((_, j) => j !== i)); setOptsArDraft(optsArDraft.filter((_, j) => j !== i)); }} className="p-1 text-slate-400 hover:text-red-500">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               ))}
               <div className="flex items-center gap-1.5">
-                <Input value={newOpt} onChange={e => setNewOpt(e.target.value)} placeholder="Add option…" className="h-7 text-sm flex-1"
-                  onKeyDown={e => { if (e.key === 'Enter' && newOpt.trim()) { setOptsDraft([...optsDraft, newOpt.trim()]); setNewOpt(''); } }} />
+                <Input value={newOpt} onChange={e => setNewOpt(e.target.value)} placeholder="Add option (English)…" className="h-7 text-sm flex-1"
+                  onKeyDown={e => { if (e.key === 'Enter' && newOpt.trim()) { setOptsDraft([...optsDraft, newOpt.trim()]); setOptsArDraft([...optsArDraft, '']); setNewOpt(''); } }} />
                 <button
-                  onClick={() => { if (newOpt.trim()) { setOptsDraft([...optsDraft, newOpt.trim()]); setNewOpt(''); } }}
+                  onClick={() => { if (newOpt.trim()) { setOptsDraft([...optsDraft, newOpt.trim()]); setOptsArDraft([...optsArDraft, '']); setNewOpt(''); } }}
                   className="p-1 text-indigo-600 hover:bg-indigo-100 rounded"
                 >
                   <Plus className="w-3 h-3" />

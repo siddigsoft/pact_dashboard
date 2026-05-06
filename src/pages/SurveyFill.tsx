@@ -33,7 +33,9 @@ interface SkipLogic {
 interface Survey {
   id: string;
   title: string;
+  title_ar: string | null;
   description: string | null;
+  description_ar: string | null;
   status: 'draft' | 'active' | 'closed';
   settings: Record<string, unknown>;
 }
@@ -43,9 +45,11 @@ interface Question {
   survey_id: string;
   type: QuestionType;
   label: string;
+  label_ar: string | null;
   description: string | null;
-  required: boolean;
+  description_ar: string | null;
   options: string[] | null;
+  options_ar: string[] | null;
   order_index: number;
   settings: Record<string, unknown>;
   group_id: string | null;
@@ -244,9 +248,10 @@ export default function SurveyFill() {
   const { currentUser } = useUser();
   const { toast } = useToast();
 
-  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
+  const [answers, setAnswers]     = useState<Record<string, AnswerValue>>({});
   const [submitted, setSubmitted] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors]       = useState<Record<string, string>>({});
+  const [lang, setLang]           = useState<'en' | 'ar'>('en');
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey-fill', id],
@@ -425,8 +430,14 @@ export default function SurveyFill() {
           <div className={cn('flex items-center gap-2 px-5 py-3', headerColors[ci])}>
             <Folder className={cn('w-4 h-4 shrink-0', iconColors[ci])} />
             <div className="flex-1 min-w-0">
-              <p className={cn('text-sm font-semibold', titleColors[ci])}>{q.label}</p>
-              {q.description && <p className="text-xs text-slate-500 mt-0.5">{q.description}</p>}
+              <p className={cn('text-sm font-semibold', titleColors[ci])}>
+                {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+              </p>
+              {(lang === 'ar' ? (q.description_ar || q.description) : q.description) && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {lang === 'ar' ? (q.description_ar || q.description) : q.description}
+                </p>
+              )}
             </div>
           </div>
           <div className="p-4 space-y-4 bg-white/50">
@@ -440,7 +451,9 @@ export default function SurveyFill() {
     if (q.type === 'section_header') {
       return (
         <div key={q.id} className="pt-4 pb-1">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">{q.label}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">
+            {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+          </p>
         </div>
       );
     }
@@ -461,16 +474,22 @@ export default function SurveyFill() {
         <div>
           <div className="flex items-start gap-1 justify-between">
             <div className="flex items-start gap-1">
-              <p className="text-sm font-semibold text-slate-800 leading-snug">{q.label}</p>
+              <p className="text-sm font-semibold text-slate-800 leading-snug">
+                {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+              </p>
               {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
             </div>
             {hasSkip && (
               <span className="flex items-center gap-0.5 text-[10px] text-amber-600 shrink-0 ml-2">
-                <GitBranch className="w-2.5 h-2.5" />conditional
+                <GitBranch className="w-2.5 h-2.5" />{lang === 'ar' ? 'مشروط' : 'conditional'}
               </span>
             )}
           </div>
-          {q.description && <p className="text-xs text-slate-500 mt-1">{q.description}</p>}
+          {(lang === 'ar' ? (q.description_ar || q.description) : q.description) && (
+            <p className="text-xs text-slate-500 mt-1">
+              {lang === 'ar' ? (q.description_ar || q.description) : q.description}
+            </p>
+          )}
         </div>
 
         {q.type === 'text' && (
@@ -587,30 +606,34 @@ export default function SurveyFill() {
 
         {q.type === 'radio' && (
           <div className="space-y-2">
-            {(q.options ?? []).map(opt => (
-              <label key={opt} className={cn(
-                'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
-                answers[q.id] === opt ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300',
-              )}>
-                <input
-                  type="radio"
-                  name={q.id}
-                  value={opt}
-                  checked={answers[q.id] === opt}
-                  onChange={() => setAnswer(q.id, opt)}
-                  className="accent-indigo-600"
-                  data-testid={`radio-${q.id}-${opt}`}
-                />
-                <span className="text-sm text-slate-700">{opt}</span>
-              </label>
-            ))}
+            {(q.options ?? []).map((opt, i) => {
+              const displayOpt = lang === 'ar' && q.options_ar?.[i] ? q.options_ar[i] : opt;
+              return (
+                <label key={opt} className={cn(
+                  'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
+                  answers[q.id] === opt ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300',
+                )}>
+                  <input
+                    type="radio"
+                    name={q.id}
+                    value={opt}
+                    checked={answers[q.id] === opt}
+                    onChange={() => setAnswer(q.id, opt)}
+                    className="accent-indigo-600"
+                    data-testid={`radio-${q.id}-${opt}`}
+                  />
+                  <span className="text-sm text-slate-700">{displayOpt}</span>
+                </label>
+              );
+            })}
           </div>
         )}
 
         {q.type === 'checkbox' && (
           <div className="space-y-2">
-            {(q.options ?? []).map(opt => {
+            {(q.options ?? []).map((opt, i) => {
               const checked = ((answers[q.id] as string[]) ?? []).includes(opt);
+              const displayOpt = lang === 'ar' && q.options_ar?.[i] ? q.options_ar[i] : opt;
               return (
                 <label key={opt} className={cn(
                   'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
@@ -623,7 +646,7 @@ export default function SurveyFill() {
                     className="accent-indigo-600"
                     data-testid={`checkbox-${q.id}-${opt}`}
                   />
-                  <span className="text-sm text-slate-700">{opt}</span>
+                  <span className="text-sm text-slate-700">{displayOpt}</span>
                 </label>
               );
             })}
@@ -633,12 +656,13 @@ export default function SurveyFill() {
         {q.type === 'dropdown' && (
           <Select value={(answers[q.id] as string) ?? ''} onValueChange={v => setAnswer(q.id, v)}>
             <SelectTrigger data-testid={`select-answer-${q.id}`}>
-              <SelectValue placeholder="Select an option…" />
+              <SelectValue placeholder={lang === 'ar' ? 'اختر خياراً…' : 'Select an option…'} />
             </SelectTrigger>
             <SelectContent>
-              {(q.options ?? []).map(opt => (
-                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-              ))}
+              {(q.options ?? []).map((opt, i) => {
+                const displayOpt = lang === 'ar' && q.options_ar?.[i] ? q.options_ar[i] : opt;
+                return <SelectItem key={opt} value={opt}>{displayOpt}</SelectItem>;
+              })}
             </SelectContent>
           </Select>
         )}
@@ -707,7 +731,9 @@ export default function SurveyFill() {
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
           <ClipboardList className="w-5 h-5 text-indigo-600 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-800 truncate">{survey.title}</p>
+            <p className="text-sm font-semibold text-slate-800 truncate">
+              {lang === 'ar' && survey.title_ar ? survey.title_ar : survey.title}
+            </p>
             {requiredVisible.length > 0 && (
               <div className="flex items-center gap-2 mt-0.5">
                 <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
@@ -717,14 +743,31 @@ export default function SurveyFill() {
               </div>
             )}
           </div>
+          {/* Language toggle — only shown if the survey has Arabic content */}
+          {(survey.title_ar || survey.description_ar) && (
+            <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden shrink-0">
+              <button
+                onClick={() => setLang('en')}
+                data-testid="btn-lang-en"
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${lang === 'en' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >EN</button>
+              <button
+                onClick={() => setLang('ar')}
+                data-testid="btn-lang-ar"
+                className={`px-2.5 py-1 text-xs font-medium transition-colors border-l border-slate-200 ${lang === 'ar' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >عربي</button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
-        {survey.description && (
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        {(lang === 'ar' ? (survey.description_ar || survey.description) : survey.description) && (
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
-            <p className="text-slate-700 text-sm leading-relaxed">{survey.description}</p>
+            <p className="text-slate-700 text-sm leading-relaxed">
+              {lang === 'ar' ? (survey.description_ar || survey.description) : survey.description}
+            </p>
           </div>
         )}
 
