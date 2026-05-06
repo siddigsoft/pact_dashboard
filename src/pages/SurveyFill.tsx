@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,6 +8,7 @@ import {
   Loader2, CheckCircle2, ClipboardList, Star, ChevronLeft, ChevronRight,
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
+  Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -141,51 +142,295 @@ function ScaleSelector({ value, onChange, min = 1, max = 10 }: { value: number |
   );
 }
 
-function GpsCapture({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
-  const [loading, setLoading] = useState(false);
-  const [gpsError, setGpsError] = useState<string | null>(null);
+// ── GPS coordinate helpers ────────────────────────────────────────────────────
+interface GpsCoords { lat: number; lng: number; alt: number | null; acc: number }
 
-  const capture = () => {
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser.');
-      return;
-    }
-    setLoading(true);
-    setGpsError(null);
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const coords = `${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)},${pos.coords.accuracy.toFixed(1)}`;
-        onChange(coords);
-        setLoading(false);
-      },
-      err => {
-        setGpsError(err.message);
-        setLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
+function parseGpsValue(v: string | null): GpsCoords | null {
+  if (!v) return null;
+  const p = v.split(',');
+  if (p.length >= 4) {
+    // New format: lat,lng,alt,acc
+    return { lat: parseFloat(p[0]), lng: parseFloat(p[1]), alt: p[2] !== '' ? parseFloat(p[2]) : null, acc: parseFloat(p[3]) };
+  } else if (p.length === 3) {
+    // Legacy format: lat,lng,acc
+    return { lat: parseFloat(p[0]), lng: parseFloat(p[1]), alt: null, acc: parseFloat(p[2]) };
+  }
+  return null;
+}
+
+function getSignalLevel(acc: number) {
+  if (acc <= 5) return 4;
+  if (acc <= 10) return 3;
+  if (acc <= 20) return 2;
+  if (acc <= 50) return 1;
+  return 0;
+}
+
+function SignalBars({ acc }: { acc: number }) {
+  const level = getSignalLevel(acc);
+  const color = level >= 3 ? 'bg-emerald-500' : level >= 2 ? 'bg-amber-500' : 'bg-red-400';
+  return (
+    <div className="flex items-end gap-0.5 h-4" title={`Accuracy: ±${acc.toFixed(0)}m`}>
+      {[1, 2, 3, 4].map(b => (
+        <div key={b} className={cn('w-1.5 rounded-sm transition-colors', b <= level ? color : 'bg-slate-200')} style={{ height: `${b * 4}px` }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Enhanced GPS Capture (ODK / Ona.io feature parity) ───────────────────────
+function GpsCapture({
+  value, onChange, settings,
+}: { value: string | null; onChange: (v: string) => void; settings?: Record<string, unknown> }) {
+  const accuracyThreshold = Number(settings?.accuracy_threshold ?? 10);
+  const captureAlt        = settings?.capture_altitude !== false;
+  const allowManual       = settings?.allow_manual !== false;
+
+  const [status, setStatus]         = useState<'idle' | 'acquiring' | 'captured'>(() => value ? 'captured' : 'idle');
+  const [liveCoords, setLiveCoords] = useState<GpsCoords | null>(null);
+  const [gpsError, setGpsError]     = useState<string | null>(null);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualLat, setManualLat]   = useState('');
+  const [manualLng, setManualLng]   = useState('');
+  const [manualAlt, setManualAlt]   = useState('');
+  const [copied, setCopied]         = useState(false);
+  const watchRef                    = useRef<number | null>(null);
+
+  const stored = parseGpsValue(value);
+
+  const stopWatch = () => {
+    if (watchRef.current !== null) { navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; }
+  };
+
+  const startWatch = () => {
+    if (!navigator.geolocation) { setGpsError('Geolocation is not supported by your browser.'); return; }
+    setStatus('acquiring'); setGpsError(null); setLiveCoords(null);
+    watchRef.current = navigator.geolocation.watchPosition(
+      pos => setLiveCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, alt: pos.coords.altitude, acc: pos.coords.accuracy }),
+      err => { setGpsError(err.message); setStatus('idle'); stopWatch(); },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
     );
   };
 
-  const parts = value ? value.split(',') : null;
+  const captureNow = () => {
+    if (!liveCoords) return;
+    const altStr = captureAlt && liveCoords.alt !== null ? liveCoords.alt.toFixed(1) : '';
+    onChange(`${liveCoords.lat.toFixed(6)},${liveCoords.lng.toFixed(6)},${altStr},${liveCoords.acc.toFixed(1)}`);
+    setStatus('captured'); stopWatch();
+  };
 
+  const captureManual = () => {
+    const lat = parseFloat(manualLat), lng = parseFloat(manualLng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setGpsError('Invalid coordinates. Latitude: −90 to 90, Longitude: −180 to 180.'); return;
+    }
+    const altStr = manualAlt ? parseFloat(manualAlt).toFixed(1) : '';
+    onChange(`${lat.toFixed(6)},${lng.toFixed(6)},${altStr},0`);
+    setStatus('captured'); setManualMode(false); setGpsError(null);
+  };
+
+  const reset = () => { stopWatch(); setStatus('idle'); setLiveCoords(null); setGpsError(null); setManualMode(false); onChange(''); };
+
+  const copyCoords = () => {
+    if (!stored) return;
+    const txt = `${stored.lat.toFixed(6)}, ${stored.lng.toFixed(6)}${stored.alt !== null ? `, ${stored.alt.toFixed(1)}m` : ''} ±${stored.acc.toFixed(0)}m`;
+    navigator.clipboard.writeText(txt).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  useEffect(() => () => stopWatch(), []);
+
+  // ── Captured ──────────────────────────────────────────────────────────────
+  if (status === 'captured' && stored) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-emerald-100">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <p className="text-sm font-semibold text-emerald-800">Location captured</p>
+            <span className="ml-auto text-[10px] text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full font-medium">
+              ±{stored.acc.toFixed(0)}m accuracy
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-emerald-100">
+            {[
+              { label: 'Latitude',  value: `${stored.lat.toFixed(6)}°` },
+              { label: 'Longitude', value: `${stored.lng.toFixed(6)}°` },
+              ...(stored.alt !== null ? [{ label: 'Altitude', value: `${stored.alt.toFixed(1)} m` }] : []),
+              { label: 'Accuracy',  value: `±${stored.acc.toFixed(1)} m` },
+            ].map(row => (
+              <div key={row.label} className="bg-white px-3 py-2">
+                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{row.label}</p>
+                <p className="text-sm font-mono font-semibold text-slate-800">{row.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mini map */}
+        <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 160 }}>
+          <iframe
+            title="GPS location"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${stored.lng - 0.006},${stored.lat - 0.006},${stored.lng + 0.006},${stored.lat + 0.006}&layer=mapnik&marker=${stored.lat},${stored.lng}`}
+            className="w-full h-full border-0"
+            loading="lazy"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button type="button" size="sm" variant="outline" onClick={reset} className="gap-1.5 text-xs h-8">
+            <RefreshCw className="w-3 h-3" />Recapture
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={copyCoords} className="gap-1.5 text-xs h-8">
+            {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+            {copied ? 'Copied!' : 'Copy coords'}
+          </Button>
+          <a
+            href={`https://www.google.com/maps?q=${stored.lat},${stored.lng}`}
+            target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs h-8 px-3 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />Open in Maps
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Acquiring ─────────────────────────────────────────────────────────────
+  if (status === 'acquiring') {
+    const thresholdMet = liveCoords ? liveCoords.acc <= accuracyThreshold : false;
+    const level = liveCoords ? getSignalLevel(liveCoords.acc) : 0;
+    return (
+      <div className="space-y-3">
+        <div className={cn('rounded-xl border p-4 space-y-3', thresholdMet ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50')}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={cn('w-2 h-2 rounded-full animate-pulse', thresholdMet ? 'bg-emerald-500' : 'bg-amber-500')} />
+              <span className="text-sm font-semibold text-slate-700">
+                {!liveCoords ? 'Waiting for GPS signal…' : thresholdMet ? 'Ready to capture' : 'Acquiring better signal…'}
+              </span>
+            </div>
+            {liveCoords && <SignalBars acc={liveCoords.acc} />}
+          </div>
+
+          {liveCoords && (
+            <>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { label: 'Accuracy', value: `±${liveCoords.acc.toFixed(0)}m` },
+                  { label: 'Target',   value: `≤${accuracyThreshold}m` },
+                  { label: 'Latitude', value: `${liveCoords.lat.toFixed(5)}°` },
+                  { label: 'Longitude',value: `${liveCoords.lng.toFixed(5)}°` },
+                  ...(liveCoords.alt !== null ? [{ label: 'Altitude', value: `${liveCoords.alt.toFixed(1)} m` }] : []),
+                ].map(row => (
+                  <div key={row.label} className="bg-white/70 rounded-lg px-2.5 py-1.5">
+                    <p className="text-[10px] text-slate-400">{row.label}</p>
+                    <p className="font-mono font-semibold text-slate-700">{row.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-1">
+                <div className="h-2 bg-white/60 rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all duration-500', thresholdMet ? 'bg-emerald-500' : level >= 2 ? 'bg-amber-400' : 'bg-red-400')}
+                    style={{ width: `${Math.min(100, Math.max(4, (accuracyThreshold / liveCoords.acc) * 100))}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  {thresholdMet ? `✓ Threshold met (≤${accuracyThreshold}m)` : `Waiting for ≤${accuracyThreshold}m accuracy…`}
+                </p>
+              </div>
+            </>
+          )}
+
+          {!liveCoords && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />Searching for satellite signal…
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button type="button" onClick={captureNow} disabled={!liveCoords} className="gap-2">
+            <Crosshair className="w-4 h-4" />{thresholdMet ? 'Capture Location' : 'Capture Anyway'}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => { stopWatch(); setStatus('idle'); setLiveCoords(null); }} className="gap-2">
+            <X className="w-4 h-4" />Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Manual entry ──────────────────────────────────────────────────────────
+  if (manualMode) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Edit3 className="w-4 h-4 text-blue-600" />
+            <p className="text-sm font-semibold text-blue-800">Enter coordinates manually</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-600">Latitude <span className="text-red-500">*</span></Label>
+              <Input type="number" value={manualLat} onChange={e => setManualLat(e.target.value)} placeholder="e.g. 15.55123" step="any" min={-90} max={90} className="h-8 text-sm font-mono" data-testid="gps-manual-lat" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-600">Longitude <span className="text-red-500">*</span></Label>
+              <Input type="number" value={manualLng} onChange={e => setManualLng(e.target.value)} placeholder="e.g. 32.54321" step="any" min={-180} max={180} className="h-8 text-sm font-mono" data-testid="gps-manual-lng" />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs text-slate-600">Altitude (m) <span className="text-slate-400 font-normal">optional</span></Label>
+              <Input type="number" value={manualAlt} onChange={e => setManualAlt(e.target.value)} placeholder="e.g. 380" step="any" className="h-8 text-sm font-mono" data-testid="gps-manual-alt" />
+            </div>
+          </div>
+          {gpsError && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{gpsError}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" onClick={captureManual} className="gap-2">
+            <Check className="w-4 h-4" />Accept Coordinates
+          </Button>
+          <Button type="button" variant="outline" onClick={() => { setManualMode(false); setGpsError(null); }}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Idle ──────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-2">
-      {parts && parts.length >= 2 && (
-        <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-sm">
-          <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-emerald-800">Location captured</p>
+    <div className="space-y-3">
+      {stored && (
+        <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-sm">
+          <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-emerald-800">Location saved</p>
             <p className="text-xs text-emerald-600 font-mono">
-              {parseFloat(parts[0]).toFixed(5)}°, {parseFloat(parts[1]).toFixed(5)}°
-              {parts[2] ? ` · ±${parseFloat(parts[2]).toFixed(0)}m` : ''}
+              {stored.lat.toFixed(5)}°, {stored.lng.toFixed(5)}°
+              {stored.alt !== null ? ` · ${stored.alt.toFixed(0)}m alt` : ''}
+              {' '}· ±{stored.acc.toFixed(0)}m
             </p>
           </div>
         </div>
       )}
-      <Button type="button" variant="outline" onClick={capture} disabled={loading} className="gap-2">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
-        {loading ? 'Getting location…' : value ? 'Update Location' : 'Capture GPS Location'}
-      </Button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button type="button" onClick={startWatch} className="gap-2" data-testid="btn-gps-capture">
+          <Crosshair className="w-4 h-4" />{stored ? 'Recapture GPS' : 'Capture GPS Location'}
+        </Button>
+        {allowManual && (
+          <Button type="button" variant="outline" onClick={() => setManualMode(true)} className="gap-2 text-sm" data-testid="btn-gps-manual">
+            <Keyboard className="w-4 h-4" />Enter Manually
+          </Button>
+        )}
+        {stored && (
+          <Button type="button" variant="ghost" size="sm" onClick={reset} className="text-slate-400 hover:text-red-500 gap-1 text-xs">
+            <X className="w-3 h-3" />Clear
+          </Button>
+        )}
+      </div>
       {gpsError && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{gpsError}</p>}
     </div>
   );
@@ -681,7 +926,7 @@ export default function SurveyFill() {
         )}
 
         {q.type === 'gps' && (
-          <GpsCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+          <GpsCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} settings={q.settings} />
         )}
 
         {q.type === 'image' && (

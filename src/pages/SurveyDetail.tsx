@@ -1727,6 +1727,9 @@ function QuestionCard({
   const [newOpt, setNewOpt]             = useState('');
   const [scaleMin, setScaleMin] = useState(Number(q.settings?.min ?? 1));
   const [scaleMax, setScaleMax] = useState(Number(q.settings?.max ?? 10));
+  const [gpsAccThreshold, setGpsAccThreshold] = useState(Number(q.settings?.accuracy_threshold ?? 10));
+  const [gpsCaptureAlt, setGpsCaptureAlt]     = useState(q.settings?.capture_altitude !== false);
+  const [gpsAllowManual, setGpsAllowManual]   = useState(q.settings?.allow_manual !== false);
 
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
@@ -1746,6 +1749,7 @@ function QuestionCard({
       ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
       : undefined;
     const scaleSettings = q.type === 'scale' ? { min: scaleMin, max: scaleMax } : {};
+    const gpsSettings   = q.type === 'gps'   ? { accuracy_threshold: gpsAccThreshold, capture_altitude: gpsCaptureAlt, allow_manual: gpsAllowManual } : {};
     const paddedOptsAr = hasOptions
       ? optsDraft.map((_, i) => optsArDraft[i] ?? '')
       : null;
@@ -1757,7 +1761,7 @@ function QuestionCard({
       required: reqDraft,
       options: hasOptions ? optsDraft.filter(Boolean) : null,
       options_ar: paddedOptsAr,
-      settings: { ...q.settings, ...scaleSettings, skip_logic: skipLogic },
+      settings: { ...q.settings, ...scaleSettings, ...gpsSettings, skip_logic: skipLogic },
     });
     onEdit();
   };
@@ -1891,6 +1895,48 @@ function QuestionCard({
                 <div className="space-y-1">
                   <Label className="text-[10px] text-slate-500">Max</Label>
                   <Input type="number" value={scaleMax} onChange={e => setScaleMax(Number(e.target.value))} className="h-7 text-sm" min={scaleMin + 1} max={20} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {q.type === 'gps' && (
+            <div className="border border-emerald-200 rounded-xl p-3 space-y-3 bg-emerald-50/40">
+              <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5" />GPS Settings
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Accuracy threshold (m)</Label>
+                  <Input
+                    type="number"
+                    value={gpsAccThreshold}
+                    onChange={e => setGpsAccThreshold(Math.max(1, Number(e.target.value)))}
+                    className="h-7 text-sm"
+                    min={1} max={500}
+                    title="Minimum GPS accuracy required before showing 'Ready to capture'"
+                  />
+                  <p className="text-[10px] text-slate-400">Signal must be ≤ this value</p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={gpsCaptureAlt}
+                      onChange={e => setGpsCaptureAlt(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-xs font-medium text-slate-700">Capture altitude</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={gpsAllowManual}
+                      onChange={e => setGpsAllowManual(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-xs font-medium text-slate-700">Allow manual entry</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -2106,16 +2152,33 @@ function SubmissionDialog({
                   </div>
                 );
               } else if (q.type === 'gps' && ans.answer_text) {
-                const parts = ans.answer_text.split(',');
-                const lat = parseFloat(parts[0]);
-                const lng = parseFloat(parts[1]);
-                const acc = parts[2] ? parseFloat(parts[2]) : null;
+                const gp = ans.answer_text.split(',');
+                // Support both legacy 3-field (lat,lng,acc) and new 4-field (lat,lng,alt,acc)
+                const lat = parseFloat(gp[0]);
+                const lng = parseFloat(gp[1]);
+                const alt = gp.length >= 4 && gp[2] !== '' ? parseFloat(gp[2]) : null;
+                const acc = gp.length >= 4 ? parseFloat(gp[3]) : (gp[2] ? parseFloat(gp[2]) : null);
                 displayValue = (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
-                      <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                      <span>{isNaN(lat) ? ans.answer_text : `${lat.toFixed(5)}, ${lng.toFixed(5)}${acc !== null ? ` ±${acc.toFixed(0)}m` : ''}`}</span>
-                    </div>
+                  <div className="space-y-2">
+                    {isNaN(lat) ? (
+                      <span className="text-sm text-slate-700">{ans.answer_text}</span>
+                    ) : (
+                      <div className="rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="grid grid-cols-2 gap-px bg-slate-100">
+                          {[
+                            { label: 'Latitude',  value: `${lat.toFixed(6)}°` },
+                            { label: 'Longitude', value: `${lng.toFixed(6)}°` },
+                            ...(alt !== null ? [{ label: 'Altitude', value: `${alt.toFixed(1)} m` }] : []),
+                            ...(acc !== null ? [{ label: 'Accuracy', value: `±${acc.toFixed(1)} m` }] : []),
+                          ].map(row => (
+                            <div key={row.label} className="bg-white px-3 py-1.5">
+                              <p className="text-[9px] text-slate-400 uppercase tracking-wider font-medium">{row.label}</p>
+                              <p className="text-xs font-mono font-semibold text-slate-700">{row.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {!isNaN(lat) && !isNaN(lng) && (
                       <a
                         href={`https://www.google.com/maps?q=${lat},${lng}`}
