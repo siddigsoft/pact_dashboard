@@ -27,6 +27,7 @@ import {
   Folder, FolderOpen, ChevronRight,
   TrendingUp, CheckCircle2, MessageSquare, Award, Target,
   Eye, Search, Table2, Map as MapIcon, X, FileSpreadsheet,
+  Settings, Shield, ToggleLeft, Globe, Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -194,7 +195,7 @@ export default function SurveyDetail() {
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
   const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
 
-  const [tab, setTab] = useState<'builder' | 'responses' | 'analytics' | 'map'>('builder');
+  const [tab, setTab] = useState<'builder' | 'responses' | 'analytics' | 'map' | 'settings'>('builder');
   const [editTitle, setEditTitle]     = useState('');
   const [editTitleAr, setEditTitleAr] = useState('');
   const [editDesc, setEditDesc]       = useState('');
@@ -211,6 +212,18 @@ export default function SurveyDetail() {
   const [selectedSubmission, setSelectedSubmission] = useState<Response | null>(null);
   const [deleteResponseTarget, setDeleteResponseTarget] = useState<Response | null>(null);
 
+  // Settings tab state
+  const [settingsForm, setSettingsForm] = useState({
+    response_limit: '',
+    expires_at: '',
+    allow_multiple: false,
+    multi_page: false,
+    show_progress: true,
+    thank_you_message: '',
+    thank_you_message_ar: '',
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey', id],
     enabled: !!id,
@@ -221,6 +234,16 @@ export default function SurveyDetail() {
       setEditTitleAr(data.title_ar ?? '');
       setEditDesc(data.description ?? '');
       setEditDescAr(data.description_ar ?? '');
+      const s = (data.settings ?? {}) as Record<string, unknown>;
+      setSettingsForm({
+        response_limit: s.response_limit != null ? String(s.response_limit) : '',
+        expires_at: s.expires_at ? String(s.expires_at).slice(0, 10) : '',
+        allow_multiple: Boolean(s.allow_multiple),
+        multi_page: Boolean(s.multi_page),
+        show_progress: s.show_progress !== false,
+        thank_you_message: String(s.thank_you_message ?? ''),
+        thank_you_message_ar: String(s.thank_you_message_ar ?? ''),
+      });
       return data as Survey;
     },
   });
@@ -275,6 +298,35 @@ export default function SurveyDetail() {
     } catch (e: unknown) {
       toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
     } finally { setSavingMeta(false); }
+  };
+
+  const saveSettings = async () => {
+    if (!id) return;
+    setSavingSettings(true);
+    try {
+      const updatedSettings: Record<string, unknown> = {
+        ...(survey?.settings ?? {}),
+        response_limit: settingsForm.response_limit ? parseInt(settingsForm.response_limit, 10) : null,
+        expires_at: settingsForm.expires_at || null,
+        allow_multiple: settingsForm.allow_multiple,
+        multi_page: settingsForm.multi_page,
+        show_progress: settingsForm.show_progress,
+        thank_you_message: settingsForm.thank_you_message || null,
+        thank_you_message_ar: settingsForm.thank_you_message_ar || null,
+      };
+      const { error } = await supabase.from('surveys').update({
+        settings: updatedSettings,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['survey', id] });
+      qc.invalidateQueries({ queryKey: ['surveys'] });
+      toast({ title: 'Settings saved' });
+    } catch (e: unknown) {
+      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const changeStatus = useMutation({
@@ -715,6 +767,7 @@ export default function SurveyDetail() {
           { id: 'responses', label: 'Responses', icon: Users,     badge: responses.length },
           { id: 'analytics', label: 'Analytics', icon: BarChart2, badge: 0 },
           { id: 'map',       label: 'Map',        icon: MapIcon,   badge: 0 },
+          ...(canManage ? [{ id: 'settings' as const, label: 'Settings', icon: Settings, badge: 0 }] : []),
         ] as const).map(t => (
           <button
             key={t.id}
@@ -1480,6 +1533,248 @@ export default function SurveyDetail() {
           </div>
         );
       })()}
+
+      {/* ── SETTINGS TAB ────────────────────────────────────────────────────── */}
+      {tab === 'settings' && canManage && (
+        <div className="space-y-5 max-w-2xl">
+
+          {/* Collection Settings */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <Shield className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Collection Settings</h3>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Response limit */}
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-limit" className="text-sm font-medium">
+                  Response Limit
+                  <span className="ml-2 text-[11px] text-slate-400 font-normal">Leave blank for unlimited</span>
+                </Label>
+                <div className="relative max-w-[200px]">
+                  <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input
+                    id="setting-limit"
+                    type="number"
+                    min="1"
+                    className="pl-9"
+                    placeholder="e.g. 500"
+                    value={settingsForm.response_limit}
+                    onChange={e => setSettingsForm(s => ({ ...s, response_limit: e.target.value }))}
+                    data-testid="input-response-limit"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">Survey will automatically stop accepting responses when this limit is reached.</p>
+              </div>
+
+              {/* Expiry date */}
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-expiry" className="text-sm font-medium">
+                  Expiry Date
+                  <span className="ml-2 text-[11px] text-slate-400 font-normal">Leave blank for no expiry</span>
+                </Label>
+                <div className="relative max-w-[220px]">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input
+                    id="setting-expiry"
+                    type="date"
+                    className="pl-9"
+                    value={settingsForm.expires_at}
+                    onChange={e => setSettingsForm(s => ({ ...s, expires_at: e.target.value }))}
+                    data-testid="input-expires-at"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">Survey will close automatically after this date.</p>
+              </div>
+
+              {/* Allow multiple submissions */}
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={settingsForm.allow_multiple}
+                    onChange={e => setSettingsForm(s => ({ ...s, allow_multiple: e.target.checked }))}
+                    data-testid="toggle-allow-multiple"
+                  />
+                  <div className={cn(
+                    'w-10 h-6 rounded-full transition-colors',
+                    settingsForm.allow_multiple ? 'bg-indigo-600' : 'bg-slate-200',
+                  )}>
+                    <div className={cn(
+                      'w-4 h-4 bg-white rounded-full shadow transition-transform m-1',
+                      settingsForm.allow_multiple ? 'translate-x-4' : 'translate-x-0',
+                    )} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Allow multiple submissions</p>
+                  <p className="text-[11px] text-slate-400">Same user can submit more than once</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Display Settings */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <Globe className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Display Settings</h3>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Multi-page mode */}
+              <label className="flex items-start gap-3 cursor-pointer">
+                <div className="relative shrink-0 mt-0.5">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={settingsForm.multi_page}
+                    onChange={e => setSettingsForm(s => ({ ...s, multi_page: e.target.checked }))}
+                    data-testid="toggle-multi-page"
+                  />
+                  <div className={cn(
+                    'w-10 h-6 rounded-full transition-colors',
+                    settingsForm.multi_page ? 'bg-indigo-600' : 'bg-slate-200',
+                  )}>
+                    <div className={cn(
+                      'w-4 h-4 bg-white rounded-full shadow transition-transform m-1',
+                      settingsForm.multi_page ? 'translate-x-4' : 'translate-x-0',
+                    )} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Multi-page mode</p>
+                  <p className="text-[11px] text-slate-400">
+                    Each Section Header becomes a separate page with Next/Back navigation.
+                    Respondents see one section at a time.
+                  </p>
+                </div>
+              </label>
+
+              {/* Show progress bar */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className="relative shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={settingsForm.show_progress}
+                    onChange={e => setSettingsForm(s => ({ ...s, show_progress: e.target.checked }))}
+                    data-testid="toggle-show-progress"
+                  />
+                  <div className={cn(
+                    'w-10 h-6 rounded-full transition-colors',
+                    settingsForm.show_progress ? 'bg-indigo-600' : 'bg-slate-200',
+                  )}>
+                    <div className={cn(
+                      'w-4 h-4 bg-white rounded-full shadow transition-transform m-1',
+                      settingsForm.show_progress ? 'translate-x-4' : 'translate-x-0',
+                    )} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Show progress bar</p>
+                  <p className="text-[11px] text-slate-400">Displays completion % in the top bar of the fill form</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Completion Message */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <MessageSquare className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Completion Message</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-[11px] text-slate-400">
+                Shown to respondents after they submit. First line = heading, remaining lines = body text.
+                Leave blank to use the default "Thank you!" message.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-ty-msg" className="text-sm font-medium">
+                  Message <span className="text-slate-400 font-normal text-[10px]">(English)</span>
+                </Label>
+                <Textarea
+                  id="setting-ty-msg"
+                  rows={3}
+                  placeholder={"Thank you!\nYour response has been recorded successfully."}
+                  value={settingsForm.thank_you_message}
+                  onChange={e => setSettingsForm(s => ({ ...s, thank_you_message: e.target.value }))}
+                  data-testid="input-thank-you-message"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-ty-msg-ar" className="text-sm font-medium flex items-center gap-1">
+                  الرسالة <span className="text-slate-400 font-normal text-[10px]">(Arabic)</span>
+                </Label>
+                <Textarea
+                  id="setting-ty-msg-ar"
+                  dir="rtl"
+                  lang="ar"
+                  rows={3}
+                  placeholder={"شكراً لك!\nتم تسجيل ردك بنجاح."}
+                  value={settingsForm.thank_you_message_ar}
+                  onChange={e => setSettingsForm(s => ({ ...s, thank_you_message_ar: e.target.value }))}
+                  data-testid="input-thank-you-message-ar"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={saveSettings}
+              disabled={savingSettings}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
+              data-testid="btn-save-settings"
+            >
+              {savingSettings
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</>
+                : <><Settings className="w-3.5 h-3.5" />Save Settings</>}
+            </Button>
+            {survey.status === 'active' && (
+              <a
+                href={`/surveys/${survey.id}/fill`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:underline"
+              >
+                <ExternalLink className="w-3 h-3" />Preview fill form
+              </a>
+            )}
+          </div>
+
+          {/* Current settings summary */}
+          {survey.settings && Object.keys(survey.settings).some(k => survey.settings[k] != null && survey.settings[k] !== '' && survey.settings[k] !== true) && (
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Active restrictions</p>
+              <div className="flex flex-wrap gap-2">
+                {survey.settings.response_limit != null && (
+                  <span className="flex items-center gap-1 text-xs bg-white border border-indigo-200 text-indigo-700 px-2 py-1 rounded-lg">
+                    <Users className="w-3 h-3" />Limit: {String(survey.settings.response_limit)} responses
+                  </span>
+                )}
+                {survey.settings.expires_at && (
+                  <span className="flex items-center gap-1 text-xs bg-white border border-orange-200 text-orange-700 px-2 py-1 rounded-lg">
+                    <Calendar className="w-3 h-3" />Expires: {new Date(String(survey.settings.expires_at)).toLocaleDateString()}
+                  </span>
+                )}
+                {survey.settings.multi_page && (
+                  <span className="flex items-center gap-1 text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded-lg">
+                    <FileText className="w-3 h-3" />Multi-page
+                  </span>
+                )}
+                {survey.settings.allow_multiple && (
+                  <span className="flex items-center gap-1 text-xs bg-white border border-emerald-200 text-emerald-700 px-2 py-1 rounded-lg">
+                    <Users className="w-3 h-3" />Multiple submissions allowed
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add question type picker */}
       <Dialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>

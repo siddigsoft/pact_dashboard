@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -497,6 +497,7 @@ export default function SurveyFill() {
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors]       = useState<Record<string, string>>({});
   const [lang, setLang]           = useState<'en' | 'ar'>('en');
+  const [currentPage, setCurrentPage] = useState(0);
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey-fill', id],
@@ -516,6 +517,21 @@ export default function SurveyFill() {
       if (error) throw error;
       return (data ?? []) as Question[];
     },
+  });
+
+  const responseLimit = survey ? Number(survey.settings?.response_limit || 0) : 0;
+  const { data: responseCount = 0 } = useQuery<number>({
+    queryKey: ['survey-fill-count', id],
+    enabled: !!id && !!survey && responseLimit > 0,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('survey_responses')
+        .select('*', { count: 'exact', head: true })
+        .eq('survey_id', id!);
+      if (error) return 0;
+      return count ?? 0;
+    },
+    staleTime: 10_000,
   });
 
   // All questions visible to this respondent (skip logic + group visibility)
@@ -586,6 +602,56 @@ export default function SurveyFill() {
     setAnswer(qid, next);
   };
 
+  // Survey settings
+  const surveySettings = (survey?.settings ?? {}) as Record<string, unknown>;
+  const multiPage      = Boolean(surveySettings.multi_page);
+  const showProgress   = surveySettings.show_progress !== false;
+  const thankYouMsg    = surveySettings.thank_you_message as string | null | undefined;
+  const thankYouMsgAr  = surveySettings.thank_you_message_ar as string | null | undefined;
+  const expiresAt      = surveySettings.expires_at ? new Date(String(surveySettings.expires_at)) : null;
+  const isFull         = responseLimit > 0 && responseCount >= responseLimit;
+  const isExpired      = expiresAt ? new Date() > expiresAt : false;
+
+  // Top-level items (moved up for pages computation)
+  const topLevelItems = questions
+    .filter(q => (q.group_id ?? null) === null)
+    .sort((a, b) => a.order_index - b.order_index);
+
+  // Multi-page computation: split at section_headers
+  const pages = useMemo(() => {
+    if (!multiPage) return [{ title: null as string | null, titleAr: null as string | null, questions: topLevelItems }];
+    const result: { title: string | null; titleAr: string | null; questions: Question[] }[] = [];
+    let current: { title: string | null; titleAr: string | null; questions: Question[] } = { title: null, titleAr: null, questions: [] };
+    for (const q of topLevelItems) {
+      if (q.type === 'section_header') {
+        if (current.questions.length > 0 || current.title) result.push(current);
+        current = { title: q.label, titleAr: q.label_ar, questions: [] };
+      } else {
+        current.questions.push(q);
+      }
+    }
+    if (current.questions.length > 0 || current.title) result.push(current);
+    return result.length > 0 ? result : [{ title: null, titleAr: null, questions: topLevelItems }];
+  }, [topLevelItems, multiPage]);
+
+  const safeCurrentPage = Math.min(currentPage, pages.length - 1);
+  const currentPageQuestions = pages[safeCurrentPage]?.questions ?? [];
+
+  const handleNextPage = () => {
+    const newErrors: Record<string, string> = {};
+    for (const q of currentPageQuestions) {
+      if (!visibleIds.has(q.id) || q.required === false || ['section_header','begin_group'].includes(q.type)) continue;
+      const val = answers[q.id];
+      if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+        newErrors[q.id] = 'This question is required';
+      }
+    }
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    setErrors({});
+    setCurrentPage(p => p + 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Count stats for progress bar
   const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type));
   const requiredVisible = visibleNonStructural.filter(q => q.required);
@@ -614,10 +680,12 @@ export default function SurveyFill() {
   );
 
   if (survey.status !== 'active') return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-center max-w-sm">
-        <ClipboardList className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-        <h2 className="text-lg font-bold text-slate-700 mb-1">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
+      <div className="text-center max-w-sm px-6">
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+          <ClipboardList className="w-8 h-8 text-slate-400" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-700 mb-2">
           {survey.status === 'draft' ? 'Survey Not Yet Open' : 'Survey Closed'}
         </h2>
         <p className="text-slate-500 text-sm">
@@ -629,17 +697,60 @@ export default function SurveyFill() {
     </div>
   );
 
-  if (submitted) return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-white">
+  if (isExpired) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-white">
       <div className="text-center max-w-sm px-6">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-          <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+        <div className="w-16 h-16 rounded-2xl bg-orange-100 flex items-center justify-center mx-auto mb-4">
+          <ClipboardList className="w-8 h-8 text-orange-400" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">Thank you!</h2>
-        <p className="text-slate-500 text-sm">Your response to <strong>"{survey.title}"</strong> has been recorded.</p>
-        <a href="/surveys" className="mt-6 inline-flex items-center gap-1.5 text-indigo-600 text-sm hover:underline">
-          <ChevronLeft className="w-3.5 h-3.5" />Back to Surveys
-        </a>
+        <h2 className="text-xl font-bold text-slate-700 mb-2">Survey Expired</h2>
+        <p className="text-slate-500 text-sm">
+          This survey closed on {expiresAt ? expiresAt.toLocaleDateString() : ''} and is no longer accepting responses.
+        </p>
+      </div>
+    </div>
+  );
+
+  if (isFull) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 to-white">
+      <div className="text-center max-w-sm px-6">
+        <div className="w-16 h-16 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+          <ClipboardList className="w-8 h-8 text-violet-400" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-700 mb-2">Survey Full</h2>
+        <p className="text-slate-500 text-sm">
+          This survey has reached its maximum number of responses and is no longer accepting new submissions.
+        </p>
+        <p className="text-xs text-slate-400 mt-3">{responseCount} / {responseLimit} responses collected</p>
+      </div>
+    </div>
+  );
+
+  if (submitted) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-indigo-50">
+      <div className="text-center max-w-sm px-6">
+        <div className="w-24 h-24 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-100">
+          <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">
+          {lang === 'ar' && thankYouMsgAr ? '' : (thankYouMsg ? '' : 'Thank you!')}
+          {lang === 'ar' ? (thankYouMsgAr ? thankYouMsgAr.split('\n')[0] : 'شكراً لك!') : (thankYouMsg ? thankYouMsg.split('\n')[0] : 'Thank you!')}
+        </h2>
+        <p className="text-slate-500 text-sm leading-relaxed">
+          {lang === 'ar'
+            ? (thankYouMsgAr
+                ? thankYouMsgAr.split('\n').slice(1).join('\n') || `تم تسجيل ردك على "${lang === 'ar' && survey.title_ar ? survey.title_ar : survey.title}".`
+                : `تم تسجيل ردك على "${survey.title_ar || survey.title}".`)
+            : (thankYouMsg
+                ? thankYouMsg.split('\n').slice(1).join('\n') || `Your response to "${survey.title}" has been recorded.`
+                : `Your response to "${survey.title}" has been recorded.`)
+          }
+        </p>
+        {currentUser && (
+          <a href="/surveys" className="mt-6 inline-flex items-center gap-1.5 text-indigo-600 text-sm hover:underline">
+            <ChevronLeft className="w-3.5 h-3.5" />Back to Surveys
+          </a>
+        )}
       </div>
     </div>
   );
@@ -964,41 +1075,45 @@ export default function SurveyFill() {
     );
   };
 
-  // Top-level items: questions with no parent group
-  const topLevelItems = questions
-    .filter(q => (q.group_id ?? null) === null)
-    .sort((a, b) => a.order_index - b.order_index);
-
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Top bar */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <ClipboardList className="w-5 h-5 text-indigo-600 shrink-0" />
+          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+            <ClipboardList className="w-3.5 h-3.5 text-white" />
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">
               {lang === 'ar' && survey.title_ar ? survey.title_ar : survey.title}
             </p>
-            {requiredVisible.length > 0 && (
+            {showProgress && requiredVisible.length > 0 && (
               <div className="flex items-center gap-2 mt-0.5">
-                <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
                 <span className="text-[10px] text-slate-400 shrink-0">{progress}%</span>
               </div>
             )}
           </div>
-          {/* Language toggle — only shown if the survey has Arabic content */}
+          {/* Page indicator for multi-page */}
+          {multiPage && pages.length > 1 && (
+            <div className="flex items-center gap-1 shrink-0">
+              {pages.map((_, i) => (
+                <span key={i} className={cn(
+                  'w-2 h-2 rounded-full transition-colors',
+                  i === safeCurrentPage ? 'bg-indigo-600' : i < safeCurrentPage ? 'bg-emerald-500' : 'bg-slate-200',
+                )} />
+              ))}
+            </div>
+          )}
+          {/* Language toggle */}
           {(survey.title_ar || survey.description_ar) && (
             <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden shrink-0">
-              <button
-                onClick={() => setLang('en')}
-                data-testid="btn-lang-en"
+              <button onClick={() => setLang('en')} data-testid="btn-lang-en"
                 className={`px-2.5 py-1 text-xs font-medium transition-colors ${lang === 'en' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
               >EN</button>
-              <button
-                onClick={() => setLang('ar')}
-                data-testid="btn-lang-ar"
+              <button onClick={() => setLang('ar')} data-testid="btn-lang-ar"
                 className={`px-2.5 py-1 text-xs font-medium transition-colors border-l border-slate-200 ${lang === 'ar' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
               >عربي</button>
             </div>
@@ -1008,37 +1123,88 @@ export default function SurveyFill() {
 
       {/* Content */}
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-5" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-        {(lang === 'ar' ? (survey.description_ar || survey.description) : survey.description) && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+
+        {/* Page title header (multi-page) */}
+        {multiPage && pages.length > 1 && pages[safeCurrentPage].title && (
+          <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+              <span className="text-sm font-bold text-indigo-600">{safeCurrentPage + 1}</span>
+            </div>
+            <div>
+              <p className="font-bold text-slate-800">
+                {lang === 'ar' && pages[safeCurrentPage].titleAr
+                  ? pages[safeCurrentPage].titleAr
+                  : pages[safeCurrentPage].title}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {lang === 'ar' ? `صفحة ${safeCurrentPage + 1} من ${pages.length}` : `Page ${safeCurrentPage + 1} of ${pages.length}`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Description — only on first page */}
+        {(safeCurrentPage === 0) && (lang === 'ar' ? (survey.description_ar || survey.description) : survey.description) && (
+          <div className="bg-white rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-white p-5">
             <p className="text-slate-700 text-sm leading-relaxed">
               {lang === 'ar' ? (survey.description_ar || survey.description) : survey.description}
             </p>
           </div>
         )}
 
-        {/* Render questions from top-level down (groups render their children) */}
-        {topLevelItems.map(q => renderQuestion(q, 0))}
+        {/* Response limit banner */}
+        {responseLimit > 0 && responseCount > 0 && (
+          <div className="flex items-center gap-2 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-4 py-2.5">
+            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${Math.min((responseCount / responseLimit) * 100, 100)}%` }} />
+            </div>
+            <span className="shrink-0">{responseCount}/{responseLimit} responses</span>
+          </div>
+        )}
 
-        {/* Submit */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        {/* Questions for current page */}
+        {currentPageQuestions.map(q => renderQuestion(q, 0))}
+
+        {/* Navigation / Submit */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
           {Object.keys(errors).length > 0 && (
-            <div className="flex items-center gap-2 mb-4 text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              Please answer all required questions before submitting.
+              {lang === 'ar' ? 'يرجى الإجابة على جميع الأسئلة المطلوبة.' : 'Please answer all required questions before continuing.'}
             </div>
           )}
-          <Button
-            onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending}
-            className="w-full gap-2"
-            data-testid="btn-submit-survey"
-          >
-            {submitMutation.isPending
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Submitting…</>
-              : <><ChevronRight className="w-4 h-4" />Submit Response</>}
-          </Button>
+
+          {multiPage && pages.length > 1 ? (
+            <div className="flex items-center gap-3">
+              {safeCurrentPage > 0 && (
+                <Button variant="outline" onClick={() => { setCurrentPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex-1 gap-2">
+                  <ChevronLeft className="w-4 h-4" />{lang === 'ar' ? 'السابق' : 'Previous'}
+                </Button>
+              )}
+              {safeCurrentPage < pages.length - 1 ? (
+                <Button onClick={handleNextPage} className="flex-1 gap-2 bg-indigo-600 hover:bg-indigo-700" data-testid="btn-next-page">
+                  {lang === 'ar' ? 'التالي' : 'Next'}<ChevronRight className="w-4 h-4" />
+                </Button>
+              ) : (
+                <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
+                  className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700" data-testid="btn-submit-survey">
+                  {submitMutation.isPending
+                    ? <><Loader2 className="w-4 h-4 animate-spin" />{lang === 'ar' ? 'جارٍ الإرسال…' : 'Submitting…'}</>
+                    : <><CheckCircle2 className="w-4 h-4" />{lang === 'ar' ? 'إرسال الردود' : 'Submit Response'}</>}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
+              className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700" data-testid="btn-submit-survey">
+              {submitMutation.isPending
+                ? <><Loader2 className="w-4 h-4 animate-spin" />{lang === 'ar' ? 'جارٍ الإرسال…' : 'Submitting…'}</>
+                : <><ChevronRight className="w-4 h-4" />{lang === 'ar' ? 'إرسال الردود' : 'Submit Response'}</>}
+            </Button>
+          )}
+
           {visibleNonStructural.length > 0 && (
-            <p className="text-center text-[11px] text-slate-400 mt-2">
+            <p className="text-center text-[11px] text-slate-400">
               {answeredRequired.length} of {visibleNonStructural.length} question{visibleNonStructural.length !== 1 ? 's' : ''} answered
             </p>
           )}
