@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -204,7 +204,7 @@ export default function SurveyDetail() {
   const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
   const [editQId, setEditQId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [expandedResponse, setExpandedResponse] = useState<string | null>(null);
+
   // Responses tab extras
   const [responsesView, setResponsesView] = useState<'list' | 'table'>('list');
   const [responseSearch, setResponseSearch] = useState('');
@@ -245,7 +245,7 @@ export default function SurveyDetail() {
     },
   });
 
-  const { data: allAnswers = [] } = useQuery<Answer[]>({
+  const { data: allAnswers = [], isLoading: allAnswersLoading } = useQuery<Answer[]>({
     queryKey: ['survey-answers', id],
     enabled: !!id && tab !== 'builder' && responses.length > 0,
     queryFn: async () => {
@@ -880,8 +880,19 @@ export default function SurveyDetail() {
 
             if (responsesView === 'table') {
               const cols = nonStructural.slice(0, 8);
+              const hiddenCount = nonStructural.length - cols.length;
               return (
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  {allAnswersLoading && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 text-xs text-indigo-600">
+                      <Loader2 className="w-3 h-3 animate-spin" />Loading answer data…
+                    </div>
+                  )}
+                  {hiddenCount > 0 && (
+                    <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 border-b border-amber-100 text-[11px] text-amber-700">
+                      <Eye className="w-3 h-3" />Showing first 8 of {nonStructural.length} columns — click any row to see all answers
+                    </div>
+                  )}
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
@@ -1365,20 +1376,25 @@ export default function SurveyDetail() {
 
         return (
           <div className="space-y-4">
-            {/* Stats bar */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                <MapPin className="w-3 h-3" />{pins.length} GPS point{pins.length !== 1 ? 's' : ''}
-              </div>
-              {gpsQuestions.length > 0 && (
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            {/* Stats bar — only show when there are GPS questions */}
+            {gpsQuestions.length > 0 && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                  <MapPin className="w-3 h-3" />{pins.length} GPS point{pins.length !== 1 ? 's' : ''}
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 flex-wrap">
                   from {gpsQuestions.length} GPS question{gpsQuestions.length !== 1 ? 's' : ''}:&nbsp;
                   {gpsQuestions.map(q => (
                     <span key={q.id} className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{q.label}</span>
                   ))}
                 </div>
-              )}
-            </div>
+                {allAnswersLoading && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-indigo-500">
+                    <Loader2 className="w-3 h-3 animate-spin" />Loading GPS data…
+                  </div>
+                )}
+              </div>
+            )}
 
             {gpsQuestions.length === 0 ? (
               <div className="bg-white rounded-xl border border-dashed border-slate-200 p-12 flex flex-col items-center text-center gap-3">
@@ -1953,80 +1969,6 @@ function QuestionCard({
   );
 }
 
-// ── ResponseRow ───────────────────────────────────────────────────────────────
-function ResponseRow({
-  r, questions, isExpanded, onToggle,
-}: {
-  r: Response; questions: Question[]; isExpanded: boolean; onToggle: () => void;
-}) {
-  const [answers, setAnswers] = useState<Answer[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  const expand = async () => {
-    onToggle();
-    if (!loaded && !isExpanded) {
-      setLoading(true);
-      const { data } = await supabase.from('survey_answers').select('*').eq('response_id', r.id);
-      setAnswers((data ?? []) as Answer[]);
-      setLoaded(true);
-      setLoading(false);
-    }
-  };
-
-  const displayName = r.respondent_name ?? r.respondent_email ?? 'Anonymous';
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <button
-        onClick={expand}
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition-colors"
-        data-testid={`btn-response-${r.id}`}
-      >
-        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-          <span className="text-xs font-bold text-indigo-700">{displayName.charAt(0).toUpperCase()}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-800">{displayName}</p>
-          <p className="text-[11px] text-slate-400">{format(new Date(r.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
-        </div>
-        <ChevronDown className={cn('w-4 h-4 text-slate-400 transition-transform shrink-0', isExpanded && 'rotate-180')} />
-      </button>
-      {isExpanded && (
-        <div className="border-t border-slate-100 p-4 space-y-3">
-          {loading ? (
-            <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" />Loading answers…</div>
-          ) : (
-            questions.filter(q => !['section_header','begin_group'].includes(q.type)).map(q => {
-              const ans = answers.find(a => a.question_id === q.id);
-              let displayValue: React.ReactNode = <span className="text-slate-300 italic">No answer</span>;
-              if (ans) {
-                if (q.type === 'image' && ans.answer_json) {
-                  displayValue = <img src={String(ans.answer_json)} className="max-h-32 rounded-lg border border-slate-200" alt="Response" />;
-                } else if (q.type === 'file' && ans.answer_json) {
-                  const meta = (() => { try { return JSON.parse(String(ans.answer_json)); } catch { return null; } })();
-                  displayValue = meta ? `${meta.name} (${(meta.size / 1024).toFixed(1)} KB)` : String(ans.answer_json);
-                } else if (q.type === 'gps' && ans.answer_text) {
-                  const parts = ans.answer_text.split(',');
-                  displayValue = parts.length >= 2 ? `Lat: ${parts[0]}, Lng: ${parts[1]}${parts[2] ? `, ±${parts[2]}m` : ''}` : ans.answer_text;
-                } else {
-                  const value = ans.answer_text ?? (Array.isArray(ans.answer_json) ? (ans.answer_json as string[]).join(', ') : ans.answer_json != null ? String(ans.answer_json) : null);
-                  if (value) displayValue = value;
-                }
-              }
-              return (
-                <div key={q.id}>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{q.label}{q.required ? ' *' : ''}</p>
-                  <p className="text-sm text-slate-700 mt-0.5">{displayValue}</p>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── SubmissionDialog ──────────────────────────────────────────────────────────
 function SubmissionDialog({
