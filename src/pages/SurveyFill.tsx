@@ -736,18 +736,18 @@ export default function SurveyFill() {
           <CheckCircle2 className="w-12 h-12 text-emerald-600" />
         </div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">
-          {lang === 'ar' && thankYouMsgAr ? '' : (thankYouMsg ? '' : 'Thank you!')}
-          {lang === 'ar' ? (thankYouMsgAr ? thankYouMsgAr.split('\n')[0] : 'شكراً لك!') : (thankYouMsg ? thankYouMsg.split('\n')[0] : 'Thank you!')}
+          {lang === 'ar'
+            ? (thankYouMsgAr ? thankYouMsgAr.split('\n')[0] : 'شكراً لك!')
+            : (thankYouMsg  ? thankYouMsg.split('\n')[0]   : 'Thank you!')}
         </h2>
         <p className="text-slate-500 text-sm leading-relaxed">
           {lang === 'ar'
-            ? (thankYouMsgAr
-                ? thankYouMsgAr.split('\n').slice(1).join('\n') || `تم تسجيل ردك على "${lang === 'ar' && survey.title_ar ? survey.title_ar : survey.title}".`
+            ? (thankYouMsgAr && thankYouMsgAr.includes('\n')
+                ? thankYouMsgAr.split('\n').slice(1).join('\n')
                 : `تم تسجيل ردك على "${survey.title_ar || survey.title}".`)
-            : (thankYouMsg
-                ? thankYouMsg.split('\n').slice(1).join('\n') || `Your response to "${survey.title}" has been recorded.`
-                : `Your response to "${survey.title}" has been recorded.`)
-          }
+            : (thankYouMsg && thankYouMsg.includes('\n')
+                ? thankYouMsg.split('\n').slice(1).join('\n')
+                : `Your response to "${survey.title}" has been recorded.`)}
         </p>
         {currentUser && (
           <a href="/surveys" className="mt-6 inline-flex items-center gap-1.5 text-indigo-600 text-sm hover:underline">
