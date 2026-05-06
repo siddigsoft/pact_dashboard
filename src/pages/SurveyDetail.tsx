@@ -2111,7 +2111,7 @@ function QuestionCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[10px] text-slate-400 capitalize">{q.type.replace(/_/g, ' ')}{q.required ? ' · Required' : ''}</p>
+            <p className="text-[10px] text-slate-400 capitalize">{q.type.replace(/_/g, ' ')}</p>
             {hasSkip && (
               <span className="flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
                 <GitBranch className="w-2.5 h-2.5" />Conditional
@@ -2120,13 +2120,34 @@ function QuestionCard({
           </div>
         </div>
         {canManage && (
-          <div className="flex items-center gap-0.5">
-            <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
-            <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
-            <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600" title="Duplicate question"><Copy className="w-3.5 h-3.5" /></button>
-            <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')} title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
-            <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+          <div className="flex items-center gap-1">
+            {/* Required / Optional quick-toggle pill */}
+            <button
+              onClick={() => { setReqDraft(!reqDraft); onUpdate({ required: !q.required }); }}
+              title={q.required ? 'Click to make optional' : 'Click to make required'}
+              data-testid={`btn-required-toggle-${q.id}`}
+              className={cn(
+                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors shrink-0',
+                q.required
+                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:text-slate-600'
+              )}
+            >
+              <span className="text-[11px] leading-none">{q.required ? '✱' : '○'}</span>
+              {q.required ? 'Required' : 'Optional'}
+            </button>
+            <div className="flex items-center gap-0.5">
+              <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
+              <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
+              <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600" title="Duplicate question"><Copy className="w-3.5 h-3.5" /></button>
+              <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')} title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
+              <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+            </div>
           </div>
+        )}
+        {/* Read-only required indicator for non-managers */}
+        {!canManage && q.required && (
+          <span className="text-[10px] font-semibold text-red-500 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 shrink-0">Required</span>
         )}
       </div>
 
@@ -2152,10 +2173,23 @@ function QuestionCard({
                 <Input dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} placeholder="نص المساعدة بالعربية…" />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id={`req-${q.id}`} checked={reqDraft} onChange={e => setReqDraft(e.target.checked)} className="rounded" />
-              <Label htmlFor={`req-${q.id}`} className="text-xs font-medium">Required</Label>
-            </div>
+            <button
+              type="button"
+              onClick={() => setReqDraft(r => !r)}
+              className={cn(
+                'flex items-center gap-2.5 w-fit px-3 py-2 rounded-xl border text-xs font-medium transition-colors',
+                reqDraft
+                  ? 'bg-red-50 border-red-200 text-red-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+              )}
+              data-testid={`btn-required-draft-${q.id}`}
+            >
+              {/* Toggle track */}
+              <span className={cn('relative inline-flex h-4 w-7 items-center rounded-full transition-colors shrink-0', reqDraft ? 'bg-red-500' : 'bg-slate-300')}>
+                <span className={cn('inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', reqDraft ? 'translate-x-3.5' : 'translate-x-0.5')} />
+              </span>
+              {reqDraft ? 'Required — respondent must answer this question' : 'Optional — respondent may skip this question'}
+            </button>
           </div>
 
           {hasOptions && (
