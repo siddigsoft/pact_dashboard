@@ -9,6 +9,7 @@ import {
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
   Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
+  FunctionSquare, Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +24,8 @@ type QuestionType =
   | 'text' | 'textarea' | 'radio' | 'checkbox'
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
-  | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group';
+  | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
+  | 'calculate' | 'begin_repeat';
 
 interface SkipLogic {
   condition_question_id: string;
@@ -57,6 +59,27 @@ interface Question {
 }
 
 type AnswerValue = string | string[] | number | null;
+
+// ── Calculated field formula evaluator ────────────────────────────────────────
+function evaluateFormula(formula: string, questions: Question[], answers: Record<string, AnswerValue>): string {
+  try {
+    // Replace ${variable_name} or ${question_id} with answer values
+    let expr = formula.replace(/\$\{([^}]+)\}/g, (_, key) => {
+      const q = questions.find(q => (q.settings?.variable_name === key) || q.id === key);
+      if (!q) return '0';
+      const val = answers[q.id];
+      if (val === null || val === undefined || val === '') return '0';
+      return String(val);
+    });
+    // Safe eval via Function (no window/document access)
+    // eslint-disable-next-line no-new-func
+    const result = new Function('"use strict"; return (' + expr + ')')();
+    if (result === null || result === undefined || isNaN(result as number)) return '';
+    return typeof result === 'number' ? (Number.isInteger(result) ? String(result) : result.toFixed(2)) : String(result);
+  } catch {
+    return '';
+  }
+}
 
 // ── Skip logic evaluation ─────────────────────────────────────────────────────
 function isVisible(q: Question, allQuestions: Question[], answers: Record<string, AnswerValue>): boolean {
@@ -502,6 +525,8 @@ export default function SurveyFill() {
   const [respondentEmail, setRespondentEmail] = useState('');
   const [hasDraft, setHasDraft]       = useState(false);
   const startTimeRef = useState(() => Date.now())[0];
+  // Repeat group rows: { [groupId]: [{ [childQId]: AnswerValue }, ...] }
+  const [repeatRows, setRepeatRows] = useState<Record<string, Array<Record<string, AnswerValue>>>>({});
 
   const draftKey = id ? `survey_draft_${id}` : null;
 
@@ -613,13 +638,30 @@ export default function SurveyFill() {
         respondent_name: currentUser?.fullName ?? (respondentName.trim() || null),
         respondent_email: currentUser?.email ?? (respondentEmail.trim() || null),
         duration_seconds: durationSeconds > 0 ? durationSeconds : null,
+        form_version: survey?.form_version ?? 1,
       });
       if (rErr) throw rErr;
 
       const jsonTypes = ['checkbox', 'rating', 'scale', 'image', 'file'];
 
+      // Flatten repeat group rows into individual answer rows
+      const repeatAnswerRows: { response_id: string; question_id: string; answer_text: string | null; answer_json: unknown }[] = [];
+      for (const [groupId, rows] of Object.entries(repeatRows)) {
+        rows.forEach((row, rowIdx) => {
+          Object.entries(row).forEach(([qid, val]) => {
+            if (val === null || val === undefined || val === '') return;
+            repeatAnswerRows.push({
+              response_id: responseId,
+              question_id: qid,
+              answer_text: `[row:${rowIdx}] ${String(val)}`,
+              answer_json: null,
+            });
+          });
+        });
+      }
+
       const answerRows = questions
-        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type))
+        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat'].includes(q.type))
         .map(q => {
           const val = answers[q.id] ?? null;
           const isJson = jsonTypes.includes(q.type);
@@ -632,8 +674,9 @@ export default function SurveyFill() {
         })
         .filter(a => a.answer_text !== null || a.answer_json !== null);
 
-      if (answerRows.length) {
-        const { error: aErr } = await supabase.from('survey_answers').insert(answerRows);
+      const allRows = [...answerRows, ...repeatAnswerRows].filter(a => a.answer_text !== null || a.answer_json !== null);
+      if (allRows.length) {
+        const { error: aErr } = await supabase.from('survey_answers').insert(allRows);
         if (aErr) throw aErr;
       }
     },
@@ -812,6 +855,93 @@ export default function SurveyFill() {
   // ── Recursive question renderer ─────────────────────────────────────────────
   const renderQuestion = (q: Question, depth = 0): React.ReactNode => {
     if (!visibleIds.has(q.id)) return null;
+
+    // Repeat group — ODK-style begin_repeat
+    if (q.type === 'begin_repeat') {
+      const children = questions
+        .filter(c => (c.group_id ?? null) === q.id)
+        .sort((a, b) => a.order_index - b.order_index);
+      if (children.length === 0) return null;
+      const rows = repeatRows[q.id] ?? [{}];
+
+      const setRowAnswer = (rowIdx: number, qid: string, val: AnswerValue) => {
+        setRepeatRows(prev => {
+          const curRows = prev[q.id] ?? [{}];
+          const newRows = curRows.map((row, i) => i === rowIdx ? { ...row, [qid]: val } : row);
+          return { ...prev, [q.id]: newRows };
+        });
+      };
+      const addRow = () => setRepeatRows(prev => ({ ...prev, [q.id]: [...(prev[q.id] ?? [{}]), {}] }));
+      const removeRow = (rowIdx: number) => setRepeatRows(prev => {
+        const curRows = prev[q.id] ?? [{}];
+        if (curRows.length <= 1) return prev;
+        return { ...prev, [q.id]: curRows.filter((_, i) => i !== rowIdx) };
+      });
+
+      return (
+        <div key={q.id} className="rounded-2xl border-2 border-violet-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-violet-50 border-b border-violet-100">
+            <RefreshCw className="w-4 h-4 text-violet-500 shrink-0" />
+            <p className="text-sm font-semibold text-violet-700 flex-1">
+              {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+            </p>
+            <span className="text-[10px] text-violet-400 bg-violet-100 px-2 py-0.5 rounded-full">
+              {rows.length} row{rows.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="divide-y divide-violet-100">
+            {rows.map((row, rowIdx) => (
+              <div key={rowIdx} className="p-4 bg-white/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide">Row {rowIdx + 1}</span>
+                  {rows.length > 1 && (
+                    <button onClick={() => removeRow(rowIdx)} className="text-[10px] text-red-400 hover:text-red-600 flex items-center gap-0.5">
+                      <X className="w-3 h-3" />Remove
+                    </button>
+                  )}
+                </div>
+                {children.map(child => {
+                  const rowVal = row[child.id] ?? null;
+                  return (
+                    <div key={child.id} className="space-y-1">
+                      <p className="text-xs font-medium text-slate-700">
+                        {lang === 'ar' && child.label_ar ? child.label_ar : child.label}
+                        {child.required && <span className="text-red-400 ml-0.5">*</span>}
+                      </p>
+                      {(child.type === 'text' || child.type === 'barcode' || child.type === 'phone' || child.type === 'email') && (
+                        <Input value={String(rowVal ?? '')} onChange={e => setRowAnswer(rowIdx, child.id, e.target.value)} className="h-8 text-sm" />
+                      )}
+                      {child.type === 'textarea' && (
+                        <Textarea value={String(rowVal ?? '')} onChange={e => setRowAnswer(rowIdx, child.id, e.target.value)} rows={2} />
+                      )}
+                      {(child.type === 'number' || child.type === 'integer') && (
+                        <Input type="number" value={String(rowVal ?? '')} onChange={e => setRowAnswer(rowIdx, child.id, e.target.value)} className="h-8 text-sm" />
+                      )}
+                      {child.type === 'date' && (
+                        <Input type="date" value={String(rowVal ?? '')} onChange={e => setRowAnswer(rowIdx, child.id, e.target.value)} className="h-8 text-sm" />
+                      )}
+                      {['radio','dropdown'].includes(child.type) && (
+                        <Select value={String(rowVal ?? '')} onValueChange={v => setRowAnswer(rowIdx, child.id, v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select…" /></SelectTrigger>
+                          <SelectContent>
+                            {(child.options ?? []).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="px-5 py-3 bg-violet-50/50 border-t border-violet-100">
+            <button onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 hover:text-violet-800 transition-colors">
+              <Plus className="w-3.5 h-3.5" />Add Another Row
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     // Group container
     if (q.type === 'begin_group') {
@@ -1101,6 +1231,22 @@ export default function SurveyFill() {
         {q.type === 'file' && (
           <FileAttachment value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
         )}
+
+        {q.type === 'calculate' && (() => {
+          const formula = String(q.settings?.formula ?? '');
+          const computed = formula ? evaluateFormula(formula, questions, answers) : '';
+          // Keep computed value in sync
+          if (computed !== '' && answers[q.id] !== computed) {
+            setTimeout(() => setAnswer(q.id, computed), 0);
+          }
+          return (
+            <div className="flex items-center gap-2 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5">
+              <FunctionSquare className="w-4 h-4 text-indigo-400 shrink-0" />
+              <span className="text-sm font-mono text-indigo-700 flex-1">{computed || <span className="text-slate-300 italic">—</span>}</span>
+              <span className="text-[10px] text-slate-400">auto-calculated</span>
+            </div>
+          );
+        })()}
 
         {q.type === 'barcode' && (
           <div className="space-y-2">

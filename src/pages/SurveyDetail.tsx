@@ -30,6 +30,7 @@ import {
   Settings, Shield, ToggleLeft, Globe, Lock,
   Sparkles, Share2, QrCode, Code2, MessageCircleMore, Filter, Timer,
   CheckCheck, CircleDot, CircleX, ClipboardList,
+  RefreshCw, FunctionSquare, PenLine, ArrowRightLeft, Activity, AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,7 +55,8 @@ type QuestionType =
   | 'text' | 'textarea' | 'radio' | 'checkbox'
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
-  | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group';
+  | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
+  | 'calculate' | 'begin_repeat';
 
 interface SkipLogic {
   condition_question_id: string;
@@ -73,6 +75,7 @@ interface Survey {
   created_at: string;
   updated_at: string;
   settings: Record<string, unknown>;
+  form_version: number;
 }
 
 interface Question {
@@ -188,7 +191,9 @@ const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
     label: 'Layout & Structure',
     types: [
       { type: 'section_header', label: 'Section Header', icon: Minus },
-      { type: 'begin_group',    label: 'Group / Repeat',  icon: Folder },
+      { type: 'begin_group',    label: 'Group',           icon: Folder },
+      { type: 'begin_repeat',   label: 'Repeat Group',    icon: RefreshCw },
+      { type: 'calculate',      label: 'Calculated Field', icon: FunctionSquare },
     ],
   },
 ];
@@ -224,6 +229,16 @@ export default function SurveyDetail() {
   const [responseSearch, setResponseSearch] = useState('');
   const [selectedSubmission, setSelectedSubmission] = useState<Response | null>(null);
   const [deleteResponseTarget, setDeleteResponseTarget] = useState<Response | null>(null);
+
+  // Cross-tabulation state
+  const [crossTabRow, setCrossTabRow] = useState<string>('');
+  const [crossTabCol, setCrossTabCol] = useState<string>('');
+
+  // Submission edit state
+  const [editTarget, setEditTarget]       = useState<Response | null>(null);
+  const [editAnswers, setEditAnswers]     = useState<Record<string, string>>({});
+  const [editNote, setEditNote]           = useState('');
+  const [editSaving, setEditSaving]       = useState(false);
 
   // Share / AI Generate / Review state
   const [shareOpen, setShareOpen]           = useState(false);
@@ -589,6 +604,48 @@ export default function SurveyDetail() {
   };
 
   // ── Analytics helpers ──────────────────────────────────────────────────────
+  const getDurationStats = () => {
+    const durations = responses.map(r => r.duration_seconds).filter((d): d is number => d != null && d > 0);
+    if (durations.length === 0) return null;
+    const sorted = [...durations].sort((a, b) => a - b);
+    const avg = Math.round(durations.reduce((s, d) => s + d, 0) / durations.length);
+    const median = sorted.length % 2 === 0
+      ? Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)
+      : sorted[Math.floor(sorted.length / 2)];
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    // Build histogram buckets
+    const buckets = [
+      { label: '<30s', from: 0, to: 30 },
+      { label: '30–60s', from: 30, to: 60 },
+      { label: '1–2m', from: 60, to: 120 },
+      { label: '2–5m', from: 120, to: 300 },
+      { label: '5–10m', from: 300, to: 600 },
+      { label: '10–15m', from: 600, to: 900 },
+      { label: '15m+', from: 900, to: Infinity },
+    ].map(b => ({ ...b, count: durations.filter(d => d >= b.from && d < b.to).length }))
+      .filter(b => b.count > 0);
+    return { avg, median, min, max, count: durations.length, buckets };
+  };
+
+  const getCrossTabData = (rowQId: string, colQId: string) => {
+    const rowQ = nonStructural.find(q => q.id === rowQId);
+    const colQ = nonStructural.find(q => q.id === colQId);
+    if (!rowQ || !colQ) return null;
+    const rowOpts = rowQ.options ?? [...new Set(allAnswers.filter(a => a.question_id === rowQId && a.answer_text).map(a => a.answer_text!))];
+    const colOpts = colQ.options ?? [...new Set(allAnswers.filter(a => a.question_id === colQId && a.answer_text).map(a => a.answer_text!))];
+    const table: Record<string, Record<string, number>> = {};
+    for (const r of rowOpts) { table[r] = {}; for (const c of colOpts) table[r][c] = 0; }
+    for (const resp of responses) {
+      const rowAns = allAnswers.find(a => a.response_id === resp.id && a.question_id === rowQId);
+      const colAns = allAnswers.find(a => a.response_id === resp.id && a.question_id === colQId);
+      const rv = rowAns?.answer_text;
+      const cv = colAns?.answer_text;
+      if (rv && cv && table[rv] && cv in table[rv]) table[rv][cv]++;
+    }
+    return { rowQ, colQ, rowOpts, colOpts, table };
+  };
+
   const getTimelineData = () => {
     if (responses.length === 0) return [];
     const counts: Record<string, number> = {};
@@ -742,7 +799,7 @@ export default function SurveyDetail() {
   );
 
   const scfg = STATUS_CFG[survey.status];
-  const nonStructural = questions.filter(q => !['section_header','begin_group'].includes(q.type));
+  const nonStructural = questions.filter(q => !['section_header','begin_group','begin_repeat'].includes(q.type));
 
   const addGroupLabel = addToGroupId
     ? questions.find(q => q.id === addToGroupId)?.label ?? 'group'
@@ -832,6 +889,32 @@ export default function SurveyDetail() {
       {/* ── BUILDER TAB ─────────────────────────────────────────────────────── */}
       {tab === 'builder' && (
         <div className="space-y-4">
+          {/* Form version banner */}
+          {survey && (
+            <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-xs font-semibold text-indigo-700">Form Version {survey.form_version ?? 1}</span>
+              </div>
+              <span className="text-[11px] text-indigo-400 flex-1">Version is stored with each response for tracking changes over time.</span>
+              {canManage && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-7 gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-100"
+                  onClick={async () => {
+                    const newVer = (survey.form_version ?? 1) + 1;
+                    const { error } = await supabase.from('surveys').update({ form_version: newVer, updated_at: new Date().toISOString() }).eq('id', id!);
+                    if (error) { toast({ title: 'Error bumping version', description: error.message, variant: 'destructive' }); return; }
+                    qc.invalidateQueries({ queryKey: ['survey', id] });
+                    toast({ title: `Bumped to Version ${newVer}`, description: 'New responses will be tagged with this version.' });
+                  }}
+                >
+                  <Plus className="w-3 h-3" />Bump Version
+                </Button>
+              )}
+            </div>
+          )}
           {canManage && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Survey Details</h3>
@@ -1169,6 +1252,24 @@ export default function SurveyDetail() {
                               <ClipboardList className="w-4 h-4" />
                             </button>
                           )}
+                          {canManage && (
+                            <button
+                              onClick={() => {
+                                const init: Record<string, string> = {};
+                                allAnswers.filter(a => a.response_id === r.id).forEach(a => {
+                                  init[a.question_id] = a.answer_text ?? (Array.isArray(a.answer_json) ? (a.answer_json as string[]).join(', ') : a.answer_json != null ? String(a.answer_json) : '');
+                                });
+                                setEditTarget(r);
+                                setEditAnswers(init);
+                                setEditNote('');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-colors"
+                              title="Edit submission"
+                              data-testid={`btn-edit-response-${r.id}`}
+                            >
+                              <PenLine className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedSubmission(r)}
                             className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
@@ -1403,6 +1504,55 @@ export default function SurveyDetail() {
             );
           })()}
 
+          {/* ── Response Time Analytics ────────────────────────────────────── */}
+          {responses.length > 0 && (() => {
+            const stats = getDurationStats();
+            if (!stats) return null;
+            const fmtSec = (s: number) => s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s/60)}m ${s%60 ? s%60+'s' : ''}`.trim() : `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+            const maxBucket = Math.max(...stats.buckets.map(b => b.count), 1);
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-sky-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Response Time</h3>
+                  <span className="text-[11px] text-slate-400 ml-auto">{stats.count} timed response{stats.count !== 1 ? 's' : ''}</span>
+                </div>
+                {/* KPI mini-cards */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: 'Average', val: fmtSec(stats.avg), color: 'text-sky-600' },
+                    { label: 'Median', val: fmtSec(stats.median), color: 'text-indigo-600' },
+                    { label: 'Fastest', val: fmtSec(stats.min), color: 'text-emerald-600' },
+                    { label: 'Slowest', val: fmtSec(stats.max), color: 'text-amber-600' },
+                  ].map(({ label, val, color }) => (
+                    <div key={label} className="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                      <p className={`text-base font-black ${color}`}>{val}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {/* Histogram */}
+                {stats.buckets.length > 0 && (
+                  <div className="space-y-1.5">
+                    {stats.buckets.map(b => (
+                      <div key={b.label} className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-400 w-14 shrink-0 text-right">{b.label}</span>
+                        <div className="flex-1 h-6 bg-slate-50 rounded-lg overflow-hidden">
+                          <div
+                            className="h-full bg-sky-400 rounded-lg flex items-center px-2 transition-all duration-700"
+                            style={{ width: `${Math.max(4, Math.round((b.count / maxBucket) * 100))}%` }}
+                          >
+                            <span className="text-[10px] font-semibold text-white">{b.count}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ── Word Cloud — text question frequency ───────────────────────── */}
           {responses.length > 0 && (() => {
             const textQs = nonStructural.filter(q => ['text','textarea'].includes(q.type));
@@ -1440,6 +1590,83 @@ export default function SurveyDetail() {
                     );
                   })}
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Cross-Tabulation ────────────────────────────────────────────── */}
+          {responses.length > 0 && (() => {
+            const choiceQs = nonStructural.filter(q => ['radio','checkbox','dropdown'].includes(q.type));
+            if (choiceQs.length < 2) return null;
+            const ctData = crossTabRow && crossTabCol && crossTabRow !== crossTabCol
+              ? getCrossTabData(crossTabRow, crossTabCol)
+              : null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-violet-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Cross-Tabulation</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-500">Row Question</p>
+                    <Select value={crossTabRow} onValueChange={setCrossTabRow}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select question…" /></SelectTrigger>
+                      <SelectContent>
+                        {choiceQs.map(q => <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-500">Column Question</p>
+                    <Select value={crossTabCol} onValueChange={setCrossTabCol}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select question…" /></SelectTrigger>
+                      <SelectContent>
+                        {choiceQs.filter(q => q.id !== crossTabRow).map(q => <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {ctData ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="px-2 py-1.5 text-left text-[10px] font-bold text-slate-400 uppercase bg-slate-50 rounded-tl-lg border border-slate-100">
+                            {ctData.rowQ.label} / {ctData.colQ.label}
+                          </th>
+                          {ctData.colOpts.map(c => (
+                            <th key={c} className="px-2 py-1.5 text-center text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-100">{c}</th>
+                          ))}
+                          <th className="px-2 py-1.5 text-center text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ctData.rowOpts.map(r => {
+                          const rowTotal = ctData.colOpts.reduce((s, c) => s + ctData.table[r][c], 0);
+                          return (
+                            <tr key={r}>
+                              <td className="px-2 py-1.5 text-[11px] font-semibold text-slate-700 bg-white border border-slate-100">{r}</td>
+                              {ctData.colOpts.map(c => {
+                                const count = ctData.table[r][c];
+                                const pct = rowTotal > 0 ? Math.round((count / rowTotal) * 100) : 0;
+                                return (
+                                  <td key={c} className="px-2 py-1.5 text-center border border-slate-100 bg-white">
+                                    <span className={cn('font-semibold', count > 0 ? 'text-violet-700' : 'text-slate-300')}>{count}</span>
+                                    {count > 0 && <span className="text-[9px] text-slate-400 ml-0.5">({pct}%)</span>}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-2 py-1.5 text-center font-bold text-slate-600 border border-slate-100 bg-slate-50">{rowTotal}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 text-center py-4">Select two different questions above to see the cross-tab.</p>
+                )}
               </div>
             );
           })()}
@@ -1690,6 +1917,36 @@ export default function SurveyDetail() {
                 )}
               </div>
             )}
+
+            {/* Coverage tracking stats */}
+            {gpsQuestions.length > 0 && pins.length > 0 && (() => {
+              // Cluster pins into approximate areas (0.1 degree ≈ 11km cells)
+              const cellSize = 0.1;
+              const cells = new Set<string>();
+              pins.forEach(p => {
+                const cellLat = Math.floor(p.lat / cellSize);
+                const cellLng = Math.floor(p.lng / cellSize);
+                cells.add(`${cellLat},${cellLng}`);
+              });
+              const uniqueRespondents = new Set(pins.map(p => p.response?.id).filter(Boolean)).size;
+              const recentPins = pins.filter(p => p.response && (Date.now() - new Date(p.response.submitted_at).getTime()) < 7 * 24 * 3600_000).length;
+              return (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-white rounded-xl border border-indigo-100 p-3 text-center">
+                    <p className="text-xl font-black text-indigo-600">{uniqueRespondents}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Respondents with GPS</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-emerald-100 p-3 text-center">
+                    <p className="text-xl font-black text-emerald-600">{cells.size}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Geographic cells (~11km)</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-amber-100 p-3 text-center">
+                    <p className="text-xl font-black text-amber-600">{recentPins}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">GPS points this week</p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {gpsQuestions.length === 0 ? (
               <div className="bg-white rounded-xl border border-dashed border-slate-200 p-12 flex flex-col items-center text-center gap-3">
@@ -2016,6 +2273,121 @@ export default function SurveyDetail() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Submission Edit Dialog ──────────────────────────────────────── */}
+      {editTarget && (
+        <Dialog open onOpenChange={() => setEditTarget(null)}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <PenLine className="w-4 h-4 text-violet-500" />Edit Submission
+                <span className="text-[11px] text-slate-400 font-normal ml-1">
+                  — {editTarget.respondent_name ?? editTarget.respondent_email ?? 'Anonymous'}
+                </span>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-1">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-700">Changes are logged to the audit trail. All edits are attributed to you with a timestamp.</p>
+              </div>
+              {nonStructural.map(q => {
+                const cur = editAnswers[q.id] ?? '';
+                const isChoice = ['radio','dropdown'].includes(q.type);
+                return (
+                  <div key={q.id} className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1">
+                      {q.label}
+                      {q.required && <span className="text-red-400">*</span>}
+                    </Label>
+                    {isChoice ? (
+                      <Select value={cur} onValueChange={v => setEditAnswers(p => ({ ...p, [q.id]: v }))}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(q.options ?? []).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : q.type === 'textarea' ? (
+                      <Textarea rows={2} value={cur} onChange={e => setEditAnswers(p => ({ ...p, [q.id]: e.target.value }))} className="text-xs" />
+                    ) : (
+                      <Input
+                        type={['number','integer'].includes(q.type) ? 'number' : q.type === 'date' ? 'date' : q.type === 'time' ? 'time' : 'text'}
+                        value={cur}
+                        onChange={e => setEditAnswers(p => ({ ...p, [q.id]: e.target.value }))}
+                        className="h-8 text-xs"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Edit note (optional)</Label>
+                <Textarea rows={2} value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="Reason for editing this submission…" className="text-xs" />
+              </div>
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <Button
+                  disabled={editSaving}
+                  onClick={async () => {
+                    setEditSaving(true);
+                    try {
+                      const responseId = editTarget.id;
+                      const jsonTypes = ['checkbox', 'rating', 'scale', 'image', 'file'];
+                      const editOps: Promise<unknown>[] = [];
+                      for (const q of nonStructural) {
+                        const newVal = editAnswers[q.id] ?? '';
+                        const existing = allAnswers.find(a => a.response_id === responseId && a.question_id === q.id);
+                        const isJson = jsonTypes.includes(q.type);
+                        // Log the change
+                        editOps.push(
+                          supabase.from('survey_answer_edits').insert({
+                            response_id: responseId,
+                            question_id: q.id,
+                            old_answer_text: existing?.answer_text ?? null,
+                            old_answer_json: existing?.answer_json ?? null,
+                            new_answer_text: isJson ? null : (newVal || null),
+                            new_answer_json: isJson ? (newVal || null) : null,
+                            edited_by: currentUser?.id ?? null,
+                            edit_note: editNote || null,
+                          })
+                        );
+                        if (existing) {
+                          editOps.push(
+                            supabase.from('survey_answers').update({
+                              answer_text: isJson ? null : (newVal || null),
+                              answer_json: isJson ? (newVal || null) : null,
+                            }).eq('id', existing.id)
+                          );
+                        } else if (newVal) {
+                          editOps.push(
+                            supabase.from('survey_answers').insert({
+                              response_id: responseId,
+                              question_id: q.id,
+                              answer_text: isJson ? null : newVal,
+                              answer_json: isJson ? newVal : null,
+                            })
+                          );
+                        }
+                      }
+                      await Promise.all(editOps);
+                      qc.invalidateQueries({ queryKey: ['survey-answers', id] });
+                      toast({ title: 'Submission updated', description: 'Changes saved and logged to audit trail.' });
+                      setEditTarget(null);
+                    } catch (e: any) {
+                      toast({ title: 'Failed to save edits', description: e.message, variant: 'destructive' });
+                    } finally {
+                      setEditSaving(false);
+                    }
+                  }}
+                  className="gap-1.5 bg-violet-600 hover:bg-violet-700"
+                >
+                  {editSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}Save Changes
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setEditTarget(null)}>Cancel</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* ── Share Dialog ─────────────────────────────────────────────────── */}
