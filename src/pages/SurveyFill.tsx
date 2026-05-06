@@ -554,13 +554,16 @@ export default function SurveyFill() {
       }
       setErrors({});
 
-      const { data: resp, error: rErr } = await supabase.from('survey_responses').insert({
+      // Generate ID client-side so anon users don't need SELECT permission after insert
+      const responseId = crypto.randomUUID();
+      const { error: rErr } = await supabase.from('survey_responses').insert({
+        id: responseId,
         survey_id: id,
         respondent_id: currentUser?.id ?? null,
         respondent_name: currentUser?.fullName ?? null,
         respondent_email: currentUser?.email ?? null,
-      }).select().single();
-      if (rErr || !resp) throw rErr ?? new Error('Failed to submit');
+      });
+      if (rErr) throw rErr;
 
       const jsonTypes = ['checkbox', 'rating', 'scale', 'image', 'file'];
 
@@ -570,7 +573,7 @@ export default function SurveyFill() {
           const val = answers[q.id] ?? null;
           const isJson = jsonTypes.includes(q.type);
           return {
-            response_id: resp.id,
+            response_id: responseId,
             question_id: q.id,
             answer_text: isJson ? null : (val as string | null),
             answer_json: isJson ? val : null,
