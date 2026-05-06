@@ -369,6 +369,7 @@ const AppRoutes = () => {
       <Route path="/email-preview" element={<EmailPreviewPage />} />
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
+      <Route path="/surveys/:id/fill" element={<SurveyFill />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
@@ -509,7 +510,6 @@ const AppRoutes = () => {
         <Route path="/crm/opportunities" element={<CRMOpportunities />} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
-        <Route path="/surveys/:id/fill" element={<SurveyFill />} />
         <Route path="/workspace" element={<WorkspaceHub />} />
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
