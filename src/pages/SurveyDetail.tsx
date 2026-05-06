@@ -2865,6 +2865,7 @@ function QuestionCard({
 
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [varNameDraft, setVarNameDraft] = useState<string>(String(q.settings?.variable_name ?? ''));
+  const [formulaDraft, setFormulaDraft] = useState<string>(String(q.settings?.formula ?? ''));
   const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
   const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
   const [skipOp, setSkipOp] = useState<SkipLogic['operator']>(existingSkip?.operator ?? 'equals');
@@ -2881,8 +2882,9 @@ function QuestionCard({
     const skipLogic: SkipLogic | undefined = skipEnabled && skipQId
       ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
       : undefined;
-    const scaleSettings = q.type === 'scale' ? { min: scaleMin, max: scaleMax } : {};
-    const gpsSettings   = q.type === 'gps'   ? { accuracy_threshold: gpsAccThreshold, capture_altitude: gpsCaptureAlt, allow_manual: gpsAllowManual } : {};
+    const scaleSettings = q.type === 'scale'     ? { min: scaleMin, max: scaleMax } : {};
+    const gpsSettings   = q.type === 'gps'       ? { accuracy_threshold: gpsAccThreshold, capture_altitude: gpsCaptureAlt, allow_manual: gpsAllowManual } : {};
+    const calcSettings  = q.type === 'calculate' ? { formula: formulaDraft.trim() } : {};
     const paddedOptsAr = hasOptions
       ? optsDraft.map((_, i) => optsArDraft[i] ?? '')
       : null;
@@ -2895,7 +2897,7 @@ function QuestionCard({
       options: hasOptions ? optsDraft.filter(Boolean) : null,
       options_ar: paddedOptsAr,
       settings: {
-        ...q.settings, ...scaleSettings, ...gpsSettings, skip_logic: skipLogic,
+        ...q.settings, ...scaleSettings, ...gpsSettings, ...calcSettings, skip_logic: skipLogic,
         ...(varNameDraft.trim() ? { variable_name: varNameDraft.trim() } : {}),
       },
     });
@@ -3128,6 +3130,52 @@ function QuestionCard({
                     <span className="text-xs font-medium text-slate-700">Allow manual entry</span>
                   </label>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {q.type === 'calculate' && (
+            <div className="border border-indigo-200 rounded-xl p-3 space-y-3 bg-indigo-50/40">
+              <p className="text-xs font-semibold text-indigo-800 flex items-center gap-1.5">
+                <FunctionSquare className="w-3.5 h-3.5" />Formula
+              </p>
+              <div className="space-y-1">
+                <Textarea
+                  value={formulaDraft}
+                  onChange={e => setFormulaDraft(e.target.value)}
+                  rows={2}
+                  placeholder="e.g.  ${age} * 2   or   ${score_a} + ${score_b}"
+                  className="font-mono text-xs"
+                />
+                <p className="text-[10px] text-indigo-600 leading-relaxed">
+                  Reference other fields by their ODK variable name: <code className="bg-indigo-100 px-1 rounded">${'{'}variable_name{'}'}</code>.
+                  Supports +, −, *, / and standard math expressions.
+                  The result is shown read-only to the respondent and stored with their submission.
+                </p>
+                {/* Live preview of referenced variables */}
+                {formulaDraft.trim() && (() => {
+                  const refs = [...formulaDraft.matchAll(/\$\{([^}]+)\}/g)].map(m => m[1]);
+                  if (!refs.length) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      <span className="text-[10px] text-indigo-400 self-center">References:</span>
+                      {refs.map((r, i) => {
+                        const found = questions.find(pq => String(pq.settings?.variable_name ?? '') === r);
+                        return (
+                          <span
+                            key={i}
+                            className={cn(
+                              'text-[10px] font-mono px-1.5 py-0.5 rounded-full border',
+                              found ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200',
+                            )}
+                          >
+                            ${r}{found ? '' : ' ⚠ not found'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
