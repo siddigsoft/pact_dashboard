@@ -2,17 +2,15 @@
 -- Run this in Supabase SQL Editor → New query → Run
 
 -- 1. Anyone can read surveys that are active
-CREATE POLICY IF NOT EXISTS "anon_read_active_surveys"
-  ON surveys
-  FOR SELECT
-  TO anon
+DROP POLICY IF EXISTS "anon_read_active_surveys" ON surveys;
+CREATE POLICY "anon_read_active_surveys"
+  ON surveys FOR SELECT TO anon
   USING (status = 'active');
 
 -- 2. Anyone can read questions belonging to active surveys
-CREATE POLICY IF NOT EXISTS "anon_read_questions_active_surveys"
-  ON survey_questions
-  FOR SELECT
-  TO anon
+DROP POLICY IF EXISTS "anon_read_questions_active_surveys" ON survey_questions;
+CREATE POLICY "anon_read_questions_active_surveys"
+  ON survey_questions FOR SELECT TO anon
   USING (
     EXISTS (
       SELECT 1 FROM surveys
@@ -22,10 +20,9 @@ CREATE POLICY IF NOT EXISTS "anon_read_questions_active_surveys"
   );
 
 -- 3. Anyone can submit a response to an active survey
-CREATE POLICY IF NOT EXISTS "anon_insert_survey_responses"
-  ON survey_responses
-  FOR INSERT
-  TO anon
+DROP POLICY IF EXISTS "anon_insert_survey_responses" ON survey_responses;
+CREATE POLICY "anon_insert_survey_responses"
+  ON survey_responses FOR INSERT TO anon
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM surveys
@@ -35,10 +32,9 @@ CREATE POLICY IF NOT EXISTS "anon_insert_survey_responses"
   );
 
 -- 4. Anyone can insert answers linked to a valid response
-CREATE POLICY IF NOT EXISTS "anon_insert_survey_answers"
-  ON survey_answers
-  FOR INSERT
-  TO anon
+DROP POLICY IF EXISTS "anon_insert_survey_answers" ON survey_answers;
+CREATE POLICY "anon_insert_survey_answers"
+  ON survey_answers FOR INSERT TO anon
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM survey_responses
