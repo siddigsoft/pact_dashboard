@@ -14,6 +14,7 @@ import {
   Users, FileText, Clock, MapPin, Image as ImageIcon, Paperclip,
   Phone, Mail, ScanLine, CalendarClock, GitBranch, Link2, Download,
   Folder, FolderOpen, ChevronRight,
+  TrendingUp, CheckCircle2, MessageSquare, Award, Target,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  AreaChart, Area, CartesianGrid,
 } from 'recharts';
 
 type SurveyStatus = 'draft' | 'active' | 'closed';
@@ -436,6 +438,61 @@ export default function SurveyDetail() {
     return nums.length ? (nums.reduce((s, n) => s + n, 0) / nums.length).toFixed(1) : null;
   };
 
+  // ── Analytics helpers ──────────────────────────────────────────────────────
+  const getTimelineData = () => {
+    if (responses.length === 0) return [];
+    const counts: Record<string, number> = {};
+    for (const r of [...responses].sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime())) {
+      const day = format(new Date(r.submitted_at), 'MMM d');
+      counts[day] = (counts[day] ?? 0) + 1;
+    }
+    return Object.entries(counts).map(([date, count]) => ({ date, count }));
+  };
+
+  const getResponseRate = (q: Question) => {
+    const answered = new Set(allAnswers.filter(a => a.question_id === q.id).map(a => a.response_id)).size;
+    const total = responses.length;
+    return { answered, total, pct: total > 0 ? Math.round((answered / total) * 100) : 0 };
+  };
+
+  const getChoiceDistribution = (q: Question) => {
+    const qAnswers = allAnswers.filter(a => a.question_id === q.id);
+    const respondentCount = new Set(qAnswers.map(a => a.response_id)).size;
+    const counts: Record<string, number> = {};
+    if (['radio', 'dropdown'].includes(q.type)) {
+      for (const a of qAnswers) if (a.answer_text) counts[a.answer_text] = (counts[a.answer_text] ?? 0) + 1;
+    } else if (q.type === 'checkbox') {
+      for (const a of qAnswers) {
+        const arr = Array.isArray(a.answer_json) ? a.answer_json as string[] : [];
+        for (const v of arr) counts[v] = (counts[v] ?? 0) + 1;
+      }
+    }
+    const allOpts = (q.options ?? []).length > 0 ? q.options! : Object.keys(counts);
+    return allOpts.map(opt => ({
+      label: opt,
+      count: counts[opt] ?? 0,
+      pct: respondentCount > 0 ? Math.round(((counts[opt] ?? 0) / respondentCount) * 100) : 0,
+    }));
+  };
+
+  const getRatingDistribution = (q: Question) => {
+    const qAnswers = allAnswers.filter(a => a.question_id === q.id);
+    const maxVal = q.type === 'rating' ? 5 : Number(q.settings?.max ?? 10);
+    const minVal = q.type === 'rating' ? 1 : Number(q.settings?.min ?? 1);
+    const counts: Record<number, number> = {};
+    for (let i = minVal; i <= maxVal; i++) counts[i] = 0;
+    for (const a of qAnswers) {
+      const v = Number(a.answer_json ?? a.answer_text);
+      if (!isNaN(v) && v >= minVal && v <= maxVal) counts[v] = (counts[v] ?? 0) + 1;
+    }
+    const maxCount = Math.max(...Object.values(counts), 1);
+    return Object.entries(counts).map(([val, count]) => ({
+      val: Number(val),
+      count,
+      barPct: Math.round((count / maxCount) * 100),
+    }));
+  };
+
   const toggleCollapsed = (gid: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -716,87 +773,304 @@ export default function SurveyDetail() {
 
       {/* ── ANALYTICS TAB ───────────────────────────────────────────────────── */}
       {tab === 'analytics' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'Responses', value: responses.length, icon: Users },
-              { label: 'Questions', value: nonStructural.length, icon: FileText },
-              { label: 'Avg completion', value: responses.length > 0 ? '100%' : '—', icon: BarChart2 },
-            ].map(s => (
-              <div key={s.label} className="bg-white rounded-xl border border-slate-200 p-4">
-                <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium uppercase tracking-wide">
-                  <s.icon className="w-3.5 h-3.5" />{s.label}
+        <div className="space-y-5">
+
+          {/* ── KPI Cards ──────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Total responses */}
+            <div className="bg-gradient-to-br from-indigo-50 via-white to-white rounded-xl border border-indigo-100 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Responses</span>
+                <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <Users className="w-3.5 h-3.5 text-indigo-600" />
                 </div>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{s.value}</p>
               </div>
-            ))}
+              <p className="text-3xl font-black text-slate-800 leading-none">{responses.length}</p>
+              <p className="text-[11px] text-slate-400">total submissions</p>
+            </div>
+
+            {/* Questions */}
+            <div className="bg-gradient-to-br from-violet-50 via-white to-white rounded-xl border border-violet-100 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-violet-400 uppercase tracking-widest">Questions</span>
+                <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                  <FileText className="w-3.5 h-3.5 text-violet-600" />
+                </div>
+              </div>
+              <p className="text-3xl font-black text-slate-800 leading-none">{nonStructural.length}</p>
+              <p className="text-[11px] text-slate-400">{nonStructural.filter(q => q.required).length} required</p>
+            </div>
+
+            {/* Completion rate */}
+            <div className="bg-gradient-to-br from-emerald-50 via-white to-white rounded-xl border border-emerald-100 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Completion</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                </div>
+              </div>
+              <p className="text-3xl font-black text-slate-800 leading-none">
+                {responses.length > 0 && nonStructural.length > 0
+                  ? Math.round((allAnswers.length / responses.length / nonStructural.length) * 100) + '%'
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-400">avg answered rate</p>
+            </div>
+
+            {/* Last response */}
+            <div className="bg-gradient-to-br from-amber-50 via-white to-white rounded-xl border border-amber-100 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Last Response</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                </div>
+              </div>
+              <p className="text-xl font-black text-slate-800 leading-none">
+                {responses.length > 0 ? format(new Date(responses[0].submitted_at), 'MMM d') : '—'}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                {responses.length > 0 ? format(new Date(responses[0].submitted_at), 'HH:mm') : 'no responses yet'}
+              </p>
+            </div>
           </div>
 
-          {nonStructural.map(q => {
-            const chartData = getChartData(q);
-            const textAnswers = getTextAnswers(q);
-            const avg = getAvgRating(q);
-            const answerCount = allAnswers.filter(a => a.question_id === q.id).length;
-            const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
-            const parentGroup = q.group_id ? questions.find(g => g.id === q.group_id) : null;
-
+          {/* ── Response Timeline ──────────────────────────────────────────── */}
+          {responses.length > 0 && (() => {
+            const timelineData = getTimelineData();
             return (
-              <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2">
-                    <QIcon className="w-4 h-4 text-indigo-500 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-800">{q.label}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
-                        {q.type.replace(/_/g, ' ')} · {answerCount} answer{answerCount !== 1 ? 's' : ''}
-                        {parentGroup && <> · <span className="text-indigo-400"><Folder className="w-2.5 h-2.5 inline" /> {parentGroup.label}</span></>}
-                      </p>
-                    </div>
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800">Response Timeline</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Submissions over time</p>
                   </div>
-                  {avg && (
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-indigo-600">{avg}</p>
-                      <p className="text-[10px] text-slate-400">{q.type === 'rating' ? 'avg / 5' : 'avg / 10'}</p>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                    <TrendingUp className="w-3 h-3" />{responses.length} total
+                  </div>
                 </div>
-
-                {chartData.length > 0 && (
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
-                      <Tooltip formatter={(v: number) => [`${v} response${v !== 1 ? 's' : ''}`, '']} />
-                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                        {chartData.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-
-                {['text','textarea','phone','email','number','integer','barcode','gps'].includes(q.type) && textAnswers.length > 0 && (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {textAnswers.map((t, i) => (
-                      <div key={i} className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">"{t}"</div>
-                    ))}
-                  </div>
-                )}
-
-                {answerCount === 0 && (
-                  <p className="text-sm text-slate-400 italic">No answers yet</p>
-                )}
+                <ResponsiveContainer width="100%" height={150}>
+                  <AreaChart data={timelineData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="responseGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.18} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={28} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px 12px', fontSize: '12px' }}
+                      formatter={(v: number) => [`${v} response${v !== 1 ? 's' : ''}`, 'Submissions']}
+                      cursor={{ stroke: '#6366f1', strokeWidth: 1, strokeDasharray: '4 4' }}
+                    />
+                    <Area dataKey="count" stroke="#6366f1" strokeWidth={2.5} fill="url(#responseGrad)" dot={{ fill: '#6366f1', r: 3.5, strokeWidth: 0 }} activeDot={{ r: 5.5, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             );
-          })}
+          })()}
 
-          {responses.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
-              <BarChart2 className="w-10 h-10 opacity-20" />
-              <p className="text-sm">Analytics will appear once there are responses</p>
+          {/* ── Question Breakdown ─────────────────────────────────────────── */}
+          {nonStructural.length === 0 ? (
+            <div className="bg-white rounded-xl border border-dashed border-slate-200 p-12 flex flex-col items-center text-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
+                <FileText className="w-6 h-6 text-slate-300" />
+              </div>
+              <p className="text-sm font-semibold text-slate-500">No questions yet</p>
+              <p className="text-xs text-slate-400">Add questions in the Builder tab to see analytics here.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Question Breakdown</h3>
+                <span className="text-[11px] text-slate-400">{nonStructural.length} question{nonStructural.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {nonStructural.map((q, qi) => {
+                const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
+                const parentGroup = q.group_id ? questions.find(g => g.id === q.group_id) : null;
+                const { answered, total, pct: ratePct } = getResponseRate(q);
+                const isChoice = ['radio', 'checkbox', 'dropdown'].includes(q.type);
+                const isRating = ['rating', 'scale'].includes(q.type);
+                const isText   = ['text','textarea','phone','email','number','integer','barcode','gps','date','time','datetime'].includes(q.type);
+                const textAnswers  = getTextAnswers(q);
+                const choiceDist   = isChoice ? getChoiceDistribution(q) : [];
+                const ratingDist   = isRating ? getRatingDistribution(q) : [];
+                const avgScore     = isRating ? getAvgRating(q) : null;
+                const maxRating    = q.type === 'rating' ? 5 : Number(q.settings?.max ?? 10);
+
+                const rateColor =
+                  ratePct >= 80 ? 'bg-emerald-500' :
+                  ratePct >= 50 ? 'bg-amber-400'   : 'bg-slate-300';
+                const rateBadge =
+                  ratePct >= 80 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' :
+                  ratePct >= 50 ? 'text-amber-700 bg-amber-50 border-amber-100'       :
+                  'text-slate-500 bg-slate-50 border-slate-200';
+
+                const TYPE_ACCENT: Record<string, string> = {
+                  radio: 'bg-indigo-100 text-indigo-600',
+                  checkbox: 'bg-violet-100 text-violet-600',
+                  dropdown: 'bg-sky-100 text-sky-600',
+                  rating: 'bg-amber-100 text-amber-600',
+                  scale: 'bg-orange-100 text-orange-600',
+                };
+                const accent = TYPE_ACCENT[q.type] ?? 'bg-slate-100 text-slate-500';
+
+                return (
+                  <div key={q.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+
+                    {/* Card header */}
+                    <div className="px-5 pt-4 pb-3 border-b border-slate-100">
+                      <div className="flex items-start gap-3">
+                        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', accent)}>
+                          <QIcon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Q{qi + 1}</span>
+                            <span className="text-[10px] text-slate-400 capitalize">{q.type.replace(/_/g, ' ')}</span>
+                            {q.required && <span className="text-[10px] text-red-500 font-semibold">Required</span>}
+                            {parentGroup && (
+                              <span className="text-[10px] text-indigo-500 flex items-center gap-0.5">
+                                <Folder className="w-2.5 h-2.5" />{parentGroup.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold text-slate-800 leading-snug">{q.label}</p>
+                        </div>
+                        {isRating && avgScore && (
+                          <div className="shrink-0 text-right">
+                            <p className="text-2xl font-black text-amber-500">{avgScore}</p>
+                            <p className="text-[10px] text-slate-400 font-medium">avg / {maxRating}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Response rate */}
+                      <div className="mt-3 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-500">
+                            <span className="font-semibold text-slate-700">{answered}</span> of <span className="font-semibold text-slate-700">{total}</span> responded
+                          </span>
+                          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full border', rateBadge)}>
+                            {total > 0 ? `${ratePct}%` : '—'}
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={cn('h-full rounded-full transition-all duration-700', rateColor)} style={{ width: `${ratePct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card body */}
+                    <div className="p-5">
+                      {answered === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-6 text-slate-400 gap-2">
+                          <MessageSquare className="w-6 h-6 opacity-25" />
+                          <span className="text-sm italic">No answers yet</span>
+                        </div>
+
+                      ) : isChoice ? (
+                        /* ── Choice: custom percentage bars ── */
+                        <div className="space-y-3">
+                          {choiceDist.map((item, ci) => (
+                            <div key={item.label} className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm text-slate-700 leading-snug flex-1 min-w-0">{item.label}</span>
+                                <div className="flex items-center gap-2.5 shrink-0">
+                                  <span className="text-[11px] text-slate-400">{item.count} resp.</span>
+                                  <span className="text-xs font-bold text-slate-700 tabular-nums w-8 text-right">{item.pct}%</span>
+                                </div>
+                              </div>
+                              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-700"
+                                  style={{ width: `${item.pct}%`, backgroundColor: CHART_COLORS[ci % CHART_COLORS.length] }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                      ) : isRating ? (
+                        /* ── Rating / Scale: distribution bars ── */
+                        <div className="space-y-2">
+                          {ratingDist.map(item => (
+                            <div key={item.val} className="flex items-center gap-3">
+                              <span className="text-[11px] font-semibold text-slate-500 shrink-0 w-14 text-right">
+                                {q.type === 'rating'
+                                  ? <span title={`${item.val} stars`}>{'★'.repeat(item.val)}<span className="text-slate-200">{'★'.repeat(maxRating - item.val)}</span></span>
+                                  : item.val}
+                              </span>
+                              <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-700" style={{ width: `${item.barPct}%` }} />
+                              </div>
+                              <span className="text-[11px] text-slate-500 w-6 shrink-0 tabular-nums">{item.count}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                      ) : isText ? (
+                        /* ── Text: scrollable response list ── */
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                          {textAnswers.length > 0 ? textAnswers.map((t, ti) => (
+                            <div key={ti} className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100 leading-relaxed">
+                              <span className="text-slate-400 mr-1 select-none">"</span>{t}<span className="text-slate-400 ml-0.5 select-none">"</span>
+                            </div>
+                          )) : (
+                            <p className="text-sm text-slate-400 italic">No text responses recorded.</p>
+                          )}
+                        </div>
+
+                      ) : (
+                        <div className="flex items-center justify-center py-4 text-slate-400 text-sm italic">
+                          {answered} response{answered !== 1 ? 's' : ''} recorded
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
+
+          {/* ── Empty state (no responses) ─────────────────────────────────── */}
+          {responses.length === 0 && (
+            <div className="bg-white rounded-xl border border-dashed border-slate-200 p-12 flex flex-col items-center text-center gap-4">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                  <BarChart2 className="w-7 h-7 text-indigo-300" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center">
+                  <Award className="w-2.5 h-2.5 text-amber-500" />
+                </div>
+              </div>
+              <div className="max-w-xs">
+                <p className="text-sm font-semibold text-slate-600">No responses yet</p>
+                <p className="text-xs text-slate-400 mt-1">Analytics will appear here once respondents start submitting. Share your survey to get started.</p>
+              </div>
+              {survey.status === 'active' && (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`/surveys/${survey.id}/fill`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" />Preview fill link
+                  </a>
+                  <button
+                    onClick={copyFillLink}
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors"
+                  >
+                    <Link2 className="w-3 h-3" />Copy link
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       )}
 
