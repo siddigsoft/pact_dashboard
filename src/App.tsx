@@ -343,7 +343,8 @@ const AuthGuard = ({ children }) => {
     !currentUser &&
     !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/') &&
-    !location.pathname.startsWith('/view/')
+    !location.pathname.startsWith('/view/') &&
+    !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill'))
   ) {
     const target = `${location.pathname}${location.search}${location.hash}`;
     const redirectTo = `/auth?redirect=${encodeURIComponent(target)}`;
