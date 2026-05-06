@@ -28,6 +28,8 @@ import {
   TrendingUp, CheckCircle2, MessageSquare, Award, Target,
   Eye, Search, Table2, Map as MapIcon, X, FileSpreadsheet,
   Settings, Shield, ToggleLeft, Globe, Lock,
+  Sparkles, Share2, QrCode, Code2, MessageCircleMore, Filter, Timer,
+  CheckCheck, CircleDot, CircleX, ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -88,12 +90,23 @@ interface Question {
   group_id: string | null;
 }
 
+interface AiQuestion {
+  type: QuestionType;
+  label: string;
+  label_ar: string | null;
+  required: boolean;
+  options: string[] | null;
+  variable_name: string;
+}
+
 interface Response {
   id: string;
   respondent_id: string | null;
   respondent_name: string | null;
   respondent_email: string | null;
   submitted_at: string;
+  review_status?: 'pending' | 'under_review' | 'approved' | 'rejected' | null;
+  duration_seconds?: number | null;
 }
 
 interface Answer {
@@ -211,6 +224,21 @@ export default function SurveyDetail() {
   const [responseSearch, setResponseSearch] = useState('');
   const [selectedSubmission, setSelectedSubmission] = useState<Response | null>(null);
   const [deleteResponseTarget, setDeleteResponseTarget] = useState<Response | null>(null);
+
+  // Share / AI Generate / Review state
+  const [shareOpen, setShareOpen]           = useState(false);
+  const [aiOpen, setAiOpen]                 = useState(false);
+  const [aiTopic, setAiTopic]               = useState('');
+  const [aiCount, setAiCount]               = useState(10);
+  const [aiGenerating, setAiGenerating]     = useState(false);
+  const [aiSuggestions, setAiSuggestions]   = useState<AiQuestion[]>([]);
+  const [aiSelected, setAiSelected]         = useState<Set<number>>(new Set());
+  const [aiLang, setAiLang]                 = useState<'en' | 'ar'>('en');
+  const [reviewTarget, setReviewTarget]     = useState<Response | null>(null);
+  const [reviewStatus, setReviewStatus]     = useState<string>('approved');
+  const [reviewComment, setReviewComment]   = useState('');
+  const [reviewFilter, setReviewFilter]     = useState<string>('all');
+  const [reviewSaving, setReviewSaving]     = useState(false);
 
   // Settings tab state
   const [settingsForm, setSettingsForm] = useState({
@@ -342,7 +370,11 @@ export default function SurveyDetail() {
   });
 
   const addQuestion = useMutation({
-    mutationFn: async ({ type, groupId }: { type: QuestionType; groupId?: string | null }) => {
+    mutationFn: async ({ type, groupId, overrides }: {
+      type: QuestionType;
+      groupId?: string | null;
+      overrides?: Partial<{ label: string; label_ar: string | null; required: boolean; options: string[] | null; settings: Record<string, unknown> }>;
+    }) => {
       const resolvedGroupId = groupId ?? null;
       const siblings = questions.filter(q => (q.group_id ?? null) === resolvedGroupId);
       const nextIndex = siblings.length > 0 ? Math.max(...siblings.map(q => q.order_index)) + 1 : questions.length;
@@ -353,11 +385,12 @@ export default function SurveyDetail() {
       const { error } = await supabase.from('survey_questions').insert({
         survey_id: id,
         type,
-        label: defaultLabel,
-        required: false,
+        label: overrides?.label ?? defaultLabel,
+        label_ar: overrides?.label_ar ?? null,
+        required: overrides?.required ?? false,
         order_index: nextIndex,
-        options: ['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null,
-        settings: defaultSettings,
+        options: overrides?.options ?? (['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null),
+        settings: { ...defaultSettings, ...(overrides?.settings ?? {}) },
         group_id: resolvedGroupId,
       });
       if (error) throw error;
@@ -738,6 +771,14 @@ export default function SurveyDetail() {
                 >
                   <Link2 className="w-3 h-3" />Copy Link
                 </button>
+                <button
+                  onClick={() => setShareOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:underline font-medium"
+                  title="Share — QR code, embed, WhatsApp"
+                  data-testid="btn-share-survey"
+                >
+                  <Share2 className="w-3 h-3" />Share
+                </button>
               </>
             )}
           </div>
@@ -821,6 +862,24 @@ export default function SurveyDetail() {
             </div>
           )}
 
+          {/* AI Generate Questions */}
+          {canManage && (
+            <div className="flex items-center gap-2 p-3 bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl border border-violet-100">
+              <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-violet-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-violet-800">AI Question Generator</p>
+                <p className="text-[10px] text-violet-500 mt-0.5">Describe your topic and let AI generate survey questions in seconds</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}
+                className="gap-1.5 text-xs border-violet-200 text-violet-700 hover:bg-violet-100 shrink-0"
+                data-testid="btn-ai-generate">
+                <Sparkles className="w-3.5 h-3.5" />Generate
+              </Button>
+            </div>
+          )}
+
           {nonStructural.length > 0 && !qLoading && (() => {
             const reqCount = nonStructural.filter(q => q.required).length;
             const condCount = nonStructural.filter(q => !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id).length;
@@ -864,6 +923,34 @@ export default function SurveyDetail() {
           {/* Toolbar */}
           {responses.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
+              {/* Review status filter chips */}
+              <div className="flex items-center gap-1 flex-wrap w-full">
+                {[
+                  { val: 'all', label: 'All', icon: ClipboardList },
+                  { val: 'pending', label: 'Pending', icon: CircleDot },
+                  { val: 'under_review', label: 'Under Review', icon: Eye },
+                  { val: 'approved', label: 'Approved', icon: CheckCheck },
+                  { val: 'rejected', label: 'Rejected', icon: CircleX },
+                ].map(({ val, label, icon: Icon }) => {
+                  const count = val === 'all' ? responses.length : responses.filter(r => (r.review_status ?? 'pending') === val).length;
+                  return (
+                    <button key={val} onClick={() => setReviewFilter(val)}
+                      className={cn('flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors',
+                        reviewFilter === val
+                          ? val === 'approved' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                            val === 'rejected' ? 'bg-red-50 border-red-200 text-red-700' :
+                            val === 'under_review' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                            val === 'pending' ? 'bg-slate-100 border-slate-300 text-slate-700' :
+                            'bg-indigo-50 border-indigo-200 text-indigo-700'
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      )}
+                    >
+                      <Icon className="w-3 h-3" />{label}
+                      <span className="ml-0.5 text-[10px] opacity-70">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
               {/* Search */}
               <div className="relative flex-1 min-w-[180px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -910,7 +997,9 @@ export default function SurveyDetail() {
                 {(() => {
                   const filtered = responses.filter(r => {
                     const q = responseSearch.toLowerCase();
-                    return !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
+                    const ms = !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
+                    const mr = reviewFilter === 'all' || (r.review_status ?? 'pending') === reviewFilter;
+                    return ms && mr;
                   });
                   return `${filtered.length} of ${responses.length}`;
                 })()}
@@ -928,7 +1017,9 @@ export default function SurveyDetail() {
           ) : (() => {
             const filtered = responses.filter(r => {
               const q = responseSearch.toLowerCase();
-              return !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
+              const ms = !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
+              const mr = reviewFilter === 'all' || (r.review_status ?? 'pending') === reviewFilter;
+              return ms && mr;
             });
 
             if (responsesView === 'table') {
@@ -1044,15 +1135,40 @@ export default function SurveyDetail() {
                             {r.respondent_id && (
                               <span className="text-[10px] bg-indigo-50 text-indigo-500 rounded-full px-2 py-0.5 shrink-0">verified</span>
                             )}
+                            {/* Review status badge */}
+                            {r.review_status && r.review_status !== 'pending' && (() => {
+                              const rCfg = {
+                                approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                                rejected: 'bg-red-50 text-red-700 border-red-200',
+                                under_review: 'bg-amber-50 text-amber-700 border-amber-200',
+                              }[r.review_status] ?? '';
+                              return <span className={`text-[10px] rounded-full px-2 py-0.5 border shrink-0 capitalize ${rCfg}`}>{r.review_status.replace('_', ' ')}</span>;
+                            })()}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             <p className="text-[11px] text-slate-400">{format(new Date(r.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
                             {r.respondent_email && (
                               <span className="text-[11px] text-slate-400 truncate">· {r.respondent_email}</span>
                             )}
+                            {r.duration_seconds != null && (
+                              <span className="text-[11px] text-slate-400 flex items-center gap-0.5">
+                                <Timer className="w-3 h-3" />
+                                {r.duration_seconds < 60 ? `${r.duration_seconds}s` : `${Math.round(r.duration_seconds / 60)}m`}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          {canManage && (
+                            <button
+                              onClick={() => { setReviewTarget(r); setReviewStatus(r.review_status ?? 'approved'); setReviewComment(''); }}
+                              className="p-1.5 rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
+                              title="Review submission"
+                              data-testid={`btn-review-response-${r.id}`}
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedSubmission(r)}
                             className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
@@ -1079,6 +1195,76 @@ export default function SurveyDetail() {
               </div>
             );
           })()}
+
+          {/* ── Review Dialog ───────────────────────────────────────────────── */}
+          {reviewTarget && (
+            <Dialog open onOpenChange={() => setReviewTarget(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-amber-500" />Review Submission
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-1">
+                  <p className="text-sm text-slate-500">
+                    Reviewing response from <strong>{reviewTarget.respondent_name ?? reviewTarget.respondent_email ?? 'Anonymous'}</strong>
+                  </p>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Decision</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { val: 'approved', label: 'Approve', cls: 'border-emerald-300 bg-emerald-50 text-emerald-700' },
+                        { val: 'rejected', label: 'Reject', cls: 'border-red-300 bg-red-50 text-red-700' },
+                        { val: 'under_review', label: 'Under Review', cls: 'border-amber-300 bg-amber-50 text-amber-700' },
+                        { val: 'pending', label: 'Reset to Pending', cls: 'border-slate-300 bg-slate-50 text-slate-700' },
+                      ].map(({ val, label, cls }) => (
+                        <button key={val} onClick={() => setReviewStatus(val)}
+                          className={cn('px-3 py-2 rounded-xl border text-xs font-medium transition-all', reviewStatus === val ? `${cls} ring-2 ring-offset-1 ring-current` : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300')}
+                        >{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Comment (optional)</Label>
+                    <Textarea
+                      value={reviewComment}
+                      onChange={e => setReviewComment(e.target.value)}
+                      placeholder="Add a review note…"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      disabled={reviewSaving}
+                      onClick={async () => {
+                        setReviewSaving(true);
+                        try {
+                          const { error } = await supabase.from('survey_responses').update({
+                            review_status: reviewStatus,
+                            review_comment: reviewComment || null,
+                            reviewed_by: currentUser?.id ?? null,
+                            reviewed_at: new Date().toISOString(),
+                          }).eq('id', reviewTarget.id);
+                          if (error) throw error;
+                          qc.invalidateQueries({ queryKey: ['survey-responses', id] });
+                          toast({ title: 'Review saved' });
+                          setReviewTarget(null);
+                        } catch (e: any) {
+                          toast({ title: 'Failed to save review', description: e.message, variant: 'destructive' });
+                        } finally {
+                          setReviewSaving(false);
+                        }
+                      }}
+                      className="gap-1.5"
+                    >
+                      {reviewSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}Save Review
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setReviewTarget(null)}>Cancel</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
 
           {/* Submission detail dialog */}
           {selectedSubmission && (
@@ -1213,6 +1399,47 @@ export default function SurveyDetail() {
                     <Area dataKey="count" stroke="#6366f1" strokeWidth={2.5} fill="url(#responseGrad)" dot={{ fill: '#6366f1', r: 3.5, strokeWidth: 0 }} activeDot={{ r: 5.5, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </div>
+            );
+          })()}
+
+          {/* ── Word Cloud — text question frequency ───────────────────────── */}
+          {responses.length > 0 && (() => {
+            const textQs = nonStructural.filter(q => ['text','textarea'].includes(q.type));
+            if (textQs.length === 0) return null;
+            const q = textQs[0];
+            const words: Record<string, number> = {};
+            allAnswers
+              .filter(a => a.question_id === q.id && a.answer_text)
+              .forEach(a => {
+                (a.answer_text ?? '').split(/\s+/).forEach(w => {
+                  const clean = w.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+                  if (clean.length > 2) words[clean] = (words[clean] ?? 0) + 1;
+                });
+              });
+            const entries = Object.entries(words).sort((a, b) => b[1] - a[1]).slice(0, 40);
+            if (entries.length < 3) return null;
+            const maxCount = entries[0][1];
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageSquare className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-sm font-semibold text-slate-800">Word Cloud</h3>
+                  <span className="text-[11px] text-slate-400 ml-auto">"{q.label}"</span>
+                </div>
+                <div className="flex flex-wrap gap-2 leading-relaxed">
+                  {entries.map(([word, count]) => {
+                    const size = 0.7 + (count / maxCount) * 1.1;
+                    const opacity = 0.4 + (count / maxCount) * 0.6;
+                    const colors = ['text-indigo-600','text-violet-600','text-sky-600','text-emerald-600','text-amber-600','text-rose-500'];
+                    const color = colors[word.charCodeAt(0) % colors.length];
+                    return (
+                      <span key={word} className={`font-medium ${color}`} style={{ fontSize: `${size}rem`, opacity }}>
+                        {word}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             );
           })()}
@@ -1791,6 +2018,229 @@ export default function SurveyDetail() {
         </div>
       )}
 
+      {/* ── Share Dialog ─────────────────────────────────────────────────── */}
+      {shareOpen && (
+        <Dialog open onOpenChange={() => setShareOpen(false)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-emerald-500" />Share Survey
+              </DialogTitle>
+            </DialogHeader>
+            {(() => {
+              const fillUrl = `${window.location.origin}/surveys/${survey.id}/fill`;
+              const embedCode = `<iframe src="${fillUrl}" width="100%" height="600" frameborder="0" style="border-radius:12px;border:1px solid #e2e8f0;"></iframe>`;
+              const waMsg = encodeURIComponent(`Please fill out this survey: ${survey.title}\n${fillUrl}`);
+              const waUrl = `https://wa.me/?text=${waMsg}`;
+              return (
+                <div className="space-y-5 py-1">
+                  {/* QR Code */}
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">QR Code</p>
+                    <div className="p-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(fillUrl)}&format=png&margin=4`}
+                        alt="Survey QR Code"
+                        width={200}
+                        height={200}
+                        className="rounded-lg"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400">Scan to open the fill form</p>
+                    <a
+                      href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(fillUrl)}&format=png&margin=6`}
+                      download={`qr-${survey.id}.png`}
+                      className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />Download QR PNG
+                    </a>
+                  </div>
+
+                  {/* Direct link */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Direct Link</p>
+                    <div className="flex items-center gap-2">
+                      <input readOnly value={fillUrl} className="flex-1 h-8 text-xs rounded-lg border border-slate-200 bg-slate-50 px-3 font-mono" />
+                      <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(fillUrl); toast({ title: 'Link copied!' }); }} className="gap-1.5 text-xs shrink-0">
+                        <Copy className="w-3 h-3" />Copy
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* URL prefill example */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">URL Prefill</p>
+                    <p className="text-[11px] text-slate-400">Pre-populate respondent name and email in the URL:</p>
+                    <input readOnly value={`${fillUrl}?name=Ahmed&email=ahmed@example.com`} className="w-full h-8 text-[11px] rounded-lg border border-slate-200 bg-slate-50 px-3 font-mono" />
+                  </div>
+
+                  {/* Embed widget */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><Code2 className="w-3 h-3" />Embed on Website</p>
+                    <textarea readOnly value={embedCode} rows={3} className="w-full text-[11px] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono resize-none" />
+                    <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(embedCode); toast({ title: 'Embed code copied!' }); }} className="gap-1.5 text-xs w-full">
+                      <Copy className="w-3 h-3" />Copy Embed Code
+                    </Button>
+                  </div>
+
+                  {/* WhatsApp */}
+                  <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors">
+                    <MessageCircleMore className="w-4 h-4" />Share on WhatsApp
+                  </a>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── AI Generate Questions Dialog ─────────────────────────────────── */}
+      {aiOpen && (
+        <Dialog open onOpenChange={() => { setAiOpen(false); setAiSuggestions([]); }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-violet-500" />AI Question Generator
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-1">
+              {aiSuggestions.length === 0 ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-500">Describe your survey topic and let AI generate questions following ODK/SurveyCTO best practices.</p>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Topic / Purpose</Label>
+                    <Textarea
+                      value={aiTopic}
+                      onChange={e => setAiTopic(e.target.value)}
+                      placeholder="e.g. Water & sanitation assessment for households in rural areas"
+                      rows={3}
+                      data-testid="input-ai-topic"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Number of questions</Label>
+                      <Select value={String(aiCount)} onValueChange={v => setAiCount(Number(v))}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[5,8,10,15,20].map(n => <SelectItem key={n} value={String(n)}>{n} questions</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Language</Label>
+                      <Select value={aiLang} onValueChange={v => setAiLang(v as 'en' | 'ar')}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="en">English</SelectItem>
+                          <SelectItem value="ar">Arabic (عربي)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button
+                    disabled={!aiTopic.trim() || aiGenerating}
+                    onClick={async () => {
+                      setAiGenerating(true);
+                      try {
+                        const res = await fetch('/api/generate-survey-questions', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error ?? 'AI generation failed');
+                        setAiSuggestions(data.questions ?? []);
+                        setAiSelected(new Set(data.questions.map((_: AiQuestion, i: number) => i)));
+                      } catch (e: any) {
+                        toast({ title: 'AI generation failed', description: e.message, variant: 'destructive' });
+                      } finally {
+                        setAiGenerating(false);
+                      }
+                    }}
+                    className="w-full gap-2 bg-violet-600 hover:bg-violet-700"
+                    data-testid="btn-ai-generate-submit"
+                  >
+                    {aiGenerating ? <><Loader2 className="w-4 h-4 animate-spin" />Generating…</> : <><Sparkles className="w-4 h-4" />Generate Questions</>}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-700">{aiSuggestions.length} questions generated — select which to add:</p>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setAiSelected(new Set(aiSuggestions.map((_, i) => i)))} className="text-[11px] text-indigo-600 hover:underline">All</button>
+                      <button onClick={() => setAiSelected(new Set())} className="text-[11px] text-slate-400 hover:underline">None</button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {aiSuggestions.map((q, i) => {
+                      const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
+                      const selected = aiSelected.has(i);
+                      return (
+                        <button key={i} onClick={() => setAiSelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+                          className={cn('w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all', selected ? 'border-violet-300 bg-violet-50' : 'border-slate-200 bg-white hover:border-slate-300')}>
+                          <div className={cn('w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5', selected ? 'border-violet-500 bg-violet-500' : 'border-slate-300')}>
+                            {selected && <span className="text-white text-[10px] font-bold">✓</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <QIcon className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                              <span className="text-[10px] font-semibold text-violet-600 capitalize">{q.type.replace(/_/g,' ')}</span>
+                              {q.variable_name && <code className="text-[10px] font-mono bg-slate-100 text-indigo-600 px-1.5 rounded-full">${q.variable_name}</code>}
+                              {q.required && <span className="text-[10px] text-red-500 font-semibold">Required</span>}
+                            </div>
+                            <p className="text-sm text-slate-700 font-medium">{q.label}</p>
+                            {q.label_ar && <p className="text-[11px] text-slate-400 mt-0.5" dir="rtl">{q.label_ar}</p>}
+                            {q.options && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {q.options.slice(0, 4).map(o => <span key={o} className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{o}</span>)}
+                                {q.options.length > 4 && <span className="text-[10px] text-slate-400">+{q.options.length - 4} more</span>}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <Button
+                      disabled={aiSelected.size === 0 || addQuestion.isPending}
+                      onClick={async () => {
+                        const toAdd = [...aiSelected].sort().map(i => aiSuggestions[i]);
+                        for (const q of toAdd) {
+                          await addQuestion.mutateAsync({
+                            type: q.type as QuestionType,
+                            groupId: null,
+                            overrides: {
+                              label: q.label,
+                              label_ar: q.label_ar ?? null,
+                              required: q.required,
+                              options: q.options,
+                              settings: q.variable_name ? { variable_name: q.variable_name } : {},
+                            },
+                          });
+                        }
+                        setAiOpen(false);
+                        setAiSuggestions([]);
+                        setAiTopic('');
+                        toast({ title: `Added ${toAdd.length} questions from AI` });
+                      }}
+                      className="gap-1.5 bg-violet-600 hover:bg-violet-700"
+                    >
+                      <Plus className="w-3.5 h-3.5" />Add {aiSelected.size} Question{aiSelected.size !== 1 ? 's' : ''}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setAiSuggestions([])}>← Back</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setAiOpen(false); setAiSuggestions([]); }}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Add question type picker */}
       <Dialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>
         <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
@@ -2042,6 +2492,7 @@ function QuestionCard({
   const [gpsAllowManual, setGpsAllowManual]   = useState(q.settings?.allow_manual !== false);
 
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
+  const [varNameDraft, setVarNameDraft] = useState<string>(String(q.settings?.variable_name ?? ''));
   const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
   const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
   const [skipOp, setSkipOp] = useState<SkipLogic['operator']>(existingSkip?.operator ?? 'equals');
@@ -2071,7 +2522,10 @@ function QuestionCard({
       required: reqDraft,
       options: hasOptions ? optsDraft.filter(Boolean) : null,
       options_ar: paddedOptsAr,
-      settings: { ...q.settings, ...scaleSettings, ...gpsSettings, skip_logic: skipLogic },
+      settings: {
+        ...q.settings, ...scaleSettings, ...gpsSettings, skip_logic: skipLogic,
+        ...(varNameDraft.trim() ? { variable_name: varNameDraft.trim() } : {}),
+      },
     });
     onEdit();
   };
@@ -2112,6 +2566,9 @@ function QuestionCard({
           <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[10px] text-slate-400 capitalize">{q.type.replace(/_/g, ' ')}</p>
+            {q.settings?.variable_name && (
+              <code className="text-[10px] font-mono bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded-full">${String(q.settings.variable_name)}</code>
+            )}
             {hasSkip && (
               <span className="flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
                 <GitBranch className="w-2.5 h-2.5" />Conditional
@@ -2190,6 +2647,23 @@ function QuestionCard({
               </span>
               {reqDraft ? 'Required — respondent must answer this question' : 'Optional — respondent may skip this question'}
             </button>
+
+            {/* ODK / XLSForm variable name */}
+            <div className="space-y-1 pt-1">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Code2 className="w-3 h-3 text-slate-400" />
+                ODK Variable Name
+                <span className="text-slate-400 font-normal">(e.g. respondent_age, has_electricity)</span>
+              </Label>
+              <Input
+                value={varNameDraft}
+                onChange={e => setVarNameDraft(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+/, '').replace(/_+$/, ''))}
+                placeholder="snake_case_name"
+                className="font-mono text-xs h-8"
+                data-testid={`input-varname-${q.id}`}
+              />
+              <p className="text-[10px] text-slate-400">Used in exports, skip logic, and ODK/XLSForm compatibility. Letters, numbers, underscores only.</p>
+            </div>
           </div>
 
           {hasOptions && (

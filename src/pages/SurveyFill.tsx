@@ -8,7 +8,7 @@ import {
   Loader2, CheckCircle2, ClipboardList, Star, ChevronLeft, ChevronRight,
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
-  Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X,
+  Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -500,6 +500,53 @@ export default function SurveyFill() {
   const [currentPage, setCurrentPage] = useState(0);
   const [respondentName, setRespondentName]   = useState('');
   const [respondentEmail, setRespondentEmail] = useState('');
+  const [hasDraft, setHasDraft]       = useState(false);
+  const startTimeRef = useState(() => Date.now())[0];
+
+  const draftKey = id ? `survey_draft_${id}` : null;
+
+  // URL prefill — ?name=Ahmed&email=ahmed@example.com
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nameParam  = params.get('name')  || params.get('respondent_name');
+    const emailParam = params.get('email') || params.get('respondent_email');
+    if (nameParam)  setRespondentName(nameParam);
+    if (emailParam) setRespondentEmail(emailParam);
+  }, []);
+
+  // Restore saved draft on mount
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft?.answers && Object.keys(draft.answers).length > 0) setHasDraft(true);
+    } catch { /* ignore */ }
+  }, [draftKey]);
+
+  // Auto-save draft every time answers change
+  useEffect(() => {
+    if (!draftKey || Object.keys(answers).length === 0) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ answers, savedAt: Date.now() }));
+    } catch { /* ignore quota errors */ }
+  }, [answers, draftKey]);
+
+  const loadDraft = () => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft?.answers) { setAnswers(draft.answers); setHasDraft(false); }
+    } catch { /* ignore */ }
+  };
+
+  const clearDraft = () => {
+    if (draftKey) try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    setHasDraft(false);
+  };
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey-fill', id],
@@ -558,12 +605,14 @@ export default function SurveyFill() {
 
       // Generate ID client-side so anon users don't need SELECT permission after insert
       const responseId = crypto.randomUUID();
+      const durationSeconds = Math.round((Date.now() - startTimeRef) / 1000);
       const { error: rErr } = await supabase.from('survey_responses').insert({
         id: responseId,
         survey_id: id,
         respondent_id: currentUser?.id ?? null,
         respondent_name: currentUser?.fullName ?? (respondentName.trim() || null),
         respondent_email: currentUser?.email ?? (respondentEmail.trim() || null),
+        duration_seconds: durationSeconds > 0 ? durationSeconds : null,
       });
       if (rErr) throw rErr;
 
@@ -588,7 +637,7 @@ export default function SurveyFill() {
         if (aErr) throw aErr;
       }
     },
-    onSuccess: () => setSubmitted(true),
+    onSuccess: () => { setSubmitted(true); clearDraft(); },
     onError: (e: Error) => {
       if (e.message !== 'Please answer all required questions') {
         toast({ title: 'Submission failed', description: e.message, variant: 'destructive' });
@@ -1154,6 +1203,27 @@ export default function SurveyFill() {
             <p className="text-slate-700 text-sm leading-relaxed">
               {lang === 'ar' ? (survey.description_ar || survey.description) : survey.description}
             </p>
+          </div>
+        )}
+
+        {/* Draft restore banner */}
+        {hasDraft && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+              <Save className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-800">You have a saved draft</p>
+              <p className="text-[11px] text-amber-600">You started filling this survey before — restore your progress?</p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={loadDraft} className="text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
+                Restore
+              </button>
+              <button onClick={clearDraft} className="text-xs text-amber-500 hover:text-amber-700 px-2 py-1.5 rounded-lg transition-colors">
+                Discard
+              </button>
+            </div>
           </div>
         )}
 

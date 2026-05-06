@@ -439,6 +439,64 @@ function geminiOcrPlugin() {
           }
         });
       });
+
+      // ── /api/generate-survey-questions — AI-powered question generation ──
+      server.middlewares.use('/api/generate-survey-questions', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method !== 'POST') return next();
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const { topic = '', count = 10, lang = 'en' } = JSON.parse(Buffer.concat(chunks).toString());
+            const prompt = `You are an expert humanitarian survey designer (ODK / SurveyCTO standard). Generate exactly ${count} survey questions about: "${topic}".
+Return ONLY a valid JSON array with no markdown, no explanation.
+Each item: { "type": string, "label": string, "label_ar": string|null, "required": boolean, "options": string[]|null, "variable_name": string }
+Allowed types: text, textarea, radio, checkbox, dropdown, rating, scale, number, integer, date, gps, yesno, phone, email
+variable_name: short snake_case identifier (e.g. respondent_age, has_electricity) — unique per question.
+options: only for radio/checkbox/dropdown, null otherwise.
+label_ar: Arabic translation of the label (if you can) otherwise null.
+Use varied types and make questions clear, specific, and relevant to the topic.
+${lang === 'ar' ? 'Write label in Arabic as the primary label, label_ar can be English translation.' : ''}`;
+            let text = '';
+            try {
+              const { GoogleGenAI } = await import('@google/genai');
+              const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || '' });
+              let tried = false;
+              for (const model of GEMINI_MODELS) {
+                if (isModelUnavailable(unavailableModels, model)) continue;
+                try {
+                  const response = await ai.models.generateContent({
+                    model,
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                  });
+                  text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+                  tried = true;
+                  break;
+                } catch (e: any) {
+                  const msg = e.message || '';
+                  if (msg.includes('404') || msg.includes('GenerateRequestsPerDay')) {
+                    markModelUnavailable(unavailableModels, model);
+                  } else throw e;
+                }
+              }
+              if (!tried) throw new Error('Gemini exhausted');
+            } catch {
+              const r = await callGroq([{ role: 'user', content: prompt }]);
+              text = r.text.replace(/```json\n?|```\n?/g, '').trim();
+            }
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) throw new Error('No JSON array in AI response');
+            const questions = JSON.parse(jsonMatch[0]);
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ questions }));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: String(err?.message ?? err) }));
+          }
+        });
+      });
     },
   };
 }
