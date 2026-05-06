@@ -6,6 +6,17 @@ import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+// Fix Leaflet default icon paths broken by Vite bundling
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronUp, ChevronDown, ExternalLink,
   BarChart2, Edit3, Save, Copy,
@@ -15,6 +26,7 @@ import {
   Phone, Mail, ScanLine, CalendarClock, GitBranch, Link2, Download,
   Folder, FolderOpen, ChevronRight,
   TrendingUp, CheckCircle2, MessageSquare, Award, Target,
+  Eye, Search, Table2, Map as MapIcon, X, FileSpreadsheet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -182,7 +194,7 @@ export default function SurveyDetail() {
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
   const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
 
-  const [tab, setTab] = useState<'builder' | 'responses' | 'analytics'>('builder');
+  const [tab, setTab] = useState<'builder' | 'responses' | 'analytics' | 'map'>('builder');
   const [editTitle, setEditTitle]     = useState('');
   const [editTitleAr, setEditTitleAr] = useState('');
   const [editDesc, setEditDesc]       = useState('');
@@ -193,6 +205,11 @@ export default function SurveyDetail() {
   const [editQId, setEditQId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [expandedResponse, setExpandedResponse] = useState<string | null>(null);
+  // Responses tab extras
+  const [responsesView, setResponsesView] = useState<'list' | 'table'>('list');
+  const [responseSearch, setResponseSearch] = useState('');
+  const [selectedSubmission, setSelectedSubmission] = useState<Response | null>(null);
+  const [deleteResponseTarget, setDeleteResponseTarget] = useState<Response | null>(null);
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey', id],
@@ -230,7 +247,7 @@ export default function SurveyDetail() {
 
   const { data: allAnswers = [] } = useQuery<Answer[]>({
     queryKey: ['survey-answers', id],
-    enabled: !!id && tab === 'analytics' && responses.length > 0,
+    enabled: !!id && tab !== 'builder' && responses.length > 0,
     queryFn: async () => {
       const rIds = responses.map(r => r.id);
       if (!rIds.length) return [];
@@ -359,6 +376,22 @@ export default function SurveyDetail() {
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
+  const deleteResponse = useMutation({
+    mutationFn: async (rid: string) => {
+      await supabase.from('survey_answers').delete().eq('response_id', rid);
+      const { error } = await supabase.from('survey_responses').delete().eq('id', rid);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['survey-responses', id] });
+      qc.invalidateQueries({ queryKey: ['survey-answers', id] });
+      setSelectedSubmission(null);
+      setDeleteResponseTarget(null);
+      toast({ title: 'Submission deleted' });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
   const copyFillLink = () => {
     const url = `${window.location.origin}/surveys/${id}/fill`;
     navigator.clipboard.writeText(url).then(() => {
@@ -393,6 +426,38 @@ export default function SurveyDetail() {
     const a = document.createElement('a');
     a.href = url; a.download = `${survey?.title ?? 'survey'}_responses.csv`; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = async () => {
+    if (!responses.length) return;
+    const rIds = responses.map(r => r.id);
+    const { data: ans } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
+    const cols = questions.filter(q => !['section_header','begin_group'].includes(q.type));
+    const header = ['Respondent Name','Respondent Email','Submitted At',...cols.map(q => q.label)];
+    const rows = responses.map(r => {
+      const ra = (ans ?? []).filter(a => a.response_id === r.id);
+      const cells = cols.map(q => {
+        const a = ra.find(x => x.question_id === q.id);
+        if (!a) return '';
+        if (Array.isArray(a.answer_json)) return (a.answer_json as string[]).join('; ');
+        if (a.answer_text) return a.answer_text;
+        if (a.answer_json !== null && a.answer_json !== undefined) return String(a.answer_json);
+        return '';
+      });
+      return [r.respondent_name ?? '', r.respondent_email ?? '', format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm:ss'), ...cells];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Responses');
+    XLSX.writeFile(wb, `${survey?.title ?? 'survey'}_responses.xlsx`);
+  };
+
+  const getAnswerDisplay = (q: Question, ans?: Answer): string => {
+    if (!ans) return '';
+    if (Array.isArray(ans.answer_json)) return (ans.answer_json as string[]).join(', ');
+    if (ans.answer_text) return ans.answer_text;
+    if (ans.answer_json !== null && ans.answer_json !== undefined) return String(ans.answer_json);
+    return '';
   };
 
   const getChartData = (q: Question) => {
@@ -644,18 +709,19 @@ export default function SurveyDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200 pb-0">
+      <div className="flex items-center gap-1 border-b border-slate-200 pb-0 overflow-x-auto">
         {([
           { id: 'builder',   label: 'Builder',   icon: Edit3,     badge: nonStructural.length },
           { id: 'responses', label: 'Responses', icon: Users,     badge: responses.length },
           { id: 'analytics', label: 'Analytics', icon: BarChart2, badge: 0 },
+          { id: 'map',       label: 'Map',        icon: MapIcon,   badge: 0 },
         ] as const).map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             data-testid={`tab-${t.id}`}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
               tab === t.id
                 ? 'border-indigo-600 text-indigo-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700',
@@ -742,14 +808,63 @@ export default function SurveyDetail() {
       {/* ── RESPONSES TAB ───────────────────────────────────────────────────── */}
       {tab === 'responses' && (
         <div className="space-y-3">
+          {/* Toolbar */}
           {responses.length > 0 && (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">{responses.length} response{responses.length !== 1 ? 's' : ''}</p>
-              <Button size="sm" variant="outline" onClick={exportCSV} className="gap-1.5 text-xs" data-testid="btn-export-csv">
-                <Download className="w-3.5 h-3.5" />Export CSV
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search respondents…"
+                  value={responseSearch}
+                  onChange={e => setResponseSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 h-8 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  data-testid="input-response-search"
+                />
+                {responseSearch && (
+                  <button onClick={() => setResponseSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              {/* View toggle */}
+              <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shrink-0">
+                <button
+                  onClick={() => setResponsesView('list')}
+                  className={cn('px-2.5 py-1.5 text-xs flex items-center gap-1 transition-colors', responsesView === 'list' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50')}
+                  data-testid="btn-view-list"
+                >
+                  <List className="w-3.5 h-3.5" />List
+                </button>
+                <button
+                  onClick={() => setResponsesView('table')}
+                  className={cn('px-2.5 py-1.5 text-xs flex items-center gap-1 transition-colors border-l border-slate-200', responsesView === 'table' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50')}
+                  data-testid="btn-view-table"
+                >
+                  <Table2 className="w-3.5 h-3.5" />Table
+                </button>
+              </div>
+              {/* Export */}
+              <Button size="sm" variant="outline" onClick={exportCSV} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-csv">
+                <Download className="w-3.5 h-3.5" />CSV
               </Button>
+              <Button size="sm" variant="outline" onClick={exportExcel} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-excel">
+                <FileSpreadsheet className="w-3.5 h-3.5" />Excel
+              </Button>
+              {/* Count */}
+              <span className="text-[11px] text-slate-400 ml-auto shrink-0">
+                {(() => {
+                  const filtered = responses.filter(r => {
+                    const q = responseSearch.toLowerCase();
+                    return !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
+                  });
+                  return `${filtered.length} of ${responses.length}`;
+                })()}
+              </span>
             </div>
           )}
+
           {rLoading ? (
             <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" />Loading…</div>
           ) : responses.length === 0 ? (
@@ -757,16 +872,168 @@ export default function SurveyDetail() {
               <Users className="w-10 h-10 opacity-20" />
               <p className="text-sm">No responses yet</p>
             </div>
-          ) : (
-            responses.map(r => (
-              <ResponseRow
-                key={r.id}
-                r={r}
-                questions={questions}
-                isExpanded={expandedResponse === r.id}
-                onToggle={() => setExpandedResponse(expandedResponse === r.id ? null : r.id)}
-              />
-            ))
+          ) : (() => {
+            const filtered = responses.filter(r => {
+              const q = responseSearch.toLowerCase();
+              return !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
+            });
+
+            if (responsesView === 'table') {
+              const cols = nonStructural.slice(0, 8);
+              return (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap sticky left-0 bg-slate-50 z-10 min-w-[140px]">Respondent</th>
+                          <th className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap min-w-[130px]">Submitted</th>
+                          {cols.map(q => (
+                            <th key={q.id} className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap min-w-[140px] max-w-[200px]">
+                              <span className="truncate block max-w-[180px]" title={q.label}>{q.label}</span>
+                            </th>
+                          ))}
+                          <th className="px-3 py-2.5 w-16"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((r, ri) => (
+                          <tr key={r.id} className={cn('border-b border-slate-100 hover:bg-indigo-50/30 cursor-pointer transition-colors', ri % 2 === 1 && 'bg-slate-50/50')}
+                            onClick={() => setSelectedSubmission(r)}
+                            data-testid={`row-response-${r.id}`}
+                          >
+                            <td className="px-3 py-2.5 sticky left-0 bg-inherit z-10">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                  <span className="text-[10px] font-bold text-indigo-700">
+                                    {(r.respondent_name ?? r.respondent_email ?? 'A').charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="truncate max-w-[100px] text-slate-700 font-medium" title={r.respondent_name ?? r.respondent_email ?? 'Anonymous'}>
+                                  {r.respondent_name ?? r.respondent_email ?? 'Anonymous'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{format(new Date(r.submitted_at), 'dd MMM yy, HH:mm')}</td>
+                            {cols.map(q => {
+                              const ans = allAnswers.find(a => a.response_id === r.id && a.question_id === q.id);
+                              const val = getAnswerDisplay(q, ans);
+                              return (
+                                <td key={q.id} className="px-3 py-2.5 text-slate-600 max-w-[200px]">
+                                  <span className="truncate block max-w-[180px]" title={val}>{val || <span className="text-slate-300 italic">—</span>}</span>
+                                </td>
+                              );
+                            })}
+                            <td className="px-3 py-2.5 text-right">
+                              <div className="flex items-center gap-1 justify-end">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setSelectedSubmission(r); }}
+                                  className="p-1 rounded hover:bg-indigo-100 text-slate-400 hover:text-indigo-600"
+                                  title="View submission"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                                {canManage && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setDeleteResponseTarget(r); }}
+                                    className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                    title="Delete submission"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {filtered.length === 0 && (
+                      <div className="py-12 text-center text-slate-400 text-sm">No results for "{responseSearch}"</div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // List view
+            return (
+              <div className="space-y-2">
+                {filtered.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-sm">No results for "{responseSearch}"</div>
+                ) : filtered.map(r => {
+                  const displayName = r.respondent_name ?? r.respondent_email ?? 'Anonymous';
+                  return (
+                    <div key={r.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="flex items-center gap-3 p-4">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-bold text-indigo-700">{displayName.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800">{displayName}</p>
+                          <p className="text-[11px] text-slate-400">{format(new Date(r.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => setSelectedSubmission(r)}
+                            className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
+                            title="View submission"
+                            data-testid={`btn-view-response-${r.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {canManage && (
+                            <button
+                              onClick={() => setDeleteResponseTarget(r)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                              title="Delete submission"
+                              data-testid={`btn-delete-response-${r.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Submission detail dialog */}
+          {selectedSubmission && (
+            <SubmissionDialog
+              response={selectedSubmission}
+              questions={nonStructural}
+              answers={allAnswers.filter(a => a.response_id === selectedSubmission.id)}
+              canManage={canManage}
+              onDelete={() => setDeleteResponseTarget(selectedSubmission)}
+              onClose={() => setSelectedSubmission(null)}
+            />
+          )}
+
+          {/* Delete confirm dialog */}
+          {deleteResponseTarget && (
+            <Dialog open onOpenChange={() => setDeleteResponseTarget(null)}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Delete submission?</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-slate-500">
+                  This will permanently delete the submission from <strong>{deleteResponseTarget.respondent_name ?? deleteResponseTarget.respondent_email ?? 'Anonymous'}</strong> and all its answers. This cannot be undone.
+                </p>
+                <div className="flex items-center gap-2 pt-2">
+                  <Button variant="destructive" size="sm" disabled={deleteResponse.isPending}
+                    onClick={() => deleteResponse.mutate(deleteResponseTarget.id)}
+                  >
+                    {deleteResponse.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}
+                    Delete
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteResponseTarget(null)}>Cancel</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
       )}
@@ -1073,6 +1340,130 @@ export default function SurveyDetail() {
 
         </div>
       )}
+
+      {/* ── MAP TAB ─────────────────────────────────────────────────────────── */}
+      {tab === 'map' && (() => {
+        const gpsQuestions = nonStructural.filter(q => q.type === 'gps');
+        const gpsAnswers = allAnswers.filter(a => {
+          const q = nonStructural.find(q => q.id === a.question_id);
+          return q?.type === 'gps' && a.answer_text;
+        });
+        const pins = gpsAnswers.flatMap(a => {
+          const parts = (a.answer_text ?? '').split(',');
+          if (parts.length < 2) return [];
+          const lat = parseFloat(parts[0]);
+          const lng = parseFloat(parts[1]);
+          const accuracy = parts[2] ? parseFloat(parts[2]) : null;
+          if (isNaN(lat) || isNaN(lng)) return [];
+          const response = responses.find(r => r.id === a.response_id);
+          const question = nonStructural.find(q => q.id === a.question_id);
+          return [{ lat, lng, accuracy, response, question, answerId: a.id }];
+        });
+        const center: [number, number] = pins.length > 0
+          ? [pins.reduce((s, p) => s + p.lat, 0) / pins.length, pins.reduce((s, p) => s + p.lng, 0) / pins.length]
+          : [15.5, 32.5]; // default: Sudan
+
+        return (
+          <div className="space-y-4">
+            {/* Stats bar */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                <MapPin className="w-3 h-3" />{pins.length} GPS point{pins.length !== 1 ? 's' : ''}
+              </div>
+              {gpsQuestions.length > 0 && (
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  from {gpsQuestions.length} GPS question{gpsQuestions.length !== 1 ? 's' : ''}:&nbsp;
+                  {gpsQuestions.map(q => (
+                    <span key={q.id} className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{q.label}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {gpsQuestions.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-slate-200 p-12 flex flex-col items-center text-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
+                  <MapIcon className="w-6 h-6 text-slate-300" />
+                </div>
+                <p className="text-sm font-semibold text-slate-500">No GPS questions</p>
+                <p className="text-xs text-slate-400">Add a GPS question in the Builder tab to see responses plotted on a map.</p>
+              </div>
+            ) : pins.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-slate-200 p-12 flex flex-col items-center text-center gap-3">
+                <MapPin className="w-8 h-8 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-500">No GPS data yet</p>
+                <p className="text-xs text-slate-400">GPS coordinates will appear here once respondents submit their location.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ height: '500px' }}>
+                <MapContainer center={center} zoom={7} style={{ height: '100%', width: '100%' }} className="z-0">
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  />
+                  {pins.map((pin, pi) => {
+                    const displayName = pin.response?.respondent_name ?? pin.response?.respondent_email ?? 'Anonymous';
+                    return (
+                      <Marker key={`${pin.answerId}-${pi}`} position={[pin.lat, pin.lng]}>
+                        <Popup maxWidth={240}>
+                          <div className="space-y-1.5 py-1">
+                            <p className="font-semibold text-sm text-slate-800">{displayName}</p>
+                            {pin.question && <p className="text-xs text-indigo-600">{pin.question.label}</p>}
+                            <p className="text-xs text-slate-500">
+                              {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+                              {pin.accuracy !== null && ` ±${pin.accuracy.toFixed(0)}m`}
+                            </p>
+                            {pin.response && (
+                              <p className="text-xs text-slate-400">
+                                {format(new Date(pin.response.submitted_at), 'dd MMM yyyy, HH:mm')}
+                              </p>
+                            )}
+                            {pin.response && (
+                              <button
+                                onClick={() => setSelectedSubmission(pin.response!)}
+                                className="text-xs text-indigo-600 hover:underline flex items-center gap-1 mt-1"
+                              >
+                                <Eye className="w-3 h-3" />View full submission
+                              </button>
+                            )}
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
+                </MapContainer>
+              </div>
+            )}
+
+            {/* Submission dialog from map popup click */}
+            {selectedSubmission && (
+              <SubmissionDialog
+                response={selectedSubmission}
+                questions={nonStructural}
+                answers={allAnswers.filter(a => a.response_id === selectedSubmission.id)}
+                canManage={canManage}
+                onDelete={() => setDeleteResponseTarget(selectedSubmission)}
+                onClose={() => setSelectedSubmission(null)}
+              />
+            )}
+            {deleteResponseTarget && (
+              <Dialog open onOpenChange={() => setDeleteResponseTarget(null)}>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader><DialogTitle>Delete submission?</DialogTitle></DialogHeader>
+                  <p className="text-sm text-slate-500">Permanently delete this submission and all its answers.</p>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button variant="destructive" size="sm" disabled={deleteResponse.isPending}
+                      onClick={() => deleteResponse.mutate(deleteResponseTarget.id)}>
+                      {deleteResponse.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}Delete
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteResponseTarget(null)}>Cancel</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Add question type picker */}
       <Dialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>
@@ -1634,5 +2025,188 @@ function ResponseRow({
         </div>
       )}
     </div>
+  );
+}
+
+// ── SubmissionDialog ──────────────────────────────────────────────────────────
+function SubmissionDialog({
+  response, questions, answers, canManage, onDelete, onClose,
+}: {
+  response: Response;
+  questions: Question[];
+  answers: Answer[];
+  canManage: boolean;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const displayName = response.respondent_name ?? response.respondent_email ?? 'Anonymous';
+  const imageAnswers = answers.filter(a => {
+    const q = questions.find(q => q.id === a.question_id);
+    return q?.type === 'image' && a.answer_json;
+  });
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+              <span className="text-sm font-bold text-indigo-700">{displayName.charAt(0).toUpperCase()}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-base">{displayName}</DialogTitle>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {format(new Date(response.submitted_at), 'dd MMM yyyy, HH:mm')}
+                {response.respondent_email && response.respondent_name && (
+                  <span className="ml-2 text-slate-300">·</span>
+                )}
+                {response.respondent_email && response.respondent_name && (
+                  <span className="ml-2">{response.respondent_email}</span>
+                )}
+              </p>
+            </div>
+            {canManage && (
+              <button
+                onClick={() => { onClose(); onDelete(); }}
+                className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                title="Delete this submission"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+          {/* Media gallery */}
+          {imageAnswers.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <ImageIcon className="w-3 h-3" />Media Gallery
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {imageAnswers.map((a, ai) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setGalleryIndex(ai)}
+                    className="aspect-square rounded-xl overflow-hidden border border-slate-200 hover:border-indigo-400 hover:scale-105 transition-all"
+                  >
+                    <img
+                      src={String(a.answer_json)}
+                      alt={`Media ${ai + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+              {/* Lightbox */}
+              {galleryIndex !== null && (
+                <div
+                  className="fixed inset-0 bg-black/85 z-[9999] flex items-center justify-center p-4"
+                  onClick={() => setGalleryIndex(null)}
+                >
+                  <div className="relative max-w-4xl max-h-full" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setGalleryIndex(null)}
+                      className="absolute -top-10 right-0 text-white/70 hover:text-white"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                    <img
+                      src={String(imageAnswers[galleryIndex].answer_json)}
+                      alt={`Media ${galleryIndex + 1}`}
+                      className="max-h-[80vh] max-w-full rounded-xl"
+                    />
+                    {imageAnswers.length > 1 && (
+                      <div className="flex justify-center gap-2 mt-3">
+                        {imageAnswers.map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setGalleryIndex(i)}
+                            className={cn('w-2 h-2 rounded-full transition-colors', i === galleryIndex ? 'bg-white' : 'bg-white/30 hover:bg-white/60')}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Q&A list */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Answers</p>
+            {questions.map((q, qi) => {
+              const ans = answers.find(a => a.question_id === q.id);
+              let displayValue: React.ReactNode;
+              if (!ans) {
+                displayValue = <span className="text-slate-300 italic text-sm">No answer</span>;
+              } else if (q.type === 'image' && ans.answer_json) {
+                displayValue = (
+                  <img
+                    src={String(ans.answer_json)}
+                    className="max-h-40 rounded-lg border border-slate-200 cursor-pointer hover:opacity-90"
+                    alt="Response image"
+                    onClick={() => {
+                      const idx = imageAnswers.findIndex(a => a.id === ans.id);
+                      if (idx >= 0) setGalleryIndex(idx);
+                    }}
+                  />
+                );
+              } else if (q.type === 'file' && ans.answer_json) {
+                const meta = (() => { try { return JSON.parse(String(ans.answer_json)); } catch { return null; } })();
+                displayValue = (
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 text-sm text-slate-700">
+                    <Paperclip className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{meta ? `${meta.name} (${(meta.size / 1024).toFixed(1)} KB)` : String(ans.answer_json)}</span>
+                  </div>
+                );
+              } else if (q.type === 'gps' && ans.answer_text) {
+                const parts = ans.answer_text.split(',');
+                const lat = parseFloat(parts[0]);
+                const lng = parseFloat(parts[1]);
+                const acc = parts[2] ? parseFloat(parts[2]) : null;
+                displayValue = (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>{isNaN(lat) ? ans.answer_text : `${lat.toFixed(5)}, ${lng.toFixed(5)}${acc !== null ? ` ±${acc.toFixed(0)}m` : ''}`}</span>
+                    </div>
+                    {!isNaN(lat) && !isNaN(lng) && (
+                      <a
+                        href={`https://www.google.com/maps?q=${lat},${lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />Open in Google Maps
+                      </a>
+                    )}
+                  </div>
+                );
+              } else {
+                const value = ans.answer_text
+                  ?? (Array.isArray(ans.answer_json) ? (ans.answer_json as string[]).join(', ')
+                  : ans.answer_json != null ? String(ans.answer_json) : null);
+                displayValue = value
+                  ? <span className="text-sm text-slate-700 leading-relaxed">{value}</span>
+                  : <span className="text-slate-300 italic text-sm">No answer</span>;
+              }
+              return (
+                <div key={q.id} className="bg-white rounded-xl border border-slate-100 p-3">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded-full">Q{qi + 1}</span>
+                    <p className="text-[11px] font-semibold text-slate-600">{q.label}{q.required ? <span className="text-red-400 ml-0.5">*</span> : ''}</p>
+                  </div>
+                  <div className="pl-0.5">{displayValue}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
