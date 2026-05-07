@@ -51,6 +51,27 @@ create table if not exists public.acct_bank_accounts (
   updated_at       timestamptz not null default now()
 );
 
+-- Defensive column additions — safe when table already existed from bank_recon_migration.sql
+do $col_ba$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'acct_bank_accounts'
+      and column_name = 'current_balance'
+  ) then
+    alter table public.acct_bank_accounts
+      add column current_balance numeric(20, 2) not null default 0;
+    raise notice 'current_balance column added to acct_bank_accounts.';
+  end if;
+  -- swift_code was in the original bank_recon_migration.sql; preserve it
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'acct_bank_accounts'
+      and column_name = 'swift_code'
+  ) then
+    alter table public.acct_bank_accounts add column swift_code text;
+  end if;
+end $col_ba$;
+
 create index if not exists idx_acct_bank_accts_active
   on public.acct_bank_accounts (is_active);
 create index if not exists idx_acct_bank_accts_currency

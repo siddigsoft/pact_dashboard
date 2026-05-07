@@ -53,15 +53,27 @@ where table_schema = 'public'
 
 ## Apply steps
 
+### If you have already run `supabase/bank_recon_migration.sql` (most users)
+
+The tables already exist. Run the hot-patch instead:
+
+1. Open **Supabase Dashboard → SQL Editor** for `abznugnirnlrqnnfkein`
+2. Paste the **entire** content of `docs/sql/PHASE6_BANKING_HOTPATCH.sql`
+3. Click **Run** — it adds `current_balance`, recreates the RPC and trigger, inserts feature flags
+
+Expected output: the final select returns `Phase 6 hot-patch complete.`
+
+### Fresh install (bank_recon_migration.sql was never applied)
+
 1. Open **Supabase Dashboard → SQL Editor** for `abznugnirnlrqnnfkein`
 2. Create a new query tab
 3. Paste the **entire** content of `supabase/migrations/accounting_phase6_banking.sql`
 4. Click **Run**
 
-### Expected NOTICE
+### Expected NOTICE (both paths)
 
 ```
-NOTICE:  acct_bridge_bank_line_matched created on acct_bank_statement_lines.
+NOTICE:  acct_bridge_bank_line_matched (re)created.
 ```
 
 ---
