@@ -243,9 +243,9 @@ declare
   v_item_cnt  integer := 0;
 begin
   -- Resolve fiscal year metadata
-  v_fy_name  := (select name        from public.acct_fiscal_years where id = p_fiscal_year_id);
-  v_fy_start := (select start_date  from public.acct_fiscal_years where id = p_fiscal_year_id);
-  v_fy_end   := (select end_date    from public.acct_fiscal_years where id = p_fiscal_year_id);
+  v_fy_name  := (select code        from public.acct_fiscal_years where id = p_fiscal_year_id);
+  v_fy_start := (select start_date from public.acct_fiscal_years where id = p_fiscal_year_id);
+  v_fy_end   := (select end_date   from public.acct_fiscal_years where id = p_fiscal_year_id);
 
   if v_fy_name is null then
     raise exception 'Fiscal year % not found', p_fiscal_year_id;
@@ -457,7 +457,7 @@ as $$
   select
     p.id,
     p.title,
-    fy.name                                                    as fiscal_year_name,
+    fy.code                                                    as fiscal_year_name,
     p.status,
     p.item_count,
     p.finding_count,
@@ -476,7 +476,7 @@ as $$
   join public.acct_fiscal_years fy on fy.id = p.fiscal_year_id
   left join public.acct_auditor_findings f on f.pack_id = p.id
   where p.id = p_pack_id
-  group by p.id, p.title, fy.name, p.status, p.item_count,
+  group by p.id, p.title, fy.code, p.status, p.item_count,
            p.finding_count, p.generated_at, p.expiry_date, p.shared_with;
 $$;
 
