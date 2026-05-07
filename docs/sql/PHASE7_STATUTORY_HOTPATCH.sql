@@ -338,14 +338,12 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_enabled boolean;
 begin
-  select is_enabled into v_enabled
-  from public.feature_flags
-  where key = 'acct.bridge.statutory_filing' limit 1;
-
-  if v_enabled is not true then
+  -- feature flag gate
+  if not exists (
+    select 1 from public.feature_flags
+    where key = 'acct.bridge.statutory_filing' and is_enabled = true
+  ) then
     return new;
   end if;
 
