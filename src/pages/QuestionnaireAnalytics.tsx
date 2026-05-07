@@ -84,7 +84,7 @@ interface EnumTrackerEntry {
   pending: number;
   rejected: number;
   total: number;
-  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string; activity: string }[];
+  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string; activity: string; mmpFileId: string; mmpName: string }[];
 }
 interface EnumStateGroup {
   state: string;
@@ -299,14 +299,21 @@ const QuestionnaireAnalytics = () => {
   const [enumSearch, setEnumSearch] = useState('');
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
+  const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
+
+  const enumMmpOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    enumTrackerRows.forEach(r => r.sites.forEach(s => { if (s.mmpFileId) map.set(s.mmpFileId, s.mmpName); }));
+    return [...map.entries()].sort(([, a], [, b]) => a.localeCompare(b));
+  }, [enumTrackerRows]);
 
   const fetchEnumTrackerData = async () => {
     setEnumTrackerLoading(true);
     try {
       const { data: entries, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, hub_office, state, locality, status, accepted_by, visit_completed_at, submitted_at, main_activity, activity_at_site')
+        .select('id, site_name, hub_office, state, locality, status, accepted_by, visit_completed_at, submitted_at, main_activity, activity_at_site, mmp_file_id')
         .not('accepted_by', 'is', null);
       if (error) throw error;
 
@@ -320,6 +327,12 @@ const QuestionnaireAnalytics = () => {
         (profiles || []).forEach((p: any) => {
           profileMap.set(p.id, p.full_name || p.username || p.email || p.id);
         });
+      }
+      const mmpFileIds = [...new Set((entries || []).map((e: any) => e.mmp_file_id).filter(Boolean))];
+      const mmpNameMap = new Map<string, string>();
+      if (mmpFileIds.length > 0) {
+        const { data: mmpFiles } = await supabase.from('mmp_files').select('id, name').in('id', mmpFileIds);
+        (mmpFiles || []).forEach((m: any) => { mmpNameMap.set(m.id, m.name || m.id); });
       }
 
       // Key = hub||state||collectorId so one collector can appear under multiple hubs/states
@@ -357,6 +370,8 @@ const QuestionnaireAnalytics = () => {
           status: entry.status || '',
           date: dateVal ? format(new Date(dateVal), 'yyyy-MM-dd') : '',
           activity: entry.main_activity || entry.activity_at_site || '',
+          mmpFileId: entry.mmp_file_id || '',
+          mmpName: mmpNameMap.get(entry.mmp_file_id) || entry.mmp_file_id || '—',
         });
       });
 
@@ -6017,6 +6032,19 @@ const QuestionnaireAnalytics = () => {
                         <option key={s} value={s}>{s === 'all' ? 'All States' : s}</option>
                       ))}
                     </select>
+                    {enumMmpOptions.length > 0 && (
+                      <select
+                        className="text-sm border rounded-md px-2 py-1.5 bg-background"
+                        value={enumMmpFilter}
+                        onChange={e => setEnumMmpFilter(e.target.value)}
+                        data-testid="select-enum-mmp-tracker"
+                      >
+                        <option value="all">All MMPs</option>
+                        {enumMmpOptions.map(([id, name]) => (
+                          <option key={id} value={id}>{name}</option>
+                        ))}
+                      </select>
+                    )}
                     <select
                       className="text-sm border rounded-md px-2 py-1.5 bg-background"
                       value={enumStatusFilter}
@@ -6029,8 +6057,8 @@ const QuestionnaireAnalytics = () => {
                       <option value="pending">Pending</option>
                       <option value="rejected">Rejected</option>
                     </select>
-                    {(enumHubFilter !== 'all' || enumStateFilter !== 'all' || enumStatusFilter !== 'all' || enumSearch) && (
-                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => { setEnumHubFilter('all'); setEnumStateFilter('all'); setEnumStatusFilter('all'); setEnumSearch(''); }}>
+                    {(enumHubFilter !== 'all' || enumStateFilter !== 'all' || enumMmpFilter !== 'all' || enumStatusFilter !== 'all' || enumSearch) && (
+                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => { setEnumHubFilter('all'); setEnumStateFilter('all'); setEnumMmpFilter('all'); setEnumStatusFilter('all'); setEnumSearch(''); }}>
                         <X className="h-3.5 w-3.5" />Clear
                       </Button>
                     )}
@@ -6050,23 +6078,39 @@ const QuestionnaireAnalytics = () => {
                     // Apply hub / state / search filters to the hierarchy
                     const visibleHubs = enumHubGroups
                       .filter(hg => enumHubFilter === 'all' || hg.hub === enumHubFilter)
-                      .map(hg => ({
-                        ...hg,
-                        states: hg.states
+                      .map(hg => {
+                        const states = hg.states
                           .filter(sg => enumStateFilter === 'all' || sg.state === enumStateFilter)
-                          .map(sg => ({
-                            ...sg,
-                            collectors: sg.collectors.filter(c => {
-                              if (enumSearch && !c.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
-                              if (enumStatusFilter === 'wfp_confirmed' && c.wfpConfirmed === 0) return false;
-                              if (enumStatusFilter === 'submitted'     && c.submitted    === 0) return false;
-                              if (enumStatusFilter === 'pending'       && c.pending      === 0) return false;
-                              if (enumStatusFilter === 'rejected'      && c.rejected     === 0) return false;
-                              return true;
-                            }),
-                          }))
-                          .filter(sg => sg.collectors.length > 0),
-                      }))
+                          .map(sg => {
+                            const collectors = sg.collectors
+                              .map(c => {
+                                if (enumMmpFilter === 'all') return c;
+                                const filteredSites = c.sites.filter(s => s.mmpFileId === enumMmpFilter);
+                                if (filteredSites.length === 0) return null;
+                                const wfpC = filteredSites.filter(s => s.status.toLowerCase() === 'wfp_confirmed').length;
+                                const subC = filteredSites.filter(s => s.status.toLowerCase() === 'submitted').length;
+                                const rejC = filteredSites.filter(s => s.status.toLowerCase() === 'rejected').length;
+                                const penC = filteredSites.length - wfpC - subC - rejC;
+                                return { ...c, sites: filteredSites, total: filteredSites.length, covered: wfpC + subC, wfpConfirmed: wfpC, submitted: subC, rejected: rejC, pending: penC };
+                              })
+                              .filter((c): c is EnumTrackerEntry => c !== null)
+                              .filter(c => {
+                                if (enumSearch && !c.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                                if (enumStatusFilter === 'wfp_confirmed' && c.wfpConfirmed === 0) return false;
+                                if (enumStatusFilter === 'submitted'     && c.submitted    === 0) return false;
+                                if (enumStatusFilter === 'pending'       && c.pending      === 0) return false;
+                                if (enumStatusFilter === 'rejected'      && c.rejected     === 0) return false;
+                                return true;
+                              });
+                            const totalSites   = collectors.reduce((s, c) => s + c.total,   0);
+                            const totalCovered = collectors.reduce((s, c) => s + c.covered, 0);
+                            return { ...sg, collectors, totalSites, totalCovered };
+                          })
+                          .filter(sg => sg.collectors.length > 0);
+                        const totalSites   = states.reduce((s, sg) => s + sg.totalSites,   0);
+                        const totalCovered = states.reduce((s, sg) => s + sg.totalCovered, 0);
+                        return { ...hg, states, totalSites, totalCovered };
+                      })
                       .filter(hg => hg.states.length > 0);
 
                     if (visibleHubs.length === 0) return (
