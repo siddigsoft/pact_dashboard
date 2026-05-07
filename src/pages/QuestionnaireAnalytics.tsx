@@ -289,14 +289,16 @@ const QuestionnaireAnalytics = () => {
   const fetchEnumTrackerData = async () => {
     setEnumTrackerLoading(true);
     try {
+      // accepted_by = the data collector who accepted / completed the site
+      // hub_office  = the hub column on mmp_site_entries
       const { data: entries, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, hub, state, locality, status, claimed_by, visit_completed_at, submitted_at')
-        .not('claimed_by', 'is', null);
+        .select('id, site_name, hub_office, state, locality, status, accepted_by, visit_completed_at, submitted_at')
+        .not('accepted_by', 'is', null);
       if (error) throw error;
 
-      const collectorIds = [...new Set((entries || []).map((e: any) => e.claimed_by).filter(Boolean))];
-      let profileMap = new Map<string, string>();
+      const collectorIds = [...new Set((entries || []).map((e: any) => e.accepted_by).filter(Boolean))];
+      const profileMap = new Map<string, string>();
       if (collectorIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
@@ -309,13 +311,13 @@ const QuestionnaireAnalytics = () => {
 
       const collectorMap = new Map<string, EnumTrackerEntry>();
       (entries || []).forEach((entry: any) => {
-        if (!entry.claimed_by) return;
-        const name = profileMap.get(entry.claimed_by) || entry.claimed_by;
-        if (!collectorMap.has(entry.claimed_by)) {
-          collectorMap.set(entry.claimed_by, {
-            collectorId: entry.claimed_by,
+        if (!entry.accepted_by) return;
+        const name = profileMap.get(entry.accepted_by) || entry.accepted_by;
+        if (!collectorMap.has(entry.accepted_by)) {
+          collectorMap.set(entry.accepted_by, {
+            collectorId: entry.accepted_by,
             collectorName: name,
-            hub: entry.hub || '',
+            hub: entry.hub_office || '',
             state: entry.state || '',
             covered: 0,
             submitted: 0,
@@ -326,17 +328,18 @@ const QuestionnaireAnalytics = () => {
             sites: [],
           });
         }
-        const row = collectorMap.get(entry.claimed_by)!;
+        const row = collectorMap.get(entry.accepted_by)!;
         row.total++;
-        if (entry.status === 'submitted') { row.submitted++; row.covered++; }
-        else if (entry.status === 'wfp_confirmed') { row.wfpConfirmed++; row.covered++; }
-        else if (entry.status === 'rejected') row.rejected++;
+        const st = (entry.status || '').toLowerCase();
+        if (st === 'submitted') { row.submitted++; row.covered++; }
+        else if (st === 'wfp_confirmed') { row.wfpConfirmed++; row.covered++; }
+        else if (st === 'rejected') row.rejected++;
         else row.pending++;
         const dateVal = entry.submitted_at || entry.visit_completed_at || '';
         row.sites.push({
           siteName: entry.site_name || '',
           locality: entry.locality || '',
-          hub: entry.hub || '',
+          hub: entry.hub_office || '',
           state: entry.state || '',
           status: entry.status || '',
           date: dateVal ? format(new Date(dateVal), 'yyyy-MM-dd') : '',
