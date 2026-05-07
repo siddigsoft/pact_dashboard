@@ -559,6 +559,8 @@ export default defineConfig(({ mode }) => ({
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
+      // Limit parallel file writes during chunk rendering — prevents OOM on low-RAM servers
+      maxParallelFileOps: 3,
       external: [
         '@capacitor-firebase/crashlytics',
         '@capacitor/haptics',
