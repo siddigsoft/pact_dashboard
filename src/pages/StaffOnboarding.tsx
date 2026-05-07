@@ -718,7 +718,7 @@ export default function StaffOnboarding() {
                 <li>Send <strong>"Hi PACT"</strong> via WhatsApp to <strong>+256 751 900 013</strong> to enable notifications</li>
                 <li>Inform your line manager that your account has been created</li>
                 <li>Check <strong>My Tasks</strong> for any work already assigned to you</li>
-                <li>Contracts and payroll will begin once <strong>all staff are on board</strong> — register before the deadline</li>
+                <li>Contracts and payroll will begin once <strong>all staff are on board</strong></li>
               </ul>
             </div>
           </div>
