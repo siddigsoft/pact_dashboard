@@ -1039,12 +1039,38 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // every other section (Top Interviewers, charts, KPIs) when filters are active.
   const localityReached = useMemo(() => {
     const map: Record<string, number> = {};
-    filtered.forEach(r => {
-      const rowId = r.locality ? SUBCODE_TO_ROW_ID[r.locality as string] : undefined;
-      if (rowId) map[rowId] = (map[rowId] || 0) + 1;
+
+    // Index locality rows by state so we know how many localities each state has
+    const rowsByState: Record<string, LocalityRow[]> = {};
+    localityRows.forEach(row => {
+      if (row.stateCode && row.locality) {
+        if (!rowsByState[row.stateCode]) rowsByState[row.stateCode] = [];
+        rowsByState[row.stateCode].push(row);
+      }
     });
+
+    filtered.forEach(r => {
+      if (!r.state) return;
+      const stateRows = rowsByState[r.state] ?? [];
+
+      if (stateRows.length === 1) {
+        // Single locality in this state → all records for this state map to it,
+        // no subcode lookup needed (covers ND/El Fasher, NK/Um Rawaba+Sheikan rolled up, RS/Port Sudan, RN/Shendi, etc.)
+        map[stateRows[0].id] = (map[stateRows[0].id] || 0) + 1;
+      } else if (stateRows.length > 1) {
+        // Multiple localities → try the subcode mapping to disambiguate
+        const rowId = r.locality ? SUBCODE_TO_ROW_ID[r.locality as string] : undefined;
+        if (rowId) {
+          map[rowId] = (map[rowId] || 0) + 1;
+        } else {
+          // Subcode not in map yet — assign to first locality of this state as best-effort fallback
+          map[stateRows[0].id] = (map[stateRows[0].id] || 0) + 1;
+        }
+      }
+    });
+
     return map;
-  }, [filtered]);
+  }, [filtered, localityRows]);
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const consentRate = PCT(filtered.filter(r => r.satisfaction != null).length, total);
