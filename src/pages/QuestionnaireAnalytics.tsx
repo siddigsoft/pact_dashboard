@@ -5560,7 +5560,7 @@ const QuestionnaireAnalytics = () => {
                         <DropdownMenuTrigger asChild>
                           <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-tracker">
                             <Download className="h-4 w-4" />
-                            Export
+                            Export Tracker - Activity by Hub
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -5671,7 +5671,7 @@ const QuestionnaireAnalytics = () => {
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-tracker">
                               <Download className="h-4 w-4" />
-                              Export
+                              Export Tracker per Hub
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -5802,7 +5802,7 @@ const QuestionnaireAnalytics = () => {
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-state-tracker">
                               <Download className="h-4 w-4" />
-                              Export
+                              Export Tracker per State
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -5933,7 +5933,7 @@ const QuestionnaireAnalytics = () => {
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">
                               <Download className="h-4 w-4" />
-                              Export
+                              Export Tracker - Activity by State
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -6029,7 +6029,7 @@ const QuestionnaireAnalytics = () => {
                       {csvEnumView === 'table' && trackerData.hubTrackers.length > 0 && (
                         <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsvEnumTableFormattedExcel} data-testid="button-export-csv-enum-table">
                           <FileSpreadsheet className="h-4 w-4" />
-                          Export
+                          Export Tracker — Enumerators (CSV)
                         </Button>
                       )}
                       <div className="flex items-center gap-1 rounded-md border p-0.5 bg-muted/40">
