@@ -774,11 +774,15 @@ export default function StaffOnboarding() {
               <tbody>
                 {[
                   ['Employee ⭐', 'All staff (default)', 'View & update own tasks · Log work · Submit leave · View contract & payslips · Join projects'],
-                  ['Manager', 'Team leads / Coordinators', 'All above + assign tasks · Approve leave & timesheets · View team dashboard'],
-                  ['Director', 'Department heads', 'Portfolio view · Cross-project analytics · Budget approvals · Financial dashboards'],
-                  ['HR Admin', 'HR team', 'Full HR hub — payroll runs, contracts, salary management, EOSB & gratuity calculations'],
-                  ['Finance Admin', 'Finance team', 'Full accounting — GL, budgets, procurement (P2P), reconciliation, donor reporting'],
-                  ['Super Admin', 'IT / System admin', 'Full platform access — user management, audit logs, system settings'],
+                  ['Data Collector', 'Field data entry staff', 'Record site visits · View assigned MMP sites · Submit field data'],
+                  ['Coordinator', 'MMP coordinators', 'Manage site visits · View MMP plans · Track coverage & reporting'],
+                  ['Supervisor', 'Field supervisors', 'All above + review & approve site visit submissions · Monitor team'],
+                  ['Project Manager', 'Project leads', 'Full project management · Assign team · Approve finances · View reports'],
+                  ['Field Operation Manager (FOM)', 'Operations managers', 'Create & approve MMPs · Manage field operations · View financial data'],
+                  ['Country Director', 'Country-level leadership', 'Portfolio view · Cross-project analytics · Budget approvals · Financial dashboards'],
+                  ['HR / HR Manager', 'HR team', 'Full HR hub — payroll runs, contracts, salary management, EOSB & gratuity calculations'],
+                  ['Financial Admin', 'Finance team', 'Full accounting — GL, budgets, procurement (P2P), reconciliation, donor reporting'],
+                  ['Admin', 'IT / System admin', 'Full platform access — user management, audit logs, system settings'],
                 ].map(([role, who, perms]) => (
                   <tr key={role}><td><strong>{role}</strong></td><td>{who}</td><td>{perms}</td></tr>
                 ))}
