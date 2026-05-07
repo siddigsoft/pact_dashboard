@@ -84,7 +84,7 @@ interface EnumTrackerEntry {
   pending: number;
   rejected: number;
   total: number;
-  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string }[];
+  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string; activity: string }[];
 }
 interface EnumStateGroup {
   state: string;
@@ -305,7 +305,7 @@ const QuestionnaireAnalytics = () => {
     try {
       const { data: entries, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, hub_office, state, locality, status, accepted_by, visit_completed_at, submitted_at')
+        .select('id, site_name, hub_office, state, locality, status, accepted_by, visit_completed_at, submitted_at, main_activity, activity_at_site')
         .not('accepted_by', 'is', null);
       if (error) throw error;
 
@@ -355,6 +355,7 @@ const QuestionnaireAnalytics = () => {
           state,
           status: entry.status || '',
           date: dateVal ? format(new Date(dateVal), 'yyyy-MM-dd') : '',
+          activity: entry.main_activity || entry.activity_at_site || '',
         });
       });
 
@@ -5901,10 +5902,9 @@ const QuestionnaireAnalytics = () => {
                                                   {colOpen && (
                                                     <div className="border-t">
                                                       <div className="flex flex-wrap gap-3 px-3 py-2 text-xs border-b bg-muted/10">
-                                                        <span className="text-blue-600"><strong>{col.submitted}</strong> Submitted</span>
-                                                        <span className="text-emerald-600"><strong>{col.wfpConfirmed}</strong> WFP Confirmed</span>
-                                                        <span className="text-amber-600"><strong>{col.pending}</strong> Pending</span>
-                                                        <span className="text-red-500"><strong>{col.rejected}</strong> Rejected</span>
+                                                        <span className="text-blue-600"><strong>{col.covered}</strong> Submitted</span>
+                                                        <span className="text-muted-foreground">{col.total} Total Sites</span>
+                                                        <span className={`font-bold ${col.total > 0 && (col.covered / col.total) * 100 >= 80 ? 'text-green-600' : col.total > 0 && (col.covered / col.total) * 100 >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{col.total > 0 ? Math.round((col.covered / col.total) * 100) : 0}% Coverage</span>
                                                       </div>
                                                       <div className="overflow-x-auto">
                                                         <table className="w-full text-xs">

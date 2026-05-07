@@ -797,7 +797,7 @@ export interface EnumTrackerEntry {
   pending: number;
   rejected: number;
   total: number;
-  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string }[];
+  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string; activity: string }[];
 }
 
 export async function exportEnumeratorTrackerExcel(
@@ -810,25 +810,22 @@ export async function exportEnumeratorTrackerExcel(
 
   // ── Sheet 1: Summary ──────────────────────────────────────────
   const ws1 = wb.addWorksheet('Enumerator Summary');
-
-  const titleRow1 = ws1.addRow(['Enumerator Tracker — Sites Covered per Data Collector']);
-  titleRow1.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
-  titleRow1.height = 28;
+  ws1.addRow(['Enumerator Tracker — Sites Covered per Data Collector']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  ws1.getRow(1).height = 28;
   ws1.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws1.addRow([]);
 
-  const hdr1 = ws1.addRow(['#', 'Enumerator', 'Hub', 'State', 'Total Claimed', 'Covered (Done)', 'Submitted', 'WFP Confirmed', 'Pending', 'Rejected', 'Coverage %']);
+  const hdr1 = ws1.addRow(['#', 'Enumerator', 'Hub', 'State', 'Total Sites', 'Submitted', 'Coverage %']);
   hdr1.height = 22;
   hdr1.eachCell((cell, ci) => {
-    cell.fill = headerFill();
-    cell.font = headerFont(10);
-    cell.border = thinBorder();
+    cell.fill = headerFill(); cell.font = headerFont(10); cell.border = thinBorder();
     cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
   });
 
   rows.forEach((r, i) => {
-    const pct = r.total > 0 ? ((r.covered / r.total) * 100).toFixed(1) + '%' : '0%';
-    const row = ws1.addRow([i + 1, r.collectorName, r.hub, r.state, r.total, r.covered, r.submitted, r.wfpConfirmed, r.pending, r.rejected, pct]);
+    const pctNum = r.total > 0 ? (r.covered / r.total) * 100 : 0;
+    const pct = r.total > 0 ? pctNum.toFixed(1) + '%' : '0%';
+    const row = ws1.addRow([i + 1, r.collectorName, r.hub, r.state, r.total, r.covered, pct]);
     row.height = 20;
     row.eachCell((cell, ci) => {
       cell.border = thinBorder();
@@ -836,112 +833,99 @@ export async function exportEnumeratorTrackerExcel(
       cell.font = bodyFont(10);
       if (i % 2 === 1) cell.fill = altFill();
     });
-    // Colour the coverage % cell
-    const pctCell = row.getCell(11);
-    const pctNum = r.total > 0 ? (r.covered / r.total) * 100 : 0;
+    const pctCell = row.getCell(7);
     pctCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
   });
 
-  // Totals row
-  const totals = ws1.addRow([
-    '', 'TOTAL', '', '',
-    rows.reduce((s, r) => s + r.total, 0),
-    rows.reduce((s, r) => s + r.covered, 0),
-    rows.reduce((s, r) => s + r.submitted, 0),
-    rows.reduce((s, r) => s + r.wfpConfirmed, 0),
-    rows.reduce((s, r) => s + r.pending, 0),
-    rows.reduce((s, r) => s + r.rejected, 0),
-    '',
-  ]);
+  const grandTot = rows.reduce((s, r) => s + r.total, 0);
+  const grandCov = rows.reduce((s, r) => s + r.covered, 0);
+  const totals = ws1.addRow(['', 'TOTAL', '', '', grandTot, grandCov, grandTot > 0 ? ((grandCov / grandTot) * 100).toFixed(1) + '%' : '0%']);
   totals.height = 22;
   totals.eachCell((cell, ci) => {
-    cell.fill = totalFill();
-    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
-    cell.border = thinBorder();
-    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+    cell.fill = totalFill(); cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
   });
-
   autoFitColumns(ws1);
 
-  // ── Sheet 2: Site-Level Detail ─────────────────────────────────
+  // ── Sheet 2: Site Detail (with Activity) ──────────────────────
   const ws2 = wb.addWorksheet('Site Detail');
-  const titleRow2 = ws2.addRow(['Enumerator Tracker — All Sites Detail']);
-  titleRow2.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
-  titleRow2.height = 28;
+  ws2.addRow(['Enumerator Tracker — All Sites Detail']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  ws2.getRow(1).height = 28;
   ws2.addRow([]);
-
-  const hdr2 = ws2.addRow(['#', 'Enumerator', 'Hub', 'State', 'Locality', 'Site Name', 'Status', 'Date']);
+  const hdr2 = ws2.addRow(['#', 'Enumerator', 'Hub', 'State', 'Activity', 'Locality', 'Site Name', 'Status', 'Date']);
   hdr2.height = 22;
   hdr2.eachCell((cell, ci) => {
-    cell.fill = headerFill();
-    cell.font = headerFont(10);
-    cell.border = thinBorder();
-    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+    cell.fill = headerFill(); cell.font = headerFont(10); cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle', wrapText: true };
   });
-
   let siteSeq = 0;
   rows.forEach(r => {
     r.sites.forEach(s => {
       siteSeq++;
-      const row = ws2.addRow([siteSeq, r.collectorName, s.hub || r.hub, s.state || r.state, s.locality, s.siteName, s.status, s.date]);
+      const row = ws2.addRow([siteSeq, r.collectorName, s.hub || r.hub, s.state || r.state, s.activity || '—', s.locality, s.siteName, s.status.replace(/_/g, ' '), s.date]);
       row.height = 20;
       row.eachCell((cell, ci) => {
-        cell.border = thinBorder();
-        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+        cell.border = thinBorder(); cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
         cell.font = bodyFont(10);
         if (siteSeq % 2 === 0) cell.fill = altFill();
       });
-      // Status badge colour
-      const statusCell = row.getCell(7);
       const sc = s.status === 'wfp_confirmed' ? GREEN : s.status === 'submitted' ? BLUE_TEXT : s.status === 'rejected' ? 'FFDC2626' : AMBER_TEXT;
-      statusCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: sc } };
+      row.getCell(8).font = { bold: true, size: 10, name: 'Calibri', color: { argb: sc } };
     });
   });
-
   autoFitColumns(ws2);
 
-  // ── Sheet 3: Hub × Enumerator Matrix ──────────────────────────
-  const ws3 = wb.addWorksheet('Hub Matrix');
-  const hubs = [...new Set(rows.map(r => r.hub).filter(Boolean))].sort();
-  const titleRow3 = ws3.addRow(['Enumerator Tracker — Sites Covered by Hub']);
-  titleRow3.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
-  titleRow3.height = 28;
+  // ── Sheet 3: By Activity ───────────────────────────────────────
+  const ws3 = wb.addWorksheet('By Activity');
+  ws3.addRow(['Enumerator Tracker — Breakdown by Activity']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  ws3.getRow(1).height = 28;
+  ws3.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws3.addRow([]);
 
-  const matrixHdr = ws3.addRow(['Enumerator', ...hubs, 'TOTAL']);
-  matrixHdr.height = 22;
-  matrixHdr.eachCell((cell, ci) => {
-    cell.fill = headerFill();
-    cell.font = headerFont(10);
-    cell.border = thinBorder();
-    cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle', wrapText: true };
-  });
-
-  rows.forEach((r, i) => {
-    const hubCounts = hubs.map(h => r.sites.filter(s => (s.hub || r.hub) === h && ['submitted','wfp_confirmed'].includes(s.status)).length);
-    const row = ws3.addRow([r.collectorName, ...hubCounts, r.covered]);
-    row.height = 20;
-    row.eachCell((cell, ci) => {
-      cell.border = thinBorder();
-      cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle' };
-      cell.font = bodyFont(10);
-      if (i % 2 === 1) cell.fill = altFill();
-      if (ci > 1 && typeof cell.value === 'number' && cell.value > 0) {
-        cell.font = { bold: false, size: 10, name: 'Calibri', color: { argb: BLUE_TEXT } };
-      }
+  const actMap3 = new Map<string, { collectorId: string; collectorName: string; hub: string; state: string; total: number; covered: number }[]>();
+  for (const r of rows) {
+    for (const s of r.sites) {
+      const act = s.activity || '—';
+      if (!actMap3.has(act)) actMap3.set(act, []);
+      const arr = actMap3.get(act)!;
+      const key = `${r.collectorId}||${r.hub}||${r.state}`;
+      let entry = arr.find(e => `${e.collectorId}||${e.hub}||${e.state}` === key);
+      if (!entry) { entry = { collectorId: r.collectorId, collectorName: r.collectorName, hub: r.hub, state: r.state, total: 0, covered: 0 }; arr.push(entry); }
+      entry.total++;
+      if (['submitted', 'wfp_confirmed'].includes(s.status)) entry.covered++;
+    }
+  }
+  const ACT_COLS3 = ['#', 'Data Collector', 'Hub', 'State', 'Total Sites', 'Submitted', 'Coverage %'];
+  let actSeq3 = 0;
+  for (const [act, colls] of [...actMap3.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const actTot = colls.reduce((s, c) => s + c.total, 0);
+    const actCov = colls.reduce((s, c) => s + c.covered, 0);
+    const aHdr = ws3.addRow([act, '', '', '', '', '', '']);
+    ws3.mergeCells(aHdr.number, 1, aHdr.number, ACT_COLS3.length);
+    aHdr.height = 24; aHdr.getCell(1).fill = headerFill();
+    aHdr.getCell(1).font = { bold: true, size: 11, name: 'Calibri', color: { argb: WHITE } };
+    aHdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+    const aColHdr = ws3.addRow(ACT_COLS3);
+    aColHdr.height = 20;
+    aColHdr.eachCell((cell, ci) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+      cell.font = headerFont(9); cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
     });
-    row.getCell(hubs.length + 2).font = { bold: true, size: 10, name: 'Calibri', color: { argb: NAVY } };
-  });
-
-  const hubTotals = ws3.addRow(['TOTAL', ...hubs.map(h => rows.reduce((s, r) => s + r.sites.filter(si => (si.hub || r.hub) === h && ['submitted','wfp_confirmed'].includes(si.status)).length, 0)), rows.reduce((s, r) => s + r.covered, 0)]);
-  hubTotals.height = 22;
-  hubTotals.eachCell((cell, ci) => {
-    cell.fill = totalFill();
-    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
-    cell.border = thinBorder();
-    cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle' };
-  });
-
+    colls.sort((a, b) => b.covered - a.covered).forEach((c, i) => {
+      actSeq3++;
+      const pctNum = c.total > 0 ? (c.covered / c.total) * 100 : 0;
+      const dr = ws3.addRow([actSeq3, c.collectorName, c.hub, c.state, c.total, c.covered, c.total > 0 ? pctNum.toFixed(1) + '%' : '0%']);
+      dr.height = 20;
+      dr.eachCell((cell, ci) => { cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' }; cell.font = bodyFont(10); if (i % 2 === 1) cell.fill = altFill(); });
+      dr.getCell(7).font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
+    });
+    const aPctNum = actTot > 0 ? (actCov / actTot) * 100 : 0;
+    const aSub = ws3.addRow(['', 'Activity Total', '', '', actTot, actCov, actTot > 0 ? aPctNum.toFixed(1) + '%' : '0%']);
+    aSub.height = 18;
+    aSub.eachCell((cell, ci) => { cell.fill = totalFill(); cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: DARK } }; cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' }; });
+    ws3.addRow([]);
+  }
   autoFitColumns(ws3);
 
   const buf = await wb.xlsx.writeBuffer();
@@ -970,7 +954,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
   const hubGroups = [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b));
 
   // ── Sheet 1: Grouped by Hub → State → Collector ───────────────
-  const COLS = ['#', 'Data Collector', 'Total Sites', 'Covered', 'Submitted', 'WFP Confirmed', 'Pending', 'Rejected', 'Coverage %'];
+  const COLS = ['#', 'Data Collector', 'Total Sites', 'Submitted', 'Coverage %'];
   const COL_COUNT = COLS.length;
 
   const ws1 = wb.addWorksheet('Enumerator by Hub');
@@ -992,7 +976,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
     const hubCovered = hubCollectors.reduce((s, c) => s + c.covered, 0);
 
     // Hub header row (navy)
-    const hubRow = ws1.addRow([hub, '', '', '', '', '', '', '', '']);
+    const hubRow = ws1.addRow([hub, '', '', '', '']);
     ws1.mergeCells(hubRow.number, 1, hubRow.number, COL_COUNT);
     hubRow.height = 24;
     hubRow.getCell(1).fill = headerFill();
@@ -1004,8 +988,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
     colHdr.height = 20;
     colHdr.eachCell((cell, ci) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-      cell.font = headerFont(9);
-      cell.border = thinBorder();
+      cell.font = headerFont(9); cell.border = thinBorder();
       cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
     });
 
@@ -1014,7 +997,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
       const stateCovered = collectors.reduce((s, c) => s + c.covered, 0);
 
       // State sub-header row (light blue)
-      const stateRow = ws1.addRow([`  ${state}`, '', '', '', '', '', '', '', '']);
+      const stateRow = ws1.addRow([`  ${state}`, '', '', '', '']);
       ws1.mergeCells(stateRow.number, 1, stateRow.number, COL_COUNT);
       stateRow.height = 18;
       stateRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1E4FF' } };
@@ -1026,7 +1009,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
         seq++;
         const pctNum = c.total > 0 ? (c.covered / c.total) * 100 : 0;
         const pct    = c.total > 0 ? pctNum.toFixed(1) + '%' : '0%';
-        const dataRow = ws1.addRow([seq, c.collectorName, c.total, c.covered, c.submitted, c.wfpConfirmed, c.pending, c.rejected, pct]);
+        const dataRow = ws1.addRow([seq, c.collectorName, c.total, c.covered, pct]);
         dataRow.height = 20;
         dataRow.eachCell((cell, ci) => {
           cell.border = thinBorder();
@@ -1034,18 +1017,12 @@ export async function exportEnumeratorTrackerFormattedExcel(
           cell.font = bodyFont(10);
           if (i % 2 === 1) cell.fill = altFill();
         });
-        // Coverage % coloured
-        const pctCell = dataRow.getCell(COL_COUNT);
-        pctCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
+        dataRow.getCell(COL_COUNT).font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
       });
 
       // State subtotal
-      const stateSubmitted   = collectors.reduce((s, c) => s + c.submitted,    0);
-      const stateWfpConf     = collectors.reduce((s, c) => s + c.wfpConfirmed, 0);
-      const statePending     = collectors.reduce((s, c) => s + c.pending,      0);
-      const stateRejected    = collectors.reduce((s, c) => s + c.rejected,     0);
       const stPctNum = stateTot > 0 ? (stateCovered / stateTot) * 100 : 0;
-      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateCovered, stateSubmitted, stateWfpConf, statePending, stateRejected, stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
+      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateCovered, stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
       stSub.height = 18;
       stSub.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4FD' } };
@@ -1056,12 +1033,8 @@ export async function exportEnumeratorTrackerFormattedExcel(
     }
 
     // Hub subtotal
-    const hubSubmitted  = hubCollectors.reduce((s, c) => s + c.submitted,    0);
-    const hubWfpConf    = hubCollectors.reduce((s, c) => s + c.wfpConfirmed, 0);
-    const hubPending    = hubCollectors.reduce((s, c) => s + c.pending,      0);
-    const hubRejected   = hubCollectors.reduce((s, c) => s + c.rejected,     0);
     const hPctNum = hubTotal > 0 ? (hubCovered / hubTotal) * 100 : 0;
-    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubCovered, hubSubmitted, hubWfpConf, hubPending, hubRejected, hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
+    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubCovered, hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
     hubSub.height = 22;
     hubSub.eachCell((cell, ci) => {
       cell.fill = totalFill();
@@ -1077,7 +1050,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
   const grandTotal   = rows.reduce((s, r) => s + r.total,   0);
   const grandCovered = rows.reduce((s, r) => s + r.covered, 0);
   const grandPctNum  = grandTotal > 0 ? (grandCovered / grandTotal) * 100 : 0;
-  const grandRow = ws1.addRow(['', 'GRAND TOTAL', grandTotal, grandCovered, rows.reduce((s,r)=>s+r.submitted,0), rows.reduce((s,r)=>s+r.wfpConfirmed,0), rows.reduce((s,r)=>s+r.pending,0), rows.reduce((s,r)=>s+r.rejected,0), grandTotal > 0 ? grandPctNum.toFixed(1) + '%' : '0%']);
+  const grandRow = ws1.addRow(['', 'GRAND TOTAL', grandTotal, grandCovered, grandTotal > 0 ? grandPctNum.toFixed(1) + '%' : '0%']);
   grandRow.height = 24;
   grandRow.eachCell((cell, ci) => {
     cell.fill = headerFill();
@@ -1088,31 +1061,28 @@ export async function exportEnumeratorTrackerFormattedExcel(
 
   autoFitColumns(ws1);
 
-  // ── Sheet 2: Site Detail ───────────────────────────────────────
+  // ── Sheet 2: Site Detail (with Activity column) ────────────────
   const ws2 = wb.addWorksheet('Site Detail');
-  const t2 = ws2.addRow(['Enumerator Tracker — All Sites Detail']);
-  t2.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
-  t2.height = 28;
+  ws2.addRow(['Enumerator Tracker — All Sites Detail']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  ws2.getRow(1).height = 28;
   ws2.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws2.addRow([]);
 
-  const h2 = ws2.addRow(['#', 'Hub', 'State', 'Data Collector', 'Locality', 'Site Name', 'Status', 'Date']);
+  const h2 = ws2.addRow(['#', 'Hub', 'State', 'Data Collector', 'Activity', 'Locality', 'Site Name', 'Status', 'Date']);
   h2.height = 22;
   h2.eachCell((cell, ci) => {
-    cell.fill = headerFill();
-    cell.font = headerFont(10);
-    cell.border = thinBorder();
+    cell.fill = headerFill(); cell.font = headerFont(10); cell.border = thinBorder();
     cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
   });
 
   let si2 = 0;
   for (const [hub, sm] of hubGroups) {
-    const hubStates = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b));
-    for (const [state, collectors] of hubStates) {
+    const hubStates2 = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b));
+    for (const [state, collectors] of hubStates2) {
       for (const c of collectors) {
         for (const s of c.sites) {
           si2++;
-          const dr = ws2.addRow([si2, hub, state, c.collectorName, s.locality, s.siteName, s.status.replace(/_/g, ' '), s.date]);
+          const dr = ws2.addRow([si2, hub, state, c.collectorName, s.activity || '—', s.locality, s.siteName, s.status.replace(/_/g, ' '), s.date]);
           dr.height = 20;
           dr.eachCell((cell, ci) => {
             cell.border = thinBorder();
@@ -1120,15 +1090,81 @@ export async function exportEnumeratorTrackerFormattedExcel(
             cell.font = bodyFont(10);
             if (si2 % 2 === 0) cell.fill = altFill();
           });
-          const statusCell = dr.getCell(7);
           const sc = s.status === 'wfp_confirmed' ? GREEN : s.status === 'submitted' ? BLUE_TEXT : s.status === 'rejected' ? 'FFDC2626' : AMBER_TEXT;
-          statusCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: sc } };
+          dr.getCell(8).font = { bold: true, size: 10, name: 'Calibri', color: { argb: sc } };
         }
       }
     }
   }
-
   autoFitColumns(ws2);
+
+  // ── Sheet 3: By Activity ───────────────────────────────────────
+  const ws3 = wb.addWorksheet('By Activity');
+  ws3.addRow(['Enumerator Tracker — Breakdown by Activity']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  ws3.getRow(1).height = 28;
+  ws3.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
+  ws3.addRow([]);
+
+  const actMap = new Map<string, { collectorId: string; collectorName: string; hub: string; state: string; total: number; covered: number }[]>();
+  for (const r of rows) {
+    for (const s of r.sites) {
+      const act = s.activity || '—';
+      if (!actMap.has(act)) actMap.set(act, []);
+      const arr = actMap.get(act)!;
+      const key = `${r.collectorId}||${r.hub}||${r.state}`;
+      let entry = arr.find(e => `${e.collectorId}||${e.hub}||${e.state}` === key);
+      if (!entry) {
+        entry = { collectorId: r.collectorId, collectorName: r.collectorName, hub: r.hub, state: r.state, total: 0, covered: 0 };
+        arr.push(entry);
+      }
+      entry.total++;
+      if (['submitted', 'wfp_confirmed'].includes(s.status)) entry.covered++;
+    }
+  }
+
+  const ACT_COLS = ['#', 'Data Collector', 'Hub', 'State', 'Total Sites', 'Submitted', 'Coverage %'];
+  let actSeq = 0;
+  for (const [act, colls] of [...actMap.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const actTot = colls.reduce((s, c) => s + c.total, 0);
+    const actCov = colls.reduce((s, c) => s + c.covered, 0);
+
+    const aHdr = ws3.addRow([act, '', '', '', '', '', '']);
+    ws3.mergeCells(aHdr.number, 1, aHdr.number, ACT_COLS.length);
+    aHdr.height = 24;
+    aHdr.getCell(1).fill = headerFill();
+    aHdr.getCell(1).font = { bold: true, size: 11, name: 'Calibri', color: { argb: WHITE } };
+    aHdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    const aColHdr = ws3.addRow(ACT_COLS);
+    aColHdr.height = 20;
+    aColHdr.eachCell((cell, ci) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+      cell.font = headerFont(9); cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+    });
+
+    colls.sort((a, b) => b.covered - a.covered).forEach((c, i) => {
+      actSeq++;
+      const pctNum = c.total > 0 ? (c.covered / c.total) * 100 : 0;
+      const dr = ws3.addRow([actSeq, c.collectorName, c.hub, c.state, c.total, c.covered, c.total > 0 ? pctNum.toFixed(1) + '%' : '0%']);
+      dr.height = 20;
+      dr.eachCell((cell, ci) => {
+        cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+        cell.font = bodyFont(10); if (i % 2 === 1) cell.fill = altFill();
+      });
+      dr.getCell(ACT_COLS.length).font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
+    });
+
+    const aPctNum = actTot > 0 ? (actCov / actTot) * 100 : 0;
+    const aSub = ws3.addRow(['', 'Activity Total', '', '', actTot, actCov, actTot > 0 ? aPctNum.toFixed(1) + '%' : '0%']);
+    aSub.height = 18;
+    aSub.eachCell((cell, ci) => {
+      cell.fill = totalFill(); cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: DARK } };
+      cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+    });
+    ws3.addRow([]);
+  }
+  autoFitColumns(ws3);
 
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
