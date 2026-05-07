@@ -812,6 +812,9 @@ export default function StaffOnboarding() {
             &nbsp;·&nbsp; WhatsApp Support: <strong style={{ color: '#16a34a' }}>+256 751 900 013</strong>
             &nbsp;·&nbsp; IT Help Desk
           </p>
+          <p style={{ marginTop: '8px', color: '#94a3b8', fontSize: '13px' }}>
+            © 2026 PACT — All rights reserved.
+          </p>
         </div>
 
       </div>
