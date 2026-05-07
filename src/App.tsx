@@ -227,6 +227,7 @@ import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
 import { ActivityTrackingProvider } from './context/activity/ActivityTrackingContext';
 import EmailPreviewPage from './pages/EmailPreviewPage';
+import StaffOnboarding from './pages/StaffOnboarding';
 
 
 // Loading component for Suspense fallback
@@ -341,7 +342,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report', '/staff-onboarding'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/') &&
     !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill'))
@@ -368,6 +369,7 @@ const AppRoutes = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
       <Route path="/email-preview" element={<EmailPreviewPage />} />
+      <Route path="/staff-onboarding" element={<StaffOnboarding />} />
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
