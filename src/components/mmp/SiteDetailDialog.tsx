@@ -1122,12 +1122,6 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{new Date(row.acceptedAt).toLocaleString()}</p>
                   </div>
                 )}
-                {row.createdAt && (
-                  <div>
-                    <Label className="text-xs font-medium text-gray-600">Created At</Label>
-                    <p className="font-medium text-gray-900 mt-1">{new Date(row.createdAt).toLocaleString()}</p>
-                  </div>
-                )}
                 {row.completedAt && (
                   <div data-testid="block-first-completed-on">
                     <Label className="text-xs font-medium text-gray-600">First Completed On</Label>

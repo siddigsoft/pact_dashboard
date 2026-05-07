@@ -558,6 +558,27 @@ export default function SurveyFill() {
     } catch { /* ignore quota errors */ }
   }, [answers, draftKey]);
 
+  // Sync calculate fields: recompute all formula questions whenever answers or
+  // questions change.  Runs as a proper effect (not during render) to avoid
+  // React "setState during render" warnings and unnecessary render cycles.
+  useEffect(() => {
+    const calcQs = questions.filter(q => q.type === 'calculate');
+    if (calcQs.length === 0) return;
+    const updates: Record<string, AnswerValue> = {};
+    for (const q of calcQs) {
+      const formula = String(q.settings?.formula ?? '');
+      if (!formula) continue;
+      const computed = evaluateFormula(formula, questions, answers);
+      if (computed !== '' && answers[q.id] !== computed) {
+        updates[q.id] = computed;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      setAnswers(prev => ({ ...prev, ...updates }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, answers]);
+
   const loadDraft = () => {
     if (!draftKey) return;
     try {

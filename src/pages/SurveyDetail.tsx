@@ -312,7 +312,7 @@ export default function SurveyDetail() {
   });
 
   const { data: allAnswers = [], isLoading: allAnswersLoading } = useQuery<Answer[]>({
-    queryKey: ['survey-answers', id],
+    queryKey: ['survey-answers', id, responses.map(r => r.id)],
     enabled: !!id && tab !== 'builder' && responses.length > 0,
     queryFn: async () => {
       const rIds = responses.map(r => r.id);
