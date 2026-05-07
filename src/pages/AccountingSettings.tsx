@@ -60,6 +60,8 @@ const DEFAULT_FLAGS: Omit<FeatureFlag, 'updated_at'>[] = [
   { key: 'acct.bridge.cash_flow_adj',            description: 'Phase 5: Post GL journal for cash flow adjustments (Inflow: DR Cash / CR Clearing; Outflow reversed). Disabled by default — enable after COA seeded with 1110 + 4990.', is_enabled: false, rolled_out_pct: 100 },
   { key: 'acct.bridge.grants',                   description: 'Phase 5: Log GL bridge entry when a grant status changes (draft → active → closed → expired). Enabled for audit visibility.',      is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.bridge.milestones',               description: 'Phase 5: Log GL bridge entry when a grant milestone is accepted. Enabled for grant compliance tracking.',                          is_enabled: true,  rolled_out_pct: 100 },
+  { key: 'acct.bridge.bank_recon',               description: 'Phase 6: Log GL bridge entry when a bank statement line is matched or un-matched to a journal entry. Enabled for audit trail.',    is_enabled: true,  rolled_out_pct: 100 },
+  { key: 'acct.bank_recon.auto_suggest',         description: 'Phase 6: (Future) Auto-suggest journal entry matches for bank statement lines based on amount + date proximity.',                  is_enabled: false, rolled_out_pct: 100 },
   { key: 'acct.posting_engine.enabled',          description: 'Master GL posting engine switch. Disabling this blocks all Phase 4 bridge postings.',                                              is_enabled: true,  rolled_out_pct: 100 },
 ];
 

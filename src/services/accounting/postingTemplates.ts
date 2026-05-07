@@ -820,6 +820,25 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
            'Enabled by default. Appears in GL Bridge Audit under "Grants" source table.',
   },
 
+  // ── Phase 6 bridges ───────────────────────────────────────────────────────
+
+  // ── 23. Bank Statement Lines → Matched ───────────────────────────────────
+  {
+    id:               'acct_bank_stmt_line_matched',
+    sourceTable:      'acct_bank_statement_lines',
+    eventType:        'line_matched | line_unmatched',
+    triggerStatus:    'UPDATE (is_matched changes)',
+    triggerCondition: 'AFTER UPDATE on acct_bank_statement_lines when is_matched changes',
+    labelEn:          'Bank Statement Line Matched to Journal Entry',
+    labelAr:          'مطابقة سطر كشف الحساب البنكي مع قيد دفتر الأستاذ',
+    featureFlag:      'acct.bridge.bank_recon',
+    lines: [],
+    notes: 'Visibility-only bridge — no new journal posted. Logs a bridge entry linking ' +
+           'the bank statement line to its matched journal entry for reconciliation audit. ' +
+           'Also logs an "un-matched" entry when a match is reversed. ' +
+           'Enabled by default. Appears in GL Bridge Audit under "Bank Statement Lines".',
+  },
+
   // ── 22. Grant Milestones → Accepted ──────────────────────────────────────
   {
     id:               'acct_grant_milestones_accepted',

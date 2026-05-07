@@ -70,6 +70,7 @@ const TABLE_LABELS: Record<string, string> = {
   acct_cash_flow_adjustments:      'Cash Flow Adjustments',
   acct_grants:                     'Grants',
   acct_grant_milestones:           'Grant Milestones',
+  acct_bank_statement_lines:       'Bank Statement Lines',
 };
 
 const HEALTH_CFG = {

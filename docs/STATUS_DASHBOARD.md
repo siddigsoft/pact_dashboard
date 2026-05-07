@@ -110,7 +110,7 @@ Apply in this order:
 | 3 | EOSB / salary advances / grant expenses / period-close allocation bridges | ✅ DONE — applied to pactdb | 100% |
 | 4 | Tax codes + FX rates + depreciation / encumbrance / leave liability bridges + accounting alert notifications | 🟡 IN PROGRESS — All code complete; 3 SQL files ready to apply manually | 80% |
 | 5 | Donor / grant management + restricted funds (extended) | 🟡 QUEUED — Expansion SQL + GL bridges SQL both written; apply after Phase 4 | 40% |
-| 6 | Sanctions / AML deep-screening + fuzzy ranking | ⚪ QUEUED | 0% |
+| 6 | Banking & Treasury — `acct_bank_accounts`, `acct_bank_statement_lines`, bank recon RPC + GL bridge | 🟡 QUEUED — SQL written; apply after Phase 3 (independent of Phases 4–5) | 40% |
 | 7 | Statutory reporting (PIT, social, zakat) | ⚪ QUEUED | 0% |
 | 8 | Audit-pack export + external auditor portal | ⚪ QUEUED | 0% |
 | 9 | Donor-side reporting + budget-vs-actual variance | ⚪ QUEUED | 0% |
@@ -166,7 +166,13 @@ Legend: ✅ DONE · 🟢 SIGNED OFF · 🟡 IN PROGRESS · 🟠 BLOCKED · ⚪ Q
 | 5.EXP | Phase 5 expansion tables: `acct_grants`, `acct_grant_expenses`, `acct_cost_allocation_rules`, `acct_allocation_runs`, `acct_depreciation_runs`, `acct_cash_flow_adjustments` | 🟡 READY TO APPLY | `20260502_acct_phase5_expansion.sql` · `PHASE5_EXPANSION_MANUAL_APPLY.md` |
 | 5.1 | Phase 5 GL bridges: 3 triggers + `acct_grant_utilization()` RPC + `v_acct_phase5_coverage` view + 3 feature flags | 🟡 READY TO APPLY — after 5.EXP | `accounting_gl_bridges_phase5.sql` · `PHASE5_GL_BRIDGES_MANUAL_APPLY.md` |
 
-### Phases 6–10
+### Phase 6 — Banking & Treasury
+
+| ID | Sprint | Status | Files |
+|---|---|---|---|
+| 6.1 | `acct_bank_accounts` + `acct_bank_statement_lines` + `acct_bank_recon_summary()` RPC + GL bridge trigger + 2 feature flags | 🟡 READY TO APPLY — after Phase 3 (independent of 4 & 5) | `accounting_phase6_banking.sql` · `PHASE6_BANKING_MANUAL_APPLY.md` |
+
+### Phases 7–10
 
 Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Phase 4.
 
@@ -210,6 +216,9 @@ Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Pha
 | `supabase/migrations/accounting_gl_bridges_phase5.sql` | 5.1 | Migration — 3 triggers + `acct_grant_utilization()` RPC + coverage view + 3 flags | ⏳ pending — apply after 5.EXP |
 | `docs/sql/PHASE5_GL_BRIDGES_MANUAL_APPLY.md` | 5.1 | Runbook | n/a |
 | `docs/sql/PHASE5_GL_BRIDGES_ROLLBACK.sql` | 5.1 | Rollback | n/a |
+| `supabase/migrations/accounting_phase6_banking.sql` | 6.1 | Migration — `acct_bank_accounts` + `acct_bank_statement_lines` + recon RPC + GL bridge + 2 flags | ⏳ pending — apply any time after Phase 3 |
+| `docs/sql/PHASE6_BANKING_MANUAL_APPLY.md` | 6.1 | Runbook | n/a |
+| `docs/sql/PHASE6_BANKING_ROLLBACK.sql` | 6.1 | Rollback | n/a |
 | `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite | ⏳ pending (apply any time) |
 | `supabase/migrations/20260409_timesheet_module.sql` | Timesheet | Migration | ✅ 2026-04-26 |
 | `supabase/migrations/20260426_timesheet_entries_insert_status_guard.sql` | Timesheet hot-patch | RLS hardening | ✅ 2026-04-26 |
