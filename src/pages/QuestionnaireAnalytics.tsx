@@ -32,6 +32,7 @@ interface QuestionnaireRow {
   activitySite: string;
   activity: string;
   subActivity: string;
+  monitoringType: string;
   dataCollector: string;
   deviceId: string;
   supervisor: string;
@@ -120,6 +121,7 @@ const DEFAULT_COLUMN_MAP = {
   activitySite: 19,
   activity: 24,
   subActivity: 25,
+  monitoringType: 26,
   dataCollector: 11,
   deviceId: 8,
   supervisor: 12,
@@ -138,6 +140,7 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   activitySite:  ['activity site', 'activity_site', 'site name', 'site_name', 'sitename', 'site', 'village', 'قرية', 'camp', 'location'],
   activity:      ['activity type', 'activity_type', 'activity', 'program type', 'programme', 'program', 'نشاط'],
   subActivity:   ['sub activity', 'sub_activity', 'subactivity', 'sub-activity'],
+  monitoringType: ['what kind of process monitoring', 'process monitoring', 'monitoring type', 'kind of monitoring', 'type of monitoring', 'نوع المراقبة'],
   dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
   deviceId:      ['deviceid', 'device_id', 'device id', 'معرف الجهاز', 'device identifier', 'imei'],
   supervisor:    ['field supervisor', 'supervisor name', 'supervisor', 'superviser', 'فيلد سوبرفايزر'],
@@ -1071,6 +1074,7 @@ const QuestionnaireAnalytics = () => {
             activitySite:  (row[colMap.activitySite]  || '').toString().trim(),
             activity:      (row[colMap.activity]      || '').toString().trim(),
             subActivity:   (row[colMap.subActivity]   || '').toString().trim(),
+            monitoringType:(row[colMap.monitoringType]|| '').toString().trim(),
             dataCollector: (row[colMap.dataCollector] || '').toString().trim(),
             deviceId:      (row[colMap.deviceId]      || '').toString().trim(),
             supervisor:    (row[colMap.supervisor]    || '').toString().trim(),
@@ -1476,7 +1480,7 @@ const QuestionnaireAnalytics = () => {
 
   const trackerData = useMemo(() => {
     const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
-    const activities = [...new Set(filteredData.map(r => r.activity))].filter(Boolean).sort();
+    const activities = [...new Set(filteredData.map(r => r.activity || r.monitoringType))].filter(Boolean).sort();
     const states = [...new Set(filteredData.map(r => r.state))].filter(Boolean).sort();
 
     const siteSetMatrix: Record<string, Record<string, Set<string>>> = {};
@@ -1485,51 +1489,54 @@ const QuestionnaireAnalytics = () => {
     const stateActMatrix: Record<string, Record<string, { q: number; sites: Set<string> }>> = {};
 
     filteredData.forEach(row => {
-      if (!row.activity || !row.hub) return;
-      if (!siteSetMatrix[row.activity]) siteSetMatrix[row.activity] = {};
-      if (!siteSetMatrix[row.activity][row.hub]) siteSetMatrix[row.activity][row.hub] = new Set();
-      if (!qMatrix[row.activity]) qMatrix[row.activity] = {};
-      if (!qMatrix[row.activity][row.hub]) qMatrix[row.activity][row.hub] = 0;
-      if (!collMatrix[row.activity]) collMatrix[row.activity] = {};
-      if (!collMatrix[row.activity][row.hub]) collMatrix[row.activity][row.hub] = new Set();
+      const actKey = row.activity || row.monitoringType;
+      if (!actKey || !row.hub) return;
+      if (!siteSetMatrix[actKey]) siteSetMatrix[actKey] = {};
+      if (!siteSetMatrix[actKey][row.hub]) siteSetMatrix[actKey][row.hub] = new Set();
+      if (!qMatrix[actKey]) qMatrix[actKey] = {};
+      if (!qMatrix[actKey][row.hub]) qMatrix[actKey][row.hub] = 0;
+      if (!collMatrix[actKey]) collMatrix[actKey] = {};
+      if (!collMatrix[actKey][row.hub]) collMatrix[actKey][row.hub] = new Set();
 
-      qMatrix[row.activity][row.hub]++;
-      if (row.activitySite) siteSetMatrix[row.activity][row.hub].add(row.activitySite);
-      if (row.dataCollector) collMatrix[row.activity][row.hub].add(row.dataCollector);
+      qMatrix[actKey][row.hub]++;
+      if (row.activitySite) siteSetMatrix[actKey][row.hub].add(row.activitySite);
+      if (row.dataCollector) collMatrix[actKey][row.hub].add(row.dataCollector);
 
       if (row.state) {
         if (!stateActMatrix[row.state]) stateActMatrix[row.state] = {};
-        if (!stateActMatrix[row.state][row.activity]) stateActMatrix[row.state][row.activity] = { q: 0, sites: new Set() };
-        stateActMatrix[row.state][row.activity].q++;
-        if (row.activitySite) stateActMatrix[row.state][row.activity].sites.add(row.activitySite);
+        if (!stateActMatrix[row.state][actKey]) stateActMatrix[row.state][actKey] = { q: 0, sites: new Set() };
+        stateActMatrix[row.state][actKey].q++;
+        if (row.activitySite) stateActMatrix[row.state][actKey].sites.add(row.activitySite);
       }
     });
 
     const hubStateActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     const stateLocalActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     filteredData.forEach(row => {
-      if (!row.activity || !row.hub || !row.state) return;
+      const actKey = row.activity || row.monitoringType;
+      if (!actKey || !row.hub || !row.state) return;
       if (!hubStateActMatrix[row.hub]) hubStateActMatrix[row.hub] = {};
-      if (!hubStateActMatrix[row.hub][row.activity]) hubStateActMatrix[row.hub][row.activity] = {};
-      if (!hubStateActMatrix[row.hub][row.activity][row.state]) hubStateActMatrix[row.hub][row.activity][row.state] = { q: 0, sites: new Set(), collectors: new Set() };
-      hubStateActMatrix[row.hub][row.activity][row.state].q++;
-      if (row.activitySite) hubStateActMatrix[row.hub][row.activity][row.state].sites.add(row.activitySite);
-      if (row.dataCollector) hubStateActMatrix[row.hub][row.activity][row.state].collectors.add(row.dataCollector);
+      if (!hubStateActMatrix[row.hub][actKey]) hubStateActMatrix[row.hub][actKey] = {};
+      if (!hubStateActMatrix[row.hub][actKey][row.state]) hubStateActMatrix[row.hub][actKey][row.state] = { q: 0, sites: new Set(), collectors: new Set() };
+      hubStateActMatrix[row.hub][actKey][row.state].q++;
+      if (row.activitySite) hubStateActMatrix[row.hub][actKey][row.state].sites.add(row.activitySite);
+      if (row.dataCollector) hubStateActMatrix[row.hub][actKey][row.state].collectors.add(row.dataCollector);
     });
     // Build stateLocalActMatrix independently — only requires activity + state + locality (hub not needed)
     filteredData.forEach(row => {
-      if (!row.activity || !row.state || !row.locality) return;
+      const actKey = row.activity || row.monitoringType;
+      if (!actKey || !row.state || !row.locality) return;
       if (!stateLocalActMatrix[row.state]) stateLocalActMatrix[row.state] = {};
-      if (!stateLocalActMatrix[row.state][row.activity]) stateLocalActMatrix[row.state][row.activity] = {};
-      if (!stateLocalActMatrix[row.state][row.activity][row.locality]) stateLocalActMatrix[row.state][row.activity][row.locality] = { q: 0, sites: new Set(), collectors: new Set() };
-      stateLocalActMatrix[row.state][row.activity][row.locality].q++;
-      if (row.activitySite) stateLocalActMatrix[row.state][row.activity][row.locality].sites.add(row.activitySite);
-      if (row.dataCollector) stateLocalActMatrix[row.state][row.activity][row.locality].collectors.add(row.dataCollector);
+      if (!stateLocalActMatrix[row.state][actKey]) stateLocalActMatrix[row.state][actKey] = {};
+      if (!stateLocalActMatrix[row.state][actKey][row.locality]) stateLocalActMatrix[row.state][actKey][row.locality] = { q: 0, sites: new Set(), collectors: new Set() };
+      stateLocalActMatrix[row.state][actKey][row.locality].q++;
+      if (row.activitySite) stateLocalActMatrix[row.state][actKey][row.locality].sites.add(row.activitySite);
+      if (row.dataCollector) stateLocalActMatrix[row.state][actKey][row.locality].collectors.add(row.dataCollector);
     });
 
     const hubTrackers = hubs.map(hub => {
       const hubStates = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.state))].filter(Boolean).sort();
-      const hubActivities = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.activity))].filter(Boolean).sort();
+      const hubActivities = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.activity || r.monitoringType))].filter(Boolean).sort();
       const mRows = hubActivities.map(act => {
         const cells = hubStates.map(st => ({
           questionnaires: hubStateActMatrix[hub]?.[act]?.[st]?.q || 0,
@@ -1558,7 +1565,7 @@ const QuestionnaireAnalytics = () => {
 
     const stateTrackers = states.map(state => {
       const stLocalities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.locality))].filter(Boolean).sort();
-      const stActivities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.activity))].filter(Boolean).sort();
+      const stActivities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.activity || r.monitoringType))].filter(Boolean).sort();
       const mRows = stActivities.map(act => {
         const cells = stLocalities.map(loc => ({
           questionnaires: stateLocalActMatrix[state]?.[act]?.[loc]?.q || 0,
