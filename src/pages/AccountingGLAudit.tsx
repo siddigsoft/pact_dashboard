@@ -63,6 +63,10 @@ const TABLE_LABELS: Record<string, string> = {
   hr_salary_advance_recoveries:    'Advance Recoveries',
   acct_grant_expenses:             'Grant Expenses',
   acct_allocation_runs:            'Cost Allocations',
+  acct_depreciation_runs:          'Depreciation Runs',
+  acct_budget_encumbrances:        'Budget Encumbrances',
+  leave_requests:                  'Leave Liability',
+  acct_fixed_assets:               'Fixed Assets',
 };
 
 const HEALTH_CFG = {

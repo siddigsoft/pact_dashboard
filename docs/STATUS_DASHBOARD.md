@@ -82,6 +82,20 @@ Paste `supabase/migrations/20260502_acct_accounting_notifications.sql` following
 4 alert triggers: AP invoice overdue, GL bridge failure, grant expiry (≤30 days),
 period needs closing. All guarded — re-run after each phase to pick up skipped triggers.
 
+**Phase 4 code status: ✅ Complete**
+- All frontend pages built and routed: Tax Management, Multi-Currency / FX Rates, Budget Encumbrance, Period Close, Depreciation Run, Cost Allocation, Grant Tracking, GL Bridge Audit
+- All Phase 4 posting templates registered in `postingTemplates.ts`
+- All Phase 4 feature flags surfaced in Accounting Settings page
+- GL Bridge Audit `TABLE_LABELS` includes all Phase 4 bridge sources (`acct_depreciation_runs`, `acct_budget_encumbrances`, `leave_requests`, `acct_fixed_assets`)
+- **Awaiting user to paste 3 SQL files (in order):** `20260520_acct_phase4_advanced.sql` → `accounting_gl_bridges_phase4.sql` → `20260502_acct_accounting_notifications.sql`
+
+### Phase 5 — Grant Tracking / Cost Allocation / Depreciation / Cash Flow Adjustments (apply any time after Phase 3)
+
+Paste `supabase/migrations/20260502_acct_phase5_expansion.sql` following `docs/sql/PHASE5_EXPANSION_MANUAL_APPLY.md`.
+
+Creates (idempotently — skips tables that already exist): `acct_grants`, `acct_grant_expenses`, `acct_cost_allocation_rules`, `acct_allocation_runs`, `acct_depreciation_runs`, `acct_cash_flow_adjustments` + 3 feature flags.
+After applying, re-run `20260502_acct_accounting_notifications.sql` so the grant expiry trigger is bound.
+
 ---
 
 ## 1 · Top-line status
@@ -92,8 +106,8 @@ period needs closing. All guarded — re-run after each phase to pick up skipped
 | 1 | Accounting foundation (GL, posting engine, sanctions, SoD, audit, tests, seed) | ✅ DONE — applied to pactdb | 100% |
 | 2 | Wire payroll / wallets / cost subs / advances / scanner to GL | ✅ DONE — applied to pactdb | 100% |
 | 3 | EOSB / salary advances / grant expenses / period-close allocation bridges | ✅ DONE — applied to pactdb | 100% |
-| 4 | Tax codes + FX rates + depreciation / encumbrance / leave liability bridges + accounting alert notifications | 🟡 IN PROGRESS — SQL written + reviewed, all runbooks ready; awaiting user to apply 3 files | 40% |
-| 5 | Donor / grant management + restricted funds (extended) | ⚪ QUEUED | 0% |
+| 4 | Tax codes + FX rates + depreciation / encumbrance / leave liability bridges + accounting alert notifications | 🟡 IN PROGRESS — All code complete; 3 SQL files ready to apply manually | 80% |
+| 5 | Donor / grant management + restricted funds (extended) | 🟡 QUEUED — SQL written (`20260502_acct_phase5_expansion.sql`), runbook written; apply after Phase 4 | 20% |
 | 6 | Sanctions / AML deep-screening + fuzzy ranking | ⚪ QUEUED | 0% |
 | 7 | Statutory reporting (PIT, social, zakat) | ⚪ QUEUED | 0% |
 | 8 | Audit-pack export + external auditor portal | ⚪ QUEUED | 0% |
