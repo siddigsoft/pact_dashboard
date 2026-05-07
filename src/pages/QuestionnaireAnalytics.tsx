@@ -356,7 +356,7 @@ const QuestionnaireAnalytics = () => {
   };
 
   useEffect(() => {
-    if (activeTab === 'enum-tracker' && !enumTrackerFetched) {
+    if ((activeTab === 'tracker' || activeTab === 'enum-tracker') && !enumTrackerFetched) {
       fetchEnumTrackerData();
     }
   }, [activeTab]);
@@ -4468,7 +4468,7 @@ const QuestionnaireAnalytics = () => {
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-5 sm:grid-cols-10 w-full">
+            <TabsList className="grid grid-cols-4 sm:grid-cols-9 w-full">
               <TabsTrigger value="overview" data-testid="tab-overview" className="gap-1">
                 <BarChart3 className="h-3 w-3 hidden sm:inline" />Overview
               </TabsTrigger>
@@ -4495,9 +4495,6 @@ const QuestionnaireAnalytics = () => {
               </TabsTrigger>
               <TabsTrigger value="reports" data-testid="tab-reports" className="gap-1">
                 <ClipboardList className="h-3 w-3 hidden sm:inline" />Reports
-              </TabsTrigger>
-              <TabsTrigger value="enum-tracker" data-testid="tab-enum-tracker" className="gap-1">
-                <Users className="h-3 w-3 hidden sm:inline" />Enum. Tracker
               </TabsTrigger>
             </TabsList>
 
@@ -5596,6 +5593,175 @@ const QuestionnaireAnalytics = () => {
                   </CardContent>
                 </Card>
               )}
+
+              {/* ── Tracker — Enumerators ─────────────────────────────── */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Users className="h-5 w-5 text-primary" />
+                        Tracker — Enumerators
+                      </CardTitle>
+                      <CardDescription>Sites covered per data collector — live MMP site entries (Hub · State · Locality)</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* inline filters */}
+                      <div className="relative">
+                        <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          className="pl-7 pr-2 py-1.5 text-xs border rounded-md bg-background w-36"
+                          placeholder="Search…"
+                          value={enumSearch}
+                          onChange={e => setEnumSearch(e.target.value)}
+                          data-testid="input-enum-search-tracker"
+                        />
+                      </div>
+                      <select
+                        className="text-xs border rounded-md px-2 py-1.5 bg-background"
+                        value={enumHubFilter}
+                        onChange={e => setEnumHubFilter(e.target.value)}
+                        data-testid="select-enum-hub-tracker"
+                      >
+                        {['all', ...[...new Set(enumTrackerRows.map(r => r.hub).filter(Boolean))].sort()].map(h => (
+                          <option key={h} value={h}>{h === 'all' ? 'All Hubs' : h}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="text-xs border rounded-md px-2 py-1.5 bg-background"
+                        value={enumStateFilter}
+                        onChange={e => setEnumStateFilter(e.target.value)}
+                        data-testid="select-enum-state-tracker"
+                      >
+                        {['all', ...[...new Set(enumTrackerRows.map(r => r.state).filter(Boolean))].sort()].map(s => (
+                          <option key={s} value={s}>{s === 'all' ? 'All States' : s}</option>
+                        ))}
+                      </select>
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => fetchEnumTrackerData()} disabled={enumTrackerLoading} data-testid="button-enum-refresh-tracker">
+                        <RotateCcw className={`h-3.5 w-3.5 ${enumTrackerLoading ? 'animate-spin' : ''}`} />
+                        {enumTrackerLoading ? 'Loading…' : 'Refresh'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => {
+                          const filtered = enumTrackerRows.filter(r => {
+                            if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
+                            if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
+                            if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                            return true;
+                          });
+                          exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                        }}
+                        disabled={enumTrackerRows.length === 0}
+                        data-testid="button-enum-export-tracker"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />Export Excel
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {enumTrackerLoading ? (
+                    <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
+                      <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                      Loading enumerator data…
+                    </div>
+                  ) : (() => {
+                    const filtered = enumTrackerRows.filter(r => {
+                      if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
+                      if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
+                      if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                      return true;
+                    });
+                    if (filtered.length === 0) return (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        {enumTrackerRows.length === 0 ? 'No MMP site entries with assigned data collectors found.' : 'No results match your filters.'}
+                      </div>
+                    );
+                    const totalCovered = filtered.reduce((s, r) => s + r.covered, 0);
+                    const totalSites = filtered.reduce((s, r) => s + r.total, 0);
+                    return (
+                      <div className="space-y-2">
+                        {/* Summary strip */}
+                        <div className="flex flex-wrap gap-3 mb-3 text-xs text-muted-foreground">
+                          <span><strong className="text-foreground">{filtered.length}</strong> enumerators</span>
+                          <span>·</span>
+                          <span><strong className="text-foreground">{totalSites}</strong> total claimed</span>
+                          <span>·</span>
+                          <span><strong className="text-green-600 font-semibold">{totalCovered}</strong> covered</span>
+                          <span>·</span>
+                          <span><strong className={totalSites > 0 && Math.round((totalCovered/totalSites)*100) >= 80 ? 'text-green-600' : 'text-amber-600'}>{totalSites > 0 ? Math.round((totalCovered / totalSites) * 100) : 0}%</strong> coverage</span>
+                        </div>
+                        {filtered.map(row => {
+                          const pct = row.total > 0 ? Math.round((row.covered / row.total) * 100) : 0;
+                          const key = `tracker-enum-${row.collectorId}`;
+                          const isOpen = expandedRows.has(key);
+                          return (
+                            <div key={row.collectorId} className="border rounded-lg" data-testid={`row-tracker-enum-${row.collectorId}`}>
+                              <button
+                                type="button"
+                                className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                                onClick={() => toggleExpand(key)}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Users className="h-4 w-4 text-primary shrink-0" />
+                                  <span className="font-medium truncate">{row.collectorName}</span>
+                                  {row.hub && <Badge variant="outline" className="text-[10px] shrink-0">{row.hub}</Badge>}
+                                  {row.state && <span className="text-xs text-muted-foreground hidden sm:inline shrink-0">{row.state}</span>}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <Badge variant="secondary" className="font-mono text-xs">{row.total} Sites</Badge>
+                                  <Badge className="font-mono text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0">{row.covered} Q</Badge>
+                                  <span className={`text-xs font-bold hidden sm:inline ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
+                                  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </div>
+                              </button>
+                              {isOpen && (
+                                <div className="border-t px-3 pb-3">
+                                  {/* Mini KPI strip */}
+                                  <div className="flex flex-wrap gap-3 py-2 text-xs">
+                                    <span className="text-blue-600"><strong>{row.submitted}</strong> Submitted</span>
+                                    <span className="text-emerald-600"><strong>{row.wfpConfirmed}</strong> WFP Confirmed</span>
+                                    <span className="text-amber-600"><strong>{row.pending}</strong> Pending</span>
+                                    <span className="text-red-500"><strong>{row.rejected}</strong> Rejected</span>
+                                  </div>
+                                  <div className="border rounded-md overflow-hidden mt-1">
+                                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 px-2 py-1.5 bg-muted/50 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                      <span>Site Name</span>
+                                      <span>Locality</span>
+                                      <span>State</span>
+                                      <span>Status</span>
+                                      <span className="text-right">Date</span>
+                                    </div>
+                                    <div className="max-h-56 overflow-y-auto">
+                                      {row.sites.map((s, si) => (
+                                        <div key={si} className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 px-2 py-1 text-xs ${si % 2 === 0 ? 'bg-muted/10' : ''}`}>
+                                          <span className="truncate font-medium">{s.siteName || '—'}</span>
+                                          <span className="text-muted-foreground truncate max-w-[90px]">{s.locality || '—'}</span>
+                                          <span className="text-muted-foreground truncate max-w-[80px]">{s.state || row.state || '—'}</span>
+                                          <Badge variant="outline" className={`text-[9px] px-1 py-0 ${
+                                            s.status === 'wfp_confirmed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50' :
+                                            s.status === 'submitted' ? 'border-blue-300 text-blue-700 bg-blue-50' :
+                                            s.status === 'rejected' ? 'border-red-300 text-red-700 bg-red-50' :
+                                            'border-amber-300 text-amber-700 bg-amber-50'
+                                          }`}>{s.status.replace('_', ' ')}</Badge>
+                                          <span className="text-muted-foreground text-right">{s.date || '—'}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
             </TabsContent>
 
             <TabsContent value="reports" className="mt-4 space-y-4" data-testid="reports-tab-content">
@@ -5998,237 +6164,6 @@ const QuestionnaireAnalytics = () => {
                   <p className="text-muted-foreground">Upload data to generate the report</p>
                 </Card>
               )}
-            </TabsContent>
-
-            {/* ── Enumerator Tracker Tab ─────────────────────────────── */}
-            <TabsContent value="enum-tracker" className="mt-4 space-y-4">
-              {(() => {
-                const enumHubs = ['all', ...[...new Set(enumTrackerRows.map(r => r.hub).filter(Boolean))].sort()];
-                const enumStates = ['all', ...[...new Set(enumTrackerRows.map(r => r.state).filter(Boolean))].sort()];
-                const filtered = enumTrackerRows.filter(r => {
-                  if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
-                  if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
-                  if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
-                  return true;
-                });
-                const totalCovered = filtered.reduce((s, r) => s + r.covered, 0);
-                const totalSites = filtered.reduce((s, r) => s + r.total, 0);
-                const totalSubmitted = filtered.reduce((s, r) => s + r.submitted, 0);
-                const totalWfp = filtered.reduce((s, r) => s + r.wfpConfirmed, 0);
-                const totalPending = filtered.reduce((s, r) => s + r.pending, 0);
-                const totalRejected = filtered.reduce((s, r) => s + r.rejected, 0);
-
-                return (
-                  <>
-                    {/* KPI cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                      {[
-                        { label: 'Enumerators', val: filtered.length, color: 'text-blue-600' },
-                        { label: 'Total Claimed', val: totalSites, color: 'text-gray-700' },
-                        { label: 'Covered (Done)', val: totalCovered, color: 'text-green-600' },
-                        { label: 'Submitted', val: totalSubmitted, color: 'text-blue-500' },
-                        { label: 'WFP Confirmed', val: totalWfp, color: 'text-emerald-600' },
-                        { label: 'Pending / Rejected', val: `${totalPending} / ${totalRejected}`, color: 'text-amber-600' },
-                      ].map(kpi => (
-                        <Card key={kpi.label} className="p-3">
-                          <p className="text-xs text-muted-foreground">{kpi.label}</p>
-                          <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.val}</p>
-                        </Card>
-                      ))}
-                    </div>
-
-                    {/* Filters + actions */}
-                    <Card className="p-3">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <div className="relative flex-1 min-w-[180px]">
-                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <input
-                            className="pl-8 pr-3 py-1.5 text-sm border rounded-md w-full bg-background"
-                            placeholder="Search enumerator…"
-                            value={enumSearch}
-                            onChange={e => setEnumSearch(e.target.value)}
-                            data-testid="input-enum-search"
-                          />
-                        </div>
-                        <select
-                          className="text-sm border rounded-md px-2 py-1.5 bg-background"
-                          value={enumHubFilter}
-                          onChange={e => setEnumHubFilter(e.target.value)}
-                          data-testid="select-enum-hub"
-                        >
-                          {enumHubs.map(h => <option key={h} value={h}>{h === 'all' ? 'All Hubs' : h}</option>)}
-                        </select>
-                        <select
-                          className="text-sm border rounded-md px-2 py-1.5 bg-background"
-                          value={enumStateFilter}
-                          onChange={e => setEnumStateFilter(e.target.value)}
-                          data-testid="select-enum-state"
-                        >
-                          {enumStates.map(s => <option key={s} value={s}>{s === 'all' ? 'All States' : s}</option>)}
-                        </select>
-                        {(enumHubFilter !== 'all' || enumStateFilter !== 'all' || enumSearch) && (
-                          <Button size="sm" variant="ghost" onClick={() => { setEnumHubFilter('all'); setEnumStateFilter('all'); setEnumSearch(''); }}>
-                            <X className="h-3 w-3 mr-1" />Clear
-                          </Button>
-                        )}
-                        <div className="ml-auto flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => fetchEnumTrackerData()} disabled={enumTrackerLoading} data-testid="button-enum-refresh">
-                            <RotateCcw className={`h-3.5 w-3.5 mr-1 ${enumTrackerLoading ? 'animate-spin' : ''}`} />Refresh
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`)}
-                            disabled={filtered.length === 0}
-                            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                            data-testid="button-enum-export-excel"
-                          >
-                            <FileSpreadsheet className="h-3.5 w-3.5" />Export Excel
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-
-                    {/* Table */}
-                    {enumTrackerLoading ? (
-                      <Card className="p-8 text-center">
-                        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-3" />
-                        <p className="text-muted-foreground text-sm">Loading enumerator data from MMP site entries…</p>
-                      </Card>
-                    ) : filtered.length === 0 ? (
-                      <Card className="p-8 text-center">
-                        <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-muted-foreground">{enumTrackerRows.length === 0 ? 'No MMP site entries with assigned enumerators found.' : 'No results match your filters.'}</p>
-                      </Card>
-                    ) : (
-                      <Card className="overflow-hidden">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="bg-[#0F2041] text-white">
-                                <th className="text-left px-3 py-2.5 font-semibold w-8">#</th>
-                                <th className="text-left px-3 py-2.5 font-semibold min-w-[160px]">Enumerator</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Hub</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">State</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Total Claimed</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Covered</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Submitted</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">WFP Confirmed</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Pending</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Rejected</th>
-                                <th className="text-center px-3 py-2.5 font-semibold">Coverage %</th>
-                                <th className="w-8" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filtered.map((row, i) => {
-                                const pct = row.total > 0 ? Math.round((row.covered / row.total) * 100) : 0;
-                                const isExpanded = enumExpandedIds.has(row.collectorId);
-                                return (
-                                  <Fragment key={row.collectorId}>
-                                    <tr
-                                      className={`border-b transition-colors hover:bg-muted/40 cursor-pointer ${i % 2 === 1 ? 'bg-muted/20' : ''}`}
-                                      onClick={() => setEnumExpandedIds(prev => {
-                                        const next = new Set(prev);
-                                        if (next.has(row.collectorId)) next.delete(row.collectorId); else next.add(row.collectorId);
-                                        return next;
-                                      })}
-                                      data-testid={`row-enum-${row.collectorId}`}
-                                    >
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">{i + 1}</td>
-                                      <td className="px-3 py-2 font-medium">{row.collectorName}</td>
-                                      <td className="px-3 py-2 text-center">
-                                        {row.hub ? <Badge variant="outline" className="text-xs">{row.hub}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
-                                      </td>
-                                      <td className="px-3 py-2 text-center">
-                                        {row.state ? <span className="text-xs">{row.state}</span> : <span className="text-muted-foreground text-xs">—</span>}
-                                      </td>
-                                      <td className="px-3 py-2 text-center font-mono font-semibold">{row.total}</td>
-                                      <td className="px-3 py-2 text-center font-mono font-semibold text-green-600">{row.covered}</td>
-                                      <td className="px-3 py-2 text-center font-mono text-blue-600">{row.submitted}</td>
-                                      <td className="px-3 py-2 text-center font-mono text-emerald-600">{row.wfpConfirmed}</td>
-                                      <td className="px-3 py-2 text-center font-mono text-amber-600">{row.pending}</td>
-                                      <td className="px-3 py-2 text-center font-mono text-red-500">{row.rejected}</td>
-                                      <td className="px-3 py-2 text-center">
-                                        <div className="flex flex-col items-center gap-0.5">
-                                          <span className={`text-xs font-bold ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
-                                          <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-                                            <div className={`h-full rounded-full ${pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${pct}%` }} />
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="px-2 py-2 text-center">
-                                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                                      </td>
-                                    </tr>
-                                    {isExpanded && (
-                                      <tr className="bg-blue-50/40 dark:bg-blue-950/10">
-                                        <td colSpan={12} className="px-4 py-3">
-                                          <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Sites — {row.collectorName}</p>
-                                          <div className="overflow-x-auto">
-                                            <table className="w-full text-xs">
-                                              <thead>
-                                                <tr className="text-muted-foreground border-b">
-                                                  <th className="text-left pb-1 pr-4">Site Name</th>
-                                                  <th className="text-left pb-1 pr-4">Hub</th>
-                                                  <th className="text-left pb-1 pr-4">State</th>
-                                                  <th className="text-left pb-1 pr-4">Locality</th>
-                                                  <th className="text-center pb-1 pr-4">Status</th>
-                                                  <th className="text-center pb-1">Date</th>
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {row.sites.map((s, si) => (
-                                                  <tr key={si} className="border-b border-muted/30 last:border-0">
-                                                    <td className="py-1 pr-4 font-medium">{s.siteName || '—'}</td>
-                                                    <td className="py-1 pr-4">{s.hub || row.hub || '—'}</td>
-                                                    <td className="py-1 pr-4">{s.state || row.state || '—'}</td>
-                                                    <td className="py-1 pr-4">{s.locality || '—'}</td>
-                                                    <td className="py-1 pr-4 text-center">
-                                                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
-                                                        s.status === 'wfp_confirmed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50' :
-                                                        s.status === 'submitted' ? 'border-blue-300 text-blue-700 bg-blue-50' :
-                                                        s.status === 'rejected' ? 'border-red-300 text-red-700 bg-red-50' :
-                                                        'border-amber-300 text-amber-700 bg-amber-50'
-                                                      }`}>{s.status.replace('_', ' ')}</Badge>
-                                                    </td>
-                                                    <td className="py-1 text-center text-muted-foreground">{s.date || '—'}</td>
-                                                  </tr>
-                                                ))}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    )}
-                                  </Fragment>
-                                );
-                              })}
-                            </tbody>
-                            {/* Grand total row */}
-                            <tfoot>
-                              <tr className="bg-muted/60 font-semibold border-t-2">
-                                <td className="px-3 py-2" colSpan={4}>Grand Total ({filtered.length} enumerators)</td>
-                                <td className="px-3 py-2 text-center font-mono">{totalSites}</td>
-                                <td className="px-3 py-2 text-center font-mono text-green-600">{totalCovered}</td>
-                                <td className="px-3 py-2 text-center font-mono text-blue-600">{totalSubmitted}</td>
-                                <td className="px-3 py-2 text-center font-mono text-emerald-600">{totalWfp}</td>
-                                <td className="px-3 py-2 text-center font-mono text-amber-600">{totalPending}</td>
-                                <td className="px-3 py-2 text-center font-mono text-red-500">{totalRejected}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <span className={`text-xs font-bold ${totalSites > 0 && Math.round((totalCovered/totalSites)*100) >= 80 ? 'text-green-600' : 'text-amber-600'}`}>
-                                    {totalSites > 0 ? Math.round((totalCovered / totalSites) * 100) : 0}%
-                                  </span>
-                                </td>
-                                <td />
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
-                      </Card>
-                    )}
-                  </>
-                );
-              })()}
             </TabsContent>
           </Tabs>
         </>
