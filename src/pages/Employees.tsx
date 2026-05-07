@@ -1349,6 +1349,9 @@ export default function Employees() {
     setBulkRoleSaving(false);
   };
 
+  /* ── Active tab — declared here so the financial useEffect can reference it ── */
+  const [activeTab, setActiveTab]   = useState('roster');
+
   /* ── Financial summary state — lazy: only fetched when tab is first opened ── */
   const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
   const [finLoading, setFinLoading] = useState(false);
@@ -1404,7 +1407,6 @@ export default function Employees() {
   const [deptFilter, setDeptFilter]       = useState('all');
   const [showUnregistered, setShowUnregistered] = useState(false);
   const [viewMode, setViewMode]           = useState<'cards' | 'table'>('table');
-  const [activeTab, setActiveTab]   = useState('roster');
 
   /* Derived geo lists */
   const availableLocalities = useMemo(

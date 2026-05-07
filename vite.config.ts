@@ -309,6 +309,38 @@ async function callGroqOCR(
   throw new Error('All Groq models unavailable. Check GROQ_API_KEY or try again later.');
 }
 
+// ── callGroqText — text-only Groq requests (no images) ──────────────────────
+// Used by the survey question generator as a Gemini fallback.
+async function callGroqText(
+  messages: Array<{ role: string; content: string }>,
+): Promise<{ text: string }> {
+  const apiKey = process.env.GROQ_API_KEY || '';
+  if (!apiKey) throw new Error('GROQ_API_KEY not configured');
+  const TEXT_MODELS = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-70b-versatile',
+    'mixtral-8x7b-32768',
+  ];
+  for (const model of TEXT_MODELS) {
+    if (isModelUnavailable(unavailableGroqModels, model)) continue;
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 2048 }),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
+      const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
+      const isDailyLimit = res.status === 429 && (errMsg.includes('per day') || errMsg.includes('RPD'));
+      if (isDailyLimit) { markModelUnavailable(unavailableGroqModels, model); continue; }
+      throw new Error(`Groq text error: ${errMsg}`);
+    }
+    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return { text: data.choices?.[0]?.message?.content || '' };
+  }
+  throw new Error('All Groq text models unavailable.');
+}
+
 // postProcess is imported from src/utils/ocrPostProcess.ts
 const postProcess = ocrPostProcess;
 
@@ -481,7 +513,7 @@ ${lang === 'ar' ? 'Write label in Arabic as the primary label, label_ar can be E
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              const r = await callGroq([{ role: 'user', content: prompt }]);
+              const r = await callGroqText([{ role: 'user', content: prompt }]);
               text = r.text.replace(/```json\n?|```\n?/g, '').trim();
             }
             const jsonMatch = text.match(/\[[\s\S]*\]/);
