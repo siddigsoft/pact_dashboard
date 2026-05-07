@@ -793,11 +793,20 @@ end $$;
 -- PART L: Trigger bindings
 -- =============================================================================
 
--- payroll_runs
-drop trigger if exists acct_bridge_payroll_runs on public.payroll_runs;
-create trigger acct_bridge_payroll_runs
-  after update on public.payroll_runs
-  for each row execute function public.acct_trig_payroll_runs();
+-- payroll_runs (guarded — skips gracefully if the table is not yet in pactdb)
+do $$ begin
+  if to_regclass('public.payroll_runs') is not null then
+    drop trigger if exists acct_bridge_payroll_runs on public.payroll_runs;
+    execute 'create trigger acct_bridge_payroll_runs
+      after update on public.payroll_runs
+      for each row execute function public.acct_trig_payroll_runs()';
+  else
+    raise notice 'SKIP: payroll_runs table not found — acct_bridge_payroll_runs trigger not created. '
+                 'Bind manually after HR payroll tables are present: '
+                 'CREATE TRIGGER acct_bridge_payroll_runs AFTER UPDATE ON public.payroll_runs '
+                 'FOR EACH ROW EXECUTE FUNCTION public.acct_trig_payroll_runs();';
+  end if;
+end $$;
 
 -- withdrawal_requests
 drop trigger if exists acct_bridge_withdrawal_requests on public.withdrawal_requests;

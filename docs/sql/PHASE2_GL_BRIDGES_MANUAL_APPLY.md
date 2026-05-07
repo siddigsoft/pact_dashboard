@@ -40,7 +40,7 @@ SELECT COUNT(*) FROM public.wallet_transactions;            -- table must exist
 1. Open **Supabase Dashboard → SQL Editor** for project `abznugnirnlrqnnfkein`
 2. Create a new query tab
 3. Paste the **entire** content of `supabase/migrations/20260520_acct_phase2_gl_bridges.sql`
-4. Click **Run** — the migration is wrapped in `BEGIN … COMMIT` so it is atomic
+4. Click **Run** — the migration has **no outer `BEGIN … COMMIT` wrapper by design**: each statement auto-commits so exclusive locks are released immediately, preventing deadlocks with the live app's RLS queries. All statements are idempotent — safe to re-run from any failed step.
 
 ### Expected output
 
