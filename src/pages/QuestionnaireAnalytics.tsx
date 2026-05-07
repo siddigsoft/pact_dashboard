@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus, RotateCcw } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus, RotateCcw, Table2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
@@ -299,6 +299,7 @@ const QuestionnaireAnalytics = () => {
   const [enumSearch, setEnumSearch] = useState('');
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
+  const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
 
   const fetchEnumTrackerData = async () => {
     setEnumTrackerLoading(true);
@@ -1395,19 +1396,20 @@ const QuestionnaireAnalytics = () => {
     });
     return [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hub, sm]) => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
-        const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => ({
-          name: c.name,
-          questionnaires: c.questionnaires,
-          sites: [...c.sites],
-          activities: [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count),
-        }));
+        const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => {
+          const activities = [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count);
+          const pdmSites   = activities.filter(a => isPdmActivity(a.name)).reduce((s, a) => s + Math.floor(a.count / 7), 0);
+          return { name: c.name, questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
+        });
         const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
         const totalSites = new Set(collectors.flatMap(c => c.sites)).size;
-        return { state, collectors, totalQ, totalSites };
+        const totalPdm   = collectors.reduce((s, c) => s + c.pdmSites, 0);
+        return { state, collectors, totalQ, totalSites, totalPdm };
       });
       const hubTotalQ     = states.reduce((s, sg) => s + sg.totalQ, 0);
       const hubTotalSites = new Set(states.flatMap(sg => sg.collectors.flatMap(c => c.sites))).size;
-      return { hub, states, totalQ: hubTotalQ, totalSites: hubTotalSites };
+      const hubTotalPdm   = states.reduce((s, sg) => s + sg.totalPdm, 0);
+      return { hub, states, totalQ: hubTotalQ, totalSites: hubTotalSites, totalPdm: hubTotalPdm };
     });
   }, [filteredData]);
 
@@ -5672,12 +5674,24 @@ const QuestionnaireAnalytics = () => {
               {/* ── Tracker — Enumerators (CSV) ──────────────────────── */}
               <Card>
                 <CardHeader className="pb-3">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Users className="h-5 w-5 text-primary" />
-                      Tracker — Enumerators (CSV)
-                    </CardTitle>
-                    <CardDescription>Hub → State → Data collector breakdown from uploaded questionnaire data</CardDescription>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Users className="h-5 w-5 text-primary" />
+                        Tracker — Enumerators (CSV)
+                      </CardTitle>
+                      <CardDescription>Hub → State → Data collector breakdown from uploaded questionnaire data</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-1 rounded-md border p-0.5 bg-muted/40">
+                      <Button size="sm" variant={csvEnumView === 'hierarchy' ? 'default' : 'ghost'} className="h-7 px-2.5 text-xs gap-1.5" onClick={() => setCsvEnumView('hierarchy')}>
+                        <Users className="h-3.5 w-3.5" />
+                        Hierarchy
+                      </Button>
+                      <Button size="sm" variant={csvEnumView === 'table' ? 'default' : 'ghost'} className="h-7 px-2.5 text-xs gap-1.5" onClick={() => setCsvEnumView('table')}>
+                        <Table2 className="h-3.5 w-3.5" />
+                        Table
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -5686,117 +5700,215 @@ const QuestionnaireAnalytics = () => {
                       <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
                       No questionnaire data uploaded yet.
                     </div>
-                  ) : csvEnumData.length === 0 ? (
-                    <div className="text-center py-10 text-muted-foreground text-sm">No data available.</div>
-                  ) : (() => {
-                    const grandQ     = csvEnumData.reduce((s, h) => s + h.totalQ, 0);
-                    const grandSites = csvEnumData.reduce((s, h) => s + h.totalSites, 0);
-                    return (
+                  ) : csvEnumView === 'table' ? (
+                    /* ── Table view (like Tracker per Hub) ── */
+                    trackerData.hubTrackers.length === 0 ? (
+                      <div className="text-center py-10 text-muted-foreground text-sm">No data available.</div>
+                    ) : (
                       <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-3 pb-1">
-                          <Badge variant="secondary" className="font-mono">{csvEnumData.length} Hub{csvEnumData.length !== 1 ? 's' : ''}</Badge>
-                          <Badge variant="outline" className="font-mono text-blue-600">{grandQ} Questionnaires</Badge>
-                          <Badge variant="outline" className="font-mono text-green-600">{grandSites} Unique Sites</Badge>
-                        </div>
-                        {csvEnumData.map(hg => {
-                          const hubKey  = `csv-ehub-${hg.hub}`;
-                          const hubOpen = expandedRows.has(hubKey);
-                          return (
-                            <div key={hg.hub} className="border rounded-lg">
-                              <button type="button" className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => toggleExpand(hubKey)}>
-                                <div className="flex items-center gap-2">
-                                  <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
-                                  <span className="font-semibold">{hg.hub}</span>
-                                  <Badge variant="outline" className="text-xs text-muted-foreground">{hg.states.length} State{hg.states.length !== 1 ? 's' : ''}</Badge>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0 ml-2">
-                                  <Badge variant="outline" className="font-mono text-blue-600 text-xs">{hg.totalQ} Q</Badge>
-                                  <Badge variant="secondary" className="font-mono text-xs">{hg.totalSites} Sites</Badge>
-                                  {hubOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                </div>
-                              </button>
-                              {hubOpen && (
-                                <div className="border-t divide-y">
-                                  {hg.states.map(sg => {
-                                    const stateKey  = `csv-estate-${hg.hub}-${sg.state}`;
-                                    const stateOpen = expandedRows.has(stateKey);
-                                    return (
-                                      <div key={sg.state}>
-                                        <button type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/20 transition-colors text-left bg-muted/10" onClick={() => toggleExpand(stateKey)}>
-                                          <div className="flex items-center gap-2">
-                                            <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-                                            <span className="font-medium text-sm">{sg.state}</span>
-                                            <span className="text-xs text-muted-foreground">{sg.collectors.length} collector{sg.collectors.length !== 1 ? 's' : ''}</span>
-                                          </div>
-                                          <div className="flex items-center gap-2 shrink-0 ml-2">
-                                            <Badge variant="outline" className="font-mono text-blue-600 text-xs">{sg.totalQ} Q</Badge>
-                                            <Badge variant="secondary" className="font-mono text-xs">{sg.totalSites} Sites</Badge>
-                                            {stateOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                          </div>
-                                        </button>
-                                        {stateOpen && (
-                                          <div className="pl-6 pr-3 pb-2 space-y-1.5 pt-1.5 bg-muted/5">
-                                            {sg.collectors.map((col, ci) => {
-                                              const colKey  = `csv-ecol-${hg.hub}-${sg.state}-${col.name}-${ci}`;
-                                              const colOpen = expandedRows.has(colKey);
-                                              return (
-                                                <div key={colKey} className="border rounded-md bg-background">
-                                                  <button type="button" className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/20 transition-colors text-left" onClick={() => toggleExpand(colKey)}>
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                      <Users className="h-3.5 w-3.5 text-primary shrink-0" />
-                                                      <span className="text-sm font-medium truncate">{col.name}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0 ml-2">
-                                                      <Badge variant="outline" className="font-mono text-blue-600 text-xs">{col.questionnaires} Q</Badge>
-                                                      <Badge variant="secondary" className="font-mono text-xs">{col.sites.length} Sites</Badge>
-                                                      {colOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                                    </div>
-                                                  </button>
-                                                  {colOpen && (
-                                                    <div className="border-t">
-                                                      <div className="flex flex-wrap gap-3 px-3 py-2 text-xs border-b bg-muted/10">
-                                                        <span className="text-blue-600"><strong>{col.questionnaires}</strong> Questionnaires</span>
-                                                        <span className="text-muted-foreground">{col.sites.length} Unique Sites</span>
-                                                        {col.activities.length > 0 && (
-                                                          <span className="text-muted-foreground">{col.activities.map(a => `${a.name} (${a.count})`).join(' · ')}</span>
+                        {trackerData.hubTrackers.map(ht => (
+                          <div key={ht.hub} className="border rounded-lg">
+                            <button type="button" className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => toggleExpand(`csv-tbl-hub-${ht.hub}`)}>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-blue-600" />
+                                <span className="font-semibold">{ht.hub}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge variant="outline" className="font-mono text-blue-600">{ht.grandSites} Sites</Badge>
+                                <Badge variant="secondary" className="font-mono">{ht.grandQ} Q</Badge>
+                                {(() => { const p = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : 0), 0); return p > 0 ? <Badge variant="outline" className="font-mono text-amber-600">{p} PDM</Badge> : null; })()}
+                                <Badge variant="outline" className="font-mono text-purple-600">{ht.grandCollectors} DC</Badge>
+                                {expandedRows.has(`csv-tbl-hub-${ht.hub}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </div>
+                            </button>
+                            {expandedRows.has(`csv-tbl-hub-${ht.hub}`) && (
+                              <div className="border-t overflow-x-auto">
+                                <table className="w-full text-sm border-collapse">
+                                  <thead>
+                                    <tr className="bg-muted/50">
+                                      <th className="text-left py-2 px-3 font-medium border min-w-[180px] sticky left-0 bg-muted/50 z-10">Activity</th>
+                                      {ht.states.map(st => (
+                                        <th key={st} className="text-center py-2 px-3 font-medium border min-w-[160px]" colSpan={4}>{st}</th>
+                                      ))}
+                                      <th className="text-center py-2 px-3 font-medium border min-w-[160px] bg-primary/10" colSpan={4}>Total</th>
+                                    </tr>
+                                    <tr className="bg-muted/30">
+                                      <th className="border sticky left-0 bg-muted/30 z-10"></th>
+                                      {ht.states.map(st => (
+                                        <Fragment key={st}>
+                                          <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600">Sites</th>
+                                          <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600">Actual</th>
+                                          <th className="text-center py-1 px-1.5 text-xs font-medium border text-amber-600">PDM</th>
+                                          <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600">DC</th>
+                                        </Fragment>
+                                      ))}
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-amber-600 bg-primary/5">PDM</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {ht.matrix.map((row, i) => (
+                                      <tr key={row.activity} className={i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}>
+                                        <td className={`py-1.5 px-3 font-medium border sticky left-0 z-10 text-sm ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>{row.activity}</td>
+                                        {row.cells.map((cell, ci) => (
+                                          <Fragment key={ht.states[ci]}>
+                                            <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
+                                            <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                            <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{isPdmActivity(row.activity) && cell.questionnaires ? Math.floor(cell.questionnaires / 7) : '-'}</td>
+                                            <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
+                                          </Fragment>
+                                        ))}
+                                        <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
+                                        <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                                        <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{isPdmActivity(row.activity) ? Math.floor(row.totalQ / 7) : '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-muted/50 font-semibold">
+                                      <td className="py-2 px-3 border sticky left-0 bg-muted/50 z-10">Total</td>
+                                      {ht.colTotals.map((ct, ci) => (
+                                        <Fragment key={ht.states[ci]}>
+                                          <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
+                                          <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
+                                          <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const t = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.floor(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); return t || '-'; })()}</td>
+                                          <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
+                                        </Fragment>
+                                      ))}
+                                      <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
+                                      <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const t = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0); return t || '-'; })()}</td>
+                                      <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    /* ── Hierarchy view (with PDM) ── */
+                    csvEnumData.length === 0 ? (
+                      <div className="text-center py-10 text-muted-foreground text-sm">No data available.</div>
+                    ) : (() => {
+                      const grandQ     = csvEnumData.reduce((s, h) => s + h.totalQ, 0);
+                      const grandSites = csvEnumData.reduce((s, h) => s + h.totalSites, 0);
+                      const grandPdm   = csvEnumData.reduce((s, h) => s + h.totalPdm, 0);
+                      return (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-3 pb-1">
+                            <Badge variant="secondary" className="font-mono">{csvEnumData.length} Hub{csvEnumData.length !== 1 ? 's' : ''}</Badge>
+                            <Badge variant="outline" className="font-mono text-blue-600">{grandQ} Questionnaires</Badge>
+                            <Badge variant="outline" className="font-mono text-green-600">{grandSites} Unique Sites</Badge>
+                            {grandPdm > 0 && <Badge variant="outline" className="font-mono text-amber-600">{grandPdm} PDM Sites</Badge>}
+                          </div>
+                          {csvEnumData.map(hg => {
+                            const hubKey  = `csv-ehub-${hg.hub}`;
+                            const hubOpen = expandedRows.has(hubKey);
+                            return (
+                              <div key={hg.hub} className="border rounded-lg">
+                                <button type="button" className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => toggleExpand(hubKey)}>
+                                  <div className="flex items-center gap-2">
+                                    <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
+                                    <span className="font-semibold">{hg.hub}</span>
+                                    <Badge variant="outline" className="text-xs text-muted-foreground">{hg.states.length} State{hg.states.length !== 1 ? 's' : ''}</Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                                    <Badge variant="outline" className="font-mono text-blue-600 text-xs">{hg.totalQ} Q</Badge>
+                                    <Badge variant="secondary" className="font-mono text-xs">{hg.totalSites} Sites</Badge>
+                                    {hg.totalPdm > 0 && <Badge variant="outline" className="font-mono text-amber-600 text-xs">{hg.totalPdm} PDM</Badge>}
+                                    {hubOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                  </div>
+                                </button>
+                                {hubOpen && (
+                                  <div className="border-t divide-y">
+                                    {hg.states.map(sg => {
+                                      const stateKey  = `csv-estate-${hg.hub}-${sg.state}`;
+                                      const stateOpen = expandedRows.has(stateKey);
+                                      return (
+                                        <div key={sg.state}>
+                                          <button type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/20 transition-colors text-left bg-muted/10" onClick={() => toggleExpand(stateKey)}>
+                                            <div className="flex items-center gap-2">
+                                              <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                                              <span className="font-medium text-sm">{sg.state}</span>
+                                              <span className="text-xs text-muted-foreground">{sg.collectors.length} collector{sg.collectors.length !== 1 ? 's' : ''}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                                              <Badge variant="outline" className="font-mono text-blue-600 text-xs">{sg.totalQ} Q</Badge>
+                                              <Badge variant="secondary" className="font-mono text-xs">{sg.totalSites} Sites</Badge>
+                                              {sg.totalPdm > 0 && <Badge variant="outline" className="font-mono text-amber-600 text-xs">{sg.totalPdm} PDM</Badge>}
+                                              {stateOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                            </div>
+                                          </button>
+                                          {stateOpen && (
+                                            <div className="pl-6 pr-3 pb-2 space-y-1.5 pt-1.5 bg-muted/5">
+                                              {sg.collectors.map((col, ci) => {
+                                                const colKey  = `csv-ecol-${hg.hub}-${sg.state}-${col.name}-${ci}`;
+                                                const colOpen = expandedRows.has(colKey);
+                                                return (
+                                                  <div key={colKey} className="border rounded-md bg-background">
+                                                    <button type="button" className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/20 transition-colors text-left" onClick={() => toggleExpand(colKey)}>
+                                                      <div className="flex items-center gap-2 min-w-0">
+                                                        <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                                                        <span className="text-sm font-medium truncate">{col.name}</span>
+                                                      </div>
+                                                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                        <Badge variant="outline" className="font-mono text-blue-600 text-xs">{col.questionnaires} Q</Badge>
+                                                        <Badge variant="secondary" className="font-mono text-xs">{col.sites.length} Sites</Badge>
+                                                        {col.pdmSites > 0 && <Badge variant="outline" className="font-mono text-amber-600 text-xs">{col.pdmSites} PDM</Badge>}
+                                                        {colOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                      </div>
+                                                    </button>
+                                                    {colOpen && (
+                                                      <div className="border-t">
+                                                        <div className="flex flex-wrap gap-3 px-3 py-2 text-xs border-b bg-muted/10">
+                                                          <span className="text-blue-600"><strong>{col.questionnaires}</strong> Questionnaires</span>
+                                                          <span className="text-muted-foreground">{col.sites.length} Unique Sites</span>
+                                                          {col.pdmSites > 0 && <span className="text-amber-600"><strong>{col.pdmSites}</strong> PDM Sites</span>}
+                                                          {col.activities.length > 0 && (
+                                                            <span className="text-muted-foreground">{col.activities.map(a => `${a.name} (${a.count}${isPdmActivity(a.name) ? ', PDM: ' + Math.floor(a.count / 7) : ''})`).join(' · ')}</span>
+                                                          )}
+                                                        </div>
+                                                        {col.sites.length > 0 && (
+                                                          <div className="overflow-x-auto">
+                                                            <table className="w-full text-xs">
+                                                              <thead>
+                                                                <tr className="bg-muted/30 border-b">
+                                                                  <th className="text-left py-1.5 px-2 font-medium">Site Name</th>
+                                                                </tr>
+                                                              </thead>
+                                                              <tbody>
+                                                                {col.sites.map((site, si) => (
+                                                                  <tr key={si} className={si % 2 === 0 ? 'bg-background' : 'bg-muted/10'}>
+                                                                    <td className="py-1.5 px-2">{site}</td>
+                                                                  </tr>
+                                                                ))}
+                                                              </tbody>
+                                                            </table>
+                                                          </div>
                                                         )}
                                                       </div>
-                                                      {col.sites.length > 0 && (
-                                                        <div className="overflow-x-auto">
-                                                          <table className="w-full text-xs">
-                                                            <thead>
-                                                              <tr className="bg-muted/30 border-b">
-                                                                <th className="text-left py-1.5 px-2 font-medium">Site Name</th>
-                                                              </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                              {col.sites.map((site, si) => (
-                                                                <tr key={si} className={si % 2 === 0 ? 'bg-background' : 'bg-muted/10'}>
-                                                                  <td className="py-1.5 px-2">{site}</td>
-                                                                </tr>
-                                                              ))}
-                                                            </tbody>
-                                                          </table>
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
+                  )}
                 </CardContent>
               </Card>
 
