@@ -16,6 +16,7 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format, parse, isValid } from 'date-fns';
+import { hubs, sudanStates } from '@/data/sudanStates';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
 import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, buildCoverageTrackerWorkbook, exportEnumeratorTrackerExcel, exportEnumeratorTrackerFormattedExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
@@ -127,10 +128,47 @@ const DEFAULT_COLUMN_MAP = {
   partner: 22,
 };
 
+// Keyword lists for every mapped field — ordered most-specific first so exact
+// matches win over partial ones.  The parser scans the header row and picks
+// the first column whose lowercased header contains any keyword.
 const HEADER_KEYWORDS: Record<string, string[]> = {
-  deviceId: ['deviceid', 'device_id', 'معرف الجهاز', 'device id', 'device identifier', 'imei'],
+  hub:           ['hub name', 'hub_name', 'hub', 'sub office', 'sub_office', 'office'],
+  state:         ['state name', 'state_name', 'state', 'governorate', 'ولاية', 'region'],
+  locality:      ['locality name', 'locality_name', 'locality', 'محلية', 'district', 'sub-district'],
+  activitySite:  ['activity site', 'activity_site', 'site name', 'site_name', 'sitename', 'site', 'village', 'قرية', 'camp', 'location'],
+  activity:      ['activity type', 'activity_type', 'activity', 'program type', 'programme', 'program', 'نشاط'],
+  subActivity:   ['sub activity', 'sub_activity', 'subactivity', 'sub-activity'],
   dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
+  deviceId:      ['deviceid', 'device_id', 'device id', 'معرف الجهاز', 'device identifier', 'imei'],
+  supervisor:    ['field supervisor', 'supervisor name', 'supervisor', 'superviser', 'فيلد سوبرفايزر'],
+  date:          ['submission date', 'submitdate', 'submit_date', 'date_time', 'today', 'date', 'start'],
+  siteId:        ['site id', 'site_id', 'siteid', '_uuid', 'uuid'],
+  partner:       ['implementing partner', 'partner name', 'partner_name', 'ip name', 'ip_name', 'partner'],
 };
+
+// ── State-name → Hub-name lookup ─────────────────────────────────────────────
+// Built dynamically from the authoritative hubs/sudanStates data so it never
+// drifts out of sync.  Used to auto-fill the hub column when the uploaded file
+// doesn't include hub names (new clean-data format).
+const STATE_TO_HUB_NAME: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  for (const hub of hubs) {
+    for (const stateId of hub.states) {
+      const st = sudanStates.find(s => s.id === stateId);
+      if (!st) continue;
+      // state ID  (e.g. "kassala")
+      m.set(stateId.toLowerCase(), hub.name);
+      // English name  (e.g. "Kassala")
+      m.set(st.name.toLowerCase(), hub.name);
+      // Hyphen → space variant  (e.g. "blue-nile" → "blue nile")
+      m.set(st.name.toLowerCase().replace(/-/g, ' '), hub.name);
+      m.set(stateId.toLowerCase().replace(/-/g, ' '), hub.name);
+      // Arabic name
+      if (st.nameAr) m.set(st.nameAr.trim(), hub.name);
+    }
+  }
+  return m;
+})();
 
 import { isPdmActivity } from '@/utils/pdmMdmUtils';
 
@@ -1014,26 +1052,33 @@ const QuestionnaireAnalytics = () => {
         const colMap = { ...DEFAULT_COLUMN_MAP };
         if (rawData.length > 0) {
           const headerRow = rawData[0].map((h: any) => (h || '').toString().toLowerCase().trim());
+          // Detect every mapped field by header keyword — most-specific keyword wins
           Object.entries(HEADER_KEYWORDS).forEach(([field, keywords]) => {
             const idx = headerRow.findIndex((h: string) => keywords.some(kw => h.includes(kw)));
             if (idx >= 0) (colMap as any)[field] = idx;
           });
         }
 
-        const rows: QuestionnaireRow[] = rawData.slice(1).map((row) => ({
-          hub: (row[colMap.hub] || '').toString().trim(),
-          state: (row[colMap.state] || '').toString().trim(),
-          locality: (row[colMap.locality] || '').toString().trim(),
-          activitySite: (row[colMap.activitySite] || '').toString().trim(),
-          activity: (row[colMap.activity] || '').toString().trim(),
-          subActivity: (row[colMap.subActivity] || '').toString().trim(),
-          dataCollector: (row[colMap.dataCollector] || '').toString().trim(),
-          deviceId: (row[colMap.deviceId] || '').toString().trim(),
-          supervisor: (row[colMap.supervisor] || '').toString().trim(),
-          date: (row[colMap.date] || '').toString().trim(),
-          siteId: (row[colMap.siteId] || '').toString().trim(),
-          partner: (row[colMap.partner] || '').toString().trim(),
-        })).filter(row => row.hub || row.state || row.dataCollector);
+        const rows: QuestionnaireRow[] = rawData.slice(1).map((row) => {
+          const rawHub   = (row[colMap.hub]   || '').toString().trim();
+          const rawState = (row[colMap.state] || '').toString().trim();
+          // Auto-derive hub from state when the file omits the hub column
+          const derivedHub = rawHub || STATE_TO_HUB_NAME.get(rawState.toLowerCase()) || '';
+          return {
+            hub:           derivedHub,
+            state:         rawState,
+            locality:      (row[colMap.locality]      || '').toString().trim(),
+            activitySite:  (row[colMap.activitySite]  || '').toString().trim(),
+            activity:      (row[colMap.activity]      || '').toString().trim(),
+            subActivity:   (row[colMap.subActivity]   || '').toString().trim(),
+            dataCollector: (row[colMap.dataCollector] || '').toString().trim(),
+            deviceId:      (row[colMap.deviceId]      || '').toString().trim(),
+            supervisor:    (row[colMap.supervisor]    || '').toString().trim(),
+            date:          (row[colMap.date]          || '').toString().trim(),
+            siteId:        (row[colMap.siteId]        || '').toString().trim(),
+            partner:       (row[colMap.partner]       || '').toString().trim(),
+          };
+        }).filter(row => row.hub || row.state || row.dataCollector);
 
         setData(rows);
         setOriginalData(null);
