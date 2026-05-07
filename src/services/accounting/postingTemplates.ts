@@ -765,6 +765,76 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
            'Daily rate = latest base_salary from eosb_accruals ÷ 30. Logs "skipped" if no salary found. ' +
            'Leave liability clears when leave encashment or payroll deduction is processed.',
   },
+
+  // ── Phase 5 bridges ───────────────────────────────────────────────────────
+
+  // ── 20. Cash Flow Adjustments → Created ──────────────────────────────────
+  {
+    id:               'acct_cash_flow_adj_created',
+    sourceTable:      'acct_cash_flow_adjustments',
+    eventType:        'created',
+    triggerStatus:    'INSERT',
+    triggerCondition: 'AFTER INSERT on acct_cash_flow_adjustments',
+    labelEn:          'Cash Flow Adjustment Posted to GL',
+    labelAr:          'تسجيل تسوية التدفق النقدي في دفتر الأستاذ',
+    featureFlag:      'acct.bridge.cash_flow_adj',
+    lines: [
+      {
+        accountCode:  '1110',
+        accountName:  'Cash (Inflow: DR / Outflow: CR)',
+        debitCredit:  'DR',
+        amountSource: 'acct_cash_flow_adjustments.amount (abs)',
+        currency:     'USD',
+        glFunction:   'none',
+        description:  'CF Adjustment — [label] [month_key]',
+      },
+      {
+        accountCode:  '4990',
+        accountName:  'Adjustment Clearing (Inflow: CR / Outflow: DR)',
+        debitCredit:  'CR',
+        amountSource: 'acct_cash_flow_adjustments.amount (abs)',
+        currency:     'USD',
+        glFunction:   'none',
+        description:  'CF Adjustment Clearing — [label]',
+      },
+    ],
+    notes: 'Disabled by default — enable acct.bridge.cash_flow_adj after COA seeded with ' +
+           'account 1110 (Cash) and 4990 (Adjustment Clearing). ' +
+           'Inflow (amount ≥ 0): DR Cash / CR Clearing. Outflow (amount < 0): DR Clearing / CR Cash. ' +
+           'Requires an open fiscal period and active fund; logs "skipped" otherwise.',
+  },
+
+  // ── 21. Grants → Status Changed ──────────────────────────────────────────
+  {
+    id:               'acct_grants_status_change',
+    sourceTable:      'acct_grants',
+    eventType:        'status_active | status_closed | status_expired',
+    triggerStatus:    'UPDATE (status changes)',
+    triggerCondition: 'AFTER UPDATE on acct_grants when old.status IS DISTINCT FROM new.status',
+    labelEn:          'Grant Status Change Logged (GL Visibility)',
+    labelAr:          'تسجيل تغيير حالة المنحة في جسر دفتر الأستاذ',
+    featureFlag:      'acct.bridge.grants',
+    lines: [],
+    notes: 'Visibility-only bridge — no journal posted. Logs a bridge entry to acct_gl_bridge_log ' +
+           'whenever a grant transitions between statuses (draft → active → closed → expired). ' +
+           'Enabled by default. Appears in GL Bridge Audit under "Grants" source table.',
+  },
+
+  // ── 22. Grant Milestones → Accepted ──────────────────────────────────────
+  {
+    id:               'acct_grant_milestones_accepted',
+    sourceTable:      'acct_grant_milestones',
+    eventType:        'milestone_accepted',
+    triggerStatus:    'UPDATE (status → accepted)',
+    triggerCondition: 'AFTER UPDATE on acct_grant_milestones when new.status = \'accepted\'',
+    labelEn:          'Grant Milestone Accepted (GL Visibility)',
+    labelAr:          'تسجيل قبول مرحلة المنحة في جسر دفتر الأستاذ',
+    featureFlag:      'acct.bridge.milestones',
+    lines: [],
+    notes: 'Visibility-only bridge — no journal posted. Logs a bridge entry when a grant milestone ' +
+           'status moves to "accepted" (the final positive state in the milestone lifecycle). ' +
+           'Enabled by default. Used for donor milestone reporting and grant compliance audit.',
+  },
 ];
 
 // ─── Helper utilities ────────────────────────────────────────────────────────

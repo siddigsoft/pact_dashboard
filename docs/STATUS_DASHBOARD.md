@@ -91,10 +91,12 @@ period needs closing. All guarded — re-run after each phase to pick up skipped
 
 ### Phase 5 — Grant Tracking / Cost Allocation / Depreciation / Cash Flow Adjustments (apply any time after Phase 3)
 
-Paste `supabase/migrations/20260502_acct_phase5_expansion.sql` following `docs/sql/PHASE5_EXPANSION_MANUAL_APPLY.md`.
-
-Creates (idempotently — skips tables that already exist): `acct_grants`, `acct_grant_expenses`, `acct_cost_allocation_rules`, `acct_allocation_runs`, `acct_depreciation_runs`, `acct_cash_flow_adjustments` + 3 feature flags.
-After applying, re-run `20260502_acct_accounting_notifications.sql` so the grant expiry trigger is bound.
+Apply in this order:
+1. `supabase/migrations/20260502_acct_phase5_expansion.sql` → `docs/sql/PHASE5_EXPANSION_MANUAL_APPLY.md`
+   Creates: `acct_grants`, `acct_grant_expenses`, `acct_cost_allocation_rules`, `acct_allocation_runs`, `acct_depreciation_runs`, `acct_cash_flow_adjustments`, `acct_grant_milestones` (via hr_advances_grant_milestones.sql).
+2. `supabase/migrations/accounting_gl_bridges_phase5.sql` → `docs/sql/PHASE5_GL_BRIDGES_MANUAL_APPLY.md`
+   Adds: 3 bridge triggers (`acct_bridge_cash_flow_adj`, `acct_bridge_grant_status`, `acct_bridge_grant_milestone`), `acct_grant_utilization()` RPC, `v_acct_phase5_coverage` view, 3 feature flags.
+3. Re-run `20260502_acct_accounting_notifications.sql` so the grant expiry trigger binds to `acct_grants`.
 
 ---
 
@@ -107,7 +109,7 @@ After applying, re-run `20260502_acct_accounting_notifications.sql` so the grant
 | 2 | Wire payroll / wallets / cost subs / advances / scanner to GL | ✅ DONE — applied to pactdb | 100% |
 | 3 | EOSB / salary advances / grant expenses / period-close allocation bridges | ✅ DONE — applied to pactdb | 100% |
 | 4 | Tax codes + FX rates + depreciation / encumbrance / leave liability bridges + accounting alert notifications | 🟡 IN PROGRESS — All code complete; 3 SQL files ready to apply manually | 80% |
-| 5 | Donor / grant management + restricted funds (extended) | 🟡 QUEUED — SQL written (`20260502_acct_phase5_expansion.sql`), runbook written; apply after Phase 4 | 20% |
+| 5 | Donor / grant management + restricted funds (extended) | 🟡 QUEUED — Expansion SQL + GL bridges SQL both written; apply after Phase 4 | 40% |
 | 6 | Sanctions / AML deep-screening + fuzzy ranking | ⚪ QUEUED | 0% |
 | 7 | Statutory reporting (PIT, social, zakat) | ⚪ QUEUED | 0% |
 | 8 | Audit-pack export + external auditor portal | ⚪ QUEUED | 0% |
@@ -157,7 +159,14 @@ Legend: ✅ DONE · 🟢 SIGNED OFF · 🟡 IN PROGRESS · 🟠 BLOCKED · ⚪ Q
 | 4.1 | Bridge triggers: depreciation run log + allocation run log + budget encumbrance journal + leave liability journal | 🟡 READY TO APPLY — after 4.ADV | ⏳ pending | `accounting_gl_bridges_phase4.sql` · `PHASE4_GL_BRIDGES_MANUAL_APPLY.md` · `PHASE4_GL_BRIDGES_ROLLBACK.sql` |
 | 4.NOT | Accounting alert notifications: AP overdue + GL bridge failure + grant expiry + period-close reminder | 🟡 READY TO APPLY — any time after Phase 3 | ⏳ pending | `20260502_acct_accounting_notifications.sql` · `ACCT_NOTIFICATIONS_MANUAL_APPLY.md` |
 
-### Phases 5–10
+### Phase 5 — Grants / Cash Flow / Depreciation GL Bridges
+
+| ID | Sprint | Status | Files |
+|---|---|---|---|
+| 5.EXP | Phase 5 expansion tables: `acct_grants`, `acct_grant_expenses`, `acct_cost_allocation_rules`, `acct_allocation_runs`, `acct_depreciation_runs`, `acct_cash_flow_adjustments` | 🟡 READY TO APPLY | `20260502_acct_phase5_expansion.sql` · `PHASE5_EXPANSION_MANUAL_APPLY.md` |
+| 5.1 | Phase 5 GL bridges: 3 triggers + `acct_grant_utilization()` RPC + `v_acct_phase5_coverage` view + 3 feature flags | 🟡 READY TO APPLY — after 5.EXP | `accounting_gl_bridges_phase5.sql` · `PHASE5_GL_BRIDGES_MANUAL_APPLY.md` |
+
+### Phases 6–10
 
 Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Phase 4.
 
@@ -195,6 +204,12 @@ Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Pha
 | `docs/sql/PHASE4_GL_BRIDGES_ROLLBACK.sql` | 4.1 | Rollback | n/a |
 | `supabase/migrations/20260502_acct_accounting_notifications.sql` | 4.NOT | Migration (299 lines) — 4 alert triggers (all guarded) | ⏳ pending — apply any time after Phase 3 |
 | `docs/sql/ACCT_NOTIFICATIONS_MANUAL_APPLY.md` | 4.NOT | Runbook | n/a |
+| `supabase/migrations/20260502_acct_phase5_expansion.sql` | 5.EXP | Migration (131 lines) — Phase 5 tables | ⏳ pending — apply after Phase 4 |
+| `docs/sql/PHASE5_EXPANSION_MANUAL_APPLY.md` | 5.EXP | Runbook | n/a |
+| `docs/sql/PHASE5_EXPANSION_ROLLBACK.sql` | 5.EXP | Rollback | n/a |
+| `supabase/migrations/accounting_gl_bridges_phase5.sql` | 5.1 | Migration — 3 triggers + `acct_grant_utilization()` RPC + coverage view + 3 flags | ⏳ pending — apply after 5.EXP |
+| `docs/sql/PHASE5_GL_BRIDGES_MANUAL_APPLY.md` | 5.1 | Runbook | n/a |
+| `docs/sql/PHASE5_GL_BRIDGES_ROLLBACK.sql` | 5.1 | Rollback | n/a |
 | `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite | ⏳ pending (apply any time) |
 | `supabase/migrations/20260409_timesheet_module.sql` | Timesheet | Migration | ✅ 2026-04-26 |
 | `supabase/migrations/20260426_timesheet_entries_insert_status_guard.sql` | Timesheet hot-patch | RLS hardening | ✅ 2026-04-26 |

@@ -57,6 +57,9 @@ const DEFAULT_FLAGS: Omit<FeatureFlag, 'updated_at'>[] = [
   { key: 'acct.bridge.acct_allocation_runs',     description: 'Phase 4: Log GL visibility entry for cost allocation runs. Enable after applying accounting_gl_bridges_phase4.sql.',               is_enabled: false, rolled_out_pct: 100 },
   { key: 'acct.bridge.acct_budget_encumbrances', description: 'Phase 4: Post encumbrance journal (DR Expense / CR 2105) on PO/PR creation. Enable only after Chart of Accounts and a GENERAL fund are configured.', is_enabled: false, rolled_out_pct: 100 },
   { key: 'acct.bridge.leave_requests',           description: 'Phase 4: Post leave liability journal (DR Leave Expense / CR 2240 Leave Payable) when a leave request is approved.',               is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.cash_flow_adj',            description: 'Phase 5: Post GL journal for cash flow adjustments (Inflow: DR Cash / CR Clearing; Outflow reversed). Disabled by default — enable after COA seeded with 1110 + 4990.', is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.grants',                   description: 'Phase 5: Log GL bridge entry when a grant status changes (draft → active → closed → expired). Enabled for audit visibility.',      is_enabled: true,  rolled_out_pct: 100 },
+  { key: 'acct.bridge.milestones',               description: 'Phase 5: Log GL bridge entry when a grant milestone is accepted. Enabled for grant compliance tracking.',                          is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.posting_engine.enabled',          description: 'Master GL posting engine switch. Disabling this blocks all Phase 4 bridge postings.',                                              is_enabled: true,  rolled_out_pct: 100 },
 ];
 

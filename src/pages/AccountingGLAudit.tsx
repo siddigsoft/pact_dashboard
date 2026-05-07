@@ -67,6 +67,9 @@ const TABLE_LABELS: Record<string, string> = {
   acct_budget_encumbrances:        'Budget Encumbrances',
   leave_requests:                  'Leave Liability',
   acct_fixed_assets:               'Fixed Assets',
+  acct_cash_flow_adjustments:      'Cash Flow Adjustments',
+  acct_grants:                     'Grants',
+  acct_grant_milestones:           'Grant Milestones',
 };
 
 const HEALTH_CFG = {
