@@ -2686,7 +2686,7 @@ const QuestionnaireAnalytics = () => {
       const totFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
       const bdrA = (): Partial<ExcelJS.Borders> => { const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: XBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
 
-      const ws1 = wb.addWorksheet(summaryName.slice(0, 31));
+      const ws1 = wb.addWorksheet(summaryName.replace(/[\\/*?[\]:]/g, '-').slice(0, 31));
       const s1Cols = ['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
       const hr1 = ws1.addRow(s1Cols);
       hr1.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
@@ -2712,7 +2712,7 @@ const QuestionnaireAnalytics = () => {
       for (let ci = 2; ci <= s1Cols.length; ci++) ws1.getColumn(ci).width = 14;
 
       [...hubTrackers].sort((a, b) => a.hub.localeCompare(b.hub)).forEach(ht => {
-        const ws = wb.addWorksheet(`Hub-${ht.hub}`.slice(0, 31));
+        const ws = wb.addWorksheet(`Hub-${ht.hub}`.replace(/[\\/*?[\]:]/g, '-').slice(0, 31));
         const hCols = ['Activity', ...ht.states.flatMap(s => [`${s} Sites`, `${s} Actual`, `${s} PDM`, `${s} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
         const hdr = ws.addRow(hCols);
         hdr.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
@@ -2739,7 +2739,7 @@ const QuestionnaireAnalytics = () => {
       });
 
       [...stateTrackers].sort((a, b) => a.state.localeCompare(b.state)).forEach(st => {
-        const ws = wb.addWorksheet(`State-${st.state}`.slice(0, 31));
+        const ws = wb.addWorksheet(`State-${st.state}`.replace(/[\\/*?[\]:]/g, '-').slice(0, 31));
         const hCols = ['Activity', ...st.localities.flatMap(l => [`${l} Sites`, `${l} Actual`, `${l} PDM`, `${l} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
         const hdr = ws.addRow(hCols);
         hdr.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
