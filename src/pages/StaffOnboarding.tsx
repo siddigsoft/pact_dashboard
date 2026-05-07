@@ -78,27 +78,75 @@ export default function StaffOnboarding() {
 
         /* ── URGENCY BANNER ── */
         .ob-urgency {
-          background: #fffbeb;
-          border: 2.5px solid #f59e0b;
-          border-radius: 14px;
-          padding: 22px 28px;
-          margin-bottom: 28px;
-          display: flex;
-          align-items: flex-start;
-          gap: 16px;
-          box-shadow: 0 4px 16px rgba(245,158,11,0.15);
+          background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 60%, #b91c1c 100%);
+          border-radius: 16px;
+          padding: 36px 36px 32px;
+          margin-bottom: 32px;
+          box-shadow: 0 16px 48px rgba(153,27,27,0.45);
+          position: relative;
+          overflow: hidden;
         }
-        .ob-urgency-icon { font-size: 32px; flex-shrink: 0; margin-top: 2px; }
+        .ob-urgency::before {
+          content: '';
+          position: absolute;
+          top: -40px; right: -40px;
+          width: 180px; height: 180px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 50%;
+        }
+        .ob-urgency-top {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+        .ob-urgency-badge {
+          background: #fff;
+          color: #991b1b;
+          font-size: 13px;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          padding: 5px 16px;
+          border-radius: 999px;
+          flex-shrink: 0;
+        }
         .ob-urgency-title {
-          font-size: 20px;
-          font-weight: 800;
-          color: #92400e;
-          margin-bottom: 6px;
+          font-size: 30px;
+          font-weight: 900;
+          color: #fff;
+          line-height: 1.2;
+          letter-spacing: -0.3px;
+          margin-bottom: 14px;
         }
         .ob-urgency-body {
-          font-size: 16px;
-          color: #78350f;
-          line-height: 1.65;
+          font-size: 18px;
+          color: #fecaca;
+          line-height: 1.75;
+        }
+        .ob-urgency-body strong {
+          color: #fff;
+          font-weight: 800;
+        }
+        .ob-urgency-divider {
+          border: none;
+          border-top: 1px solid rgba(255,255,255,0.2);
+          margin: 20px 0;
+        }
+        .ob-urgency-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-top: 20px;
+        }
+        .ob-urgency-pill {
+          background: rgba(255,255,255,0.15);
+          border: 1.5px solid rgba(255,255,255,0.35);
+          color: #fff;
+          font-size: 14px;
+          font-weight: 700;
+          padding: 7px 18px;
+          border-radius: 999px;
         }
 
         /* ── CARD ── */
@@ -444,12 +492,22 @@ export default function StaffOnboarding() {
 
         {/* ── URGENCY BANNER ── */}
         <div className="ob-urgency">
-          <div className="ob-urgency-icon">⚡</div>
-          <div>
-            <div className="ob-urgency-title">Action Required — Register Today</div>
-            <div className="ob-urgency-body">
-              Contract management and payroll processing are ready to launch. <strong>We cannot start until every staff member has registered.</strong> Please complete your registration as soon as possible — it takes less than 3 minutes.
-            </div>
+          <div className="ob-urgency-top">
+            <span className="ob-urgency-badge">🚨 &nbsp;REQUIRED</span>
+          </div>
+          <div className="ob-urgency-title">
+            Action Required — Register Today
+          </div>
+          <div className="ob-urgency-body">
+            Contract management and payroll processing are <strong>fully ready to launch.</strong><br /><br />
+            <strong>We cannot process a single contract or pay a single salary until every staff member has registered.</strong> Your colleagues are waiting on you. Every day of delay holds up payroll for the entire team.<br /><br />
+            Registration takes <strong>less than 3 minutes.</strong> There is no reason to wait.
+          </div>
+          <hr className="ob-urgency-divider" />
+          <div className="ob-urgency-pills">
+            <span className="ob-urgency-pill">⏱ Takes less than 3 minutes</span>
+            <span className="ob-urgency-pill">💰 Payroll blocked until you register</span>
+            <span className="ob-urgency-pill">📄 Contracts cannot be issued without your account</span>
           </div>
         </div>
 
