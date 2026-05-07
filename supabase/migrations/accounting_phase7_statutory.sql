@@ -146,7 +146,7 @@ end $$;
 create table if not exists public.acct_tax_withholding (
   id                      uuid        primary key default gen_random_uuid(),
   employee_id             uuid        not null references public.profiles(id) on delete restrict,
-  period_id               uuid        not null references public.acct_periods(id) on delete restrict,
+  period_id               uuid        not null references public.acct_fiscal_periods(id) on delete restrict,
   gross_salary            numeric(20,2) not null,
   taxable_income          numeric(20,2) not null,   -- gross minus exemptions
   pit_amount              numeric(20,2) not null default 0,
@@ -224,7 +224,7 @@ create table if not exists public.acct_statutory_filings (
       'social_monthly','social_annual',
       'zakat_annual'
     )),
-  period_id       uuid        references public.acct_periods(id) on delete set null,
+  period_id       uuid        references public.acct_fiscal_periods(id) on delete set null,
   fiscal_year_id  uuid        references public.acct_fiscal_years(id) on delete set null,
   filing_date     date,
   due_date        date,
@@ -367,7 +367,7 @@ set search_path = public
 as $$
   select
     w.period_id,
-    p.name                                                        as period_name,
+    to_char(p.start_date, 'Mon YYYY')                             as period_name,
     count(distinct w.employee_id)                                 as employee_count,
     sum(w.gross_salary)                                           as total_gross,
     sum(w.pit_amount)                                             as total_pit,
@@ -380,10 +380,10 @@ as $$
     count(*) filter (where w.status = 'submitted')                as submitted_count,
     count(*) filter (where w.status = 'paid')                     as paid_count
   from public.acct_tax_withholding w
-  join public.acct_periods p on p.id = w.period_id
+  join public.acct_fiscal_periods p on p.id = w.period_id
   where (p_period_id is null or w.period_id = p_period_id)
-  group by w.period_id, p.name
-  order by p.name desc;
+  group by w.period_id, p.start_date, p.period_no
+  order by p.start_date desc;
 $$;
 
 -- ── PART H: GL Bridge — statutory filing paid ────────────────────────────────
