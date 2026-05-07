@@ -1040,8 +1040,12 @@ export async function exportEnumeratorTrackerFormattedExcel(
       });
 
       // State subtotal
+      const stateSubmitted   = collectors.reduce((s, c) => s + c.submitted,    0);
+      const stateWfpConf     = collectors.reduce((s, c) => s + c.wfpConfirmed, 0);
+      const statePending     = collectors.reduce((s, c) => s + c.pending,      0);
+      const stateRejected    = collectors.reduce((s, c) => s + c.rejected,     0);
       const stPctNum = stateTot > 0 ? (stateCovered / stateTot) * 100 : 0;
-      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateCovered, '', '', '', '', stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
+      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateCovered, stateSubmitted, stateWfpConf, statePending, stateRejected, stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
       stSub.height = 18;
       stSub.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4FD' } };
@@ -1052,8 +1056,12 @@ export async function exportEnumeratorTrackerFormattedExcel(
     }
 
     // Hub subtotal
+    const hubSubmitted  = hubCollectors.reduce((s, c) => s + c.submitted,    0);
+    const hubWfpConf    = hubCollectors.reduce((s, c) => s + c.wfpConfirmed, 0);
+    const hubPending    = hubCollectors.reduce((s, c) => s + c.pending,      0);
+    const hubRejected   = hubCollectors.reduce((s, c) => s + c.rejected,     0);
     const hPctNum = hubTotal > 0 ? (hubCovered / hubTotal) * 100 : 0;
-    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubCovered, '', '', '', '', hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
+    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubCovered, hubSubmitted, hubWfpConf, hubPending, hubRejected, hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
     hubSub.height = 22;
     hubSub.eachCell((cell, ci) => {
       cell.fill = totalFill();

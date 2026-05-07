@@ -295,6 +295,7 @@ const QuestionnaireAnalytics = () => {
   const [enumTrackerLoading, setEnumTrackerLoading] = useState(false);
   const [enumHubFilter, setEnumHubFilter] = useState('all');
   const [enumStateFilter, setEnumStateFilter] = useState('all');
+  const [enumStatusFilter, setEnumStatusFilter] = useState('all');
   const [enumSearch, setEnumSearch] = useState('');
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
@@ -5670,6 +5671,10 @@ const QuestionnaireAnalytics = () => {
                                 if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
                                 if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
                                 if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                                if (enumStatusFilter === 'wfp_confirmed' && r.wfpConfirmed === 0) return false;
+                                if (enumStatusFilter === 'submitted'     && r.submitted    === 0) return false;
+                                if (enumStatusFilter === 'pending'       && r.pending      === 0) return false;
+                                if (enumStatusFilter === 'rejected'      && r.rejected     === 0) return false;
                                 return true;
                               });
                               exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
@@ -5684,6 +5689,10 @@ const QuestionnaireAnalytics = () => {
                                 if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
                                 if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
                                 if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                                if (enumStatusFilter === 'wfp_confirmed' && r.wfpConfirmed === 0) return false;
+                                if (enumStatusFilter === 'submitted'     && r.submitted    === 0) return false;
+                                if (enumStatusFilter === 'pending'       && r.pending      === 0) return false;
+                                if (enumStatusFilter === 'rejected'      && r.rejected     === 0) return false;
                                 return true;
                               });
                               exportEnumeratorTrackerFormattedExcel(filtered, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
@@ -5730,8 +5739,20 @@ const QuestionnaireAnalytics = () => {
                         <option key={s} value={s}>{s === 'all' ? 'All States' : s}</option>
                       ))}
                     </select>
-                    {(enumHubFilter !== 'all' || enumStateFilter !== 'all' || enumSearch) && (
-                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => { setEnumHubFilter('all'); setEnumStateFilter('all'); setEnumSearch(''); }}>
+                    <select
+                      className="text-sm border rounded-md px-2 py-1.5 bg-background"
+                      value={enumStatusFilter}
+                      onChange={e => setEnumStatusFilter(e.target.value)}
+                      data-testid="select-enum-status-tracker"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="wfp_confirmed">WFP Confirmed</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="pending">Pending</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                    {(enumHubFilter !== 'all' || enumStateFilter !== 'all' || enumStatusFilter !== 'all' || enumSearch) && (
+                      <Button size="sm" variant="ghost" className="gap-1" onClick={() => { setEnumHubFilter('all'); setEnumStateFilter('all'); setEnumStatusFilter('all'); setEnumSearch(''); }}>
                         <X className="h-3.5 w-3.5" />Clear
                       </Button>
                     )}
@@ -5757,9 +5778,14 @@ const QuestionnaireAnalytics = () => {
                           .filter(sg => enumStateFilter === 'all' || sg.state === enumStateFilter)
                           .map(sg => ({
                             ...sg,
-                            collectors: enumSearch
-                              ? sg.collectors.filter(c => c.collectorName.toLowerCase().includes(enumSearch.toLowerCase()))
-                              : sg.collectors,
+                            collectors: sg.collectors.filter(c => {
+                              if (enumSearch && !c.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                              if (enumStatusFilter === 'wfp_confirmed' && c.wfpConfirmed === 0) return false;
+                              if (enumStatusFilter === 'submitted'     && c.submitted    === 0) return false;
+                              if (enumStatusFilter === 'pending'       && c.pending      === 0) return false;
+                              if (enumStatusFilter === 'rejected'      && c.rejected     === 0) return false;
+                              return true;
+                            }),
                           }))
                           .filter(sg => sg.collectors.length > 0),
                       }))
