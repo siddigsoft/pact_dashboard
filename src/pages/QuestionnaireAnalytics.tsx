@@ -86,6 +86,18 @@ interface EnumTrackerEntry {
   total: number;
   sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string }[];
 }
+interface EnumStateGroup {
+  state: string;
+  totalSites: number;
+  totalCovered: number;
+  collectors: EnumTrackerEntry[];
+}
+interface EnumHubGroup {
+  hub: string;
+  totalSites: number;
+  totalCovered: number;
+  states: EnumStateGroup[];
+}
 
 interface SavedSession {
   id: string;
@@ -279,6 +291,7 @@ const QuestionnaireAnalytics = () => {
 
   // ── Enumerator Tracker state ──────────────────────────────────
   const [enumTrackerRows, setEnumTrackerRows] = useState<EnumTrackerEntry[]>([]);
+  const [enumHubGroups, setEnumHubGroups] = useState<EnumHubGroup[]>([]);
   const [enumTrackerLoading, setEnumTrackerLoading] = useState(false);
   const [enumHubFilter, setEnumHubFilter] = useState('all');
   const [enumStateFilter, setEnumStateFilter] = useState('all');
@@ -289,8 +302,6 @@ const QuestionnaireAnalytics = () => {
   const fetchEnumTrackerData = async () => {
     setEnumTrackerLoading(true);
     try {
-      // accepted_by = the data collector who accepted / completed the site
-      // hub_office  = the hub column on mmp_site_entries
       const { data: entries, error } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, hub_office, state, locality, status, accepted_by, visit_completed_at, submitted_at')
@@ -309,44 +320,72 @@ const QuestionnaireAnalytics = () => {
         });
       }
 
-      const collectorMap = new Map<string, EnumTrackerEntry>();
+      // Key = hub||state||collectorId so one collector can appear under multiple hubs/states
+      const hubStateCollectorMap = new Map<string, EnumTrackerEntry>();
       (entries || []).forEach((entry: any) => {
         if (!entry.accepted_by) return;
         const name = profileMap.get(entry.accepted_by) || entry.accepted_by;
-        if (!collectorMap.has(entry.accepted_by)) {
-          collectorMap.set(entry.accepted_by, {
+        const hub   = entry.hub_office || '—';
+        const state = entry.state      || '—';
+        const key   = `${hub}||${state}||${entry.accepted_by}`;
+        if (!hubStateCollectorMap.has(key)) {
+          hubStateCollectorMap.set(key, {
             collectorId: entry.accepted_by,
             collectorName: name,
-            hub: entry.hub_office || '',
-            state: entry.state || '',
-            covered: 0,
-            submitted: 0,
-            wfpConfirmed: 0,
-            pending: 0,
-            rejected: 0,
+            hub,
+            state,
+            covered: 0, submitted: 0, wfpConfirmed: 0, pending: 0, rejected: 0,
             total: 0,
             sites: [],
           });
         }
-        const row = collectorMap.get(entry.accepted_by)!;
+        const row = hubStateCollectorMap.get(key)!;
         row.total++;
         const st = (entry.status || '').toLowerCase();
-        if (st === 'submitted') { row.submitted++; row.covered++; }
+        if (st === 'submitted')    { row.submitted++;    row.covered++; }
         else if (st === 'wfp_confirmed') { row.wfpConfirmed++; row.covered++; }
-        else if (st === 'rejected') row.rejected++;
-        else row.pending++;
+        else if (st === 'rejected')  row.rejected++;
+        else                         row.pending++;
         const dateVal = entry.submitted_at || entry.visit_completed_at || '';
         row.sites.push({
           siteName: entry.site_name || '',
-          locality: entry.locality || '',
-          hub: entry.hub_office || '',
-          state: entry.state || '',
+          locality: entry.locality  || '',
+          hub,
+          state,
           status: entry.status || '',
           date: dateVal ? format(new Date(dateVal), 'yyyy-MM-dd') : '',
         });
       });
 
-      setEnumTrackerRows([...collectorMap.values()].sort((a, b) => b.covered - a.covered));
+      // Build Hub → State → Collectors hierarchy
+      const hubMap = new Map<string, Map<string, EnumTrackerEntry[]>>();
+      for (const entry of hubStateCollectorMap.values()) {
+        if (!hubMap.has(entry.hub)) hubMap.set(entry.hub, new Map());
+        const sm = hubMap.get(entry.hub)!;
+        if (!sm.has(entry.state)) sm.set(entry.state, []);
+        sm.get(entry.state)!.push(entry);
+      }
+      const hubGroups: EnumHubGroup[] = [...hubMap.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([hub, sm]) => {
+          const states: EnumStateGroup[] = [...sm.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([state, collectors]) => ({
+              state,
+              totalSites:   collectors.reduce((s, c) => s + c.total,   0),
+              totalCovered: collectors.reduce((s, c) => s + c.covered, 0),
+              collectors: collectors.sort((a, b) => b.covered - a.covered),
+            }));
+          return {
+            hub,
+            totalSites:   states.reduce((s, sg) => s + sg.totalSites,   0),
+            totalCovered: states.reduce((s, sg) => s + sg.totalCovered, 0),
+            states,
+          };
+        });
+
+      setEnumHubGroups(hubGroups);
+      setEnumTrackerRows([...hubStateCollectorMap.values()].sort((a, b) => b.covered - a.covered));
       setEnumTrackerFetched(true);
     } catch (e: any) {
       toast({ title: 'Failed to load enumerator data', description: e.message, variant: 'destructive' });
@@ -5603,7 +5642,7 @@ const QuestionnaireAnalytics = () => {
                         <Users className="h-5 w-5 text-primary" />
                         Tracker — Enumerators
                       </CardTitle>
-                      <CardDescription>Sites covered per data collector — sourced from live MMP site entries</CardDescription>
+                      <CardDescription>Hub → State → Data collector breakdown from live MMP site entries</CardDescription>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button
@@ -5640,13 +5679,13 @@ const QuestionnaireAnalytics = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Filter row — matches style used in Hub/State tracker views */}
+                  {/* Filter row */}
                   <div className="flex flex-wrap gap-2 mb-4 items-center">
                     <div className="relative flex-1 min-w-[160px] max-w-[260px]">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                       <input
                         className="pl-8 pr-3 py-1.5 text-sm border rounded-md w-full bg-background"
-                        placeholder="Search enumerator…"
+                        placeholder="Search collector…"
                         value={enumSearch}
                         onChange={e => setEnumSearch(e.target.value)}
                         data-testid="input-enum-search-tracker"
@@ -5658,7 +5697,7 @@ const QuestionnaireAnalytics = () => {
                       onChange={e => setEnumHubFilter(e.target.value)}
                       data-testid="select-enum-hub-tracker"
                     >
-                      {['all', ...[...new Set(enumTrackerRows.map(r => r.hub).filter(Boolean))].sort()].map(h => (
+                      {['all', ...enumHubGroups.map(g => g.hub)].map(h => (
                         <option key={h} value={h}>{h === 'all' ? 'All Hubs' : h}</option>
                       ))}
                     </select>
@@ -5668,7 +5707,7 @@ const QuestionnaireAnalytics = () => {
                       onChange={e => setEnumStateFilter(e.target.value)}
                       data-testid="select-enum-state-tracker"
                     >
-                      {['all', ...[...new Set(enumTrackerRows.map(r => r.state).filter(Boolean))].sort()].map(s => (
+                      {['all', ...[...new Set(enumHubGroups.flatMap(g => g.states.map(s => s.state)))].sort()].map(s => (
                         <option key={s} value={s}>{s === 'all' ? 'All States' : s}</option>
                       ))}
                     </select>
@@ -5684,110 +5723,183 @@ const QuestionnaireAnalytics = () => {
                       <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
                       Loading enumerator data from MMP site entries…
                     </div>
+                  ) : !enumTrackerFetched ? (
+                    <div className="text-center py-10 text-muted-foreground text-sm">
+                      <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      Click <strong>Refresh</strong> to load enumerator data.
+                    </div>
                   ) : (() => {
-                    const filtered = enumTrackerRows.filter(r => {
-                      if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
-                      if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
-                      if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
-                      return true;
-                    });
+                    // Apply hub / state / search filters to the hierarchy
+                    const visibleHubs = enumHubGroups
+                      .filter(hg => enumHubFilter === 'all' || hg.hub === enumHubFilter)
+                      .map(hg => ({
+                        ...hg,
+                        states: hg.states
+                          .filter(sg => enumStateFilter === 'all' || sg.state === enumStateFilter)
+                          .map(sg => ({
+                            ...sg,
+                            collectors: enumSearch
+                              ? sg.collectors.filter(c => c.collectorName.toLowerCase().includes(enumSearch.toLowerCase()))
+                              : sg.collectors,
+                          }))
+                          .filter(sg => sg.collectors.length > 0),
+                      }))
+                      .filter(hg => hg.states.length > 0);
 
-                    if (!enumTrackerFetched) return (
+                    if (visibleHubs.length === 0) return (
                       <div className="text-center py-10 text-muted-foreground text-sm">
                         <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                        Click <strong>Refresh</strong> to load enumerator data.
-                      </div>
-                    );
-
-                    if (filtered.length === 0) return (
-                      <div className="text-center py-10 text-muted-foreground text-sm">
-                        <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                        {enumTrackerRows.length === 0
+                        {enumHubGroups.length === 0
                           ? 'No MMP site entries with assigned data collectors found.'
                           : 'No enumerators match the selected filters.'}
                       </div>
                     );
 
-                    const totalCovered = filtered.reduce((s, r) => s + r.covered, 0);
-                    const totalSites   = filtered.reduce((s, r) => s + r.total, 0);
-                    const overallPct   = totalSites > 0 ? Math.round((totalCovered / totalSites) * 100) : 0;
+                    const grandSites   = visibleHubs.reduce((s, h) => s + h.totalSites,   0);
+                    const grandCovered = visibleHubs.reduce((s, h) => s + h.totalCovered, 0);
+                    const grandPct     = grandSites > 0 ? Math.round((grandCovered / grandSites) * 100) : 0;
 
                     return (
                       <div className="space-y-3">
-                        {/* Summary strip */}
-                        <div className="flex flex-wrap items-center gap-3 text-sm pb-1">
-                          <Badge variant="secondary" className="font-mono">{filtered.length} Enumerators</Badge>
-                          <Badge variant="outline" className="font-mono text-blue-600">{totalSites} Total Sites</Badge>
-                          <Badge variant="outline" className="font-mono text-green-600">{totalCovered} Covered</Badge>
-                          <Badge variant={overallPct >= 80 ? 'default' : 'outline'} className={`font-mono ${overallPct >= 80 ? 'bg-green-600' : overallPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-                            {overallPct}% Coverage
+                        {/* Grand summary */}
+                        <div className="flex flex-wrap items-center gap-3 pb-1">
+                          <Badge variant="secondary" className="font-mono">{visibleHubs.length} Hub{visibleHubs.length !== 1 ? 's' : ''}</Badge>
+                          <Badge variant="outline" className="font-mono text-blue-600">{grandSites} Total Sites</Badge>
+                          <Badge variant="outline" className="font-mono text-green-600">{grandCovered} Covered</Badge>
+                          <Badge variant="outline" className={`font-mono ${grandPct >= 80 ? 'text-green-600' : grandPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                            {grandPct}% Coverage
                           </Badge>
                         </div>
 
-                        {filtered.map(row => {
-                          const pct    = row.total > 0 ? Math.round((row.covered / row.total) * 100) : 0;
-                          const eKey   = `tracker-enum-${row.collectorId}`;
-                          const isOpen = expandedRows.has(eKey);
+                        {/* Hub level */}
+                        {visibleHubs.map(hg => {
+                          const hubKey    = `enum-hub-${hg.hub}`;
+                          const hubOpen   = expandedRows.has(hubKey);
+                          const hubPct    = hg.totalSites > 0 ? Math.round((hg.totalCovered / hg.totalSites) * 100) : 0;
                           return (
-                            <div key={row.collectorId} className="border rounded-lg" data-testid={`row-tracker-enum-${row.collectorId}`}>
+                            <div key={hg.hub} className="border rounded-lg" data-testid={`row-enum-hub-${hg.hub}`}>
+                              {/* Hub header */}
                               <button
                                 type="button"
                                 className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
-                                onClick={() => toggleExpand(eKey)}
+                                onClick={() => toggleExpand(hubKey)}
                               >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Users className="h-4 w-4 text-primary shrink-0" />
-                                  <span className="font-medium truncate">{row.collectorName}</span>
-                                  {row.hub  && <Badge variant="outline" className="text-xs shrink-0">{row.hub}</Badge>}
-                                  {row.state && <span className="text-xs text-muted-foreground hidden sm:inline shrink-0">{row.state}</span>}
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
+                                  <span className="font-semibold">{hg.hub}</span>
+                                  <Badge variant="outline" className="text-xs text-muted-foreground">{hg.states.length} State{hg.states.length !== 1 ? 's' : ''}</Badge>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0 ml-2">
-                                  <Badge variant="outline" className="font-mono text-blue-600 text-xs">{row.total} Sites</Badge>
-                                  <Badge variant="secondary" className="font-mono text-xs">{row.covered} Covered</Badge>
-                                  <span className={`text-xs font-bold hidden sm:inline ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
-                                  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                  <Badge variant="outline" className="font-mono text-blue-600 text-xs">{hg.totalSites} Sites</Badge>
+                                  <Badge variant="secondary" className="font-mono text-xs">{hg.totalCovered} Covered</Badge>
+                                  <span className={`text-xs font-bold hidden sm:inline ${hubPct >= 80 ? 'text-green-600' : hubPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{hubPct}%</span>
+                                  {hubOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                 </div>
                               </button>
 
-                              {isOpen && (
-                                <div className="border-t px-3 pb-3">
-                                  <div className="flex flex-wrap gap-4 py-2 text-xs">
-                                    <span className="text-blue-600"><strong>{row.submitted}</strong> Submitted</span>
-                                    <span className="text-emerald-600"><strong>{row.wfpConfirmed}</strong> WFP Confirmed</span>
-                                    <span className="text-amber-600"><strong>{row.pending}</strong> Pending</span>
-                                    <span className="text-red-500"><strong>{row.rejected}</strong> Rejected</span>
-                                  </div>
-                                  <div className="overflow-x-auto mt-1">
-                                    <table className="w-full text-xs">
-                                      <thead>
-                                        <tr className="bg-muted/50 border-b">
-                                          <th className="text-left py-1.5 px-2 font-medium">Site Name</th>
-                                          <th className="text-left py-1.5 px-2 font-medium">Locality</th>
-                                          <th className="text-left py-1.5 px-2 font-medium">State</th>
-                                          <th className="text-center py-1.5 px-2 font-medium">Status</th>
-                                          <th className="text-center py-1.5 px-2 font-medium">Date</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {row.sites.map((s, si) => (
-                                          <tr key={si} className={`border-b ${si % 2 === 1 ? 'bg-muted/20' : ''}`}>
-                                            <td className="py-1.5 px-2 font-medium">{s.siteName || '—'}</td>
-                                            <td className="py-1.5 px-2 text-muted-foreground">{s.locality || '—'}</td>
-                                            <td className="py-1.5 px-2 text-muted-foreground">{s.state || row.state || '—'}</td>
-                                            <td className="py-1.5 px-2 text-center">
-                                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
-                                                s.status === 'wfp_confirmed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30' :
-                                                s.status === 'submitted'     ? 'border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30' :
-                                                s.status === 'rejected'      ? 'border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30' :
-                                                'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30'
-                                              }`}>{s.status.replace(/_/g, ' ')}</Badge>
-                                            </td>
-                                            <td className="py-1.5 px-2 text-center text-muted-foreground">{s.date || '—'}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                              {/* State level */}
+                              {hubOpen && (
+                                <div className="border-t divide-y">
+                                  {hg.states.map(sg => {
+                                    const stateKey  = `enum-state-${hg.hub}-${sg.state}`;
+                                    const stateOpen = expandedRows.has(stateKey);
+                                    const statePct  = sg.totalSites > 0 ? Math.round((sg.totalCovered / sg.totalSites) * 100) : 0;
+                                    return (
+                                      <div key={sg.state}>
+                                        {/* State header */}
+                                        <button
+                                          type="button"
+                                          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/20 transition-colors text-left bg-muted/10"
+                                          onClick={() => toggleExpand(stateKey)}
+                                          data-testid={`row-enum-state-${hg.hub}-${sg.state}`}
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                                            <span className="font-medium text-sm">{sg.state}</span>
+                                            <span className="text-xs text-muted-foreground">{sg.collectors.length} collector{sg.collectors.length !== 1 ? 's' : ''}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                                            <Badge variant="outline" className="font-mono text-blue-600 text-xs">{sg.totalSites} Sites</Badge>
+                                            <Badge variant="secondary" className="font-mono text-xs">{sg.totalCovered} Covered</Badge>
+                                            <span className={`text-xs font-bold hidden sm:inline ${statePct >= 80 ? 'text-green-600' : statePct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{statePct}%</span>
+                                            {stateOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                          </div>
+                                        </button>
+
+                                        {/* Collector level */}
+                                        {stateOpen && (
+                                          <div className="pl-6 pr-3 pb-2 space-y-1.5 pt-1.5 bg-muted/5">
+                                            {sg.collectors.map(col => {
+                                              const colKey  = `tracker-enum-${hg.hub}-${sg.state}-${col.collectorId}`;
+                                              const colOpen = expandedRows.has(colKey);
+                                              const colPct  = col.total > 0 ? Math.round((col.covered / col.total) * 100) : 0;
+                                              return (
+                                                <div key={colKey} className="border rounded-md bg-background" data-testid={`row-enum-col-${col.collectorId}`}>
+                                                  <button
+                                                    type="button"
+                                                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/20 transition-colors text-left"
+                                                    onClick={() => toggleExpand(colKey)}
+                                                  >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                      <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                                                      <span className="text-sm font-medium truncate">{col.collectorName}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                      <Badge variant="outline" className="font-mono text-blue-600 text-xs">{col.total} Sites</Badge>
+                                                      <Badge variant="secondary" className="font-mono text-xs">{col.covered} Covered</Badge>
+                                                      <span className={`text-xs font-bold hidden sm:inline ${colPct >= 80 ? 'text-green-600' : colPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{colPct}%</span>
+                                                      {colOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                    </div>
+                                                  </button>
+
+                                                  {/* Site detail table */}
+                                                  {colOpen && (
+                                                    <div className="border-t">
+                                                      <div className="flex flex-wrap gap-3 px-3 py-2 text-xs border-b bg-muted/10">
+                                                        <span className="text-blue-600"><strong>{col.submitted}</strong> Submitted</span>
+                                                        <span className="text-emerald-600"><strong>{col.wfpConfirmed}</strong> WFP Confirmed</span>
+                                                        <span className="text-amber-600"><strong>{col.pending}</strong> Pending</span>
+                                                        <span className="text-red-500"><strong>{col.rejected}</strong> Rejected</span>
+                                                      </div>
+                                                      <div className="overflow-x-auto">
+                                                        <table className="w-full text-xs">
+                                                          <thead>
+                                                            <tr className="bg-muted/30 border-b">
+                                                              <th className="text-left py-1.5 px-2 font-medium">Site Name</th>
+                                                              <th className="text-left py-1.5 px-2 font-medium">Locality</th>
+                                                              <th className="text-center py-1.5 px-2 font-medium">Status</th>
+                                                              <th className="text-center py-1.5 px-2 font-medium">Date</th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody>
+                                                            {col.sites.map((s, si) => (
+                                                              <tr key={si} className={`border-b last:border-0 ${si % 2 === 1 ? 'bg-muted/10' : ''}`}>
+                                                                <td className="py-1.5 px-2 font-medium">{s.siteName || '—'}</td>
+                                                                <td className="py-1.5 px-2 text-muted-foreground">{s.locality || '—'}</td>
+                                                                <td className="py-1.5 px-2 text-center">
+                                                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                                                                    s.status === 'wfp_confirmed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30' :
+                                                                    s.status === 'submitted'     ? 'border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30' :
+                                                                    s.status === 'rejected'      ? 'border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30' :
+                                                                    'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30'
+                                                                  }`}>{s.status.replace(/_/g, ' ')}</Badge>
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-center text-muted-foreground">{s.date || '—'}</td>
+                                                              </tr>
+                                                            ))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
