@@ -3628,6 +3628,149 @@ const QuestionnaireAnalytics = () => {
     await exportFormattedExcel(sheets, 'tracker_per_hub.xlsx');
   }, [trackerData]);
 
+  const exportCsvEnumTableFormattedExcel = useCallback(async () => {
+    if (trackerData.hubTrackers.length === 0) return;
+
+    // Build: hub → activity → state → [{name, count}]
+    const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
+    csvEnumData.forEach(hg => {
+      if (!colLookup.has(hg.hub)) colLookup.set(hg.hub, new Map());
+      const actMap = colLookup.get(hg.hub)!;
+      hg.states.forEach(sg => {
+        sg.collectors.forEach(col => {
+          col.activities.forEach(act => {
+            if (!actMap.has(act.name)) actMap.set(act.name, new Map());
+            if (!actMap.get(act.name)!.has(sg.state)) actMap.get(act.name)!.set(sg.state, []);
+            actMap.get(act.name)!.get(sg.state)!.push({ name: col.name, count: act.count });
+          });
+        });
+      });
+    });
+
+    const XNAVY = 'FF0F2041', XWHITE = 'FFFFFFFF', XLIGHT = 'FFF5F7FC', XBORDER = 'FFC8CDD7';
+    const COL_BG = 'FFFFF8F0', COL_FG = 'FF78603A';
+    const xBorder = (): Partial<ExcelJS.Borders> => {
+      const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: XBORDER } };
+      return { top: s, bottom: s, left: s, right: s };
+    };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'PACT Command Center';
+    wb.created = new Date();
+
+    for (const ht of trackerData.hubTrackers) {
+      const ws = wb.addWorksheet(ht.hub.slice(0, 31));
+      const numStates = ht.states.length;
+      const totalCols = 1 + numStates * 4 + 4;
+      ws.getColumn(1).width = 36;
+      for (let i = 2; i <= totalCols; i++) ws.getColumn(i).width = 9;
+
+      // Title
+      const titleRow = ws.addRow([ht.hub]);
+      titleRow.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
+      titleRow.height = 24;
+      ws.addRow([]);
+
+      // Header row 1 — merged state group labels
+      const h1Vals: (string | null)[] = ['Activity'];
+      ht.states.forEach(st => { h1Vals.push(st, null, null, null); });
+      h1Vals.push('Total', null, null, null);
+      const h1Row = ws.addRow(h1Vals);
+      h1Row.height = 22;
+      let mCol = 2;
+      for (let si = 0; si <= numStates; si++) {
+        ws.mergeCells(h1Row.number, mCol, h1Row.number, mCol + 3);
+        mCol += 4;
+      }
+      h1Row.eachCell({ includeEmpty: true }, (cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XWHITE } };
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = xBorder();
+      });
+
+      // Header row 2 — Sites / Actual / PDM / DC per state + Total
+      const h2Vals: string[] = [''];
+      for (let si = 0; si <= numStates; si++) h2Vals.push('Sites', 'Actual', 'PDM', 'DC');
+      const h2Row = ws.addRow(h2Vals);
+      h2Row.height = 18;
+      h2Row.eachCell({ includeEmpty: true }, (cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: XWHITE } };
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = xBorder();
+      });
+
+      // Activity rows + collector sub-rows
+      ht.matrix.forEach((mRow, ri) => {
+        const isPdm = isPdmActivity(mRow.activity);
+        const actVals: (string | number)[] = [mRow.activity];
+        mRow.cells.forEach(c => {
+          actVals.push(c.sites || '-', c.questionnaires || '-', isPdm && c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-');
+        });
+        actVals.push(mRow.totalSites, mRow.totalQ, isPdm ? Math.floor(mRow.totalQ / 7) : '-', mRow.totalCollectors);
+        const actRow = ws.addRow(actVals);
+        actRow.height = 18;
+        const altBg = ri % 2 === 1 ? XLIGHT : 'FFFFFFFF';
+        actRow.eachCell({ includeEmpty: true }, (cell, ci) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: altBg } };
+          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XNAVY } };
+          cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+          cell.border = xBorder();
+        });
+
+        // Collector sub-rows (indented, amber-tinted)
+        const actColMap = colLookup.get(ht.hub)?.get(mRow.activity);
+        if (actColMap) {
+          const allCols = new Set<string>();
+          actColMap.forEach(list => list.forEach(c => allCols.add(c.name)));
+          allCols.forEach(collName => {
+            const subVals: (string | number)[] = [`   · ${collName}`];
+            ht.states.forEach(st => {
+              const found = actColMap.get(st)?.find(c => c.name === collName);
+              subVals.push('-', found ? found.count : '-', isPdm && found ? Math.floor(found.count / 7) : '-', '');
+            });
+            subVals.push('', '', '', '');
+            const subRow = ws.addRow(subVals);
+            subRow.height = 15;
+            subRow.eachCell({ includeEmpty: true }, (cell, ci) => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COL_BG } };
+              cell.font = { italic: true, size: 9, name: 'Calibri', color: { argb: COL_FG } };
+              cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+              cell.border = xBorder();
+            });
+          });
+        }
+      });
+
+      // Total row
+      const totVals: (string | number)[] = ['Total'];
+      ht.colTotals.forEach((ct, ci) => {
+        const pdmCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.floor(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        totVals.push(ct.sites, ct.questionnaires, pdmCol || '-', ct.collectors);
+      });
+      const grandPdm = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0);
+      totVals.push(ht.grandSites, ht.grandQ, grandPdm || '-', ht.grandCollectors);
+      const totRow = ws.addRow(totVals);
+      totRow.height = 20;
+      totRow.eachCell({ includeEmpty: true }, (cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XNAVY } };
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = xBorder();
+      });
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `csv_enum_tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [trackerData, csvEnumData]);
+
   const exportTrackerPerStateFormattedExcel = useCallback(async () => {
     const sheets = trackerData.stateTrackers.map((st: any) => {
       const headers = ['Activity'];
@@ -5697,15 +5840,23 @@ const QuestionnaireAnalytics = () => {
                       </CardTitle>
                       <CardDescription>Hub → State → Data collector breakdown from uploaded questionnaire data</CardDescription>
                     </div>
-                    <div className="flex items-center gap-1 rounded-md border p-0.5 bg-muted/40">
-                      <Button size="sm" variant={csvEnumView === 'hierarchy' ? 'default' : 'ghost'} className="h-7 px-2.5 text-xs gap-1.5" onClick={() => setCsvEnumView('hierarchy')}>
-                        <Users className="h-3.5 w-3.5" />
-                        Hierarchy
-                      </Button>
-                      <Button size="sm" variant={csvEnumView === 'table' ? 'default' : 'ghost'} className="h-7 px-2.5 text-xs gap-1.5" onClick={() => setCsvEnumView('table')}>
-                        <Table2 className="h-3.5 w-3.5" />
-                        Table
-                      </Button>
+                    <div className="flex items-center gap-2">
+                      {csvEnumView === 'table' && trackerData.hubTrackers.length > 0 && (
+                        <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsvEnumTableFormattedExcel} data-testid="button-export-csv-enum-table">
+                          <FileSpreadsheet className="h-4 w-4" />
+                          Export
+                        </Button>
+                      )}
+                      <div className="flex items-center gap-1 rounded-md border p-0.5 bg-muted/40">
+                        <Button size="sm" variant={csvEnumView === 'hierarchy' ? 'default' : 'ghost'} className="h-7 px-2.5 text-xs gap-1.5" onClick={() => setCsvEnumView('hierarchy')}>
+                          <Users className="h-3.5 w-3.5" />
+                          Hierarchy
+                        </Button>
+                        <Button size="sm" variant={csvEnumView === 'table' ? 'default' : 'ghost'} className="h-7 px-2.5 text-xs gap-1.5" onClick={() => setCsvEnumView('table')}>
+                          <Table2 className="h-3.5 w-3.5" />
+                          Table
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
