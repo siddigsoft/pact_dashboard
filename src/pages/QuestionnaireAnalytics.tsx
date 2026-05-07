@@ -1377,6 +1377,40 @@ const QuestionnaireAnalytics = () => {
     });
   };
 
+  const csvEnumData = useMemo(() => {
+    type CsvColl = { name: string; questionnaires: number; sites: Set<string>; activities: Map<string, number> };
+    const hubMap = new Map<string, Map<string, Map<string, CsvColl>>>();
+    filteredData.forEach(row => {
+      const hub = row.hub || '—';
+      const state = row.state || '—';
+      const collector = row.dataCollector || '(Unknown)';
+      if (!hubMap.has(hub)) hubMap.set(hub, new Map());
+      if (!hubMap.get(hub)!.has(state)) hubMap.get(hub)!.set(state, new Map());
+      const collMap = hubMap.get(hub)!.get(state)!;
+      if (!collMap.has(collector)) collMap.set(collector, { name: collector, questionnaires: 0, sites: new Set(), activities: new Map() });
+      const entry = collMap.get(collector)!;
+      entry.questionnaires++;
+      if (row.activitySite) entry.sites.add(row.activitySite.trim());
+      if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
+    });
+    return [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hub, sm]) => {
+      const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
+        const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => ({
+          name: c.name,
+          questionnaires: c.questionnaires,
+          sites: [...c.sites],
+          activities: [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count),
+        }));
+        const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
+        const totalSites = new Set(collectors.flatMap(c => c.sites)).size;
+        return { state, collectors, totalQ, totalSites };
+      });
+      const hubTotalQ     = states.reduce((s, sg) => s + sg.totalQ, 0);
+      const hubTotalSites = new Set(states.flatMap(sg => sg.collectors.flatMap(c => c.sites))).size;
+      return { hub, states, totalQ: hubTotalQ, totalSites: hubTotalSites };
+    });
+  }, [filteredData]);
+
   const trackerData = useMemo(() => {
     const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
     const activities = [...new Set(filteredData.map(r => r.activity))].filter(Boolean).sort();
@@ -5635,7 +5669,138 @@ const QuestionnaireAnalytics = () => {
                 </Card>
               )}
 
-              {/* ── Tracker — Enumerators ─────────────────────────────── */}
+              {/* ── Tracker — Enumerators (CSV) ──────────────────────── */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Users className="h-5 w-5 text-primary" />
+                      Tracker — Enumerators (CSV)
+                    </CardTitle>
+                    <CardDescription>Hub → State → Data collector breakdown from uploaded questionnaire data</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {filteredData.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground text-sm">
+                      <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      No questionnaire data uploaded yet.
+                    </div>
+                  ) : csvEnumData.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground text-sm">No data available.</div>
+                  ) : (() => {
+                    const grandQ     = csvEnumData.reduce((s, h) => s + h.totalQ, 0);
+                    const grandSites = csvEnumData.reduce((s, h) => s + h.totalSites, 0);
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3 pb-1">
+                          <Badge variant="secondary" className="font-mono">{csvEnumData.length} Hub{csvEnumData.length !== 1 ? 's' : ''}</Badge>
+                          <Badge variant="outline" className="font-mono text-blue-600">{grandQ} Questionnaires</Badge>
+                          <Badge variant="outline" className="font-mono text-green-600">{grandSites} Unique Sites</Badge>
+                        </div>
+                        {csvEnumData.map(hg => {
+                          const hubKey  = `csv-ehub-${hg.hub}`;
+                          const hubOpen = expandedRows.has(hubKey);
+                          return (
+                            <div key={hg.hub} className="border rounded-lg">
+                              <button type="button" className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => toggleExpand(hubKey)}>
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
+                                  <span className="font-semibold">{hg.hub}</span>
+                                  <Badge variant="outline" className="text-xs text-muted-foreground">{hg.states.length} State{hg.states.length !== 1 ? 's' : ''}</Badge>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <Badge variant="outline" className="font-mono text-blue-600 text-xs">{hg.totalQ} Q</Badge>
+                                  <Badge variant="secondary" className="font-mono text-xs">{hg.totalSites} Sites</Badge>
+                                  {hubOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </div>
+                              </button>
+                              {hubOpen && (
+                                <div className="border-t divide-y">
+                                  {hg.states.map(sg => {
+                                    const stateKey  = `csv-estate-${hg.hub}-${sg.state}`;
+                                    const stateOpen = expandedRows.has(stateKey);
+                                    return (
+                                      <div key={sg.state}>
+                                        <button type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/20 transition-colors text-left bg-muted/10" onClick={() => toggleExpand(stateKey)}>
+                                          <div className="flex items-center gap-2">
+                                            <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                                            <span className="font-medium text-sm">{sg.state}</span>
+                                            <span className="text-xs text-muted-foreground">{sg.collectors.length} collector{sg.collectors.length !== 1 ? 's' : ''}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                                            <Badge variant="outline" className="font-mono text-blue-600 text-xs">{sg.totalQ} Q</Badge>
+                                            <Badge variant="secondary" className="font-mono text-xs">{sg.totalSites} Sites</Badge>
+                                            {stateOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                          </div>
+                                        </button>
+                                        {stateOpen && (
+                                          <div className="pl-6 pr-3 pb-2 space-y-1.5 pt-1.5 bg-muted/5">
+                                            {sg.collectors.map((col, ci) => {
+                                              const colKey  = `csv-ecol-${hg.hub}-${sg.state}-${col.name}-${ci}`;
+                                              const colOpen = expandedRows.has(colKey);
+                                              return (
+                                                <div key={colKey} className="border rounded-md bg-background">
+                                                  <button type="button" className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/20 transition-colors text-left" onClick={() => toggleExpand(colKey)}>
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                      <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                                                      <span className="text-sm font-medium truncate">{col.name}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                      <Badge variant="outline" className="font-mono text-blue-600 text-xs">{col.questionnaires} Q</Badge>
+                                                      <Badge variant="secondary" className="font-mono text-xs">{col.sites.length} Sites</Badge>
+                                                      {colOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                    </div>
+                                                  </button>
+                                                  {colOpen && (
+                                                    <div className="border-t">
+                                                      <div className="flex flex-wrap gap-3 px-3 py-2 text-xs border-b bg-muted/10">
+                                                        <span className="text-blue-600"><strong>{col.questionnaires}</strong> Questionnaires</span>
+                                                        <span className="text-muted-foreground">{col.sites.length} Unique Sites</span>
+                                                        {col.activities.length > 0 && (
+                                                          <span className="text-muted-foreground">{col.activities.map(a => `${a.name} (${a.count})`).join(' · ')}</span>
+                                                        )}
+                                                      </div>
+                                                      {col.sites.length > 0 && (
+                                                        <div className="overflow-x-auto">
+                                                          <table className="w-full text-xs">
+                                                            <thead>
+                                                              <tr className="bg-muted/30 border-b">
+                                                                <th className="text-left py-1.5 px-2 font-medium">Site Name</th>
+                                                              </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                              {col.sites.map((site, si) => (
+                                                                <tr key={si} className={si % 2 === 0 ? 'bg-background' : 'bg-muted/10'}>
+                                                                  <td className="py-1.5 px-2">{site}</td>
+                                                                </tr>
+                                                              ))}
+                                                            </tbody>
+                                                          </table>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* ── Tracker — Enumerators (DB) ────────────────────────── */}
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -5902,7 +6067,10 @@ const QuestionnaireAnalytics = () => {
                                                   {colOpen && (
                                                     <div className="border-t">
                                                       <div className="flex flex-wrap gap-3 px-3 py-2 text-xs border-b bg-muted/10">
-                                                        <span className="text-blue-600"><strong>{col.covered}</strong> Submitted</span>
+                                                        <span className="text-emerald-600"><strong>{col.wfpConfirmed}</strong> WFP Confirmed</span>
+                                                        <span className="text-blue-600"><strong>{col.submitted}</strong> Submitted</span>
+                                                        <span className="text-amber-600"><strong>{col.pending}</strong> Pending</span>
+                                                        <span className="text-red-500"><strong>{col.rejected}</strong> Rejected</span>
                                                         <span className="text-muted-foreground">{col.total} Total Sites</span>
                                                         <span className={`font-bold ${col.total > 0 && (col.covered / col.total) * 100 >= 80 ? 'text-green-600' : col.total > 0 && (col.covered / col.total) * 100 >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{col.total > 0 ? Math.round((col.covered / col.total) * 100) : 0}% Coverage</span>
                                                       </div>

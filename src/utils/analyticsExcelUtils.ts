@@ -815,7 +815,7 @@ export async function exportEnumeratorTrackerExcel(
   ws1.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws1.addRow([]);
 
-  const hdr1 = ws1.addRow(['#', 'Enumerator', 'Hub', 'State', 'Total Sites', 'Submitted', 'Coverage %']);
+  const hdr1 = ws1.addRow(['#', 'Enumerator', 'Hub', 'State', 'Total Sites', 'WFP Confirmed', 'Submitted', 'Pending', 'Rejected', 'Coverage %']);
   hdr1.height = 22;
   hdr1.eachCell((cell, ci) => {
     cell.fill = headerFill(); cell.font = headerFont(10); cell.border = thinBorder();
@@ -825,7 +825,7 @@ export async function exportEnumeratorTrackerExcel(
   rows.forEach((r, i) => {
     const pctNum = r.total > 0 ? (r.covered / r.total) * 100 : 0;
     const pct = r.total > 0 ? pctNum.toFixed(1) + '%' : '0%';
-    const row = ws1.addRow([i + 1, r.collectorName, r.hub, r.state, r.total, r.covered, pct]);
+    const row = ws1.addRow([i + 1, r.collectorName, r.hub, r.state, r.total, r.wfpConfirmed, r.submitted, r.pending, r.rejected, pct]);
     row.height = 20;
     row.eachCell((cell, ci) => {
       cell.border = thinBorder();
@@ -833,13 +833,16 @@ export async function exportEnumeratorTrackerExcel(
       cell.font = bodyFont(10);
       if (i % 2 === 1) cell.fill = altFill();
     });
-    const pctCell = row.getCell(7);
+    const pctCell = row.getCell(10);
     pctCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
   });
 
-  const grandTot = rows.reduce((s, r) => s + r.total, 0);
-  const grandCov = rows.reduce((s, r) => s + r.covered, 0);
-  const totals = ws1.addRow(['', 'TOTAL', '', '', grandTot, grandCov, grandTot > 0 ? ((grandCov / grandTot) * 100).toFixed(1) + '%' : '0%']);
+  const grandTot  = rows.reduce((s, r) => s + r.total, 0);
+  const grandWfp  = rows.reduce((s, r) => s + r.wfpConfirmed, 0);
+  const grandCov  = rows.reduce((s, r) => s + r.covered, 0);
+  const grandPend = rows.reduce((s, r) => s + r.pending, 0);
+  const grandRej  = rows.reduce((s, r) => s + r.rejected, 0);
+  const totals = ws1.addRow(['', 'TOTAL', '', '', grandTot, grandWfp, grandCov, grandPend, grandRej, grandTot > 0 ? ((grandCov / grandTot) * 100).toFixed(1) + '%' : '0%']);
   totals.height = 22;
   totals.eachCell((cell, ci) => {
     cell.fill = totalFill(); cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
@@ -954,7 +957,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
   const hubGroups = [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b));
 
   // ── Sheet 1: Grouped by Hub → State → Collector ───────────────
-  const COLS = ['#', 'Data Collector', 'Total Sites', 'Submitted', 'Coverage %'];
+  const COLS = ['#', 'Data Collector', 'Total Sites', 'WFP Confirmed', 'Submitted', 'Pending', 'Rejected', 'Coverage %'];
   const COL_COUNT = COLS.length;
 
   const ws1 = wb.addWorksheet('Enumerator by Hub');
@@ -972,11 +975,14 @@ export async function exportEnumeratorTrackerFormattedExcel(
   for (const [hub, sm] of hubGroups) {
     const hubStates = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b));
     const hubCollectors = hubStates.flatMap(([, cs]) => cs);
-    const hubTotal   = hubCollectors.reduce((s, c) => s + c.total,   0);
-    const hubCovered = hubCollectors.reduce((s, c) => s + c.covered, 0);
+    const hubTotal   = hubCollectors.reduce((s, c) => s + c.total,       0);
+    const hubWfp     = hubCollectors.reduce((s, c) => s + c.wfpConfirmed, 0);
+    const hubCovered = hubCollectors.reduce((s, c) => s + c.covered,     0);
+    const hubPend    = hubCollectors.reduce((s, c) => s + c.pending,     0);
+    const hubRej     = hubCollectors.reduce((s, c) => s + c.rejected,    0);
 
     // Hub header row (navy)
-    const hubRow = ws1.addRow([hub, '', '', '', '']);
+    const hubRow = ws1.addRow([hub, '', '', '', '', '', '', '']);
     ws1.mergeCells(hubRow.number, 1, hubRow.number, COL_COUNT);
     hubRow.height = 24;
     hubRow.getCell(1).fill = headerFill();
@@ -993,11 +999,14 @@ export async function exportEnumeratorTrackerFormattedExcel(
     });
 
     for (const [state, collectors] of hubStates) {
-      const stateTot     = collectors.reduce((s, c) => s + c.total,   0);
-      const stateCovered = collectors.reduce((s, c) => s + c.covered, 0);
+      const stateTot     = collectors.reduce((s, c) => s + c.total,       0);
+      const stateWfp     = collectors.reduce((s, c) => s + c.wfpConfirmed, 0);
+      const stateCovered = collectors.reduce((s, c) => s + c.covered,     0);
+      const statePend    = collectors.reduce((s, c) => s + c.pending,     0);
+      const stateRej     = collectors.reduce((s, c) => s + c.rejected,    0);
 
       // State sub-header row (light blue)
-      const stateRow = ws1.addRow([`  ${state}`, '', '', '', '']);
+      const stateRow = ws1.addRow([`  ${state}`, '', '', '', '', '', '', '']);
       ws1.mergeCells(stateRow.number, 1, stateRow.number, COL_COUNT);
       stateRow.height = 18;
       stateRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1E4FF' } };
@@ -1009,7 +1018,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
         seq++;
         const pctNum = c.total > 0 ? (c.covered / c.total) * 100 : 0;
         const pct    = c.total > 0 ? pctNum.toFixed(1) + '%' : '0%';
-        const dataRow = ws1.addRow([seq, c.collectorName, c.total, c.covered, pct]);
+        const dataRow = ws1.addRow([seq, c.collectorName, c.total, c.wfpConfirmed, c.covered, c.pending, c.rejected, pct]);
         dataRow.height = 20;
         dataRow.eachCell((cell, ci) => {
           cell.border = thinBorder();
@@ -1022,7 +1031,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
 
       // State subtotal
       const stPctNum = stateTot > 0 ? (stateCovered / stateTot) * 100 : 0;
-      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateCovered, stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
+      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateWfp, stateCovered, statePend, stateRej, stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
       stSub.height = 18;
       stSub.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4FD' } };
@@ -1034,7 +1043,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
 
     // Hub subtotal
     const hPctNum = hubTotal > 0 ? (hubCovered / hubTotal) * 100 : 0;
-    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubCovered, hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
+    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubWfp, hubCovered, hubPend, hubRej, hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
     hubSub.height = 22;
     hubSub.eachCell((cell, ci) => {
       cell.fill = totalFill();
@@ -1047,10 +1056,13 @@ export async function exportEnumeratorTrackerFormattedExcel(
   }
 
   // Grand total
-  const grandTotal   = rows.reduce((s, r) => s + r.total,   0);
-  const grandCovered = rows.reduce((s, r) => s + r.covered, 0);
+  const grandTotal   = rows.reduce((s, r) => s + r.total,       0);
+  const grandWfpTot  = rows.reduce((s, r) => s + r.wfpConfirmed, 0);
+  const grandCovered = rows.reduce((s, r) => s + r.covered,     0);
+  const grandPendTot = rows.reduce((s, r) => s + r.pending,     0);
+  const grandRejTot  = rows.reduce((s, r) => s + r.rejected,    0);
   const grandPctNum  = grandTotal > 0 ? (grandCovered / grandTotal) * 100 : 0;
-  const grandRow = ws1.addRow(['', 'GRAND TOTAL', grandTotal, grandCovered, grandTotal > 0 ? grandPctNum.toFixed(1) + '%' : '0%']);
+  const grandRow = ws1.addRow(['', 'GRAND TOTAL', grandTotal, grandWfpTot, grandCovered, grandPendTot, grandRejTot, grandTotal > 0 ? grandPctNum.toFixed(1) + '%' : '0%']);
   grandRow.height = 24;
   grandRow.eachCell((cell, ci) => {
     cell.fill = headerFill();
