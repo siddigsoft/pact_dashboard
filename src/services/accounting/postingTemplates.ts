@@ -854,6 +854,133 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
            'status moves to "accepted" (the final positive state in the milestone lifecycle). ' +
            'Enabled by default. Used for donor milestone reporting and grant compliance audit.',
   },
+
+  // ── Phase 7 bridges ───────────────────────────────────────────────────────
+
+  // ── 24. Statutory Filings → Submitted ────────────────────────────────────
+  {
+    id:               'acct_statutory_filing_submitted',
+    sourceTable:      'acct_statutory_filings',
+    eventType:        'statutory_filing_submitted',
+    triggerStatus:    'UPDATE (status → submitted)',
+    triggerCondition: 'AFTER UPDATE on acct_statutory_filings when new.status = \'submitted\'',
+    labelEn:          'Statutory Filing Submitted (GL Visibility)',
+    labelAr:          'تسجيل تقديم الإقرار الضريبي في جسر دفتر الأستاذ',
+    featureFlag:      'acct.bridge.statutory_filing',
+    lines: [],
+    notes: 'Visibility-only bridge — no journal posted. Logs a bridge entry when a statutory ' +
+           'filing (PIT monthly/annual, social monthly, zakat annual) is submitted to the authority. ' +
+           'Enabled by default. Appears in GL Bridge Audit under "Statutory Filings".',
+  },
+
+  // ── 25. Statutory Filings → Paid ─────────────────────────────────────────
+  {
+    id:               'acct_statutory_filing_paid',
+    sourceTable:      'acct_statutory_filings',
+    eventType:        'statutory_filing_paid',
+    triggerStatus:    'UPDATE (status → paid)',
+    triggerCondition: 'AFTER UPDATE on acct_statutory_filings when new.status = \'paid\'',
+    labelEn:          'Statutory Filing Payment to Tax Authority',
+    labelAr:          'سداد الإقرار الضريبي للجهة الضريبية',
+    featureFlag:      'acct.bridge.statutory_filing',
+    lines: [
+      {
+        accountCode:  '2310',
+        accountName:  'PIT Payable',
+        debitCredit:  'DR',
+        amountSource: 'acct_statutory_filings.total_amount (PIT filings)',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Clear PIT payable liability on payment to tax authority',
+      },
+      {
+        accountCode:  '2320',
+        accountName:  'Social Insurance Payable',
+        debitCredit:  'DR',
+        amountSource: 'acct_statutory_filings.total_amount (social filings)',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Clear SIPC payable on payment',
+      },
+      {
+        accountCode:  '1200',
+        accountName:  'Cash at Bank — SDG',
+        debitCredit:  'CR',
+        amountSource: 'acct_statutory_filings.total_amount',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Bank outflow for statutory payment',
+      },
+    ],
+    notes: 'Full journal bridge — DR Tax Payable / CR Cash at Bank. ' +
+           'Fires when a statutory filing status moves to "paid". ' +
+           'The GL bridge log records the payment reference and filing type. ' +
+           'Enabled by default. Applies to PIT, social, and zakat filings.',
+  },
+
+  // ── 26. Tax Withholding — PIT + Social Posted ─────────────────────────────
+  {
+    id:               'acct_tax_withholding_pit',
+    sourceTable:      'acct_tax_withholding',
+    eventType:        'withholding_computed',
+    triggerStatus:    'INSERT or UPDATE (status = submitted)',
+    triggerCondition: 'Manual: computed via acct_compute_pit() RPC + social rate lookup',
+    labelEn:          'Employee PIT Withholding & Social Insurance Accrual',
+    labelAr:          'استقطاع ضريبة الدخل الشخصي واستحقاق التأمين الاجتماعي',
+    featureFlag:      'acct.statutory.pit',
+    lines: [
+      {
+        accountCode:  '5110',
+        accountName:  'Salary Expense',
+        debitCredit:  'DR',
+        amountSource: 'acct_tax_withholding.gross_salary',
+        currency:     'SDG',
+        glFunction:   'program',
+        description:  'Gross salary charge to program/department',
+      },
+      {
+        accountCode:  '5210',
+        accountName:  'Employer Social Insurance Expense',
+        debitCredit:  'DR',
+        amountSource: 'acct_tax_withholding.social_employer_amount',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Employer share of SIPC contribution (17%)',
+      },
+      {
+        accountCode:  '2310',
+        accountName:  'PIT Payable',
+        debitCredit:  'CR',
+        amountSource: 'acct_tax_withholding.pit_amount',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'PIT withheld from employee — payable to Taxation Chamber',
+      },
+      {
+        accountCode:  '2320',
+        accountName:  'Social Insurance Payable',
+        debitCredit:  'CR',
+        amountSource: 'total_employee_deduction + social_employer_amount',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Total SIPC (employee 8% + employer 17%) payable to SIPC',
+      },
+      {
+        accountCode:  '2100',
+        accountName:  'Salaries & Wages Payable',
+        debitCredit:  'CR',
+        amountSource: 'gross_salary − total_employee_deduction (net pay)',
+        currency:     'SDG',
+        glFunction:   'mng',
+        description:  'Net salary payable to employee after deductions',
+      },
+    ],
+    notes: 'Full payroll withholding journal. DR Salary Expense + DR Employer Social / ' +
+           'CR PIT Payable + CR Social Payable + CR Net Salaries Payable. ' +
+           'Uses acct_compute_pit() RPC for PIT bracket calculation. ' +
+           'Enabled by default when acct.statutory.pit is on. ' +
+           'Sudan SIPC rates (2024): employee 8%, employer 17%.',
+  },
 ];
 
 // ─── Helper utilities ────────────────────────────────────────────────────────

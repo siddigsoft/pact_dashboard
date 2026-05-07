@@ -62,6 +62,11 @@ const DEFAULT_FLAGS: Omit<FeatureFlag, 'updated_at'>[] = [
   { key: 'acct.bridge.milestones',               description: 'Phase 5: Log GL bridge entry when a grant milestone is accepted. Enabled for grant compliance tracking.',                          is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.bridge.bank_recon',               description: 'Phase 6: Log GL bridge entry when a bank statement line is matched or un-matched to a journal entry. Enabled for audit trail.',    is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.bank_recon.auto_suggest',         description: 'Phase 6: (Future) Auto-suggest journal entry matches for bank statement lines based on amount + date proximity.',                  is_enabled: false, rolled_out_pct: 100 },
+  // Phase 7 — Statutory Reporting
+  { key: 'acct.statutory.pit',                   description: 'Phase 7: Enable PIT (Personal Income Tax) withholding computation and monthly/annual filing workflow.',                            is_enabled: true,  rolled_out_pct: 100 },
+  { key: 'acct.statutory.social',                description: 'Phase 7: Enable social insurance (SIPC) employee 8% + employer 17% contribution tracking and monthly filings.',                   is_enabled: true,  rolled_out_pct: 100 },
+  { key: 'acct.statutory.zakat',                 description: 'Phase 7: Enable zakat computation (2.5% on net zakatable assets above nisab). Enable after adding a zakat config row.',           is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.statutory_filing',         description: 'Phase 7: Log GL bridge entry when a statutory filing is submitted or paid. Enabled by default for compliance audit trail.',       is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.posting_engine.enabled',          description: 'Master GL posting engine switch. Disabling this blocks all Phase 4 bridge postings.',                                              is_enabled: true,  rolled_out_pct: 100 },
 ];
 

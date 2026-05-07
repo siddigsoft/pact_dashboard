@@ -16,9 +16,9 @@
 > auto-push. The agent only writes SQL files and runbooks; the user pastes
 > them.
 
-**Last updated:** 2026-05-07 (Phase 1–3 applied; Phase 4 SQL + runbooks complete and ready)
-**Current sprint:** Phase 4 · **SQL READY TO APPLY** — two files in order: (1) `20260520_acct_phase4_advanced.sql` (Tax codes, FX rates, period-close log, budget encumbrances) then (2) `accounting_gl_bridges_phase4.sql` (5 bridge triggers: depreciation, allocation, encumbrance, leave liability). Also ready: `20260502_acct_accounting_notifications.sql` (4 accounting alert triggers — apply after Phase 3+).
-**Next up:** (1) Apply `20260520_acct_phase4_advanced.sql` → `docs/sql/PHASE4_ADVANCED_CONTROLS_MANUAL_APPLY.md`. (2) Apply `accounting_gl_bridges_phase4.sql` → `docs/sql/PHASE4_GL_BRIDGES_MANUAL_APPLY.md`. (3) Apply `20260502_acct_accounting_notifications.sql` → `docs/sql/ACCT_NOTIFICATIONS_MANUAL_APPLY.md`.
+**Last updated:** 2026-05-07 (Phase 1–3 + Phase 6 hot-patch applied; Phases 4–7 SQL all written)
+**Current sprint:** Phase 7 · **SQL READY TO APPLY** — `accounting_phase7_statutory.sql` (PIT brackets + social rates + withholding table + statutory filings + PIT RPC + GL bridge).  Apply any time after Phase 1. Independent of Phases 4–6.
+**Next up:** Apply `accounting_phase7_statutory.sql` → `docs/sql/PHASE7_STATUTORY_MANUAL_APPLY.md`.
 
 ---
 
@@ -111,7 +111,7 @@ Apply in this order:
 | 4 | Tax codes + FX rates + depreciation / encumbrance / leave liability bridges + accounting alert notifications | 🟡 IN PROGRESS — All code complete; 3 SQL files ready to apply manually | 80% |
 | 5 | Donor / grant management + restricted funds (extended) | 🟡 QUEUED — Expansion SQL + GL bridges SQL both written; apply after Phase 4 | 40% |
 | 6 | Banking & Treasury — `acct_bank_accounts`, `acct_bank_statement_lines`, bank recon RPC + GL bridge | 🟡 QUEUED — SQL written; apply after Phase 3 (independent of Phases 4–5) | 40% |
-| 7 | Statutory reporting (PIT, social, zakat) | ⚪ QUEUED | 0% |
+| 7 | Statutory reporting (PIT, social, zakat) | 🟡 QUEUED — SQL written; apply any time after Phase 1 | 40% |
 | 8 | Audit-pack export + external auditor portal | ⚪ QUEUED | 0% |
 | 9 | Donor-side reporting + budget-vs-actual variance | ⚪ QUEUED | 0% |
 | 10 | Mobile / Flutter parity for finance flows | ⚪ QUEUED | 0% |
@@ -172,7 +172,15 @@ Legend: ✅ DONE · 🟢 SIGNED OFF · 🟡 IN PROGRESS · 🟠 BLOCKED · ⚪ Q
 |---|---|---|---|
 | 6.1 | `acct_bank_accounts` + `acct_bank_statement_lines` + `acct_bank_recon_summary()` RPC + GL bridge trigger + 2 feature flags | 🟡 READY TO APPLY — after Phase 3 (independent of 4 & 5) | `accounting_phase6_banking.sql` · `PHASE6_BANKING_MANUAL_APPLY.md` |
 
-### Phases 7–10
+### Phase 7 — Statutory Reporting (PIT · Social Insurance · Zakat)
+
+Apply any time after Phase 1 (independent of Phases 4–6):
+
+| ID | Sprint | Status | Files |
+|---|---|---|---|
+| 7.1 | PIT brackets + social rates + zakat config + withholding table + statutory filings + `acct_compute_pit()` RPC + `acct_statutory_summary()` RPC + GL bridge trigger + 4 feature flags | 🟡 READY TO APPLY | `accounting_phase7_statutory.sql` · `PHASE7_STATUTORY_MANUAL_APPLY.md` |
+
+### Phases 8–10
 
 Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Phase 4.
 
@@ -219,6 +227,10 @@ Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Pha
 | `supabase/migrations/accounting_phase6_banking.sql` | 6.1 | Migration — `acct_bank_accounts` + `acct_bank_statement_lines` + recon RPC + GL bridge + 2 flags | ⏳ pending — apply any time after Phase 3 |
 | `docs/sql/PHASE6_BANKING_MANUAL_APPLY.md` | 6.1 | Runbook | n/a |
 | `docs/sql/PHASE6_BANKING_ROLLBACK.sql` | 6.1 | Rollback | n/a |
+| `docs/sql/PHASE6_BANKING_HOTPATCH.sql` | 6.1 | Hot-patch — adds `current_balance` to existing table + recreates RPC/trigger | ✅ applied (replaces main migration for users who had bank_recon_migration.sql) |
+| `supabase/migrations/accounting_phase7_statutory.sql` | 7.1 | Migration — 5 tables + 3 RPCs + GL bridge trigger + 4 flags (PIT/social/zakat) | ⏳ pending — apply any time after Phase 1 |
+| `docs/sql/PHASE7_STATUTORY_MANUAL_APPLY.md` | 7.1 | Runbook | n/a |
+| `docs/sql/PHASE7_STATUTORY_ROLLBACK.sql` | 7.1 | Rollback | n/a |
 | `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite | ⏳ pending (apply any time) |
 | `supabase/migrations/20260409_timesheet_module.sql` | Timesheet | Migration | ✅ 2026-04-26 |
 | `supabase/migrations/20260426_timesheet_entries_insert_status_guard.sql` | Timesheet hot-patch | RLS hardening | ✅ 2026-04-26 |

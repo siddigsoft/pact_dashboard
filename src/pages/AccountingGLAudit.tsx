@@ -71,6 +71,9 @@ const TABLE_LABELS: Record<string, string> = {
   acct_grants:                     'Grants',
   acct_grant_milestones:           'Grant Milestones',
   acct_bank_statement_lines:       'Bank Statement Lines',
+  // Phase 7 — Statutory Reporting
+  acct_statutory_filings:          'Statutory Filings',
+  acct_tax_withholding:            'Tax Withholding',
 };
 
 const HEALTH_CFG = {
