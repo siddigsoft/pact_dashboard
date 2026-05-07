@@ -189,9 +189,9 @@ export async function exportFormattedTrackerExcel(
   matrix.forEach((row: any, ri: number) => {
     const cells: (string | number)[] = [row.activity];
     row.cells.forEach((c: any) => {
-      cells.push(c.sites || '-', c.questionnaires || '-', isPdmActivity(row.activity) && c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-');
+      cells.push(c.sites || '-', c.questionnaires || '-', c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-');
     });
-    cells.push(row.totalSites, row.totalQ, isPdmActivity(row.activity) ? Math.floor(row.totalQ / 7) : '-', row.totalCollectors);
+    cells.push(row.totalSites, row.totalQ, row.totalQ ? Math.floor(row.totalQ / 7) : '-', row.totalCollectors);
     const dataRow = ws.addRow(cells);
     dataRow.eachCell((cell, ci) => {
       cell.border = thinBorder();
@@ -211,10 +211,10 @@ export async function exportFormattedTrackerExcel(
 
   const totCells: (string | number)[] = ['Grand Total'];
   hubTotals.forEach((ht: any, hi: number) => {
-    const pdmSitesCol = matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.floor(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+    const pdmSitesCol = matrix.reduce((a: number, r: any) => a + Math.floor(r.cells[hi].questionnaires / 7), 0);
     totCells.push(ht.sites, ht.questionnaires, pdmSitesCol || '-', ht.collectors);
   });
-  const pdmSitesGrand = matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0);
+  const pdmSitesGrand = matrix.reduce((a: number, r: any) => a + Math.floor(r.totalQ / 7), 0);
   totCells.push(grandSites, grandQ, pdmSitesGrand || '-', grandCollectors);
   const totRow = ws.addRow(totCells);
   totRow.eachCell((cell) => {
