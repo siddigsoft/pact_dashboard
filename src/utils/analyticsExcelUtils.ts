@@ -948,6 +948,184 @@ export async function exportEnumeratorTrackerExcel(
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
 }
 
+// ── Formatted Enumerator Tracker Excel (Hub-grouped) ─────────────
+export async function exportEnumeratorTrackerFormattedExcel(
+  rows: EnumTrackerEntry[],
+  filename: string
+) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'PACT Command Center';
+  wb.created = new Date();
+
+  // Rebuild Hub → State → Collector hierarchy from flat rows
+  const hubMap = new Map<string, Map<string, EnumTrackerEntry[]>>();
+  for (const r of rows) {
+    const hub   = r.hub   || '—';
+    const state = r.state || '—';
+    if (!hubMap.has(hub)) hubMap.set(hub, new Map());
+    const sm = hubMap.get(hub)!;
+    if (!sm.has(state)) sm.set(state, []);
+    sm.get(state)!.push(r);
+  }
+  const hubGroups = [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  // ── Sheet 1: Grouped by Hub → State → Collector ───────────────
+  const COLS = ['#', 'Data Collector', 'Total Sites', 'Covered', 'Submitted', 'WFP Confirmed', 'Pending', 'Rejected', 'Coverage %'];
+  const COL_COUNT = COLS.length;
+
+  const ws1 = wb.addWorksheet('Enumerator by Hub');
+
+  // Title
+  const titleRow = ws1.addRow(['Enumerator Tracker — By Hub, State & Data Collector']);
+  titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow.height = 28;
+  ws1.mergeCells(titleRow.number, 1, titleRow.number, COL_COUNT);
+  ws1.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
+  ws1.addRow([]);
+
+  let seq = 0;
+
+  for (const [hub, sm] of hubGroups) {
+    const hubStates = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const hubCollectors = hubStates.flatMap(([, cs]) => cs);
+    const hubTotal   = hubCollectors.reduce((s, c) => s + c.total,   0);
+    const hubCovered = hubCollectors.reduce((s, c) => s + c.covered, 0);
+
+    // Hub header row (navy)
+    const hubRow = ws1.addRow([hub, '', '', '', '', '', '', '', '']);
+    ws1.mergeCells(hubRow.number, 1, hubRow.number, COL_COUNT);
+    hubRow.height = 24;
+    hubRow.getCell(1).fill = headerFill();
+    hubRow.getCell(1).font = { bold: true, size: 11, name: 'Calibri', color: { argb: WHITE } };
+    hubRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Column header row
+    const colHdr = ws1.addRow(COLS);
+    colHdr.height = 20;
+    colHdr.eachCell((cell, ci) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+      cell.font = headerFont(9);
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+    });
+
+    for (const [state, collectors] of hubStates) {
+      const stateTot     = collectors.reduce((s, c) => s + c.total,   0);
+      const stateCovered = collectors.reduce((s, c) => s + c.covered, 0);
+
+      // State sub-header row (light blue)
+      const stateRow = ws1.addRow([`  ${state}`, '', '', '', '', '', '', '', '']);
+      ws1.mergeCells(stateRow.number, 1, stateRow.number, COL_COUNT);
+      stateRow.height = 18;
+      stateRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1E4FF' } };
+      stateRow.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF1E3A8A' } };
+      stateRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+      // Collector rows
+      collectors.sort((a, b) => b.covered - a.covered).forEach((c, i) => {
+        seq++;
+        const pctNum = c.total > 0 ? (c.covered / c.total) * 100 : 0;
+        const pct    = c.total > 0 ? pctNum.toFixed(1) + '%' : '0%';
+        const dataRow = ws1.addRow([seq, c.collectorName, c.total, c.covered, c.submitted, c.wfpConfirmed, c.pending, c.rejected, pct]);
+        dataRow.height = 20;
+        dataRow.eachCell((cell, ci) => {
+          cell.border = thinBorder();
+          cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+          cell.font = bodyFont(10);
+          if (i % 2 === 1) cell.fill = altFill();
+        });
+        // Coverage % coloured
+        const pctCell = dataRow.getCell(COL_COUNT);
+        pctCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
+      });
+
+      // State subtotal
+      const stPctNum = stateTot > 0 ? (stateCovered / stateTot) * 100 : 0;
+      const stSub = ws1.addRow(['', `State Total — ${state}`, stateTot, stateCovered, '', '', '', '', stateTot > 0 ? stPctNum.toFixed(1) + '%' : '0%']);
+      stSub.height = 18;
+      stSub.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4FD' } };
+        cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: 'FF1E3A8A' } };
+        cell.border = thinBorder();
+        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+      });
+    }
+
+    // Hub subtotal
+    const hPctNum = hubTotal > 0 ? (hubCovered / hubTotal) * 100 : 0;
+    const hubSub = ws1.addRow(['', `Hub Total — ${hub}`, hubTotal, hubCovered, '', '', '', '', hubTotal > 0 ? hPctNum.toFixed(1) + '%' : '0%']);
+    hubSub.height = 22;
+    hubSub.eachCell((cell, ci) => {
+      cell.fill = totalFill();
+      cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+    });
+
+    ws1.addRow([]);
+  }
+
+  // Grand total
+  const grandTotal   = rows.reduce((s, r) => s + r.total,   0);
+  const grandCovered = rows.reduce((s, r) => s + r.covered, 0);
+  const grandPctNum  = grandTotal > 0 ? (grandCovered / grandTotal) * 100 : 0;
+  const grandRow = ws1.addRow(['', 'GRAND TOTAL', grandTotal, grandCovered, rows.reduce((s,r)=>s+r.submitted,0), rows.reduce((s,r)=>s+r.wfpConfirmed,0), rows.reduce((s,r)=>s+r.pending,0), rows.reduce((s,r)=>s+r.rejected,0), grandTotal > 0 ? grandPctNum.toFixed(1) + '%' : '0%']);
+  grandRow.height = 24;
+  grandRow.eachCell((cell, ci) => {
+    cell.fill = headerFill();
+    cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: WHITE } };
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+  });
+
+  autoFitColumns(ws1);
+
+  // ── Sheet 2: Site Detail ───────────────────────────────────────
+  const ws2 = wb.addWorksheet('Site Detail');
+  const t2 = ws2.addRow(['Enumerator Tracker — All Sites Detail']);
+  t2.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  t2.height = 28;
+  ws2.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
+  ws2.addRow([]);
+
+  const h2 = ws2.addRow(['#', 'Hub', 'State', 'Data Collector', 'Locality', 'Site Name', 'Status', 'Date']);
+  h2.height = 22;
+  h2.eachCell((cell, ci) => {
+    cell.fill = headerFill();
+    cell.font = headerFont(10);
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
+  });
+
+  let si2 = 0;
+  for (const [hub, sm] of hubGroups) {
+    const hubStates = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b));
+    for (const [state, collectors] of hubStates) {
+      for (const c of collectors) {
+        for (const s of c.sites) {
+          si2++;
+          const dr = ws2.addRow([si2, hub, state, c.collectorName, s.locality, s.siteName, s.status.replace(/_/g, ' '), s.date]);
+          dr.height = 20;
+          dr.eachCell((cell, ci) => {
+            cell.border = thinBorder();
+            cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
+            cell.font = bodyFont(10);
+            if (si2 % 2 === 0) cell.fill = altFill();
+          });
+          const statusCell = dr.getCell(7);
+          const sc = s.status === 'wfp_confirmed' ? GREEN : s.status === 'submitted' ? BLUE_TEXT : s.status === 'rejected' ? 'FFDC2626' : AMBER_TEXT;
+          statusCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: sc } };
+        }
+      }
+    }
+  }
+
+  autoFitColumns(ws2);
+
+  const buf = await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+}
+
 export async function exportCoverageTrackerExcel(
   filteredData: FilteredRow[],
   filename: string,

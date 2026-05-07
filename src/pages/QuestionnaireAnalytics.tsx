@@ -17,7 +17,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format, parse, isValid } from 'date-fns';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
-import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, buildCoverageTrackerWorkbook, exportEnumeratorTrackerExcel } from '@/utils/analyticsExcelUtils';
+import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, buildCoverageTrackerWorkbook, exportEnumeratorTrackerExcel, exportEnumeratorTrackerFormattedExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -5656,25 +5656,44 @@ const QuestionnaireAnalytics = () => {
                         <RotateCcw className={`h-4 w-4 ${enumTrackerLoading ? 'animate-spin' : ''}`} />
                         Refresh
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5"
-                        onClick={() => {
-                          const filtered = enumTrackerRows.filter(r => {
-                            if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
-                            if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
-                            if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
-                            return true;
-                          });
-                          exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-                        }}
-                        disabled={enumTrackerRows.length === 0}
-                        data-testid="button-enum-export-tracker"
-                      >
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Export Excel
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="gap-1.5" disabled={enumTrackerRows.length === 0} data-testid="button-enum-export-tracker">
+                            <Download className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const filtered = enumTrackerRows.filter(r => {
+                                if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
+                                if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
+                                if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                                return true;
+                              });
+                              exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                            }}
+                          >
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Excel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const filtered = enumTrackerRows.filter(r => {
+                                if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
+                                if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
+                                if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                                return true;
+                              });
+                              exportEnumeratorTrackerFormattedExcel(filtered, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                            }}
+                          >
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Formatted Excel
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </CardHeader>
