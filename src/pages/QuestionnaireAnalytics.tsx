@@ -1633,7 +1633,10 @@ const QuestionnaireAnalytics = () => {
   }, []);
 
   const openSectionEmailDialog = useCallback(async (section: string, type: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' | 'tracker_all' = 'coverage') => {
-    const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
+    const rawMonth = computeReportSummary?.monthCoverage;
+    const month = (rawMonth && rawMonth !== 'N/A')
+      ? rawMonth
+      : currentSessionName || fileName.replace(/\.[^.]+$/, '') || format(new Date(), 'MMMM yyyy');
     const isReport = type === 'report';
     setEmailSubject(`${section} - ${month}`);
     setEmailType(type);
@@ -1777,7 +1780,10 @@ const QuestionnaireAnalytics = () => {
 
   const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' | 'tracker_all') => {
     const s = computeReportSummary;
-    const month = s?.monthCoverage || '';
+    const rawMonth = s?.monthCoverage;
+    const month = (rawMonth && rawMonth !== 'N/A')
+      ? rawMonth
+      : currentSessionName || fileName.replace(/\.[^.]+$/, '') || '';
     const greeting = recipientName || 'Team';
     const reportLabels: Record<string, { en: string; ar: string }> = {
       report: { en: 'Questionnaire Data Report', ar: 'تقرير بيانات الاستبيانات' },
