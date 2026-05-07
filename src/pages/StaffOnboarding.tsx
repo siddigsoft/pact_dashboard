@@ -1,238 +1,726 @@
 export default function StaffOnboarding() {
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", background: '#f0f4f8', minHeight: '100vh', padding: '32px 16px 64px' }}>
+    <div style={{ fontFamily: "'Segoe UI', 'Inter', Arial, sans-serif", background: '#EEF2F7', minHeight: '100vh' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        *{box-sizing:border-box;}
-        .ob-page{max-width:780px;margin:0 auto;}
-        .ob-card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
-        .ob-header{background:linear-gradient(135deg,#1a3a6b 0%,#2563eb 60%,#3b82f6 100%);padding:48px 40px 40px;text-align:center;}
-        .ob-header h1{color:#fff;font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.25;margin:0 0 8px;}
-        .ob-header p{color:#bfdbfe;font-size:14px;margin:6px 0 0;}
-        .ob-badge-row{display:flex;justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap;}
-        .ob-badge{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:999px;font-size:12px;font-weight:600;padding:4px 14px;}
-        .ob-body{padding:40px;}
-        .ob-salute{font-size:15px;color:#334155;margin-bottom:20px;line-height:1.75;}
-        .ob-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2563eb;margin:32px 0 14px;}
-        .ob-steps{display:flex;flex-direction:column;gap:14px;}
-        .ob-step{display:flex;align-items:flex-start;gap:14px;}
-        .ob-step-num{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;}
-        .ob-step-body strong{display:block;font-size:14px;font-weight:700;color:#1e293b;margin-bottom:3px;}
-        .ob-step-body span{font-size:13px;color:#64748b;line-height:1.55;}
-        .ob-step-link{font-size:13px;color:#2563eb;font-weight:600;}
-        .ob-feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-        @media(max-width:520px){.ob-feat-grid{grid-template-columns:1fr;}}
-        .ob-feat{border:1.5px solid #e2e8f0;border-radius:10px;padding:14px 16px;}
-        .ob-feat-icon{font-size:22px;margin-bottom:8px;}
-        .ob-feat strong{display:block;font-size:13px;font-weight:700;color:#1e293b;margin-bottom:4px;}
-        .ob-feat span{font-size:12px;color:#64748b;line-height:1.5;}
-        .ob-role-box{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:18px 20px;display:flex;align-items:flex-start;gap:14px;}
-        .ob-role-box .ob-icon{font-size:28px;flex-shrink:0;}
-        .ob-role-box strong{display:block;font-size:14px;font-weight:700;color:#1d4ed8;margin-bottom:4px;}
-        .ob-role-box span{font-size:13px;color:#3b5299;line-height:1.55;}
-        .ob-priority-box{background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:18px 20px;margin-top:16px;}
-        .ob-priority-box strong{display:block;font-size:14px;font-weight:700;color:#92400e;margin-bottom:6px;}
-        .ob-priority-box ul{padding-left:18px;margin-top:4px;}
-        .ob-priority-box li{font-size:13px;color:#78350f;line-height:1.7;}
-        .ob-cta-wrap{text-align:center;margin:32px 0 8px;}
-        .ob-cta{display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;}
-        .ob-divider{border:none;border-top:1.5px solid #f1f5f9;margin:28px 0;}
-        .ob-footer{background:#f8fafc;padding:24px 40px;text-align:center;}
-        .ob-footer p{font-size:12px;color:#94a3b8;line-height:1.7;}
-        .ob-footer strong{color:#64748b;}
-        .ob-guide-title{text-align:center;font-size:22px;font-weight:800;color:#1e293b;margin:56px 0 6px;}
-        .ob-guide-sub{text-align:center;font-size:14px;color:#64748b;margin-bottom:32px;}
-        table.ob-ref{width:100%;border-collapse:collapse;margin-top:8px;}
-        table.ob-ref th{background:#1a3a6b;color:#fff;font-size:12px;font-weight:600;padding:10px 14px;text-align:left;}
-        table.ob-ref td{font-size:13px;color:#334155;padding:10px 14px;border-bottom:1px solid #e2e8f0;vertical-align:top;}
-        table.ob-ref tr:last-child td{border-bottom:none;}
-        table.ob-ref tr:nth-child(even) td{background:#f8fafc;}
-        .ob-print-btn{display:block;text-align:right;margin-bottom:12px;}
-        .ob-print-btn button{background:#1a3a6b;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;}
-        @media print{.ob-print-btn{display:none;}.ob-page{padding:0;}.ob-card{box-shadow:none;border-radius:0;}}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+
+        .ob-wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 80px; }
+
+        /* ── HERO ── */
+        .ob-hero {
+          background: linear-gradient(150deg, #0f2d6e 0%, #1a52c8 55%, #2d7aff 100%);
+          border-radius: 20px;
+          padding: 60px 48px 52px;
+          text-align: center;
+          position: relative;
+          overflow: hidden;
+          margin-bottom: 32px;
+          box-shadow: 0 20px 60px rgba(15,45,110,0.35);
+        }
+        .ob-hero::before {
+          content: '';
+          position: absolute;
+          top: -80px; right: -80px;
+          width: 320px; height: 320px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 50%;
+        }
+        .ob-hero::after {
+          content: '';
+          position: absolute;
+          bottom: -100px; left: -60px;
+          width: 280px; height: 280px;
+          background: rgba(255,255,255,0.04);
+          border-radius: 50%;
+        }
+        .ob-hero-logo {
+          height: 56px;
+          margin-bottom: 24px;
+          filter: brightness(0) invert(1);
+          opacity: 0.95;
+        }
+        .ob-hero h1 {
+          color: #fff;
+          font-size: 38px;
+          font-weight: 900;
+          line-height: 1.15;
+          letter-spacing: -0.5px;
+          margin-bottom: 14px;
+        }
+        .ob-hero-sub {
+          color: #a5c8ff;
+          font-size: 18px;
+          font-weight: 500;
+          line-height: 1.5;
+          max-width: 580px;
+          margin: 0 auto 28px;
+        }
+        .ob-hero-chips {
+          display: flex;
+          justify-content: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .ob-chip {
+          background: rgba(255,255,255,0.14);
+          border: 1.5px solid rgba(255,255,255,0.28);
+          color: #fff;
+          border-radius: 999px;
+          font-size: 14px;
+          font-weight: 600;
+          padding: 6px 18px;
+          letter-spacing: 0.01em;
+        }
+
+        /* ── URGENCY BANNER ── */
+        .ob-urgency {
+          background: #fffbeb;
+          border: 2.5px solid #f59e0b;
+          border-radius: 14px;
+          padding: 22px 28px;
+          margin-bottom: 28px;
+          display: flex;
+          align-items: flex-start;
+          gap: 16px;
+          box-shadow: 0 4px 16px rgba(245,158,11,0.15);
+        }
+        .ob-urgency-icon { font-size: 32px; flex-shrink: 0; margin-top: 2px; }
+        .ob-urgency-title {
+          font-size: 20px;
+          font-weight: 800;
+          color: #92400e;
+          margin-bottom: 6px;
+        }
+        .ob-urgency-body {
+          font-size: 16px;
+          color: #78350f;
+          line-height: 1.65;
+        }
+
+        /* ── CARD ── */
+        .ob-card {
+          background: #fff;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+          margin-bottom: 28px;
+        }
+        .ob-card-header {
+          padding: 28px 36px 20px;
+          border-bottom: 2px solid #f1f5f9;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+        .ob-card-header-icon {
+          font-size: 30px;
+          flex-shrink: 0;
+        }
+        .ob-card-title {
+          font-size: 22px;
+          font-weight: 800;
+          color: #0f2d6e;
+          letter-spacing: -0.3px;
+        }
+        .ob-card-subtitle {
+          font-size: 14px;
+          color: #64748b;
+          font-weight: 400;
+          margin-top: 2px;
+        }
+        .ob-card-body { padding: 32px 36px 36px; }
+
+        /* ── INTRO TEXT ── */
+        .ob-intro {
+          font-size: 17px;
+          color: #334155;
+          line-height: 1.8;
+          margin-bottom: 0;
+        }
+        .ob-intro strong { color: #0f172a; }
+
+        /* ── ROLE BOX ── */
+        .ob-role {
+          background: linear-gradient(135deg, #eff6ff, #dbeafe);
+          border: 2px solid #93c5fd;
+          border-radius: 12px;
+          padding: 24px 28px;
+          display: flex;
+          align-items: flex-start;
+          gap: 18px;
+          margin-top: 24px;
+        }
+        .ob-role-icon { font-size: 36px; flex-shrink: 0; }
+        .ob-role-label {
+          font-size: 20px;
+          font-weight: 800;
+          color: #1d4ed8;
+          margin-bottom: 6px;
+        }
+        .ob-role-desc {
+          font-size: 16px;
+          color: #1e3a8a;
+          line-height: 1.65;
+        }
+
+        /* ── STEPS ── */
+        .ob-steps { display: flex; flex-direction: column; gap: 16px; }
+        .ob-step {
+          display: flex;
+          align-items: flex-start;
+          gap: 18px;
+          background: #f8fafc;
+          border: 1.5px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 20px 24px;
+          transition: border-color 0.2s;
+        }
+        .ob-step-highlight {
+          background: #eff6ff;
+          border-color: #2563eb;
+        }
+        .ob-step-num {
+          flex-shrink: 0;
+          width: 42px;
+          height: 42px;
+          border-radius: 50%;
+          background: #0f2d6e;
+          color: #fff;
+          font-size: 18px;
+          font-weight: 800;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(15,45,110,0.3);
+        }
+        .ob-step-highlight .ob-step-num { background: #2563eb; }
+        .ob-step-content {}
+        .ob-step-title {
+          font-size: 18px;
+          font-weight: 700;
+          color: #1e293b;
+          margin-bottom: 6px;
+        }
+        .ob-step-highlight .ob-step-title { color: #1d4ed8; }
+        .ob-step-desc {
+          font-size: 15px;
+          color: #475569;
+          line-height: 1.65;
+        }
+        .ob-step-link {
+          color: #2563eb;
+          font-weight: 700;
+          font-size: 16px;
+          text-decoration: none;
+          word-break: break-all;
+        }
+
+        /* ── WHATSAPP BOX ── */
+        .ob-wa {
+          background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+          border: 2px solid #4ade80;
+          border-radius: 14px;
+          padding: 28px 32px;
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          margin-top: 28px;
+          box-shadow: 0 4px 16px rgba(34,197,94,0.15);
+        }
+        .ob-wa-icon { font-size: 44px; flex-shrink: 0; }
+        .ob-wa-title {
+          font-size: 20px;
+          font-weight: 800;
+          color: #14532d;
+          margin-bottom: 6px;
+        }
+        .ob-wa-number {
+          font-size: 28px;
+          font-weight: 900;
+          color: #16a34a;
+          letter-spacing: 0.5px;
+          margin-bottom: 6px;
+        }
+        .ob-wa-desc {
+          font-size: 15px;
+          color: #166534;
+          line-height: 1.6;
+        }
+        .ob-wa-btn {
+          display: inline-block;
+          background: #16a34a;
+          color: #fff;
+          border-radius: 10px;
+          padding: 12px 24px;
+          font-size: 15px;
+          font-weight: 700;
+          text-decoration: none;
+          margin-top: 12px;
+          box-shadow: 0 4px 12px rgba(22,163,74,0.35);
+        }
+
+        /* ── FEATURE GRID ── */
+        .ob-feat-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
+        @media (max-width: 560px) { .ob-feat-grid { grid-template-columns: 1fr; } }
+        .ob-feat {
+          background: #f8fafc;
+          border: 1.5px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 20px 22px;
+        }
+        .ob-feat-top {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 10px;
+        }
+        .ob-feat-icon { font-size: 26px; }
+        .ob-feat-title {
+          font-size: 17px;
+          font-weight: 700;
+          color: #1e293b;
+        }
+        .ob-feat-desc {
+          font-size: 14px;
+          color: #64748b;
+          line-height: 1.65;
+        }
+
+        /* ── PRIORITY LIST ── */
+        .ob-priority {
+          background: #fff7ed;
+          border: 2px solid #fb923c;
+          border-radius: 12px;
+          padding: 24px 28px;
+        }
+        .ob-priority-title {
+          font-size: 19px;
+          font-weight: 800;
+          color: #9a3412;
+          margin-bottom: 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .ob-priority ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+        .ob-priority li {
+          font-size: 16px;
+          color: #7c2d12;
+          line-height: 1.6;
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
+        .ob-priority li::before {
+          content: '✓';
+          color: #ea580c;
+          font-weight: 800;
+          font-size: 16px;
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+
+        /* ── TABLE ── */
+        table.ob-ref { width: 100%; border-collapse: collapse; }
+        table.ob-ref th {
+          background: #0f2d6e;
+          color: #fff;
+          font-size: 14px;
+          font-weight: 700;
+          padding: 14px 18px;
+          text-align: left;
+          letter-spacing: 0.02em;
+        }
+        table.ob-ref td {
+          font-size: 15px;
+          color: #334155;
+          padding: 14px 18px;
+          border-bottom: 1px solid #e2e8f0;
+          vertical-align: top;
+          line-height: 1.55;
+        }
+        table.ob-ref tr:last-child td { border-bottom: none; }
+        table.ob-ref tr:nth-child(even) td { background: #f8fafc; }
+
+        /* ── CTA ── */
+        .ob-cta-wrap {
+          background: linear-gradient(135deg, #0f2d6e 0%, #1a52c8 100%);
+          border-radius: 16px;
+          padding: 48px 40px;
+          text-align: center;
+          box-shadow: 0 16px 48px rgba(15,45,110,0.3);
+        }
+        .ob-cta-wrap h2 {
+          color: #fff;
+          font-size: 30px;
+          font-weight: 900;
+          margin-bottom: 12px;
+        }
+        .ob-cta-wrap p {
+          color: #93c5fd;
+          font-size: 17px;
+          margin-bottom: 28px;
+          line-height: 1.6;
+        }
+        .ob-cta-btn {
+          display: inline-block;
+          background: #fff;
+          color: #0f2d6e;
+          border-radius: 12px;
+          padding: 18px 48px;
+          font-size: 20px;
+          font-weight: 900;
+          text-decoration: none;
+          letter-spacing: 0.01em;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+
+        /* ── FOOTER ── */
+        .ob-footer {
+          text-align: center;
+          margin-top: 32px;
+          padding: 0 20px;
+        }
+        .ob-footer p {
+          font-size: 14px;
+          color: #94a3b8;
+          line-height: 1.8;
+        }
+
+        /* ── PRINT ── */
+        .ob-print-bar {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 16px;
+        }
+        .ob-print-btn {
+          background: #0f2d6e;
+          color: #fff;
+          border: none;
+          border-radius: 10px;
+          padding: 10px 22px;
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+          letter-spacing: 0.02em;
+        }
+        @media print {
+          .ob-print-bar { display: none; }
+          .ob-wrap { padding: 0; }
+          .ob-hero { box-shadow: none; }
+          .ob-card { box-shadow: none; }
+        }
       `}</style>
 
-      <div className="ob-page">
+      <div className="ob-wrap">
 
-        {/* Print / Download button */}
-        <div className="ob-print-btn">
-          <button onClick={() => window.print()}>🖨️ Print / Save as PDF</button>
+        {/* Print button */}
+        <div className="ob-print-bar">
+          <button className="ob-print-btn" onClick={() => window.print()}>🖨️ Print / Save as PDF</button>
         </div>
 
-        {/* ── EMAIL CARD ── */}
-        <div className="ob-card">
+        {/* ── HERO ── */}
+        <div className="ob-hero">
+          <img className="ob-hero-logo" src="/pact-logo.png" alt="PACT" />
+          <h1>Welcome to PACT Command Center</h1>
+          <p className="ob-hero-sub">
+            Your unified platform for projects, daily tasks, contracts, payroll & field operations — all in one place.
+          </p>
+          <div className="ob-hero-chips">
+            <span className="ob-chip">🔒 Secure</span>
+            <span className="ob-chip">📱 Mobile Ready</span>
+            <span className="ob-chip">🌐 app.pactorg.com</span>
+            <span className="ob-chip">💬 WhatsApp Notifications</span>
+          </div>
+        </div>
 
-          {/* Header */}
-          <div className="ob-header">
-            <img src="/pact-logo.png" alt="PACT" style={{ height: 48, marginBottom: 18, filter: 'brightness(0) invert(1)' }} />
-            <h1>Welcome to PACT Command Center</h1>
-            <p>Your unified platform for projects, tasks, payroll & field operations</p>
-            <div className="ob-badge-row">
-              <span className="ob-badge">🔒 Secure</span>
-              <span className="ob-badge">📱 Mobile Ready</span>
-              <span className="ob-badge">🌐 app.pactorg.com</span>
+        {/* ── URGENCY BANNER ── */}
+        <div className="ob-urgency">
+          <div className="ob-urgency-icon">⚡</div>
+          <div>
+            <div className="ob-urgency-title">Action Required — Register Today</div>
+            <div className="ob-urgency-body">
+              Contract management and payroll processing are ready to launch. <strong>We cannot start until every staff member has registered.</strong> Please complete your registration as soon as possible — it takes less than 3 minutes.
             </div>
           </div>
+        </div>
 
-          {/* Body */}
-          <div className="ob-body">
-
-            <p className="ob-salute">
-              Dear <strong>PACT Team</strong>,<br /><br />
-              We are excited to officially launch the <strong>PACT Command Center</strong> — our centralized digital platform designed to manage everything from projects and daily tasks to contracts, payroll, and field operations in one place.<br /><br />
-              To enable full automation of HR and financial processes — including contract management and payroll runs — <strong>we need all staff to be registered and active on the platform.</strong> Please follow the steps below to create your account today.
+        {/* ── INTRODUCTION ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">📢</div>
+            <div>
+              <div className="ob-card-title">Dear PACT Team</div>
+              <div className="ob-card-subtitle">Important announcement from Management</div>
+            </div>
+          </div>
+          <div className="ob-card-body">
+            <p className="ob-intro">
+              We are officially launching the <strong>PACT Command Center</strong> — our centralized digital platform built to manage everything from <strong>daily tasks and projects</strong> to <strong>contracts, payroll, and field operations</strong> in one secure place.<br /><br />
+              To enable full automation of HR and financial processes — including digital contract signing and payroll runs — <strong>every staff member must be registered and active on the platform.</strong>
             </p>
 
-            {/* Role callout */}
-            <div className="ob-role-box">
-              <div className="ob-icon">👤</div>
+            {/* Role box */}
+            <div className="ob-role">
+              <div className="ob-role-icon">👤</div>
               <div>
-                <strong>Your Role: Employee</strong>
-                <span>All staff should register with the <strong>Employee</strong> role. Your account will be reviewed and activated by the administration team. Managers and directors will be assigned elevated roles by the system admin after registration.</span>
+                <div className="ob-role-label">Your Role: EMPLOYEE</div>
+                <div className="ob-role-desc">
+                  All staff register with the <strong>Employee</strong> role. Do not select any other role during registration. Managers and directors will be upgraded by the system administrator after registration is complete.
+                </div>
               </div>
             </div>
-
-            {/* Registration steps */}
-            <div className="ob-section-title">📋 Registration Steps</div>
-            <div className="ob-steps">
-              {[
-                { n: 1, title: 'Open the Platform', body: <>On any browser (Chrome recommended), go to: <a className="ob-step-link" href="https://app.pactorg.com">https://app.pactorg.com</a></> },
-                { n: 2, title: 'Click "Sign Up"', body: 'On the login page, click the Sign Up or Create Account link below the login form.' },
-                { n: 3, title: 'Enter Your Work Email & Password', body: 'Use your official PACT email address. Create a strong password (minimum 8 characters, include numbers and symbols).' },
-                { n: 4, title: 'Select Role: Employee', body: <><strong style={{ color: '#2563eb' }}>When prompted to select your role, choose Employee.</strong> Do not select any other role — the system admin will upgrade roles for managers as needed.</> },
-                { n: 5, title: 'Complete Your Profile', body: 'Fill in your full name, department, and job title. Upload a profile photo if you wish. This helps your manager assign tasks and approve requests correctly.' },
-                { n: 6, title: 'Wait for Activation', body: 'Your account will be reviewed and activated by the admin team. You will receive a confirmation email once your account is ready.' },
-                { n: 7, title: 'Log In & Explore', body: 'Once activated, log in and explore your personal dashboard. Start with My Tasks and My Board to see what has been assigned to you.' },
-              ].map(s => (
-                <div className="ob-step" key={s.n}>
-                  <div className="ob-step-num">{s.n}</div>
-                  <div className="ob-step-body">
-                    <strong>{s.title}</strong>
-                    <span>{s.body}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Features */}
-            <div className="ob-section-title">🚀 What You Can Do on the Platform</div>
-            <div className="ob-feat-grid">
-              {[
-                { icon: '📋', title: 'My Tasks', desc: 'View, update, and complete tasks assigned to you. Add comments, attach files, and log your daily output with proof uploads.' },
-                { icon: '🗂️', title: 'Projects', desc: 'See all projects you are part of. Track progress, view milestones, and collaborate with your team in a structured workflow.' },
-                { icon: '📌', title: 'My Board', desc: 'A personal Kanban board showing all your tasks. Drag cards between To Do → In Progress → Done to stay organized.' },
-                { icon: '⏱️', title: 'Timesheets', desc: 'Log your daily work hours. Timesheets feed directly into payroll calculations so accuracy is important.' },
-                { icon: '📄', title: 'Contracts & Payroll', desc: 'View your employment contract, track payment history, and download payslips — all digitally within the platform.' },
-                { icon: '🏖️', title: 'Leave Requests', desc: 'Submit leave applications, check your leave balance, and track approval status in real time.' },
-                { icon: '📊', title: 'Reports & Analytics', desc: 'Access dashboards relevant to your work. See your task completion rates, project health, and field operation summaries.' },
-                { icon: '🔔', title: 'Notifications', desc: 'Receive real-time alerts for task assignments, approvals, deadlines, and announcements — in-app and via WhatsApp.' },
-              ].map(f => (
-                <div className="ob-feat" key={f.title}>
-                  <div className="ob-feat-icon">{f.icon}</div>
-                  <strong>{f.title}</strong>
-                  <span>{f.desc}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Priority */}
-            <div className="ob-section-title">⚡ Immediate Priority Actions</div>
-            <div className="ob-priority-box">
-              <strong>Once registered, please complete the following right away:</strong>
-              <ul>
-                <li>Confirm your profile information (name, department, position, phone number)</li>
-                <li>Check for any tasks already assigned to you in <em>My Tasks</em></li>
-                <li>Inform your line manager that your account is active</li>
-                <li>Contract and payroll processing will begin once all staff are on board — <strong>register by the deadline communicated by your manager</strong></li>
-              </ul>
-            </div>
-
-            <hr className="ob-divider" />
-
-            {/* For managers */}
-            <div className="ob-section-title">🏢 For Managers & Directors</div>
-            <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, marginBottom: 16 }}>Once your team is registered, you will be able to:</p>
-            <div className="ob-feat-grid">
-              {[
-                { icon: '👥', title: 'Team Management', desc: 'Assign tasks to team members, monitor workload, and track completion rates from your Team Monitor dashboard.' },
-                { icon: '✅', title: 'Approvals', desc: 'Approve leave requests, timesheets, expense submissions, and procurement — all in one place with a full audit trail.' },
-                { icon: '💰', title: 'Payroll & Contracts', desc: 'Run payroll cycles, review staff contracts, approve salary changes, and generate payslips — automated once all staff are registered.' },
-                { icon: '📈', title: 'Portfolio Dashboard', desc: 'Cross-project KPI overview: budget utilization, milestone tracking, project health scores, and risk alerts — all in real time.' },
-              ].map(f => (
-                <div className="ob-feat" key={f.title}>
-                  <div className="ob-feat-icon">{f.icon}</div>
-                  <strong>{f.title}</strong>
-                  <span>{f.desc}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* CTA */}
-            <div className="ob-cta-wrap">
-              <a className="ob-cta" href="https://app.pactorg.com">Register Now → app.pactorg.com</a>
-            </div>
-            <p style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 12 }}>
-              If you have any issues registering, contact the IT team or your line manager immediately.
-            </p>
-
-          </div>
-
-          {/* Footer */}
-          <div className="ob-footer">
-            <p>
-              <strong>PACT Sudan — Command Center</strong><br />
-              This is an internal communication. Please do not share your login credentials.<br />
-              Platform: <a href="https://app.pactorg.com" style={{ color: '#2563eb' }}>app.pactorg.com</a> &nbsp;·&nbsp; Support: IT Help Desk
-            </p>
-          </div>
-
-        </div>{/* /card */}
-
-        {/* ── QUICK REFERENCE GUIDE ── */}
-        <h2 className="ob-guide-title">📖 Quick Reference Guide</h2>
-        <p className="ob-guide-sub">Print or share this section with your team as a desk reference</p>
-
-        <div className="ob-card" style={{ marginBottom: 24 }}>
-          <div className="ob-body">
-            <div className="ob-section-title">Platform Modules at a Glance</div>
-            <table className="ob-ref">
-              <thead>
-                <tr><th>Module</th><th>Who Uses It</th><th>What It Does</th></tr>
-              </thead>
-              <tbody>
-                {[
-                  ['Projects', 'All staff', 'Full project lifecycle — planning, execution, milestones, Gantt, budget, and health tracking'],
-                  ['My Tasks / Board', 'All staff', 'Personal task list with Kanban board, due dates, priorities, subtasks, and output logging'],
-                  ['Daily Work', 'All staff', 'Log daily accomplishments with proof uploads — feeds into performance reviews'],
-                  ['Timesheets', 'All staff', 'Track work hours per project/activity — required for payroll accuracy'],
-                  ['HR Hub', 'HR / Managers', 'Staff contracts, payroll runs, leave management, performance reviews, salary increments, and EOSB calculations'],
-                  ['Finance', 'Finance / Directors', 'Journal entries, budget vs actuals, donor fund tracking, procurement (P2P), payslip generation'],
-                  ['Site Visits / MMP', 'Field staff / Coordinators', 'Monthly Monitoring Plans, GPS site visits, coverage tracking, coordinator dashboard'],
-                  ['Surveys', 'Data collectors / M&E', 'Build and distribute surveys, collect responses offline, analyze results with charts and cross-tabs'],
-                  ['Reports', 'All roles', 'Generate PDF/Excel exports for projects, finance, HR, field operations, and donor reporting'],
-                ].map(([mod, who, desc]) => (
-                  <tr key={mod}><td><strong>{mod}</strong></td><td>{who}</td><td>{desc}</td></tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
 
-        <div className="ob-card" style={{ marginBottom: 24 }}>
-          <div className="ob-body">
-            <div className="ob-section-title">User Roles Explained</div>
+        {/* ── REGISTRATION STEPS ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">📋</div>
+            <div>
+              <div className="ob-card-title">How to Register — Step by Step</div>
+              <div className="ob-card-subtitle">Follow these 7 steps to create your account</div>
+            </div>
+          </div>
+          <div className="ob-card-body">
+            <div className="ob-steps">
+
+              <div className="ob-step">
+                <div className="ob-step-num">1</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">Open the Platform in Your Browser</div>
+                  <div className="ob-step-desc">
+                    Go to: <a className="ob-step-link" href="https://app.pactorg.com" target="_blank" rel="noreferrer">https://app.pactorg.com</a><br />
+                    Works on Chrome, Firefox, Edge — and on your mobile phone.
+                  </div>
+                </div>
+              </div>
+
+              <div className="ob-step">
+                <div className="ob-step-num">2</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">Click "Sign Up" on the Login Page</div>
+                  <div className="ob-step-desc">
+                    You will see a login form. Click the <strong>Sign Up</strong> link below it to start creating your account.
+                  </div>
+                </div>
+              </div>
+
+              <div className="ob-step">
+                <div className="ob-step-num">3</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">Enter Your Official PACT Work Email</div>
+                  <div className="ob-step-desc">
+                    Use your official PACT email address. Create a strong password — at least 8 characters, include numbers and symbols (e.g. <em>Pact@2026</em>).
+                  </div>
+                </div>
+              </div>
+
+              <div className="ob-step ob-step-highlight">
+                <div className="ob-step-num">4</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">⭐ Select Role: EMPLOYEE</div>
+                  <div className="ob-step-desc">
+                    When prompted to choose your role, select <strong>Employee</strong>. This is the correct role for all staff. Managers will be upgraded separately by the admin team.
+                  </div>
+                </div>
+              </div>
+
+              <div className="ob-step">
+                <div className="ob-step-num">5</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">Complete Your Profile</div>
+                  <div className="ob-step-desc">
+                    Enter your <strong>full name</strong>, <strong>department</strong>, <strong>job title</strong>, and <strong>phone number</strong>. A complete profile allows your manager to assign tasks and process payroll correctly.
+                  </div>
+                </div>
+              </div>
+
+              <div className="ob-step">
+                <div className="ob-step-num">6</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">Wait for Account Activation</div>
+                  <div className="ob-step-desc">
+                    The admin team will review and activate your account. You will receive a confirmation email once it is ready — usually within 24 hours.
+                  </div>
+                </div>
+              </div>
+
+              <div className="ob-step">
+                <div className="ob-step-num">7</div>
+                <div className="ob-step-content">
+                  <div className="ob-step-title">Log In and Explore Your Dashboard</div>
+                  <div className="ob-step-desc">
+                    Once activated, log in and go to <strong>My Tasks</strong> and <strong>My Board</strong> to see your assignments and get started.
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        {/* ── WHATSAPP STEP ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">💬</div>
+            <div>
+              <div className="ob-card-title">Enable WhatsApp Notifications</div>
+              <div className="ob-card-subtitle">Receive real-time task alerts and updates directly on WhatsApp</div>
+            </div>
+          </div>
+          <div className="ob-card-body">
+            <div className="ob-wa">
+              <div className="ob-wa-icon">📱</div>
+              <div>
+                <div className="ob-wa-title">Send a WhatsApp message to activate notifications</div>
+                <div className="ob-wa-number">+256 751 900 013</div>
+                <div className="ob-wa-desc">
+                  Send a WhatsApp message to the number above saying <strong>"Hi PACT"</strong> or your name to opt in to platform notifications. You will then receive real-time alerts for:
+                  <ul style={{ marginTop: 10, paddingLeft: 20, lineHeight: 1.8 }}>
+                    <li>New tasks assigned to you</li>
+                    <li>Approvals and decisions on your requests</li>
+                    <li>Deadline reminders</li>
+                    <li>Payroll and contract updates</li>
+                    <li>Important announcements from management</li>
+                  </ul>
+                </div>
+                <a
+                  className="ob-wa-btn"
+                  href="https://wa.me/256751900013?text=Hi%20PACT%20-%20I%20have%20registered%20on%20the%20Command%20Center"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  💬 Open WhatsApp Chat
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── WHAT YOU CAN DO ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">🚀</div>
+            <div>
+              <div className="ob-card-title">What You Can Do as an Employee</div>
+              <div className="ob-card-subtitle">Everything available to you once your account is active</div>
+            </div>
+          </div>
+          <div className="ob-card-body">
+            <div className="ob-feat-grid">
+              {[
+                { icon: '📋', title: 'My Tasks', desc: 'View and update all tasks assigned to you. Add comments, attach files, and mark tasks complete. Log your daily output with proof uploads.' },
+                { icon: '📌', title: 'My Board (Kanban)', desc: 'A personal Kanban board showing all your tasks. Drag cards from To Do → In Progress → Done to track your work visually.' },
+                { icon: '🗂️', title: 'Projects', desc: 'See all projects you are part of. View milestones, progress, and collaborate with your team within a structured workflow.' },
+                { icon: '⏱️', title: 'Timesheets', desc: 'Log your daily working hours per project or activity. Timesheets feed directly into payroll — accuracy is essential.' },
+                { icon: '📄', title: 'Contracts & Payslips', desc: 'View your employment contract and download monthly payslips as PDF, all stored securely in the platform.' },
+                { icon: '🏖️', title: 'Leave Requests', desc: 'Submit leave applications online, check your leave balance, and track approval status in real time.' },
+                { icon: '🔔', title: 'Notifications', desc: 'Receive instant alerts for new task assignments, approvals, deadlines, and announcements — in-app and via WhatsApp.' },
+                { icon: '📊', title: 'Reports & Dashboards', desc: 'Access dashboards showing your task completion, project health, and activity summaries relevant to your work.' },
+              ].map(f => (
+                <div className="ob-feat" key={f.title}>
+                  <div className="ob-feat-top">
+                    <span className="ob-feat-icon">{f.icon}</span>
+                    <span className="ob-feat-title">{f.title}</span>
+                  </div>
+                  <div className="ob-feat-desc">{f.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── PRIORITY CHECKLIST ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">✅</div>
+            <div>
+              <div className="ob-card-title">Checklist — Do This Right Away</div>
+              <div className="ob-card-subtitle">Complete these steps immediately after registering</div>
+            </div>
+          </div>
+          <div className="ob-card-body">
+            <div className="ob-priority">
+              <div className="ob-priority-title">
+                <span>📌</span> Your Immediate Action List
+              </div>
+              <ul>
+                <li>Register at <strong>app.pactorg.com</strong> using your official PACT email</li>
+                <li>Select role <strong>Employee</strong> during registration</li>
+                <li>Complete your full profile — name, department, job title, and phone number</li>
+                <li>Send <strong>"Hi PACT"</strong> via WhatsApp to <strong>+256 751 900 013</strong> to enable notifications</li>
+                <li>Inform your line manager that your account has been created</li>
+                <li>Check <strong>My Tasks</strong> for any work already assigned to you</li>
+                <li>Contracts and payroll will begin once <strong>all staff are on board</strong> — register before the deadline</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* ── FOR MANAGERS ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">🏢</div>
+            <div>
+              <div className="ob-card-title">For Managers & Directors</div>
+              <div className="ob-card-subtitle">Additional capabilities unlocked once your team is registered</div>
+            </div>
+          </div>
+          <div className="ob-card-body">
+            <div className="ob-feat-grid">
+              {[
+                { icon: '👥', title: 'Team Monitor', desc: 'Real-time dashboard of your team\'s task load, completion rates, and daily activity. Identify overloaded or underperforming staff instantly.' },
+                { icon: '✅', title: 'Approvals Hub', desc: 'Approve leave, timesheets, expense submissions, and procurement — all in one place with a full digital audit trail.' },
+                { icon: '💰', title: 'Payroll & Contracts', desc: 'Run payroll cycles, generate payslips, manage salary changes and EOSB calculations automatically.' },
+                { icon: '📈', title: 'Portfolio Dashboard', desc: 'Cross-project KPIs, budget utilization, milestone tracking, and project health matrix for full management visibility.' },
+              ].map(f => (
+                <div className="ob-feat" key={f.title}>
+                  <div className="ob-feat-top">
+                    <span className="ob-feat-icon">{f.icon}</span>
+                    <span className="ob-feat-title">{f.title}</span>
+                  </div>
+                  <div className="ob-feat-desc">{f.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── ROLES TABLE ── */}
+        <div className="ob-card">
+          <div className="ob-card-header">
+            <div className="ob-card-header-icon">🔐</div>
+            <div>
+              <div className="ob-card-title">User Roles at a Glance</div>
+              <div className="ob-card-subtitle">All staff register as Employee — admin upgrades roles after registration</div>
+            </div>
+          </div>
+          <div className="ob-card-body" style={{ padding: '0' }}>
             <table className="ob-ref">
               <thead>
-                <tr><th>Role</th><th>Who Gets It</th><th>Key Permissions</th></tr>
+                <tr>
+                  <th>Role</th>
+                  <th>Who Gets It</th>
+                  <th>Key Permissions</th>
+                </tr>
               </thead>
               <tbody>
                 {[
-                  ['Employee ⭐', 'All staff (default)', 'View & update own tasks · Log work · Submit leave · View own contract & payslip · Join projects'],
-                  ['Manager', 'Team leads / Coordinators', 'Everything above + assign tasks · Approve leave & timesheets · View team dashboard'],
-                  ['Director', 'Department heads', 'Portfolio view · Cross-project analytics · Approve budgets · Access financial dashboards'],
-                  ['HR Admin', 'HR team', 'Full HR hub access — payroll runs, contracts, salary management, EOSB calculations'],
-                  ['Finance Admin', 'Finance team', 'Full accounting suite — GL, budgets, procurement, reconciliation, donor reporting'],
-                  ['Super Admin', 'IT / System admin', 'Full platform access including user management, audit logs, and system settings'],
+                  ['Employee ⭐', 'All staff (default)', 'View & update own tasks · Log work · Submit leave · View contract & payslips · Join projects'],
+                  ['Manager', 'Team leads / Coordinators', 'All above + assign tasks · Approve leave & timesheets · View team dashboard'],
+                  ['Director', 'Department heads', 'Portfolio view · Cross-project analytics · Budget approvals · Financial dashboards'],
+                  ['HR Admin', 'HR team', 'Full HR hub — payroll runs, contracts, salary management, EOSB & gratuity calculations'],
+                  ['Finance Admin', 'Finance team', 'Full accounting — GL, budgets, procurement (P2P), reconciliation, donor reporting'],
+                  ['Super Admin', 'IT / System admin', 'Full platform access — user management, audit logs, system settings'],
                 ].map(([role, who, perms]) => (
                   <tr key={role}><td><strong>{role}</strong></td><td>{who}</td><td>{perms}</td></tr>
                 ))}
@@ -241,28 +729,27 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        <div className="ob-card">
-          <div className="ob-body">
-            <div className="ob-section-title">Need Help?</div>
-            <div className="ob-steps">
-              {[
-                { color: '#059669', icon: '✉', title: 'Contact IT Help Desk', desc: 'For login issues, account activation, or technical problems — reach out to the IT team or your system administrator.' },
-                { color: '#7c3aed', icon: '📱', title: 'Mobile Access', desc: <>The platform works on all mobile browsers. Open <strong>app.pactorg.com</strong> on your phone and add it to your home screen for quick access.</> },
-                { color: '#d97706', icon: '🔐', title: 'Security Reminder', desc: "Never share your password. The platform contains sensitive HR and financial data. If you suspect unauthorized access, inform IT immediately." },
-              ].map(s => (
-                <div className="ob-step" key={s.title}>
-                  <div className="ob-step-num" style={{ background: s.color }}>{s.icon}</div>
-                  <div className="ob-step-body">
-                    <strong>{s.title}</strong>
-                    <span>{s.desc}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="ob-footer">
-            <p>PACT Command Center &nbsp;·&nbsp; Internal Use Only &nbsp;·&nbsp; Confidential<br /><strong>app.pactorg.com</strong></p>
-          </div>
+        {/* ── CTA ── */}
+        <div className="ob-cta-wrap">
+          <h2>Ready? Register Now</h2>
+          <p>
+            Open your browser, go to the link below, and complete registration in under 3 minutes.<br />
+            Then send your WhatsApp message to <strong style={{ color: '#fff' }}>+256 751 900 013</strong> to enable notifications.
+          </p>
+          <a className="ob-cta-btn" href="https://app.pactorg.com" target="_blank" rel="noreferrer">
+            🌐 &nbsp; app.pactorg.com
+          </a>
+        </div>
+
+        {/* ── FOOTER ── */}
+        <div className="ob-footer">
+          <p>
+            <strong style={{ color: '#475569' }}>PACT Sudan — Command Center</strong><br />
+            Internal communication — do not share your login credentials with anyone.<br />
+            Platform: <a href="https://app.pactorg.com" style={{ color: '#2563eb', fontWeight: 600 }}>app.pactorg.com</a>
+            &nbsp;·&nbsp; WhatsApp Support: <strong style={{ color: '#16a34a' }}>+256 751 900 013</strong>
+            &nbsp;·&nbsp; IT Help Desk
+          </p>
         </div>
 
       </div>
