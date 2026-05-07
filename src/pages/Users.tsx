@@ -120,6 +120,9 @@ const Users = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [isRejectingWithReason, setIsRejectingWithReason] = useState(false);
 
+  const [notifLevelDialog, setNotifLevelDialog] = useState<{ open: boolean; user?: User; level?: string }>({ open: false });
+  const [isSavingNotifLevel, setIsSavingNotifLevel] = useState(false);
+
   const primaryRole = currentUser?.role?.toLowerCase() || '';
   const isAdminOrICT = 
     (roles || []).includes('admin' as any) || 
@@ -128,6 +131,12 @@ const Users = () => {
     primaryRole === 'admin' ||
     primaryRole === 'ict' ||
     primaryRole === 'superadmin';
+
+  const isSuperAdminUser =
+    primaryRole === 'superadmin' ||
+    primaryRole === 'super_admin' ||
+    currentUser?.role === 'superAdmin' ||
+    currentUser?.role === 'SuperAdmin';
 
   if (!isAdminOrICT && !canManageRoles()) {
     return <Navigate to="/dashboard" replace />;
@@ -500,6 +509,37 @@ const Users = () => {
     }
   };
 
+  const NOTIF_LEVELS = [
+    { value: 'field',       label: 'Field Staff',   desc: 'Task & site-visit alerts only' },
+    { value: 'coordinator', label: 'Coordinator',   desc: '+ Coverage, MMP & dispatch alerts' },
+    { value: 'manager',     label: 'Manager',       desc: '+ Team, leave & timesheet approvals' },
+    { value: 'director',    label: 'Director',      desc: '+ Budget, project & financial alerts' },
+    { value: 'executive',   label: 'Executive',     desc: '+ Strategic & all operational alerts' },
+    { value: 'system',      label: 'System (IT)',   desc: 'Everything including system events' },
+  ] as const;
+
+  const handleSaveNotifLevel = async () => {
+    if (!notifLevelDialog.user || !notifLevelDialog.level) return;
+    setIsSavingNotifLevel(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ notification_level: notifLevelDialog.level })
+        .eq('id', notifLevelDialog.user.id);
+      if (error) throw error;
+      toast({
+        title: 'Notification level updated',
+        description: `${notifLevelDialog.user.name}'s notification level set to ${NOTIF_LEVELS.find(l => l.value === notifLevelDialog.level)?.label}.`,
+      });
+      setNotifLevelDialog({ open: false });
+      await refreshUsers();
+    } catch (e: any) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsSavingNotifLevel(false);
+    }
+  };
+
   const handleOpenPasswordReset = (user: User) => {
     setPasswordResetDialog({ open: true, user });
   };
@@ -717,6 +757,15 @@ const Users = () => {
                         <Shield className="h-4 w-4 mr-2" />
                         Manage Roles
                       </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {isSuperAdminUser && (
+                    <DropdownMenuItem
+                      onClick={() => setNotifLevelDialog({ open: true, user, level: (user as any).notification_level || 'coordinator' })}
+                      data-testid={`button-notif-level-${user.id}`}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Set Notification Level
                     </DropdownMenuItem>
                   )}
                   {isAdminOrICT && (
@@ -1547,6 +1596,60 @@ const Users = () => {
         targetRole={activateWithRoleDialog.selectedRole || ''}
         currentUserName={currentUser?.name || 'Platform Owner'}
       />
+
+      {/* Notification Level Dialog — Super Admin only */}
+      <Dialog open={notifLevelDialog.open} onOpenChange={(open) => { if (!open) setNotifLevelDialog({ open: false }); }}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-purple-600" />
+              Set Notification Level
+            </DialogTitle>
+            <DialogDescription>
+              Control which notification categories <strong>{notifLevelDialog.user?.name}</strong> receives.
+              This is managed by Super Admin only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {NOTIF_LEVELS.map(lvl => (
+              <button
+                key={lvl.value}
+                onClick={() => setNotifLevelDialog(prev => ({ ...prev, level: lvl.value }))}
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border-2 text-left transition-all ${
+                  notifLevelDialog.level === lvl.value
+                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                    : 'border-transparent bg-muted/30 hover:bg-muted/60'
+                }`}
+                data-testid={`button-notif-level-option-${lvl.value}`}
+              >
+                <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                  notifLevelDialog.level === lvl.value ? 'border-purple-500' : 'border-muted-foreground/30'
+                }`}>
+                  {notifLevelDialog.level === lvl.value && (
+                    <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium text-sm">{lvl.label}</p>
+                  <p className="text-xs text-muted-foreground">{lvl.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setNotifLevelDialog({ open: false })}>Cancel</Button>
+            <Button
+              onClick={handleSaveNotifLevel}
+              disabled={isSavingNotifLevel || !notifLevelDialog.level}
+              className="bg-purple-600 hover:bg-purple-700"
+              data-testid="button-save-notif-level"
+            >
+              {isSavingNotifLevel ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+              Save Level
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

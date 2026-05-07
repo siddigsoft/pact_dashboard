@@ -53,6 +53,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const [permissionsCache, setPermissionsCache] = useState<Record<string, Pick<Permission, 'resource' | 'action' | 'conditions'>[]>>({});
+  const [overridesCache, setOverridesCache] = useState<Record<string, { resource: string; action: string; is_granted: boolean; expires_at: string | null }[]>>({});
 
   const fetchRoles = useCallback(async () => {
     setIsLoading(true);
@@ -134,6 +135,20 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       const { data, error } = await supabase.rpc('get_user_permissions', { user_uuid: userId });
       if (error) throw error;
       setPermissionsCache(prev => ({ ...prev, [userId]: (data || []) as any }));
+
+      // Also fetch per-user overrides so hasPermission can apply them
+      try {
+        const now = new Date().toISOString();
+        const { data: ovData } = await supabase
+          .from('user_permission_overrides')
+          .select('resource, action, is_granted, expires_at')
+          .eq('user_id', userId)
+          .or(`expires_at.is.null,expires_at.gt.${now}`);
+        setOverridesCache(prev => ({ ...prev, [userId]: (ovData || []) as any }));
+      } catch {
+        // table may not exist yet — fail silently
+      }
+
       return ((data || []) as any);
     } catch (error) {
       console.error('Error fetching user permissions:', error);
@@ -439,10 +454,17 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   const hasPermission = (userId: string, resource: ResourceType, action: ActionType): boolean => {
     const perms = permissionsCache[userId];
     if (!perms) return false;
-    
+
     const hasSuperAdminPerm = perms.some(p => p.resource === 'system' && p.action === 'override');
     if (hasSuperAdminPerm) return true;
-    
+
+    // Check per-user overrides first — they win over role defaults
+    const overrides = overridesCache[userId];
+    if (overrides && overrides.length > 0) {
+      const override = overrides.find(o => o.resource === resource && o.action === action);
+      if (override) return override.is_granted;
+    }
+
     return perms.some(p => p.resource === resource && p.action === action);
   };
 

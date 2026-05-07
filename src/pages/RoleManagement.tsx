@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Users, Shield, Settings, Sparkles, Award } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -10,6 +12,7 @@ import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog'
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
 import { PermissionTester } from '@/components/role-management/PermissionTester';
+import { UserPermissionOverrides } from '@/components/role-management/UserPermissionOverrides';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +20,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
+import { normalizeRole } from '@/utils/roleMapping';
 
 const RoleManagement = () => {
   const { currentUser, users, refreshUsers } = useAppContext();
@@ -44,6 +48,9 @@ const RoleManagement = () => {
 
   // Gate by granular permissions (fallback to legacy for backward compatibility)
   const canManageRoles = canManageRolesAuth();
+  const isSuperAdmin = normalizeRole(currentUser?.role || '') === 'superAdmin' ||
+    currentUser?.role?.toLowerCase().replace(/[_\s]/g, '') === 'superadmin' ||
+    currentUser?.role?.toLowerCase() === 'admin';
 
   if (!canManageRoles) {
     return (
@@ -212,7 +219,7 @@ const RoleManagement = () => {
             Role Management
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Manage roles and permissions for your organization
+            Manage roles, permissions, and per-user overrides
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -227,127 +234,131 @@ const RoleManagement = () => {
         </div>
       </div>
 
-      {/* Enhanced Stats Cards */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
-          data-testid="card-total-roles"
-        >
+        <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0" data-testid="card-total-roles">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Total Roles
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-white/90">Total Roles</CardTitle>
             <Shield className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">{roles.length}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {systemRoles.length} system + {customRoles.length} custom
-            </p>
+            <p className="text-xs text-white/80 mt-1">{systemRoles.length} system + {customRoles.length} custom</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
-          data-testid="card-total-users"
-        >
+        <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0" data-testid="card-total-users">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Total Users
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-white/90">Total Users</CardTitle>
             <Users className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">{users.length}</div>
-            <p className="text-xs text-white/80 mt-1">
-              Across all roles
-            </p>
+            <p className="text-xs text-white/80 mt-1">Across all roles</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
-          data-testid="card-active-roles"
-        >
+        <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0" data-testid="card-active-roles">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Active Roles
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-white/90">Active Roles</CardTitle>
             <Award className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">
-              {roles.filter(role => role.is_active).length}
-            </div>
-            <p className="text-xs text-white/80 mt-1">
-              Currently active
-            </p>
+            <div className="text-3xl font-bold text-white">{roles.filter(r => r.is_active).length}</div>
+            <p className="text-xs text-white/80 mt-1">Currently active</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
       </div>
 
-      {/* System Roles */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">System Roles</h2>
-          <p className="text-gray-500">Built-in roles with predefined permissions</p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {systemRoles.map(role => (
-            <RoleCard
-              key={role.id}
-              role={role}
-              onEdit={handleEditRole}
-              onDelete={handleDeleteRole}
-              onViewUsers={handleViewUsers}
-              onClone={handleCloneRole}
-              userCount={getAssignedUsers(role).length}
-            />
-          ))}
-        </div>
-      </div>
+      {/* Tabbed content */}
+      <Tabs defaultValue="roles">
+        <TabsList className="mb-4">
+          <TabsTrigger value="roles" className="gap-2">
+            <Shield className="h-4 w-4" />
+            Roles
+          </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="overrides" className="gap-2" data-testid="tab-user-overrides">
+              <UserCog className="h-4 w-4" />
+              User Permission Overrides
+              <Badge variant="secondary" className="ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] px-1.5">
+                Super Admin
+              </Badge>
+            </TabsTrigger>
+          )}
+        </TabsList>
 
-      {/* Custom Roles */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Custom Roles</h2>
-          <p className="text-gray-500">Organization-specific roles with custom permissions</p>
-        </div>
-        
-        {customRoles.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Shield className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Custom Roles</h3>
-              <p className="text-gray-500 text-center mb-4">
-                Create custom roles to define specific permissions for your organization.
-              </p>
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create First Custom Role
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customRoles.map(role => (
-              <RoleCard
-                key={role.id}
-                role={role}
-                onEdit={handleEditRole}
-                onDelete={handleDeleteRole}
-                onViewUsers={handleViewUsers}
-                onClone={handleCloneRole}
-                userCount={getAssignedUsers(role).length}
-              />
-            ))}
+        {/* ── Tab 1: Roles ── */}
+        <TabsContent value="roles" className="space-y-6">
+          {/* System Roles */}
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">System Roles</h2>
+              <p className="text-gray-500">Built-in roles with predefined permissions</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {systemRoles.map(role => (
+                <RoleCard
+                  key={role.id}
+                  role={role}
+                  onEdit={handleEditRole}
+                  onDelete={handleDeleteRole}
+                  onViewUsers={handleViewUsers}
+                  onClone={handleCloneRole}
+                  userCount={getAssignedUsers(role).length}
+                />
+              ))}
+            </div>
           </div>
+
+          {/* Custom Roles */}
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">Custom Roles</h2>
+              <p className="text-gray-500">Organization-specific roles with custom permissions</p>
+            </div>
+            {customRoles.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Shield className="h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Custom Roles</h3>
+                  <p className="text-gray-500 text-center mb-4">
+                    Create custom roles to define specific permissions for your organization.
+                  </p>
+                  <Button onClick={() => setShowCreateDialog(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Custom Role
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {customRoles.map(role => (
+                  <RoleCard
+                    key={role.id}
+                    role={role}
+                    onEdit={handleEditRole}
+                    onDelete={handleDeleteRole}
+                    onViewUsers={handleViewUsers}
+                    onClone={handleCloneRole}
+                    userCount={getAssignedUsers(role).length}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Tab 2: User Permission Overrides (Super Admin only) ── */}
+        {isSuperAdmin && (
+          <TabsContent value="overrides">
+            <UserPermissionOverrides />
+          </TabsContent>
         )}
-      </div>
+      </Tabs>
 
       {/* Dialogs */}
       <CreateRoleDialog
