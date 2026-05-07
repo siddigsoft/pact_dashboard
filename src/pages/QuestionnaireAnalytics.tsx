@@ -2708,7 +2708,8 @@ const QuestionnaireAnalytics = () => {
       s1Tot.push(grandSites, grandQ, pdmG, grandCollectors);
       const tr1A = ws1.addRow(s1Tot);
       tr1A.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
-      ws1.columns.forEach((col, i) => { col.width = i === 0 ? 30 : 14; });
+      ws1.getColumn(1).width = 30;
+      for (let ci = 2; ci <= s1Cols.length; ci++) ws1.getColumn(ci).width = 14;
 
       [...hubTrackers].sort((a, b) => a.hub.localeCompare(b.hub)).forEach(ht => {
         const ws = wb.addWorksheet(`Hub-${ht.hub}`.slice(0, 31));
@@ -2733,7 +2734,8 @@ const QuestionnaireAnalytics = () => {
         htTot.push(ht.grandSites, ht.grandQ, htPdm, ht.grandCollectors);
         const htTr = ws.addRow(htTot);
         htTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
-        ws.columns.forEach((col, i) => { col.width = i === 0 ? 28 : 13; });
+        ws.getColumn(1).width = 28;
+        for (let ci = 2; ci <= hCols.length; ci++) ws.getColumn(ci).width = 13;
       });
 
       [...stateTrackers].sort((a, b) => a.state.localeCompare(b.state)).forEach(st => {
@@ -2759,7 +2761,8 @@ const QuestionnaireAnalytics = () => {
         stTot.push(st.grandSites, st.grandQ, stPdm, st.grandCollectors);
         const stTr = ws.addRow(stTot);
         stTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
-        ws.columns.forEach((col, i) => { col.width = i === 0 ? 28 : 13; });
+        ws.getColumn(1).width = 28;
+        for (let ci = 2; ci <= hCols.length; ci++) ws.getColumn(ci).width = 13;
       });
 
       const wsE = wb.addWorksheet('Enumerators');
@@ -2780,11 +2783,12 @@ const QuestionnaireAnalytics = () => {
 
       const buffer = await wb.xlsx.writeBuffer();
       return bufferToBase64(buffer as ArrayBuffer);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to generate all trackers base64:', e);
+      toast({ title: 'Attachment Error', description: `Could not generate the tracker file: ${e?.message || 'Unknown error'}`, variant: 'destructive' });
       return null;
     }
-  }, [trackerData, csvEnumData, computeReportSummary, fileName, bufferToBase64]);
+  }, [trackerData, csvEnumData, computeReportSummary, fileName, bufferToBase64, toast]);
 
   const sendEmailReport = useCallback(async () => {
     if (emailToUsers.length === 0) {
