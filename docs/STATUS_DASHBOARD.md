@@ -112,7 +112,7 @@ Apply in this order:
 | 5 | Donor / grant management + restricted funds (extended) | 🟡 QUEUED — Expansion SQL + GL bridges SQL both written; apply after Phase 4 | 40% |
 | 6 | Banking & Treasury — `acct_bank_accounts`, `acct_bank_statement_lines`, bank recon RPC + GL bridge | 🟡 QUEUED — SQL written; apply after Phase 3 (independent of Phases 4–5) | 40% |
 | 7 | Statutory reporting (PIT, social, zakat) | 🟡 QUEUED — SQL written; apply any time after Phase 1 | 40% |
-| 8 | Audit-pack export + external auditor portal | ⚪ QUEUED | 0% |
+| 8 | Audit-pack export + external auditor portal | 🟡 QUEUED — SQL written; apply any time after Phase 1 | 40% |
 | 9 | Donor-side reporting + budget-vs-actual variance | ⚪ QUEUED | 0% |
 | 10 | Mobile / Flutter parity for finance flows | ⚪ QUEUED | 0% |
 
@@ -180,7 +180,15 @@ Apply any time after Phase 1 (independent of Phases 4–6):
 |---|---|---|---|
 | 7.1 | PIT brackets + social rates + zakat config + withholding table + statutory filings + `acct_compute_pit()` RPC + `acct_statutory_summary()` RPC + GL bridge trigger + 4 feature flags | 🟡 READY TO APPLY | `accounting_phase7_statutory.sql` · `PHASE7_STATUTORY_MANUAL_APPLY.md` |
 
-### Phases 8–10
+### Phase 8 — Audit-Pack Export + External Auditor Portal
+
+Apply any time after Phase 1 (independent of Phases 4–7):
+
+| ID | Sprint | Status | Files |
+|---|---|---|---|
+| 8.1 | `acct_audit_packs` + `acct_audit_pack_items` + `acct_auditor_findings` + `acct_generate_audit_pack()` RPC + `acct_audit_pack_summary()` RPC + GL bridge + finding counter triggers + 3 flags | 🟡 READY TO APPLY | `accounting_phase8_audit_pack.sql` · `PHASE8_AUDIT_PACK_MANUAL_APPLY.md` |
+
+### Phases 9–10
 
 Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Phase 4.
 
@@ -231,6 +239,9 @@ Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Pha
 | `supabase/migrations/accounting_phase7_statutory.sql` | 7.1 | Migration — 5 tables + 3 RPCs + GL bridge trigger + 4 flags (PIT/social/zakat) | ⏳ pending — apply any time after Phase 1 |
 | `docs/sql/PHASE7_STATUTORY_MANUAL_APPLY.md` | 7.1 | Runbook | n/a |
 | `docs/sql/PHASE7_STATUTORY_ROLLBACK.sql` | 7.1 | Rollback | n/a |
+| `supabase/migrations/accounting_phase8_audit_pack.sql` | 8.1 | Migration — 3 tables + 2 RPCs + GL bridge + finding counter triggers + 3 flags | ⏳ pending — apply any time after Phase 1 |
+| `docs/sql/PHASE8_AUDIT_PACK_MANUAL_APPLY.md` | 8.1 | Runbook | n/a |
+| `docs/sql/PHASE8_AUDIT_PACK_ROLLBACK.sql` | 8.1 | Rollback | n/a |
 | `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite | ⏳ pending (apply any time) |
 | `supabase/migrations/20260409_timesheet_module.sql` | Timesheet | Migration | ✅ 2026-04-26 |
 | `supabase/migrations/20260426_timesheet_entries_insert_status_guard.sql` | Timesheet hot-patch | RLS hardening | ✅ 2026-04-26 |

@@ -67,6 +67,10 @@ const DEFAULT_FLAGS: Omit<FeatureFlag, 'updated_at'>[] = [
   { key: 'acct.statutory.social',                description: 'Phase 7: Enable social insurance (SIPC) employee 8% + employer 17% contribution tracking and monthly filings.',                   is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.statutory.zakat',                 description: 'Phase 7: Enable zakat computation (2.5% on net zakatable assets above nisab). Enable after adding a zakat config row.',           is_enabled: false, rolled_out_pct: 100 },
   { key: 'acct.bridge.statutory_filing',         description: 'Phase 7: Log GL bridge entry when a statutory filing is submitted or paid. Enabled by default for compliance audit trail.',       is_enabled: true,  rolled_out_pct: 100 },
+  // Phase 8 — Audit Pack
+  { key: 'acct.audit_pack.enabled',              description: 'Phase 8: Enable audit pack generation — snapshots trial balance, journals, COA, bank recon, and grants into a JSONB bundle for external auditors.', is_enabled: true,  rolled_out_pct: 100 },
+  { key: 'acct.auditor_portal.enabled',          description: 'Phase 8: Enable external auditor portal — time-limited token-based access so auditors can view shared packs and raise findings.',  is_enabled: false, rolled_out_pct: 100 },
+  { key: 'acct.bridge.audit_pack',               description: 'Phase 8: Log GL bridge entry when an audit pack is finalized or shared with external auditors. Enabled by default.',               is_enabled: true,  rolled_out_pct: 100 },
   { key: 'acct.posting_engine.enabled',          description: 'Master GL posting engine switch. Disabling this blocks all Phase 4 bridge postings.',                                              is_enabled: true,  rolled_out_pct: 100 },
 ];
 

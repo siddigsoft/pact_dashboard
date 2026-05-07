@@ -918,6 +918,25 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
            'Enabled by default. Applies to PIT, social, and zakat filings.',
   },
 
+  // ── Phase 8 bridges ───────────────────────────────────────────────────────
+
+  // ── 27. Audit Pack → Finalized ────────────────────────────────────────────
+  {
+    id:               'acct_audit_pack_finalized',
+    sourceTable:      'acct_audit_packs',
+    eventType:        'audit_pack_finalized | audit_pack_shared',
+    triggerStatus:    'UPDATE (status → finalized or shared)',
+    triggerCondition: 'AFTER UPDATE on acct_audit_packs when new.status in (\'finalized\',\'shared\')',
+    labelEn:          'Audit Pack Finalized / Shared with External Auditors',
+    labelAr:          'إتمام حزمة المراجعة ومشاركتها مع المراجعين الخارجيين',
+    featureFlag:      'acct.bridge.audit_pack',
+    lines: [],
+    notes: 'Visibility-only bridge — no journal posted. Logs a GL bridge entry when an audit ' +
+           'pack is finalized or shared, recording the pack title, item count, and finding count. ' +
+           'Provides an immutable audit trail of when external auditors were given access. ' +
+           'Enabled by default. Appears in GL Bridge Audit under "Audit Packs".',
+  },
+
   // ── 26. Tax Withholding — PIT + Social Posted ─────────────────────────────
   {
     id:               'acct_tax_withholding_pit',

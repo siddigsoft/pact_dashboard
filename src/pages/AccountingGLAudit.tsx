@@ -74,6 +74,9 @@ const TABLE_LABELS: Record<string, string> = {
   // Phase 7 — Statutory Reporting
   acct_statutory_filings:          'Statutory Filings',
   acct_tax_withholding:            'Tax Withholding',
+  // Phase 8 — Audit Pack
+  acct_audit_packs:                'Audit Packs',
+  acct_auditor_findings:           'Auditor Findings',
 };
 
 const HEALTH_CFG = {
