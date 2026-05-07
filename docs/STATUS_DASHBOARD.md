@@ -16,33 +16,47 @@
 > auto-push. The agent only writes SQL files and runbooks; the user pastes
 > them.
 
-**Last updated:** 2026-05-07 (Phase 1 confirmed applied to pactdb; Phase 2 GL bridges SQL written, ready to apply)
-**Current sprint:** Phase 2 · **SQL READY TO APPLY** — `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` (1 465 lines) + runbook `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md` + rollback `docs/sql/PHASE2_GL_BRIDGES_ROLLBACK.sql` all complete. Triggers: payroll_runs (approved/locked), withdrawal_requests (approved), operational_cost_submissions (paid), down_payment_requests (fully_paid), salary_advances (disbursed), wallet_transactions (reward INSERT). P2P tables: PR → PO → GRN → Invoice → Payment → Cheque Register. Daily reconciliation RPC + GL Bridge status dashboard page.
-**Next up:** Paste `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` into pactdb SQL editor following `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md`. Pre-flight checks are in the runbook.
-**Active hot-patches (out-of-band, apply any time, independent of accounting sprints):**
-- `personal_tasks_co_assignee_rls_v2` — co-assignees see "Task not found" on `/tasks/:id`; bulletproof EXISTS-form RLS rewrite ready to paste
+**Last updated:** 2026-05-07 (Phase 1 + Phase 2 applied to pactdb; Phase 3 SQL + runbooks ready to apply)
+**Current sprint:** Phase 3 · **SQL READY TO APPLY** — `supabase/migrations/accounting_gl_bridges_phase3.sql` (910 lines) + runbook `docs/sql/PHASE3_GL_BRIDGES_MANUAL_APPLY.md` + rollback all complete. Bridges: EOSB monthly provisions, salary advance disbursements & recoveries, grant programme expenses, payroll→advance auto-deduction. Also adds `run_period_close_allocation` RPC, `get_gl_bridge_log` RPC, and `acct_gl_bridge_coverage` view.
+**Next up:** (1) Apply prerequisite `hr_advances_grant_milestones.sql` if not yet in pactdb. (2) Paste `accounting_gl_bridges_phase3.sql` following `docs/sql/PHASE3_GL_BRIDGES_MANUAL_APPLY.md`.
 
 ---
 
-## ✅ Phase 1 — COMPLETE (all 3 SQL sprints applied to pactdb)
+## ✅ Phase 1 — COMPLETE
 
-Phase 1 is **10 / 10 acceptance criteria green** — all SQL applied to pactdb, all pages live.
+All 3 SQL sprints applied to pactdb. 10/10 acceptance criteria 🟢 in pactdb.
 
 | Step | File | Status |
 |---|---|---|
-| 1 | `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` + `docs/sql/PHASE1_SPRINT1_1_SEED_SUDAN_COA.sql` | ✅ APPLIED 2026-05-07 |
+| 1 | `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` + seed | ✅ APPLIED 2026-05-07 |
 | 2 | `supabase/migrations/20260508_acct_phase1_sprint1_2.sql` | ✅ APPLIED 2026-05-07 |
 | 3 | `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` | ✅ APPLIED 2026-05-07 |
 
+## ✅ Phase 2 — COMPLETE
+
+GL Bridge Engine + P2P tables applied to pactdb. 7 triggers live.
+
+| Step | File | Status |
+|---|---|---|
+| 1 | `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` | ✅ APPLIED 2026-05-07 |
+
 ---
 
-## ⚡ Phase 2 — next apply (user action)
+## ⚡ Phase 3 — next apply (user action)
 
-**Pre-flight:** run the 6 queries in `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md` §Pre-flight to confirm Phase 1 schema and source tables are present.
+**Step 1 — prerequisite (if not yet applied):**
+Paste `supabase/migrations/hr_advances_grant_milestones.sql` first. It creates
+`hr_salary_advances`, `hr_salary_advance_recoveries`, `acct_grant_expenses`,
+`acct_allocation_runs`, `acct_depreciation_runs`. It is idempotent — safe to run even if
+some tables already exist.
 
-**Apply:** paste `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` into pactdb SQL editor and click Run.
+**Step 2 — Phase 3:**
+Paste `supabase/migrations/accounting_gl_bridges_phase3.sql` following
+`docs/sql/PHASE3_GL_BRIDGES_MANUAL_APPLY.md`.
 
-**Note on `payroll_runs` trigger:** the migration auto-detects whether `public.payroll_runs` exists. If it does not (the table may live in a separate HR schema), the trigger is silently skipped with a `RAISE NOTICE` and must be bound manually after the HR payroll tables are confirmed present. All other 6 bridges + all P2P tables apply regardless.
+**Note on `payroll_run_items` guard:** same pattern as Phase 2. If HR payroll tables are
+absent, Parts J (advance-deduction columns) and the `acct_payroll_advance_recovery` trigger
+are gracefully skipped with RAISE NOTICE and can be bound manually later.
 
 ---
 
@@ -51,11 +65,11 @@ Phase 1 is **10 / 10 acceptance criteria green** — all SQL applied to pactdb, 
 | Phase | Title | Status | % done |
 |---|---|---|---|
 | 0 | HR audit gaps H1–H10 | ✅ DONE — applied to pactdb | 100% |
-| 1 | Accounting foundation (GL, posting engine, sanctions, SoD foundation, audit, tests, seed) | ✅ DONE — all 4 sprints (1.1, 1.2, 1.3, 1.F) applied + 10/10 acceptance criteria green in pactdb | 100% |
-| 2 | Wire payroll / wallets / cost subs / advances / scanner to GL | 🟡 IN PROGRESS — SQL + frontend complete; awaiting user to apply `20260520_acct_phase2_gl_bridges.sql` in pactdb | 50% |
-| 3 | Bank reconciliation + cash-flow forecasting | ⚪ QUEUED | 0% |
-| 4 | Period-close + reconciliation engine | ⚪ QUEUED | 0% |
-| 5 | Donor / grant management + restricted funds | ⚪ QUEUED | 0% |
+| 1 | Accounting foundation (GL, posting engine, sanctions, SoD, audit, tests, seed) | ✅ DONE — applied to pactdb | 100% |
+| 2 | Wire payroll / wallets / cost subs / advances / scanner to GL | ✅ DONE — applied to pactdb | 100% |
+| 3 | EOSB / salary advances / grant expenses / period-close allocation bridges | 🟡 IN PROGRESS — SQL written + reviewed, runbook ready; awaiting user to apply Phase 3 migration | 50% |
+| 4 | Depreciation run / allocation run / budget encumbrance / leave liability bridges | 🟡 IN PROGRESS — SQL written + reviewed, runbook ready; awaiting Phase 3 first | 30% |
+| 5 | Donor / grant management + restricted funds (extended) | ⚪ QUEUED | 0% |
 | 6 | Sanctions / AML deep-screening + fuzzy ranking | ⚪ QUEUED | 0% |
 | 7 | Statutory reporting (PIT, social, zakat) | ⚪ QUEUED | 0% |
 | 8 | Audit-pack export + external auditor portal | ⚪ QUEUED | 0% |
@@ -70,88 +84,96 @@ Legend: ✅ DONE · 🟢 SIGNED OFF · 🟡 IN PROGRESS · 🟠 BLOCKED · ⚪ Q
 
 ### Phase 0 — HR audit (already in pactdb)
 
-| ID | Sprint | Status | Files | Notes |
-|---|---|---|---|---|
-| HR-0 | H1–H10 closure | ✅ APPLIED to pactdb | `supabase/migrations/20260425_hr_audit_remediation.sql`, `docs/sql/HR_AUDIT_MANUAL_APPLY.sql`, `docs/sql/HR_AUDIT_FIX_PATCH.sql` | All 10 gaps closed |
+| ID | Sprint | Status | Files |
+|---|---|---|---|
+| HR-0 | H1–H10 closure | ✅ APPLIED | `20260425_hr_audit_remediation.sql` · `HR_AUDIT_MANUAL_APPLY.sql` · `HR_AUDIT_FIX_PATCH.sql` |
 
 ### Phase 1 — Accounting foundation
 
-| ID | Sprint | Status | Sign-off | Apply log | Files |
-|---|---|---|---|---|---|
-| 1.1 | GL schema + posting engine + TB RPC + feature flags + Sudan COA seed | 🟢 SIGNED OFF — PASS | 2026-04-25 (round 2) | ✅ APPLIED 2026-05-07 | Migration: `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_1_ROLLBACK.sql` · Seed: `docs/sql/PHASE1_SPRINT1_1_SEED_SUDAN_COA.sql` |
-| 1.2 | Sanctions + SoD foundation + finance audit triggers | 🟢 SIGNED OFF — PASS | 2026-04-25 (round 2) | ✅ APPLIED 2026-05-07 | Migration: `supabase/migrations/20260508_acct_phase1_sprint1_2.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_2_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_2_ROLLBACK.sql` |
-| 1.3 | Posting-engine unit-test suite (20 tests, ~95% branch coverage) + synthetic data generator with reset registry | 🟢 SIGNED OFF — PASS | 2026-04-25 (round 4) | ✅ APPLIED 2026-05-07 | Migration: `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` |
-| 1.F | Phase 1 frontend: `/accounting/coa`, `/accounting/journals`, `/accounting/trial-balance`, `/finance/audit-trail` + Arabic jsPDF font (`src/lib/jspdfArabic.ts`, `src/lib/accountingFormat.ts`, 4 pages, sidebar group, lazy routes) | ✅ SHIPPED IN CODE — pages live with pactdb data | 2026-04-26 | Agent self-review | n/a (frontend) |
+| ID | Sprint | Status | Apply log | Files |
+|---|---|---|---|---|
+| 1.1 | GL schema + posting engine + TB RPC + feature flags + Sudan COA seed | 🟢 SIGNED OFF | ✅ APPLIED 2026-05-07 | `20260501_acct_phase1_sprint1_1.sql` · runbook · rollback · seed |
+| 1.2 | Sanctions + SoD foundation + finance audit triggers | 🟢 SIGNED OFF | ✅ APPLIED 2026-05-07 | `20260508_acct_phase1_sprint1_2.sql` · runbook · rollback |
+| 1.3 | Posting-engine unit-test suite (20 tests) + synthetic data generator | 🟢 SIGNED OFF | ✅ APPLIED 2026-05-07 | `20260515_acct_phase1_sprint1_3.sql` · runbook · rollback |
+| 1.F | Phase 1 frontend: COA, journals, trial balance, audit trail, Arabic PDF | ✅ SHIPPED | 2026-04-26 | n/a (frontend) |
 
 ### Phase 2 — GL Bridge Engine
 
-| ID | Sprint | Status | Sign-off | Apply log | Files |
-|---|---|---|---|---|---|
-| 2.1 | GL Bridge Engine: 7 triggers (payroll, withdrawals, ops costs, down payments, salary advances, wallet rewards, P2P invoice/payment) + P2P tables (PR→PO→GRN→Invoice→Payment→Cheque) + daily recon RPC + bridge summary view + feature flags | 🟡 SQL WRITTEN — awaiting user paste in pactdb | Agent review ✅ | ⏳ pending | Migration: `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` · Runbook: `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE2_GL_BRIDGES_ROLLBACK.sql` |
-| 2.F | Phase 2 frontend: `/accounting/gl-bridge` (bridge health + log + recon + template registry), `/accounting/purchase-orders`, `/accounting/purchase-requisitions`, `/accounting/grn`, `/accounting/ap-invoices`, `/accounting/cheque-register`, `src/services/accounting/postingTemplates.ts` | ✅ SHIPPED IN CODE — pages available; data populates after 2.1 is applied | 2026-05-07 | Agent self-review | n/a (frontend) |
+| ID | Sprint | Status | Apply log | Files |
+|---|---|---|---|---|
+| 2.1 | Bridge engine + 7 triggers (payroll, withdrawals, ops costs, down payments, salary advances, wallet rewards, P2P) + P2P tables (PR→PO→GRN→Invoice→Payment→Cheque) + recon RPC + bridge log view | 🟢 SIGNED OFF | ✅ APPLIED 2026-05-07 | `20260520_acct_phase2_gl_bridges.sql` · `PHASE2_GL_BRIDGES_MANUAL_APPLY.md` · `PHASE2_GL_BRIDGES_ROLLBACK.sql` |
+| 2.F | P2P frontend + GL Bridge dashboard + posting templates | ✅ SHIPPED | 2026-05-07 | n/a (frontend) |
 
-### Phases 3–10
+### Phase 3 — HR / Grant / Period-Close Bridges
 
-Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md` §3–§12. Unblocked after Phase 2 is applied to pactdb.
+| ID | Sprint | Status | Apply log | Files |
+|---|---|---|---|---|
+| 3.PRE | Prerequisite tables — `hr_salary_advances`, `hr_salary_advance_recoveries`, `acct_grant_expenses`, `acct_allocation_runs`, `acct_depreciation_runs` | 🟡 READY TO APPLY | ⏳ pending | `hr_advances_grant_milestones.sql` |
+| 3.1 | EOSB accruals + salary advance disbursement + recovery + grant expense bridges + period-close allocation RPC + `get_gl_bridge_log` RPC + `acct_gl_bridge_coverage` view | 🟡 READY TO APPLY | ⏳ pending — apply after 3.PRE | `accounting_gl_bridges_phase3.sql` · `PHASE3_GL_BRIDGES_MANUAL_APPLY.md` · `PHASE3_GL_BRIDGES_ROLLBACK.sql` |
+
+### Phase 4 — Depreciation / Encumbrance / Leave Bridges
+
+| ID | Sprint | Status | Apply log | Files |
+|---|---|---|---|---|
+| 4.1 | Depreciation run log + allocation run log + budget encumbrance journal + leave liability journal | 🟡 READY TO APPLY — apply after Phase 3 | ⏳ pending | `accounting_gl_bridges_phase4.sql` · `PHASE4_GL_BRIDGES_MANUAL_APPLY.md` · `PHASE4_GL_BRIDGES_ROLLBACK.sql` |
+
+### Phases 5–10
+
+Detailed sprint breakdowns live in `docs/PLANNING_INDEX.md`. Unblocked after Phase 4.
 
 ---
 
 ## 3 · SQL artefact registry
 
-Every SQL file the agent has produced for the accounting/HR rebuild. Apply
-status is the truth — sign-off only means "cleared to apply".
+| File | Sprint | Type | Applied to pactdb |
+|---|---|---|---|
+| `supabase/migrations/20260425_hr_audit_remediation.sql` | HR-0 | Migration | ✅ 2026-04-26 |
+| `docs/sql/HR_AUDIT_MANUAL_APPLY.sql` | HR-0 | Bundle runbook | ✅ |
+| `docs/sql/HR_AUDIT_FIX_PATCH.sql` | HR-0 | Hot-patch | ✅ |
+| `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` | 1.1 | Migration | ✅ 2026-05-07 |
+| `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md` | 1.1 | Runbook | n/a |
+| `docs/sql/PHASE1_SPRINT1_1_ROLLBACK.sql` | 1.1 | Rollback | n/a |
+| `docs/sql/PHASE1_SPRINT1_1_SEED_SUDAN_COA.sql` | 1.1 | Seed | ✅ 2026-05-07 |
+| `supabase/migrations/20260508_acct_phase1_sprint1_2.sql` | 1.2 | Migration | ✅ 2026-05-07 |
+| `docs/sql/PHASE1_SPRINT1_2_MANUAL_APPLY.md` | 1.2 | Runbook | n/a |
+| `docs/sql/PHASE1_SPRINT1_2_ROLLBACK.sql` | 1.2 | Rollback | n/a |
+| `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` | 1.3 | Migration | ✅ 2026-05-07 |
+| `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` | 1.3 | Runbook | n/a |
+| `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` | 1.3 | Rollback | n/a |
+| `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` | 2.1 | Migration (1 465 lines) | ✅ 2026-05-07 |
+| `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md` | 2.1 | Runbook | n/a |
+| `docs/sql/PHASE2_GL_BRIDGES_ROLLBACK.sql` | 2.1 | Rollback | n/a |
+| `supabase/migrations/hr_advances_grant_milestones.sql` | 3.PRE | Prerequisite tables (idempotent) | ⏳ pending |
+| `supabase/migrations/accounting_gl_bridges_phase3.sql` | 3.1 | Migration (910 lines) | ⏳ pending — after 3.PRE |
+| `docs/sql/PHASE3_GL_BRIDGES_MANUAL_APPLY.md` | 3.1 | Runbook | n/a |
+| `docs/sql/PHASE3_GL_BRIDGES_ROLLBACK.sql` | 3.1 | Rollback | n/a |
+| `supabase/migrations/accounting_gl_bridges_phase4.sql` | 4.1 | Migration (446 lines) | ⏳ pending — after 3.1 |
+| `docs/sql/PHASE4_GL_BRIDGES_MANUAL_APPLY.md` | 4.1 | Runbook | n/a |
+| `docs/sql/PHASE4_GL_BRIDGES_ROLLBACK.sql` | 4.1 | Rollback | n/a |
+| `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite | ⏳ pending (apply any time) |
+| `supabase/migrations/20260409_timesheet_module.sql` | Timesheet | Migration | ✅ 2026-04-26 |
+| `supabase/migrations/20260426_timesheet_entries_insert_status_guard.sql` | Timesheet hot-patch | RLS hardening | ✅ 2026-04-26 |
 
-| File | Sprint | Type | Sign-off | Applied to pactdb |
-|---|---|---|---|---|
-| `supabase/migrations/20260425_hr_audit_remediation.sql` | HR-0 | Migration | ✅ | ✅ 2026-04-26 |
-| `docs/sql/HR_AUDIT_MANUAL_APPLY.sql` | HR-0 | Bundle runbook | ✅ | ✅ |
-| `docs/sql/HR_AUDIT_FIX_PATCH.sql` | HR-0 | Hot-patch | ✅ | ✅ |
-| `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` | 1.1 | Migration | ✅ PASS | ✅ 2026-05-07 |
-| `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md` | 1.1 | Runbook + smoke tests | ✅ | n/a |
-| `docs/sql/PHASE1_SPRINT1_1_ROLLBACK.sql` | 1.1 | Rollback | ✅ | n/a |
-| `docs/sql/PHASE1_SPRINT1_1_SEED_SUDAN_COA.sql` | 1.1 | Seed (~80 postable accounts EN+AR) | ✅ | ✅ 2026-05-07 |
-| `supabase/migrations/20260508_acct_phase1_sprint1_2.sql` | 1.2 | Migration | ✅ PASS | ✅ 2026-05-07 |
-| `docs/sql/PHASE1_SPRINT1_2_MANUAL_APPLY.md` | 1.2 | Runbook + smoke tests | ✅ | n/a |
-| `docs/sql/PHASE1_SPRINT1_2_ROLLBACK.sql` | 1.2 | Rollback | ✅ | n/a |
-| `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` | 1.3 | Migration | ✅ PASS (round 4) | ✅ 2026-05-07 |
-| `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` | 1.3 | Runbook + smoke tests + 20-row results format | ✅ | n/a |
-| `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` | 1.3 | Rollback (registry-driven, real data safe) | ✅ | n/a |
-| `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` | 2.1 | Migration (1 465 lines) — bridge engine + P2P tables + recon RPC | ✅ Agent review | ⏳ pending — apply after Phase 1 confirmed in pactdb |
-| `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md` | 2.1 | Runbook + pre-flight + smoke tests + live integration test | ✅ | n/a |
-| `docs/sql/PHASE2_GL_BRIDGES_ROLLBACK.sql` | 2.1 | Rollback (drops triggers, P2P tables, bridge log, functions) | ✅ | n/a |
-| `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite (bulletproof EXISTS form) | ✅ | ⏳ pending — apply any time, independent of accounting sprints |
-| `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_APPLY.md` | Hot-patch | Runbook + 5 verification steps | ✅ | n/a |
-| `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_ROLLBACK.sql` | Hot-patch | Rollback to prior `@>` containment policy | ✅ | n/a |
-| `supabase/migrations/20260409_timesheet_module.sql` | Timesheet module (out-of-band, non-accounting) | Migration — pre-patches old flat `timesheets` table with 16 `ADD COLUMN IF NOT EXISTS` guards before back-fill INSERTs, then creates `timesheet_entries` + `timesheet_periods`, RLS, indexes, RPCs | ✅ PASS (round 3) | ✅ 2026-04-26 |
-| `docs/runbooks/2026-04-25_apply_timesheet_module.md` | Timesheet module | Runbook + 2-query pre-flight (detect old flat table) + Troubleshooting section + corrected rollback section | ✅ | n/a |
-| `supabase/migrations/20260426_timesheet_entries_insert_status_guard.sql` | Timesheet module hot-patch | RLS hardening — `timesheet_entries_insert` blocks self-service inserts when parent timesheet is not `draft`/`revision` | ✅ | ✅ 2026-04-26 |
-| `docs/runbooks/2026-04-26_apply_timesheet_entries_insert_status_guard.md` | Timesheet module hot-patch | Runbook + verify query + manual smoke + rollback | ✅ | n/a |
-
-> When the user applies a file in pactdb, change the column to ✅ + the date
-> they ran it.
+> When the user applies a file in pactdb, change the column to ✅ + the date they ran it.
 
 ---
 
 ## 4 · Phase 1 acceptance-criteria matrix
 
-The 10 criteria from `docs/ACCOUNTING_MODULE_MASTER_PLAN.md` §3 (Phase 1):
-
-| # | Criterion | Status | Delivered by |
-|---|---|---|---|
-| 1 | Any service can post a balanced journal via `acct_post_journal` | 🟢 in pactdb | Sprint 1.1 — applied 2026-05-07 |
-| 2 | Trial balance RPC returns balanced fund-aware totals | 🟢 in pactdb | Sprint 1.1 — applied 2026-05-07 |
-| 3 | Sanctions block prevents posting to a sanctioned partner | 🟢 in pactdb | Sprint 1.2 — applied 2026-05-07 |
-| 4 | SoD matrix prevents same user posting + approving same journal | 🟡 PARTIAL — RPC + rules + violations log in pactdb; **posting-path enforcement deferred to Phase 2** (no draft/approve split in Phase 1) | Sprint 1.2 (foundation) → Phase 2 (posting-path) |
-| 5 | Feature flags gate every accounting subsystem | 🟢 in pactdb | Sprint 1.1 — applied 2026-05-07 |
-| 6 | Posting-engine unit-test suite passes (≥ 95% branch coverage) | 🟢 in pactdb | Sprint 1.3 — applied 2026-05-07 |
-| 7 | Synthetic data generator produces a reproducible test ledger | 🟢 in pactdb | Sprint 1.3 — applied 2026-05-07 |
-| 6b | Idempotency on posting (race-safe) | 🟢 in pactdb | Sprint 1.1 — applied 2026-05-07 |
-| 7b | Period close prevents posting to closed periods | 🟢 in pactdb | Sprint 1.1 — applied 2026-05-07 |
-| 8 | Functional currency + FX coherence per line | 🟢 in pactdb | Sprint 1.1 — applied 2026-05-07 |
-| 9 | Bilingual EN/AR with Arabic jsPDF font registered | 🟢 in pactdb — Amiri font lazy-fetched in `src/lib/jspdfArabic.ts` | Sprint 1.F |
-| 10 | Audit trail backed by triggers on funds, accounts, periods, flags | 🟢 in pactdb — data layer ✅ in 1.2 + visualiser page `/finance/audit-trail` | Sprint 1.2 (data) + Sprint 1.F (UI) |
-
-**Phase 1 status today:** 10 / 10 acceptance criteria 🟢 in pactdb (criterion 4 yellow-by-design — SoD posting-path enforcement is a Phase 2 deliverable). **Phase 1 is complete.**
+| # | Criterion | Status |
+|---|---|---|
+| 1 | Any service can post a balanced journal via `acct_post_journal` | 🟢 in pactdb |
+| 2 | Trial balance RPC returns balanced fund-aware totals | 🟢 in pactdb |
+| 3 | Sanctions block prevents posting to a sanctioned partner | 🟢 in pactdb |
+| 4 | SoD matrix prevents same user posting + approving same journal | 🟡 PARTIAL — posting-path enforcement deferred to Phase 2 draft/approve UI |
+| 5 | Feature flags gate every accounting subsystem | 🟢 in pactdb |
+| 6 | Posting-engine unit-test suite passes (≥ 95% branch coverage) | 🟢 in pactdb |
+| 7 | Synthetic data generator produces a reproducible test ledger | 🟢 in pactdb |
+| 6b | Idempotency on posting (race-safe) | 🟢 in pactdb |
+| 7b | Period close prevents posting to closed periods | 🟢 in pactdb |
+| 8 | Functional currency + FX coherence per line | 🟢 in pactdb |
+| 9 | Bilingual EN/AR with Arabic jsPDF font registered | 🟢 in pactdb |
+| 10 | Audit trail backed by triggers on funds, accounts, periods, flags | 🟢 in pactdb |
 
 ---
 
@@ -159,16 +181,16 @@ The 10 criteria from `docs/ACCOUNTING_MODULE_MASTER_PLAN.md` §3 (Phase 1):
 
 | Item | State | Owner | Notes |
 |---|---|---|---|
-| **Apply Phase 2 GL bridges to pactdb** | ⏳ **NEXT ACTION** | User | Paste `supabase/migrations/20260520_acct_phase2_gl_bridges.sql` following `docs/sql/PHASE2_GL_BRIDGES_MANUAL_APPLY.md`. Pre-flight first. |
-| `payroll_runs` trigger binding | ⚠️ Conditional — see Phase 2 note | Agent/User | Migration guards gracefully: if `payroll_runs` is absent the trigger is skipped with NOTICE. Manual bind: `CREATE TRIGGER acct_bridge_payroll_runs AFTER UPDATE ON public.payroll_runs FOR EACH ROW EXECUTE FUNCTION public.acct_trig_payroll_runs();` after HR payroll tables confirmed present. |
-| Posting-path SoD enforcement (criterion #4) | 🟠 Deferred to Phase 2 journal draft/approve UI | Agent | Phase 2 ships journal draft/approve UI which will pass real `entry_id` to `acct_check_sod` |
+| **Apply `hr_advances_grant_milestones.sql` to pactdb** | ⏳ **NEXT ACTION (1 of 2)** | User | Prerequisite for Phase 3. Idempotent — safe to run even if some tables exist. |
+| **Apply Phase 3 GL bridges to pactdb** | ⏳ **NEXT ACTION (2 of 2)** | User | `accounting_gl_bridges_phase3.sql` — follow `docs/sql/PHASE3_GL_BRIDGES_MANUAL_APPLY.md` |
+| **Apply Phase 4 GL bridges to pactdb** | ⏳ QUEUED — after Phase 3 | User | `accounting_gl_bridges_phase4.sql` — follow `docs/sql/PHASE4_GL_BRIDGES_MANUAL_APPLY.md` |
+| Phase 2 `payroll_runs` trigger — conditional | ⚠️ May have skipped with NOTICE | Agent/User | Bind manually if needed: `CREATE TRIGGER acct_bridge_payroll_runs AFTER UPDATE ON public.payroll_runs FOR EACH ROW EXECUTE FUNCTION public.acct_trig_payroll_runs();` |
+| Phase 3 `payroll_run_items` trigger — conditional | ⚠️ May skip with NOTICE if table absent | Agent/User | Same pattern — bind manually after HR payroll tables confirmed |
+| Phase 4 leave liability bridge — disabled by default | ⚠️ Enable manually after payroll/EOSB data populated | User | `UPDATE feature_flags SET is_enabled=true WHERE key='acct.bridge.leave_requests';` |
+| Phase 4 budget encumbrance bridge — disabled by default | ⚠️ Enable after COA + GENERAL fund confirmed | User | `UPDATE feature_flags SET is_enabled=true WHERE key='acct.bridge.acct_budget_encumbrances';` |
+| Posting-path SoD enforcement (criterion #4) | 🟠 Deferred to Phase 2 journal draft/approve UI | Agent | Phase 2 ships journal draft/approve UI which passes real `entry_id` to `acct_check_sod` |
 | 2FA enforcement on finance roles | 🟠 Manual config | User | Supabase Auth dashboard, not SQL |
-| `task_can_start` RPC missing in pactdb | ✅ Mitigated in code (2026-04-26) — client-side fallback via `getBlockingTasks()` | Agent | Permanent fix: paste `supabase/migrations/20260426_task_can_start_rpc.sql` in pactdb |
-| Co-assignees see "Task not found" on `/tasks/:id` | 🟠 Awaiting user to paste `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | User | Runbook: `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_APPLY.md` |
-| `personal_tasks` DELETE policy — silent RLS denial for admins/assignees | 🟠 Pre-existing — tracked for next tasks sprint | Agent (when scheduled) | Fix: widen USING clause or route through SECURITY DEFINER RPC |
-| Apply `docs/sql/PROGRESSIVE_OUTPUT_TRACKING.sql` (quantitative output tracking) | 🟠 Awaiting user paste in pactdb | User | Adds `target_value`, `current_value`, `unit` columns + `task_element_progress_log` + `update_task_element_progress` RPC. Runbook: `docs/sql/PROGRESSIVE_OUTPUT_TRACKING_APPLY.md` |
-| Apply `docs/sql/PROJECT_FLOW_STAGE_OVERRIDES.sql` (admin override of lifecycle stages) | 🟠 Awaiting user paste in pactdb | User | Runbook: `docs/sql/PROJECT_FLOW_STAGE_OVERRIDES_APPLY.md` |
-| Apply `docs/sql/PROJECT_FIELD_TASK_DEPENDENCIES.sql` (typed FS/SS/FF/SF deps) | 🟠 Awaiting user paste in pactdb | User | Runbook: `docs/sql/PROJECT_FIELD_TASK_DEPENDENCIES_APPLY.md` |
-| Apply `docs/sql/PROJECT_FIELD_TASK_DEPENDENCIES_RPCS.sql` (SECURITY DEFINER dep RPCs) | 🟠 Awaiting user paste in pactdb | User | Runbook: `docs/sql/PROJECT_FIELD_TASK_DEPENDENCIES_RPCS_APPLY.md` |
-| Redeploy `send-whatsapp` edge function | 🟠 Awaiting user — `supabase functions deploy send-whatsapp` | User | Removes legacy direct-call code path |
-| Task Reward Deductions — paste + redeploy | 🟠 Awaiting user to paste `supabase/migrations/20260425_task_reward_deductions.sql` + redeploy `credit-task-reward` edge function | User | Runbook: `docs/runbooks/2026-04-25_task_reward_deductions.md` |
+| Co-assignees see "Task not found" on `/tasks/:id` | 🟠 Awaiting user to paste `20260425_personal_tasks_co_assignee_rls_v2.sql` | User | Runbook: `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_APPLY.md` |
+| `task_can_start` RPC missing in pactdb | ✅ Mitigated in code — client-side fallback via `getBlockingTasks()` | Agent | Permanent fix: paste `supabase/migrations/20260426_task_can_start_rpc.sql` |
+| Redeploy `send-whatsapp` edge function | 🟠 Awaiting user | User | `supabase functions deploy send-whatsapp` |
+| Task Reward Deductions | 🟠 Awaiting user to paste `20260425_task_reward_deductions.sql` + redeploy `credit-task-reward` | User | Runbook: `docs/runbooks/2026-04-25_task_reward_deductions.md` |

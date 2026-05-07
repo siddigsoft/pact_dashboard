@@ -769,10 +769,18 @@ grant execute on function public.get_gl_bridge_log(text, text, date, date, int) 
 -- When a payroll_run_items row is inserted/updated and has salary_advance_deduction > 0,
 -- auto-create a recovery entry in hr_salary_advance_recoveries.
 -- This links payroll → salary advances automatically.
+-- Guarded — skips gracefully if payroll_run_items table is not yet in pactdb.
 -- =============================================================================
-alter table public.payroll_run_items
-  add column if not exists salary_advance_deduction numeric(14,2) default 0,
-  add column if not exists salary_advance_ids        uuid[]       default '{}';
+do $guard_pri$ begin
+  if to_regclass('public.payroll_run_items') is not null then
+    execute 'alter table public.payroll_run_items
+      add column if not exists salary_advance_deduction numeric(14,2) default 0,
+      add column if not exists salary_advance_ids        uuid[]       default ''{}''';
+  else
+    raise notice 'SKIP Part J: payroll_run_items not found — salary_advance columns not added. '
+                 'Add them manually once HR payroll tables exist.';
+  end if;
+end $guard_pri$;
 
 comment on column public.payroll_run_items.salary_advance_deduction is
   'Total salary advance recovery amount deducted from this payroll item. '
@@ -830,10 +838,20 @@ begin
   return new;
 end $$;
 
-drop trigger if exists acct_payroll_advance_recovery on public.payroll_run_items;
-create trigger acct_payroll_advance_recovery
-  after insert on public.payroll_run_items
-  for each row execute function public.acct_trig_payroll_advance_recovery();
+do $guard_trig$ begin
+  if to_regclass('public.payroll_run_items') is not null then
+    execute 'drop trigger if exists acct_payroll_advance_recovery on public.payroll_run_items';
+    execute 'create trigger acct_payroll_advance_recovery
+      after insert on public.payroll_run_items
+      for each row execute function public.acct_trig_payroll_advance_recovery()';
+    raise notice 'acct_payroll_advance_recovery trigger created on payroll_run_items.';
+  else
+    raise notice 'SKIP: payroll_run_items not found — acct_payroll_advance_recovery trigger not created. '
+                 'Bind manually: CREATE TRIGGER acct_payroll_advance_recovery AFTER INSERT ON '
+                 'public.payroll_run_items FOR EACH ROW EXECUTE FUNCTION '
+                 'public.acct_trig_payroll_advance_recovery();';
+  end if;
+end $guard_trig$;
 
 -- =============================================================================
 -- PART K: Ensure acct_allocation_runs has journal_entry_id + source_account_code
@@ -844,8 +862,15 @@ alter table public.acct_allocation_runs
   add column if not exists notes     text;
 
 alter table public.acct_cost_allocation_rules
-  add column if not exists driver_amount      numeric(20,4) default 0,
-  add column if not exists source_account_code text;
+  add column if not exists driver_amount       numeric(20,4) default 0,
+  add column if not exists source_account_code text,
+  add column if not exists rule_name           text;
+
+-- Back-fill rule_name from pool_name where not already set
+-- (run_period_close_allocation references v_rule.rule_name)
+update public.acct_cost_allocation_rules
+  set rule_name = pool_name
+  where rule_name is null and pool_name is not null;
 
 -- =============================================================================
 -- PART L: Summary view — GL Bridge Coverage Matrix
