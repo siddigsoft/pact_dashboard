@@ -1,55 +1,18 @@
 -- =============================================================================
--- PACT Accounting — Phase 7: Statutory Reporting
--- PIT (Personal Income Tax) · Social Insurance · Zakat
---
--- Creates (8 objects):
---   acct_tax_brackets         — progressive PIT rate table (Sudan 2024 rates seeded)
---   acct_social_rates         — social insurance employee/employer rates (Sudan seeded)
---   acct_zakat_config         — annual zakat nisab + rate configuration
---   acct_tax_withholding      — per-employee per-period withholding computation records
---   acct_statutory_filings    — monthly/annual filing submissions
---   acct_compute_pit()        — RPC: compute PIT on a gross salary amount
---   acct_statutory_summary()  — RPC: period-level aggregates for statutory dashboard
---   acct_trig_statutory_filing_paid() — GL bridge on filing → paid
---   v_acct_phase7_coverage    — bridge health view
---
--- Apply: any time after Phase 1 (independent of Phases 4–6).
--- Idempotent: all CREATE TABLE / CREATE INDEX / CREATE POLICY guarded with
---   IF NOT EXISTS; column additions use DO $$ IF NOT EXISTS checks.
+-- PACT Accounting — Phase 7 Hot-patch
+-- Fixes: accounting_phase7_statutory.sql failed with
+--   "ERROR 42601: syntax error at or near 'super_admin'"
+-- Cause: Double-escaped quotes (''role'') inside dollar-quoted EXECUTE string.
+--        Inside $pol$...$pol$ single quotes need no escaping.
+-- =============================================================================
+-- Run this ONCE in Supabase SQL Editor (abznugnirnlrqnnfkein).
+-- The main migration file has also been fixed for future reference.
+-- All blocks use IF NOT EXISTS guards — safe to re-run.
 -- =============================================================================
 
--- ── PART A: Tax Brackets ─────────────────────────────────────────────────────
--- Stores progressive tax brackets for PIT (and optionally other tax types).
--- One row per band per tax_type per country; multiple effective dates supported.
--- Sudan 2024 annual PIT brackets (SDG/year) seeded below.
-
-create table if not exists public.acct_tax_brackets (
-  id             uuid        primary key default gen_random_uuid(),
-  tax_type       text        not null default 'PIT',   -- PIT | SOCIAL | ZAKAT
-  country        text        not null default 'SD',    -- ISO-3166-1 alpha-2
-  name           text        not null,                 -- human label, e.g. "Band 1 (0–36 000)"
-  lower_bound    numeric(20,2) not null default 0,     -- annual taxable income ≥ this
-  upper_bound    numeric(20,2),                        -- annual taxable income < this (null = no cap)
-  rate_pct       numeric(6,4) not null,                -- e.g. 10.0000 means 10 %
-  effective_from date        not null default '2024-01-01',
-  effective_to   date,                                 -- null = current
-  notes          text,
-  created_at     timestamptz not null default now()
-);
-
-create index if not exists idx_acct_tax_bkt_type_country
-  on public.acct_tax_brackets (tax_type, country, effective_from);
-
-alter table public.acct_tax_brackets enable row level security;
+-- ── STEP 1: Fix acct_tax_brackets modify policy (partially created) ──────────
 
 do $$ begin
-  if not exists (
-    select 1 from pg_policies
-    where tablename = 'acct_tax_brackets' and policyname = 'tax_brackets_select'
-  ) then
-    execute 'create policy "tax_brackets_select" on public.acct_tax_brackets
-             for select to authenticated using (true)';
-  end if;
   if not exists (
     select 1 from pg_policies
     where tablename = 'acct_tax_brackets' and policyname = 'tax_brackets_modify'
@@ -66,28 +29,19 @@ do $$ begin
             )
         )
       )$pol$;
+    raise notice 'tax_brackets_modify policy created.';
+  else
+    raise notice 'tax_brackets_modify already exists — skipping.';
   end if;
 end $$;
 
--- Seed: Sudan 2024 PIT annual bands (SDG).  Source: Sudan Income Tax Act 2024.
--- Bands are on ANNUAL taxable income. Monthly = annual / 12.
-insert into public.acct_tax_brackets
-  (tax_type, country, name, lower_bound, upper_bound, rate_pct, effective_from, notes)
-values
-  ('PIT','SD','Exempt (0 – 36 000)',      0,        36000,   0,     '2024-01-01', 'Personal allowance'),
-  ('PIT','SD','Band 1 (36 001 – 60 000)', 36000,    60000,   10,    '2024-01-01', NULL),
-  ('PIT','SD','Band 2 (60 001 – 120 000)',60000,    120000,  15,    '2024-01-01', NULL),
-  ('PIT','SD','Band 3 (120 001 – 240 000)',120000,  240000,  20,    '2024-01-01', NULL),
-  ('PIT','SD','Band 4 (> 240 000)',        240000,  NULL,    25,    '2024-01-01', 'Top marginal rate')
-on conflict do nothing;
-
--- ── PART B: Social Insurance Rates ──────────────────────────────────────────
+-- ── STEP 2: Social Insurance Rates ──────────────────────────────────────────
 
 create table if not exists public.acct_social_rates (
   id              uuid        primary key default gen_random_uuid(),
   country         text        not null default 'SD',
-  employee_rate   numeric(6,4) not null,   -- % deducted from employee gross
-  employer_rate   numeric(6,4) not null,   -- % added by employer
+  employee_rate   numeric(6,4) not null,
+  employer_rate   numeric(6,4) not null,
   effective_from  date        not null default '2024-01-01',
   effective_to    date,
   notes           text,
@@ -106,7 +60,6 @@ do $$ begin
   end if;
 end $$;
 
--- Seed: Sudan Social Insurance — employee 8%, employer 17%
 insert into public.acct_social_rates
   (country, employee_rate, employer_rate, effective_from, notes)
 values
@@ -114,13 +67,13 @@ values
    'Sudan Social Insurance & Pensions Commission (SIPC) rates 2024')
 on conflict do nothing;
 
--- ── PART C: Zakat Configuration ──────────────────────────────────────────────
+-- ── STEP 3: Zakat Configuration ───────────────────────────────────────────────
 
 create table if not exists public.acct_zakat_config (
   id              uuid        primary key default gen_random_uuid(),
   fiscal_year_id  uuid        references public.acct_fiscal_years(id) on delete set null,
   country         text        not null default 'SD',
-  nisab_sdg       numeric(20,2) not null,   -- minimum zakatable wealth in SDG
+  nisab_sdg       numeric(20,2) not null,
   rate_pct        numeric(6,4) not null default 2.5,
   effective_from  date        not null,
   notes           text,
@@ -139,16 +92,14 @@ do $$ begin
   end if;
 end $$;
 
--- ── PART D: Tax Withholding Records ─────────────────────────────────────────
--- One row per employee per accounting period.
--- Values are stored in SDG; currency field records the denomination.
+-- ── STEP 4: Tax Withholding ───────────────────────────────────────────────────
 
 create table if not exists public.acct_tax_withholding (
   id                      uuid        primary key default gen_random_uuid(),
   employee_id             uuid        not null references public.profiles(id) on delete restrict,
   period_id               uuid        not null references public.acct_periods(id) on delete restrict,
   gross_salary            numeric(20,2) not null,
-  taxable_income          numeric(20,2) not null,   -- gross minus exemptions
+  taxable_income          numeric(20,2) not null,
   pit_amount              numeric(20,2) not null default 0,
   social_employee_amount  numeric(20,2) not null default 0,
   social_employer_amount  numeric(20,2) not null default 0,
@@ -203,7 +154,6 @@ do $$ begin
   end if;
 end $$;
 
--- updated_at trigger
 create or replace function public.update_acct_tax_withholding_updated_at()
 returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end; $$;
@@ -213,8 +163,7 @@ create trigger acct_tax_wh_updated_at
   before update on public.acct_tax_withholding
   for each row execute function public.update_acct_tax_withholding_updated_at();
 
--- ── PART E: Statutory Filings ─────────────────────────────────────────────────
--- Tracks the monthly/annual submissions made to tax / social insurance authority.
+-- ── STEP 5: Statutory Filings ─────────────────────────────────────────────────
 
 create table if not exists public.acct_statutory_filings (
   id              uuid        primary key default gen_random_uuid(),
@@ -232,7 +181,7 @@ create table if not exists public.acct_statutory_filings (
   currency        text        not null default 'SDG',
   status          text        not null default 'draft'
     check (status in ('draft','submitted','accepted','overdue','paid')),
-  reference_number text,             -- authority-assigned reference
+  reference_number  text,
   submitted_by    uuid        references auth.users(id),
   submitted_at    timestamptz,
   paid_at         timestamptz,
@@ -278,7 +227,6 @@ do $$ begin
   end if;
 end $$;
 
--- updated_at trigger
 create or replace function public.update_acct_statutory_filings_updated_at()
 returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end; $$;
@@ -288,9 +236,7 @@ create trigger acct_statutory_filings_updated_at
   before update on public.acct_statutory_filings
   for each row execute function public.update_acct_statutory_filings_updated_at();
 
--- ── PART F: acct_compute_pit() RPC ───────────────────────────────────────────
--- Computes PIT for a given annual gross salary using the active Sudan brackets.
--- Returns: pit_annual, pit_monthly, effective_rate_pct.
+-- ── STEP 6: acct_compute_pit() RPC ───────────────────────────────────────────
 
 create or replace function public.acct_compute_pit(
   p_gross_annual   numeric,
@@ -338,9 +284,7 @@ as $$
   order by b.lower_bound;
 $$;
 
--- ── PART G: acct_statutory_summary() RPC ─────────────────────────────────────
--- Period-level aggregates: PIT total, social employee, social employer, zakat.
--- If p_period_id is null, returns totals for all periods (dashboard overview).
+-- ── STEP 7: acct_statutory_summary() RPC ─────────────────────────────────────
 
 create or replace function public.acct_statutory_summary(
   p_period_id uuid default null
@@ -386,7 +330,7 @@ as $$
   order by p.name desc;
 $$;
 
--- ── PART H: GL Bridge — statutory filing paid ────────────────────────────────
+-- ── STEP 8: GL bridge trigger function ───────────────────────────────────────
 
 create or replace function public.acct_trig_statutory_filing_paid()
 returns trigger
@@ -397,7 +341,6 @@ as $$
 declare
   v_enabled boolean;
 begin
-  -- feature flag gate
   select is_enabled into v_enabled
   from public.feature_flags
   where key = 'acct.bridge.statutory_filing' limit 1;
@@ -406,27 +349,20 @@ begin
     return new;
   end if;
 
-  -- fire only on status transition to 'paid'
   if (old.status is distinct from new.status) and new.status = 'paid' then
     insert into public.acct_gl_bridge_log (
       source_table, source_id, event_type, status,
       je_reference, je_description
     ) values (
-      'acct_statutory_filings',
-      new.id,
-      'statutory_filing_paid',
-      'success',
+      'acct_statutory_filings', new.id, 'statutory_filing_paid', 'success',
       new.payment_reference,
       format('Statutory filing paid — type: %s | amount: %s %s | ref: %s | paid: %s',
-        new.filing_type,
-        new.total_amount,
-        new.currency,
-        coalesce(new.reference_number, 'n/a'),
+        new.filing_type, new.total_amount, new.currency,
+        coalesce(new.reference_number,'n/a'),
         coalesce(new.paid_at::text, now()::text))
     );
   end if;
 
-  -- fire only on status transition to 'submitted'
   if (old.status is distinct from new.status) and new.status = 'submitted' then
     insert into public.acct_gl_bridge_log (
       source_table, source_id, event_type, status, je_description
@@ -442,8 +378,7 @@ begin
 end;
 $$;
 
--- ── PART I: Overdue filing auto-flag function ─────────────────────────────────
--- Call this from a scheduled edge function or manually to flag overdue filings.
+-- ── STEP 9: acct_flag_overdue_filings() ──────────────────────────────────────
 
 create or replace function public.acct_flag_overdue_filings()
 returns integer
@@ -464,7 +399,7 @@ begin
 end;
 $$;
 
--- ── PART J: Coverage view ─────────────────────────────────────────────────────
+-- ── STEP 10: Coverage view ────────────────────────────────────────────────────
 
 create or replace view public.v_acct_phase7_coverage as
 select
@@ -486,7 +421,7 @@ from public.acct_gl_bridge_log
 where source_table in ('acct_statutory_filings','acct_tax_withholding')
 group by source_table;
 
--- ── PART K: Trigger binding ───────────────────────────────────────────────────
+-- ── STEP 11: Trigger binding ──────────────────────────────────────────────────
 
 do $guard$ begin
   if to_regclass('public.acct_statutory_filings') is not null then
@@ -500,24 +435,24 @@ do $guard$ begin
   end if;
 end $guard$;
 
--- ── PART L: Feature flags ─────────────────────────────────────────────────────
+-- ── STEP 12: Feature flags ────────────────────────────────────────────────────
 
 insert into public.feature_flags (key, description, is_enabled) values
   ('acct.statutory.pit',
-   'Phase 7: Enable PIT (Personal Income Tax) withholding computation and reporting.',
+   'Phase 7: Enable PIT (Personal Income Tax) withholding computation and monthly/annual filing workflow.',
    true),
   ('acct.statutory.social',
-   'Phase 7: Enable social insurance (SIPC) employee/employer contribution tracking.',
+   'Phase 7: Enable social insurance (SIPC) employee 8% + employer 17% contribution tracking and monthly filings.',
    true),
   ('acct.statutory.zakat',
-   'Phase 7: Enable zakat computation and annual filing.',
+   'Phase 7: Enable zakat computation (2.5% on net zakatable assets above nisab). Enable after adding a zakat config row.',
    false),
   ('acct.bridge.statutory_filing',
    'Phase 7: Log GL bridge entry when a statutory filing is submitted or paid.',
    true)
 on conflict (key) do nothing;
 
--- ── PART M: Smoke checks ─────────────────────────────────────────────────────
+-- ── STEP 13: Smoke checks ─────────────────────────────────────────────────────
 
 select count(*) as pit_bands_seeded
 from public.acct_tax_brackets
@@ -525,12 +460,10 @@ where tax_type = 'PIT' and country = 'SD';
 -- expect 5
 
 select count(*) as social_rates_seeded
-from public.acct_social_rates
-where country = 'SD';
+from public.acct_social_rates where country = 'SD';
 -- expect 1
 
-select * from public.acct_compute_pit(120000);
--- expect 4 bands: exempt=0, band1=2400, band2=9000, band3=0 (income exactly at boundary)
--- (120 000 annual: band1 = (60000-36000)*10% = 2400, band2 = (120000-60000)*15% = 9000)
+select * from public.acct_compute_pit(240000);
+-- expect 4 bands; total PIT = 2400 + 9000 + 24000 = 35 400 SDG/year
 
-select 'Phase 7 statutory SQL complete.' as result;
+select 'Phase 7 hot-patch complete.' as result;
