@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Save, X, Play, Banknote, CalendarClock } from 'lucide-react';
+import { Pencil, Save, X, Play, Banknote, CalendarClock, ClipboardList } from 'lucide-react';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { PostponementDialog } from './PostponementDialog';
@@ -19,6 +19,7 @@ import { SiteAuditTrail } from '@/components/mmp/SiteAuditTrail';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 import { parseBoolean } from '@/utils/siteNormalization';
 import { isTerminalCompletionAppStatus, isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
+import { isPdmActivity, isMdmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -227,9 +228,12 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const hasGpsCoordinates = registryGpsLatitude && registryGpsLongitude;
     const hasRegistryMatch = !!registrySiteId;
 
+    const pdmQuestionnaires = Number(ad.pdm_questionnaires_submitted) || 0;
+    const mdmQuestionnaires = Number(ad.mdm_questionnaires_submitted) || 0;
+
     return { 
       hubOffice, state, locality, siteCode, siteName, phoneRaw, phoneDisplay, cpName, siteActivity, 
-      monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
+      monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring, pdmQuestionnaires, mdmQuestionnaires,
       visitDate, comments, 
       enumeratorFee: displayedEnumeratorFee, transportFee: displayedTransportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
@@ -746,9 +750,84 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                       className="mt-1"
                     />
                   ) : (
-                    <p className="font-medium text-gray-900 mt-1">{row.siteActivity || '—'}</p>
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-gray-900">{row.siteActivity || '—'}</p>
+                      {isPdmActivity(row.siteActivity || '') && (
+                        <Badge variant="outline" className="text-xs bg-violet-50 text-violet-700 border-violet-300 gap-1">
+                          <ClipboardList className="h-3 w-3" />
+                          PDM
+                        </Badge>
+                      )}
+                      {isMdmRequired(row.useMarketDiversion) && (
+                        <Badge variant="outline" className="text-xs bg-pink-50 text-pink-700 border-pink-300">
+                          MDM
+                        </Badge>
+                      )}
+                    </div>
                   )}
                 </div>
+
+                {/* PDM metrics panel */}
+                {!isEditing && isPdmActivity(row.siteActivity || '') && (
+                  <div className="sm:col-span-2 rounded-lg border border-violet-200 bg-violet-50 dark:bg-violet-900/20 dark:border-violet-800 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ClipboardList className="h-4 w-4 text-violet-600" />
+                      <span className="text-sm font-semibold text-violet-900 dark:text-violet-100">PDM Activity</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-2xl font-black text-violet-700 dark:text-violet-300">{row.pdmQuestionnaires}</p>
+                        <p className="text-xs text-violet-500 mt-0.5">Questionnaires</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-black text-violet-700 dark:text-violet-300">{calculatePdmSiteVisits(row.pdmQuestionnaires)}</p>
+                        <p className="text-xs text-violet-500 mt-0.5">Site Visits (÷7)</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-black text-violet-700 dark:text-violet-300">{calculatePdmRemainder(row.pdmQuestionnaires)}/7</p>
+                        <p className="text-xs text-violet-500 mt-0.5">Toward Next</p>
+                      </div>
+                    </div>
+                    {row.pdmQuestionnaires > 0 && (
+                      <div className="mt-3">
+                        <div className="bg-violet-100 dark:bg-violet-800/40 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-violet-600 dark:bg-violet-400 h-full rounded-full transition-all"
+                            style={{ width: `${(calculatePdmRemainder(row.pdmQuestionnaires) / 7) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-violet-500 mt-1">
+                          {calculatePdmRemainder(row.pdmQuestionnaires) > 0
+                            ? `${calculatePdmRemainder(row.pdmQuestionnaires)} of 7 questionnaires toward next site visit`
+                            : 'All questionnaires accounted for'}
+                        </p>
+                      </div>
+                    )}
+                    {row.pdmQuestionnaires === 0 && (
+                      <p className="text-xs text-violet-400 mt-2 text-center">No questionnaires submitted yet</p>
+                    )}
+                  </div>
+                )}
+
+                {/* MDM metrics panel */}
+                {!isEditing && isMdmRequired(row.useMarketDiversion) && (
+                  <div className="sm:col-span-2 rounded-lg border border-pink-200 bg-pink-50 dark:bg-pink-900/20 dark:border-pink-800 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-sm font-semibold text-pink-900 dark:text-pink-100">MDM — Market Diversion Monitoring</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                      <div>
+                        <p className="text-2xl font-black text-pink-700 dark:text-pink-300">{row.mdmQuestionnaires}</p>
+                        <p className="text-xs text-pink-500 mt-0.5">MDM Questionnaires</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-black text-pink-700 dark:text-pink-300">Active</p>
+                        <p className="text-xs text-pink-500 mt-0.5">MDM Status</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <Label className="text-xs font-medium text-gray-600">Visit Date</Label>
                   {isEditing ? (
