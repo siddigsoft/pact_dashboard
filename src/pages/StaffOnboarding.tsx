@@ -679,7 +679,7 @@ export default function StaffOnboarding() {
                 { icon: '📋', title: 'My Tasks', desc: 'View and update all tasks assigned to you. Add comments, attach files, and mark tasks complete. Log your daily output with proof uploads.' },
                 { icon: '📌', title: 'My Board (Kanban)', desc: 'A personal Kanban board showing all your tasks. Drag cards from To Do → In Progress → Done to track your work visually.' },
                 { icon: '🗂️', title: 'Projects', desc: 'See all projects you are part of. View milestones, progress, and collaborate with your team within a structured workflow.' },
-                { icon: '⏱️', title: 'Timesheets', desc: 'Log your daily working hours per project or activity. Timesheets feed directly into payroll — accuracy is essential.' },
+                { icon: '⏱️', title: 'Timesheets', desc: 'Log your daily working hours per project or task — only required if the project or task has a paid timesheet. These hours feed directly into payroll calculations.' },
                 { icon: '📄', title: 'Contracts & Payslips', desc: 'View your employment contract and download monthly payslips as PDF, all stored securely in the platform.' },
                 { icon: '🏖️', title: 'Leave Requests', desc: 'Submit leave applications online, check your leave balance, and track approval status in real time.' },
                 { icon: '🔔', title: 'Notifications', desc: 'Receive instant alerts for new task assignments, approvals, deadlines, and announcements — in-app and via WhatsApp.' },
