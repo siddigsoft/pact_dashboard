@@ -493,21 +493,22 @@ export default function StaffOnboarding() {
         {/* ── URGENCY BANNER ── */}
         <div className="ob-urgency">
           <div className="ob-urgency-top">
-            <span className="ob-urgency-badge">🚨 &nbsp;REQUIRED</span>
+            <span className="ob-urgency-badge">🚨 &nbsp;MANDATORY — MANAGEMENT DIRECTIVE</span>
           </div>
           <div className="ob-urgency-title">
-            Action Required — Register Today
+            All Teams Must Be On the System — No Exceptions
           </div>
           <div className="ob-urgency-body">
-            Contract management and payroll processing are <strong>fully ready to launch.</strong><br /><br />
-            <strong>We cannot process a single contract or pay a single salary until every staff member has registered.</strong> Your colleagues are waiting on you. Every day of delay holds up payroll for the entire team.<br /><br />
-            Registration takes <strong>less than 3 minutes.</strong> There is no reason to wait.
+            This is a <strong>formal management directive.</strong> PACT Command Center is now the official platform for all operations across every department and hub.<br /><br />
+            <strong>Every team member — without exception — is required to register, log in, and actively use the system for all work activities.</strong> Continued use of offline methods, spreadsheets, or parallel tracking tools is no longer permitted.<br /><br />
+            Management will monitor adoption across all teams. <strong>Non-compliance will be escalated directly to department heads.</strong> Your team's onboarding status is visible in real time to senior leadership.
           </div>
           <hr className="ob-urgency-divider" />
           <div className="ob-urgency-pills">
-            <span className="ob-urgency-pill">⏱ Takes less than 3 minutes</span>
-            <span className="ob-urgency-pill">💰 Payroll blocked until you register</span>
-            <span className="ob-urgency-pill">📄 Contracts cannot be issued without your account</span>
+            <span className="ob-urgency-pill">🏢 All departments &amp; hubs required</span>
+            <span className="ob-urgency-pill">📊 Adoption tracked by management</span>
+            <span className="ob-urgency-pill">💰 Payroll &amp; contracts run through the system only</span>
+            <span className="ob-urgency-pill">⚠️ Non-compliance escalated to department heads</span>
           </div>
         </div>
 
