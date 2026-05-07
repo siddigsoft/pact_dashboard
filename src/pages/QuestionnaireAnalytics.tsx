@@ -3835,9 +3835,126 @@ const QuestionnaireAnalytics = () => {
       return { top: s, bottom: s, left: s, right: s };
     };
 
+    // Build hub-level collector lookup: hub → activity → collector → count (summed across all states)
+    const hubColLookup = new Map<string, Map<string, Map<string, number>>>();
+    csvEnumData.forEach(hg => {
+      if (!hubColLookup.has(hg.hub)) hubColLookup.set(hg.hub, new Map());
+      const actMap = hubColLookup.get(hg.hub)!;
+      hg.states.forEach(sg => {
+        sg.collectors.forEach(col => {
+          col.activities.forEach(act => {
+            if (!actMap.has(act.name)) actMap.set(act.name, new Map());
+            const colMap = actMap.get(act.name)!;
+            colMap.set(col.name, (colMap.get(col.name) || 0) + act.count);
+          });
+        });
+      });
+    });
+
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PACT Command Center';
     wb.created = new Date();
+
+    // ── Summary sheet (Activity × Hub, with collector sub-rows) ──────────
+    {
+      const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
+      const wsSummary = wb.addWorksheet('Summary');
+      const numHubs = hubs.length;
+      const totalCols = 1 + numHubs * 4 + 4;
+      wsSummary.getColumn(1).width = 36;
+      for (let i = 2; i <= totalCols; i++) wsSummary.getColumn(i).width = 9;
+
+      const titleRowS = wsSummary.addRow(['Tracker — Enumerators (CSV) — Summary']);
+      titleRowS.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
+      titleRowS.height = 24;
+      wsSummary.addRow([]);
+
+      // Header row 1 — Hub group labels (merged × 4)
+      const sh1Vals: (string | null)[] = ['Activity'];
+      hubs.forEach(h => { sh1Vals.push(h, null, null, null); });
+      sh1Vals.push('Total', null, null, null);
+      const sh1Row = wsSummary.addRow(sh1Vals);
+      sh1Row.height = 22;
+      let smCol = 2;
+      for (let hi = 0; hi <= numHubs; hi++) {
+        wsSummary.mergeCells(sh1Row.number, smCol, sh1Row.number, smCol + 3);
+        smCol += 4;
+      }
+      sh1Row.eachCell({ includeEmpty: true }, (cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XWHITE } };
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = xBorder();
+      });
+
+      // Header row 2 — Sites / Actual / PDM / DC per hub + Total
+      const sh2Vals: string[] = [''];
+      for (let hi = 0; hi <= numHubs; hi++) sh2Vals.push('Sites', 'Actual', 'PDM', 'DC');
+      const sh2Row = wsSummary.addRow(sh2Vals);
+      sh2Row.height = 18;
+      sh2Row.eachCell({ includeEmpty: true }, (cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: XWHITE } };
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = xBorder();
+      });
+
+      // Activity rows + collector sub-rows
+      matrix.forEach((mRow, ri) => {
+        const isPdm = isPdmActivity(mRow.activity);
+        const actVals: (string | number)[] = [mRow.activity];
+        mRow.cells.forEach(c => {
+          actVals.push(c.sites || '-', c.questionnaires || '-', isPdm && c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-');
+        });
+        actVals.push(mRow.totalSites, mRow.totalQ, isPdm ? Math.floor(mRow.totalQ / 7) : '-', mRow.totalCollectors);
+        const actRowS = wsSummary.addRow(actVals);
+        actRowS.height = 18;
+        const altBg = ri % 2 === 1 ? XLIGHT : 'FFFFFFFF';
+        actRowS.eachCell({ includeEmpty: true }, (cell, ci) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: altBg } };
+          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XNAVY } };
+          cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+          cell.border = xBorder();
+        });
+
+        // Collector sub-rows across all hubs
+        const allCollNames = new Set<string>();
+        hubs.forEach(h => { hubColLookup.get(h)?.get(mRow.activity)?.forEach((_, name) => allCollNames.add(name)); });
+        allCollNames.forEach(collName => {
+          const subVals: (string | number)[] = [`   · ${collName}`];
+          hubs.forEach(h => {
+            const cnt = hubColLookup.get(h)?.get(mRow.activity)?.get(collName) || 0;
+            subVals.push('-', cnt || '-', isPdm && cnt ? Math.floor(cnt / 7) : '-', '');
+          });
+          subVals.push('', '', '', '');
+          const subRowS = wsSummary.addRow(subVals);
+          subRowS.height = 15;
+          subRowS.eachCell({ includeEmpty: true }, (cell, ci) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COL_BG } };
+            cell.font = { italic: true, size: 9, name: 'Calibri', color: { argb: COL_FG } };
+            cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+            cell.border = xBorder();
+          });
+        });
+      });
+
+      // Total row
+      const sTotVals: (string | number)[] = ['Total'];
+      hubs.forEach((_, hi) => {
+        const pdmCol = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.floor(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+        sTotVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || '-', hubTotals[hi].collectors);
+      });
+      const sPdmGrand = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0);
+      sTotVals.push(grandSites, grandQ, sPdmGrand || '-', grandCollectors);
+      const sTotRow = wsSummary.addRow(sTotVals);
+      sTotRow.height = 20;
+      sTotRow.eachCell({ includeEmpty: true }, (cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XNAVY } };
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = xBorder();
+      });
+    }
 
     for (const ht of trackerData.hubTrackers) {
       const ws = wb.addWorksheet(ht.hub.slice(0, 31));
