@@ -285,7 +285,8 @@ const QuestionnaireAnalytics = () => {
   const [emailSending, setEmailSending] = useState(false);
   const [emailUsers, setEmailUsers] = useState<{id: string; name: string; email: string; role: string}[]>([]);
   const [emailHighPriority, setEmailHighPriority] = useState(true);
-  const [emailType, setEmailType] = useState<'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel'>('report');
+  const [emailType, setEmailType] = useState<'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' | 'tracker_all'>('report');
+  const [trackerAllFormat, setTrackerAllFormat] = useState<'excel' | 'csv'>('excel');
   const [emailProfilesLoading, setEmailProfilesLoading] = useState(false);
   const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
 
@@ -1631,7 +1632,7 @@ const QuestionnaireAnalytics = () => {
     }
   }, []);
 
-  const openSectionEmailDialog = useCallback(async (section: string, type: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' = 'coverage') => {
+  const openSectionEmailDialog = useCallback(async (section: string, type: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' | 'tracker_all' = 'coverage') => {
     const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
     const isReport = type === 'report';
     setEmailSubject(`${section} - ${month}`);
@@ -1659,6 +1660,10 @@ const QuestionnaireAnalytics = () => {
   const openAnalyticsExcelEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Analytics (Excel)', 'analytics_excel'), [openSectionEmailDialog]);
   const openAnalyticsPdfEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Analytics (Full PDF)', 'analytics_pdf'), [openSectionEmailDialog]);
   const openTrackerExcelEmailDialog = useCallback(() => openSectionEmailDialog('Tracker Report (Excel)', 'tracker_excel'), [openSectionEmailDialog]);
+  const openAllTrackerEmailDialog = useCallback(() => {
+    setTrackerAllFormat('excel');
+    openSectionEmailDialog('Combined Tracker Report', 'tracker_all');
+  }, [openSectionEmailDialog]);
 
   const getEmailCcList = useMemo(() => {
     const fromRoles = emailCcRoles.length > 0 ? emailUsers.filter(u => emailCcRoles.includes(u.role)) : [];
@@ -1770,7 +1775,7 @@ const QuestionnaireAnalytics = () => {
     setEmailCcUsers(prev => prev.filter(u => u.email !== email));
   }, []);
 
-  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel') => {
+  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' | 'tracker_all') => {
     const s = computeReportSummary;
     const month = s?.monthCoverage || '';
     const greeting = recipientName || 'Team';
@@ -1780,6 +1785,7 @@ const QuestionnaireAnalytics = () => {
       analytics_excel: { en: 'Questionnaire Analytics Report (Excel)', ar: 'تقرير تحليل الاستبيانات (إكسل)' },
       analytics_pdf: { en: 'Questionnaire Analytics Report (Full PDF with Collector Details)', ar: 'تقرير تحليل الاستبيانات الشامل (بتفاصيل جامعي البيانات)' },
       tracker_excel: { en: 'Tracker Report (Excel)', ar: 'تقرير المتابعة (إكسل)' },
+      tracker_all: { en: 'Combined Tracker Report (Summary, By Hub, By State & Enumerators)', ar: 'تقرير المتابعة الشامل (الملخص، حسب الهاب، حسب الولاية وجامعو البيانات)' },
     };
     const labels = reportLabels[type || 'report'] || reportLabels.report;
 
@@ -2611,6 +2617,175 @@ const QuestionnaireAnalytics = () => {
     }
   }, [trackerData, bufferToBase64]);
 
+  const generateAllTrackersExcelBase64 = useCallback(async (fmt: 'excel' | 'csv' = 'excel'): Promise<string | null> => {
+    try {
+      const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors, hubTrackers, stateTrackers } = trackerData;
+      const summaryName = computeReportSummary?.monthCoverage || fileName.replace(/\.[^.]+$/, '') || 'Tracker Summary';
+
+      if (fmt === 'csv') {
+        const lines: string[] = [];
+        const esc = (v: any) => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+        const row = (vals: any[]) => lines.push(vals.map(esc).join(','));
+
+        lines.push(`=== ${summaryName} ===`);
+        row(['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC']);
+        matrix.forEach(r => {
+          const isPdm = isPdmActivity(r.activity);
+          row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, isPdm ? Math.floor(c.questionnaires / 7) : 0, c.collectors]), r.totalSites, r.totalQ, isPdm ? Math.floor(r.totalQ / 7) : 0, r.totalCollectors]);
+        });
+        const totValsC: any[] = ['Grand Total'];
+        hubs.forEach((_, hi) => {
+          const pdm = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.floor(r.cells[hi].questionnaires / 7) : 0) : 0), 0);
+          totValsC.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdm, hubTotals[hi].collectors);
+        });
+        const pdmGrandC = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : 0), 0);
+        totValsC.push(grandSites, grandQ, pdmGrandC, grandCollectors);
+        row(totValsC);
+
+        [...hubTrackers].sort((a, b) => a.hub.localeCompare(b.hub)).forEach(ht => {
+          lines.push(''); lines.push(`=== Hub: ${ht.hub} ===`);
+          row(['Activity', ...ht.states.flatMap(s => [`${s} Sites`, `${s} Actual`, `${s} PDM`, `${s} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC']);
+          ht.matrix.forEach(r => {
+            const isPdm = isPdmActivity(r.activity);
+            row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, isPdm ? Math.floor(c.questionnaires / 7) : 0, c.collectors]), r.totalSites, r.totalQ, isPdm ? Math.floor(r.totalQ / 7) : 0, r.totalCollectors]);
+          });
+        });
+
+        [...stateTrackers].sort((a, b) => a.state.localeCompare(b.state)).forEach(st => {
+          lines.push(''); lines.push(`=== State: ${st.state} ===`);
+          row(['Activity', ...st.localities.flatMap(l => [`${l} Sites`, `${l} Actual`, `${l} PDM`, `${l} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC']);
+          st.matrix.forEach(r => {
+            const isPdm = isPdmActivity(r.activity);
+            row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, isPdm ? Math.floor(c.questionnaires / 7) : 0, c.collectors]), r.totalSites, r.totalQ, isPdm ? Math.floor(r.totalQ / 7) : 0, r.totalCollectors]);
+          });
+        });
+
+        lines.push(''); lines.push('=== Enumerators ===');
+        row(['Hub', 'State', 'Data Collector', 'Sites', 'Questionnaires', 'PDM Sites', 'Activities']);
+        [...csvEnumData].sort((a, b) => a.hub.localeCompare(b.hub)).forEach(hg => {
+          [...hg.states].sort((a, b) => a.state.localeCompare(b.state)).forEach(sg => {
+            [...sg.collectors].sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+              row([hg.hub, sg.state, c.name, c.sites.length, c.questionnaires, c.pdmSites, c.activities.map(a => `${a.name}: ${a.count}`).join('; ')]);
+            });
+          });
+        });
+
+        const csvBlob = new Blob([lines.join('\n')], { type: 'text/csv' });
+        const csvBuf = await csvBlob.arrayBuffer();
+        return bufferToBase64(csvBuf);
+      }
+
+      const ExcelJSM = (await import('exceljs')).default;
+      const wb = new ExcelJSM.Workbook();
+      wb.creator = 'PACT Command Center'; wb.created = new Date();
+      const XNAVY = 'FF0F2041', XWHITE = 'FFFFFFFF', XLIGHT = 'FFF5F7FC', XBORDER = 'FFC8CDD7';
+      const hFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+      const hFontA: ExcelJS.Font = { bold: true, color: { argb: XWHITE }, size: 10, name: 'Calibri' };
+      const bFontA: ExcelJS.Font = { size: 9, name: 'Calibri' };
+      const altFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLIGHT } };
+      const totFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      const bdrA = (): Partial<ExcelJS.Borders> => { const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: XBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+
+      const ws1 = wb.addWorksheet(summaryName.slice(0, 31));
+      const s1Cols = ['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
+      const hr1 = ws1.addRow(s1Cols);
+      hr1.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+      hr1.height = 22;
+      matrix.forEach((r, ri) => {
+        const isPdm = isPdmActivity(r.activity);
+        const vals: (string | number)[] = [r.activity];
+        r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, isPdm ? Math.floor(c.questionnaires / 7) : 0, c.collectors); });
+        vals.push(r.totalSites, r.totalQ, isPdm ? Math.floor(r.totalQ / 7) : 0, r.totalCollectors);
+        const dr = ws1.addRow(vals);
+        dr.eachCell(c => { c.font = bFontA; c.border = bdrA(); if (ri % 2 === 1) c.fill = altFillA; });
+      });
+      const s1Tot: (string | number)[] = ['Grand Total'];
+      hubs.forEach((_, hi) => {
+        const pdm = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.floor(r.cells[hi].questionnaires / 7) : 0) : 0), 0);
+        s1Tot.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdm, hubTotals[hi].collectors);
+      });
+      const pdmG = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : 0), 0);
+      s1Tot.push(grandSites, grandQ, pdmG, grandCollectors);
+      const tr1A = ws1.addRow(s1Tot);
+      tr1A.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
+      ws1.columns.forEach((col, i) => { col.width = i === 0 ? 30 : 14; });
+
+      [...hubTrackers].sort((a, b) => a.hub.localeCompare(b.hub)).forEach(ht => {
+        const ws = wb.addWorksheet(`Hub-${ht.hub}`.slice(0, 31));
+        const hCols = ['Activity', ...ht.states.flatMap(s => [`${s} Sites`, `${s} Actual`, `${s} PDM`, `${s} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
+        const hdr = ws.addRow(hCols);
+        hdr.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+        hdr.height = 22;
+        ht.matrix.forEach((r, ri) => {
+          const isPdm = isPdmActivity(r.activity);
+          const vals: (string | number)[] = [r.activity];
+          r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, isPdm ? Math.floor(c.questionnaires / 7) : 0, c.collectors); });
+          vals.push(r.totalSites, r.totalQ, isPdm ? Math.floor(r.totalQ / 7) : 0, r.totalCollectors);
+          const dr = ws.addRow(vals);
+          dr.eachCell(c => { c.font = bFontA; c.border = bdrA(); if (ri % 2 === 1) c.fill = altFillA; });
+        });
+        const htTot: (string | number)[] = ['Total'];
+        ht.colTotals.forEach((ct, ci) => {
+          const pdm = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.floor(r.cells[ci].questionnaires / 7) : 0) : 0), 0);
+          htTot.push(ct.sites, ct.questionnaires, pdm, ct.collectors);
+        });
+        const htPdm = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : 0), 0);
+        htTot.push(ht.grandSites, ht.grandQ, htPdm, ht.grandCollectors);
+        const htTr = ws.addRow(htTot);
+        htTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
+        ws.columns.forEach((col, i) => { col.width = i === 0 ? 28 : 13; });
+      });
+
+      [...stateTrackers].sort((a, b) => a.state.localeCompare(b.state)).forEach(st => {
+        const ws = wb.addWorksheet(`State-${st.state}`.slice(0, 31));
+        const hCols = ['Activity', ...st.localities.flatMap(l => [`${l} Sites`, `${l} Actual`, `${l} PDM`, `${l} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
+        const hdr = ws.addRow(hCols);
+        hdr.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+        hdr.height = 22;
+        st.matrix.forEach((r, ri) => {
+          const isPdm = isPdmActivity(r.activity);
+          const vals: (string | number)[] = [r.activity];
+          r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, isPdm ? Math.floor(c.questionnaires / 7) : 0, c.collectors); });
+          vals.push(r.totalSites, r.totalQ, isPdm ? Math.floor(r.totalQ / 7) : 0, r.totalCollectors);
+          const dr = ws.addRow(vals);
+          dr.eachCell(c => { c.font = bFontA; c.border = bdrA(); if (ri % 2 === 1) c.fill = altFillA; });
+        });
+        const stTot: (string | number)[] = ['Total'];
+        st.colTotals.forEach((ct, ci) => {
+          const pdm = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.floor(r.cells[ci].questionnaires / 7) : 0) : 0), 0);
+          stTot.push(ct.sites, ct.questionnaires, pdm, ct.collectors);
+        });
+        const stPdm = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : 0), 0);
+        stTot.push(st.grandSites, st.grandQ, stPdm, st.grandCollectors);
+        const stTr = ws.addRow(stTot);
+        stTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
+        ws.columns.forEach((col, i) => { col.width = i === 0 ? 28 : 13; });
+      });
+
+      const wsE = wb.addWorksheet('Enumerators');
+      const eHdr = wsE.addRow(['Hub', 'State', 'Data Collector', 'Sites', 'Questionnaires', 'PDM Sites', 'Activities']);
+      eHdr.eachCell(c => { c.fill = hFillA; c.font = hFontA; c.border = bdrA(); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+      eHdr.height = 22;
+      wsE.columns = [{ width: 22 }, { width: 18 }, { width: 28 }, { width: 10 }, { width: 16 }, { width: 12 }, { width: 55 }];
+      let eRi = 0;
+      [...csvEnumData].sort((a, b) => a.hub.localeCompare(b.hub)).forEach(hg => {
+        [...hg.states].sort((a, b) => a.state.localeCompare(b.state)).forEach(sg => {
+          [...sg.collectors].sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+            const dr = wsE.addRow([hg.hub, sg.state, c.name, c.sites.length, c.questionnaires, c.pdmSites, c.activities.map(a => `${a.name}: ${a.count}`).join(' | ')]);
+            dr.eachCell(cell => { cell.font = bFontA; cell.border = bdrA(); if (eRi % 2 === 1) cell.fill = altFillA; });
+            eRi++;
+          });
+        });
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      return bufferToBase64(buffer as ArrayBuffer);
+    } catch (e) {
+      console.error('Failed to generate all trackers base64:', e);
+      return null;
+    }
+  }, [trackerData, csvEnumData, computeReportSummary, fileName, bufferToBase64]);
+
   const sendEmailReport = useCallback(async () => {
     if (emailToUsers.length === 0) {
       toast({ title: 'Error', description: 'Please add at least one recipient', variant: 'destructive' });
@@ -2627,6 +2802,7 @@ const QuestionnaireAnalytics = () => {
         analytics_excel: 'تقرير تحليل الاستبيانات (إكسل)',
         analytics_pdf: 'تقرير تحليل الاستبيانات الشامل',
         tracker_excel: 'تقرير المتابعة (إكسل)',
+        tracker_all: 'تقرير المتابعة الشامل',
       };
       const reportLabelAr = reportArLabels[emailType] || reportArLabels.report;
       const titleAr = s ? `${reportLabelAr} - ${s.monthCoverage}` : emailSubject;
@@ -2648,6 +2824,11 @@ const QuestionnaireAnalytics = () => {
       } else if (emailType === 'tracker_excel') {
         const b64 = await generateTrackerExcelBase64();
         if (b64) attachments.push({ filename: `tracker_report_${baseName}.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      } else if (emailType === 'tracker_all') {
+        const ext = trackerAllFormat === 'csv' ? 'csv' : 'xlsx';
+        const mime = trackerAllFormat === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        const b64 = await generateAllTrackersExcelBase64(trackerAllFormat);
+        if (b64) attachments.push({ filename: `combined_tracker_${baseName}.${ext}`, content: b64, type: mime });
       } else {
         if (emailAttachCleaned && cleanResults) {
           const b64 = await generateExcelBase64('cleaned');
@@ -2712,7 +2893,7 @@ const QuestionnaireAnalytics = () => {
     } finally {
       setEmailSending(false);
     }
-  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, generatePdfBase64, generateAnalyticsExcelBase64, generateAnalyticsPdfBase64, generateTrackerExcelBase64, computeReportSummary]);
+  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, generatePdfBase64, generateAnalyticsExcelBase64, generateAnalyticsPdfBase64, generateTrackerExcelBase64, generateAllTrackersExcelBase64, trackerAllFormat, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -5401,6 +5582,10 @@ const QuestionnaireAnalytics = () => {
                         <Mail className="h-4 w-4" />
                         Send Email
                       </Button>
+                      <Button size="sm" variant="default" className="gap-1.5" onClick={openAllTrackerEmailDialog} data-testid="button-send-all-tracker-email">
+                        <Send className="h-4 w-4" />
+                        Send Combined Report
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -7424,6 +7609,42 @@ const QuestionnaireAnalytics = () => {
                 <div className="flex items-center gap-2">
                   <Label className="mb-0">Attachments:</Label>
                   <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Tracker Excel (All Sheets)</Badge>
+                </div>
+              ) : emailType === 'tracker_all' ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Label className="mb-0">Format:</Label>
+                  <div className="flex items-center gap-1 rounded-md border p-0.5 bg-muted/40">
+                    <button
+                      type="button"
+                      onClick={() => setTrackerAllFormat('excel')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${trackerAllFormat === 'excel' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      data-testid="button-tracker-all-format-excel"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      Excel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTrackerAllFormat('csv')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${trackerAllFormat === 'csv' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      data-testid="button-tracker-all-format-csv"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      CSV
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {trackerAllFormat === 'excel' ? (
+                      <>
+                        <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Summary sheet</Badge>
+                        <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Per-Hub sheets</Badge>
+                        <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Per-State sheets</Badge>
+                        <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Enumerators sheet</Badge>
+                      </>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs gap-1"><FileText className="h-3 w-3" />Combined CSV (all sections)</Badge>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
