@@ -17,7 +17,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format, parse, isValid } from 'date-fns';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
-import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, buildCoverageTrackerWorkbook } from '@/utils/analyticsExcelUtils';
+import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, buildCoverageTrackerWorkbook, exportEnumeratorTrackerExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -71,6 +71,20 @@ interface CollectorDetail {
   hubs: string[];
   states: string[];
   nameVariants: { name: string; count: number }[];
+}
+
+interface EnumTrackerEntry {
+  collectorId: string;
+  collectorName: string;
+  hub: string;
+  state: string;
+  covered: number;
+  submitted: number;
+  wfpConfirmed: number;
+  pending: number;
+  rejected: number;
+  total: number;
+  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string }[];
 }
 
 interface SavedSession {
@@ -262,6 +276,87 @@ const QuestionnaireAnalytics = () => {
   const [emailType, setEmailType] = useState<'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel'>('report');
   const [emailProfilesLoading, setEmailProfilesLoading] = useState(false);
   const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
+
+  // ── Enumerator Tracker state ──────────────────────────────────
+  const [enumTrackerRows, setEnumTrackerRows] = useState<EnumTrackerEntry[]>([]);
+  const [enumTrackerLoading, setEnumTrackerLoading] = useState(false);
+  const [enumHubFilter, setEnumHubFilter] = useState('all');
+  const [enumStateFilter, setEnumStateFilter] = useState('all');
+  const [enumSearch, setEnumSearch] = useState('');
+  const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
+  const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
+
+  const fetchEnumTrackerData = async () => {
+    setEnumTrackerLoading(true);
+    try {
+      const { data: entries, error } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, hub, state, locality, status, claimed_by, visit_completed_at, submitted_at')
+        .not('claimed_by', 'is', null);
+      if (error) throw error;
+
+      const collectorIds = [...new Set((entries || []).map((e: any) => e.claimed_by).filter(Boolean))];
+      let profileMap = new Map<string, string>();
+      if (collectorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, username')
+          .in('id', collectorIds);
+        (profiles || []).forEach((p: any) => {
+          profileMap.set(p.id, p.full_name || p.username || p.email || p.id);
+        });
+      }
+
+      const collectorMap = new Map<string, EnumTrackerEntry>();
+      (entries || []).forEach((entry: any) => {
+        if (!entry.claimed_by) return;
+        const name = profileMap.get(entry.claimed_by) || entry.claimed_by;
+        if (!collectorMap.has(entry.claimed_by)) {
+          collectorMap.set(entry.claimed_by, {
+            collectorId: entry.claimed_by,
+            collectorName: name,
+            hub: entry.hub || '',
+            state: entry.state || '',
+            covered: 0,
+            submitted: 0,
+            wfpConfirmed: 0,
+            pending: 0,
+            rejected: 0,
+            total: 0,
+            sites: [],
+          });
+        }
+        const row = collectorMap.get(entry.claimed_by)!;
+        row.total++;
+        if (entry.status === 'submitted') { row.submitted++; row.covered++; }
+        else if (entry.status === 'wfp_confirmed') { row.wfpConfirmed++; row.covered++; }
+        else if (entry.status === 'rejected') row.rejected++;
+        else row.pending++;
+        const dateVal = entry.submitted_at || entry.visit_completed_at || '';
+        row.sites.push({
+          siteName: entry.site_name || '',
+          locality: entry.locality || '',
+          hub: entry.hub || '',
+          state: entry.state || '',
+          status: entry.status || '',
+          date: dateVal ? format(new Date(dateVal), 'yyyy-MM-dd') : '',
+        });
+      });
+
+      setEnumTrackerRows([...collectorMap.values()].sort((a, b) => b.covered - a.covered));
+      setEnumTrackerFetched(true);
+    } catch (e: any) {
+      toast({ title: 'Failed to load enumerator data', description: e.message, variant: 'destructive' });
+    } finally {
+      setEnumTrackerLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'enum-tracker' && !enumTrackerFetched) {
+      fetchEnumTrackerData();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     try {
@@ -4370,7 +4465,7 @@ const QuestionnaireAnalytics = () => {
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-4 sm:grid-cols-9 w-full">
+            <TabsList className="grid grid-cols-5 sm:grid-cols-10 w-full">
               <TabsTrigger value="overview" data-testid="tab-overview" className="gap-1">
                 <BarChart3 className="h-3 w-3 hidden sm:inline" />Overview
               </TabsTrigger>
@@ -4397,6 +4492,9 @@ const QuestionnaireAnalytics = () => {
               </TabsTrigger>
               <TabsTrigger value="reports" data-testid="tab-reports" className="gap-1">
                 <ClipboardList className="h-3 w-3 hidden sm:inline" />Reports
+              </TabsTrigger>
+              <TabsTrigger value="enum-tracker" data-testid="tab-enum-tracker" className="gap-1">
+                <Users className="h-3 w-3 hidden sm:inline" />Enum. Tracker
               </TabsTrigger>
             </TabsList>
 
@@ -5897,6 +5995,237 @@ const QuestionnaireAnalytics = () => {
                   <p className="text-muted-foreground">Upload data to generate the report</p>
                 </Card>
               )}
+            </TabsContent>
+
+            {/* ── Enumerator Tracker Tab ─────────────────────────────── */}
+            <TabsContent value="enum-tracker" className="mt-4 space-y-4">
+              {(() => {
+                const enumHubs = ['all', ...[...new Set(enumTrackerRows.map(r => r.hub).filter(Boolean))].sort()];
+                const enumStates = ['all', ...[...new Set(enumTrackerRows.map(r => r.state).filter(Boolean))].sort()];
+                const filtered = enumTrackerRows.filter(r => {
+                  if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
+                  if (enumStateFilter !== 'all' && r.state !== enumStateFilter) return false;
+                  if (enumSearch && !r.collectorName.toLowerCase().includes(enumSearch.toLowerCase())) return false;
+                  return true;
+                });
+                const totalCovered = filtered.reduce((s, r) => s + r.covered, 0);
+                const totalSites = filtered.reduce((s, r) => s + r.total, 0);
+                const totalSubmitted = filtered.reduce((s, r) => s + r.submitted, 0);
+                const totalWfp = filtered.reduce((s, r) => s + r.wfpConfirmed, 0);
+                const totalPending = filtered.reduce((s, r) => s + r.pending, 0);
+                const totalRejected = filtered.reduce((s, r) => s + r.rejected, 0);
+
+                return (
+                  <>
+                    {/* KPI cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      {[
+                        { label: 'Enumerators', val: filtered.length, color: 'text-blue-600' },
+                        { label: 'Total Claimed', val: totalSites, color: 'text-gray-700' },
+                        { label: 'Covered (Done)', val: totalCovered, color: 'text-green-600' },
+                        { label: 'Submitted', val: totalSubmitted, color: 'text-blue-500' },
+                        { label: 'WFP Confirmed', val: totalWfp, color: 'text-emerald-600' },
+                        { label: 'Pending / Rejected', val: `${totalPending} / ${totalRejected}`, color: 'text-amber-600' },
+                      ].map(kpi => (
+                        <Card key={kpi.label} className="p-3">
+                          <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                          <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.val}</p>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Filters + actions */}
+                    <Card className="p-3">
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <div className="relative flex-1 min-w-[180px]">
+                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <input
+                            className="pl-8 pr-3 py-1.5 text-sm border rounded-md w-full bg-background"
+                            placeholder="Search enumerator…"
+                            value={enumSearch}
+                            onChange={e => setEnumSearch(e.target.value)}
+                            data-testid="input-enum-search"
+                          />
+                        </div>
+                        <select
+                          className="text-sm border rounded-md px-2 py-1.5 bg-background"
+                          value={enumHubFilter}
+                          onChange={e => setEnumHubFilter(e.target.value)}
+                          data-testid="select-enum-hub"
+                        >
+                          {enumHubs.map(h => <option key={h} value={h}>{h === 'all' ? 'All Hubs' : h}</option>)}
+                        </select>
+                        <select
+                          className="text-sm border rounded-md px-2 py-1.5 bg-background"
+                          value={enumStateFilter}
+                          onChange={e => setEnumStateFilter(e.target.value)}
+                          data-testid="select-enum-state"
+                        >
+                          {enumStates.map(s => <option key={s} value={s}>{s === 'all' ? 'All States' : s}</option>)}
+                        </select>
+                        {(enumHubFilter !== 'all' || enumStateFilter !== 'all' || enumSearch) && (
+                          <Button size="sm" variant="ghost" onClick={() => { setEnumHubFilter('all'); setEnumStateFilter('all'); setEnumSearch(''); }}>
+                            <X className="h-3 w-3 mr-1" />Clear
+                          </Button>
+                        )}
+                        <div className="ml-auto flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => fetchEnumTrackerData()} disabled={enumTrackerLoading} data-testid="button-enum-refresh">
+                            <RotateCcw className={`h-3.5 w-3.5 mr-1 ${enumTrackerLoading ? 'animate-spin' : ''}`} />Refresh
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`)}
+                            disabled={filtered.length === 0}
+                            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            data-testid="button-enum-export-excel"
+                          >
+                            <FileSpreadsheet className="h-3.5 w-3.5" />Export Excel
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* Table */}
+                    {enumTrackerLoading ? (
+                      <Card className="p-8 text-center">
+                        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-3" />
+                        <p className="text-muted-foreground text-sm">Loading enumerator data from MMP site entries…</p>
+                      </Card>
+                    ) : filtered.length === 0 ? (
+                      <Card className="p-8 text-center">
+                        <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-muted-foreground">{enumTrackerRows.length === 0 ? 'No MMP site entries with assigned enumerators found.' : 'No results match your filters.'}</p>
+                      </Card>
+                    ) : (
+                      <Card className="overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-[#0F2041] text-white">
+                                <th className="text-left px-3 py-2.5 font-semibold w-8">#</th>
+                                <th className="text-left px-3 py-2.5 font-semibold min-w-[160px]">Enumerator</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Hub</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">State</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Total Claimed</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Covered</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Submitted</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">WFP Confirmed</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Pending</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Rejected</th>
+                                <th className="text-center px-3 py-2.5 font-semibold">Coverage %</th>
+                                <th className="w-8" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtered.map((row, i) => {
+                                const pct = row.total > 0 ? Math.round((row.covered / row.total) * 100) : 0;
+                                const isExpanded = enumExpandedIds.has(row.collectorId);
+                                return (
+                                  <Fragment key={row.collectorId}>
+                                    <tr
+                                      className={`border-b transition-colors hover:bg-muted/40 cursor-pointer ${i % 2 === 1 ? 'bg-muted/20' : ''}`}
+                                      onClick={() => setEnumExpandedIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(row.collectorId)) next.delete(row.collectorId); else next.add(row.collectorId);
+                                        return next;
+                                      })}
+                                      data-testid={`row-enum-${row.collectorId}`}
+                                    >
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">{i + 1}</td>
+                                      <td className="px-3 py-2 font-medium">{row.collectorName}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        {row.hub ? <Badge variant="outline" className="text-xs">{row.hub}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
+                                      </td>
+                                      <td className="px-3 py-2 text-center">
+                                        {row.state ? <span className="text-xs">{row.state}</span> : <span className="text-muted-foreground text-xs">—</span>}
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-mono font-semibold">{row.total}</td>
+                                      <td className="px-3 py-2 text-center font-mono font-semibold text-green-600">{row.covered}</td>
+                                      <td className="px-3 py-2 text-center font-mono text-blue-600">{row.submitted}</td>
+                                      <td className="px-3 py-2 text-center font-mono text-emerald-600">{row.wfpConfirmed}</td>
+                                      <td className="px-3 py-2 text-center font-mono text-amber-600">{row.pending}</td>
+                                      <td className="px-3 py-2 text-center font-mono text-red-500">{row.rejected}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className={`text-xs font-bold ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
+                                          <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                                            <div className={`h-full rounded-full ${pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${pct}%` }} />
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center">
+                                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                                      </td>
+                                    </tr>
+                                    {isExpanded && (
+                                      <tr className="bg-blue-50/40 dark:bg-blue-950/10">
+                                        <td colSpan={12} className="px-4 py-3">
+                                          <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Sites — {row.collectorName}</p>
+                                          <div className="overflow-x-auto">
+                                            <table className="w-full text-xs">
+                                              <thead>
+                                                <tr className="text-muted-foreground border-b">
+                                                  <th className="text-left pb-1 pr-4">Site Name</th>
+                                                  <th className="text-left pb-1 pr-4">Hub</th>
+                                                  <th className="text-left pb-1 pr-4">State</th>
+                                                  <th className="text-left pb-1 pr-4">Locality</th>
+                                                  <th className="text-center pb-1 pr-4">Status</th>
+                                                  <th className="text-center pb-1">Date</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {row.sites.map((s, si) => (
+                                                  <tr key={si} className="border-b border-muted/30 last:border-0">
+                                                    <td className="py-1 pr-4 font-medium">{s.siteName || '—'}</td>
+                                                    <td className="py-1 pr-4">{s.hub || row.hub || '—'}</td>
+                                                    <td className="py-1 pr-4">{s.state || row.state || '—'}</td>
+                                                    <td className="py-1 pr-4">{s.locality || '—'}</td>
+                                                    <td className="py-1 pr-4 text-center">
+                                                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                                                        s.status === 'wfp_confirmed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50' :
+                                                        s.status === 'submitted' ? 'border-blue-300 text-blue-700 bg-blue-50' :
+                                                        s.status === 'rejected' ? 'border-red-300 text-red-700 bg-red-50' :
+                                                        'border-amber-300 text-amber-700 bg-amber-50'
+                                                      }`}>{s.status.replace('_', ' ')}</Badge>
+                                                    </td>
+                                                    <td className="py-1 text-center text-muted-foreground">{s.date || '—'}</td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
+                            </tbody>
+                            {/* Grand total row */}
+                            <tfoot>
+                              <tr className="bg-muted/60 font-semibold border-t-2">
+                                <td className="px-3 py-2" colSpan={4}>Grand Total ({filtered.length} enumerators)</td>
+                                <td className="px-3 py-2 text-center font-mono">{totalSites}</td>
+                                <td className="px-3 py-2 text-center font-mono text-green-600">{totalCovered}</td>
+                                <td className="px-3 py-2 text-center font-mono text-blue-600">{totalSubmitted}</td>
+                                <td className="px-3 py-2 text-center font-mono text-emerald-600">{totalWfp}</td>
+                                <td className="px-3 py-2 text-center font-mono text-amber-600">{totalPending}</td>
+                                <td className="px-3 py-2 text-center font-mono text-red-500">{totalRejected}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`text-xs font-bold ${totalSites > 0 && Math.round((totalCovered/totalSites)*100) >= 80 ? 'text-green-600' : 'text-amber-600'}`}>
+                                    {totalSites > 0 ? Math.round((totalCovered / totalSites) * 100) : 0}%
+                                  </span>
+                                </td>
+                                <td />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </Card>
+                    )}
+                  </>
+                );
+              })()}
             </TabsContent>
           </Tabs>
         </>

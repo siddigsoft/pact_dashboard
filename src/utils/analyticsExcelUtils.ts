@@ -786,6 +786,168 @@ export async function buildCoverageTrackerWorkbook(
   return buf as ArrayBuffer;
 }
 
+export interface EnumTrackerEntry {
+  collectorId: string;
+  collectorName: string;
+  hub: string;
+  state: string;
+  covered: number;
+  submitted: number;
+  wfpConfirmed: number;
+  pending: number;
+  rejected: number;
+  total: number;
+  sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string }[];
+}
+
+export async function exportEnumeratorTrackerExcel(
+  rows: EnumTrackerEntry[],
+  filename: string
+) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'PACT Command Center';
+  wb.created = new Date();
+
+  // ── Sheet 1: Summary ──────────────────────────────────────────
+  const ws1 = wb.addWorksheet('Enumerator Summary');
+
+  const titleRow1 = ws1.addRow(['Enumerator Tracker — Sites Covered per Data Collector']);
+  titleRow1.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow1.height = 28;
+  ws1.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
+  ws1.addRow([]);
+
+  const hdr1 = ws1.addRow(['#', 'Enumerator', 'Hub', 'State', 'Total Claimed', 'Covered (Done)', 'Submitted', 'WFP Confirmed', 'Pending', 'Rejected', 'Coverage %']);
+  hdr1.height = 22;
+  hdr1.eachCell((cell, ci) => {
+    cell.fill = headerFill();
+    cell.font = headerFont(10);
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+  });
+
+  rows.forEach((r, i) => {
+    const pct = r.total > 0 ? ((r.covered / r.total) * 100).toFixed(1) + '%' : '0%';
+    const row = ws1.addRow([i + 1, r.collectorName, r.hub, r.state, r.total, r.covered, r.submitted, r.wfpConfirmed, r.pending, r.rejected, pct]);
+    row.height = 20;
+    row.eachCell((cell, ci) => {
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+      cell.font = bodyFont(10);
+      if (i % 2 === 1) cell.fill = altFill();
+    });
+    // Colour the coverage % cell
+    const pctCell = row.getCell(11);
+    const pctNum = r.total > 0 ? (r.covered / r.total) * 100 : 0;
+    pctCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: pctNum >= 80 ? GREEN : pctNum >= 50 ? AMBER : 'FFDC2626' } };
+  });
+
+  // Totals row
+  const totals = ws1.addRow([
+    '', 'TOTAL', '', '',
+    rows.reduce((s, r) => s + r.total, 0),
+    rows.reduce((s, r) => s + r.covered, 0),
+    rows.reduce((s, r) => s + r.submitted, 0),
+    rows.reduce((s, r) => s + r.wfpConfirmed, 0),
+    rows.reduce((s, r) => s + r.pending, 0),
+    rows.reduce((s, r) => s + r.rejected, 0),
+    '',
+  ]);
+  totals.height = 22;
+  totals.eachCell((cell, ci) => {
+    cell.fill = totalFill();
+    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+  });
+
+  autoFitColumns(ws1);
+
+  // ── Sheet 2: Site-Level Detail ─────────────────────────────────
+  const ws2 = wb.addWorksheet('Site Detail');
+  const titleRow2 = ws2.addRow(['Enumerator Tracker — All Sites Detail']);
+  titleRow2.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow2.height = 28;
+  ws2.addRow([]);
+
+  const hdr2 = ws2.addRow(['#', 'Enumerator', 'Hub', 'State', 'Locality', 'Site Name', 'Status', 'Date']);
+  hdr2.height = 22;
+  hdr2.eachCell((cell, ci) => {
+    cell.fill = headerFill();
+    cell.font = headerFont(10);
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+  });
+
+  let siteSeq = 0;
+  rows.forEach(r => {
+    r.sites.forEach(s => {
+      siteSeq++;
+      const row = ws2.addRow([siteSeq, r.collectorName, s.hub || r.hub, s.state || r.state, s.locality, s.siteName, s.status, s.date]);
+      row.height = 20;
+      row.eachCell((cell, ci) => {
+        cell.border = thinBorder();
+        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+        cell.font = bodyFont(10);
+        if (siteSeq % 2 === 0) cell.fill = altFill();
+      });
+      // Status badge colour
+      const statusCell = row.getCell(7);
+      const sc = s.status === 'wfp_confirmed' ? GREEN : s.status === 'submitted' ? BLUE_TEXT : s.status === 'rejected' ? 'FFDC2626' : AMBER_TEXT;
+      statusCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: sc } };
+    });
+  });
+
+  autoFitColumns(ws2);
+
+  // ── Sheet 3: Hub × Enumerator Matrix ──────────────────────────
+  const ws3 = wb.addWorksheet('Hub Matrix');
+  const hubs = [...new Set(rows.map(r => r.hub).filter(Boolean))].sort();
+  const titleRow3 = ws3.addRow(['Enumerator Tracker — Sites Covered by Hub']);
+  titleRow3.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow3.height = 28;
+  ws3.addRow([]);
+
+  const matrixHdr = ws3.addRow(['Enumerator', ...hubs, 'TOTAL']);
+  matrixHdr.height = 22;
+  matrixHdr.eachCell((cell, ci) => {
+    cell.fill = headerFill();
+    cell.font = headerFont(10);
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+  });
+
+  rows.forEach((r, i) => {
+    const hubCounts = hubs.map(h => r.sites.filter(s => (s.hub || r.hub) === h && ['submitted','wfp_confirmed'].includes(s.status)).length);
+    const row = ws3.addRow([r.collectorName, ...hubCounts, r.covered]);
+    row.height = 20;
+    row.eachCell((cell, ci) => {
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle' };
+      cell.font = bodyFont(10);
+      if (i % 2 === 1) cell.fill = altFill();
+      if (ci > 1 && typeof cell.value === 'number' && cell.value > 0) {
+        cell.font = { bold: false, size: 10, name: 'Calibri', color: { argb: BLUE_TEXT } };
+      }
+    });
+    row.getCell(hubs.length + 2).font = { bold: true, size: 10, name: 'Calibri', color: { argb: NAVY } };
+  });
+
+  const hubTotals = ws3.addRow(['TOTAL', ...hubs.map(h => rows.reduce((s, r) => s + r.sites.filter(si => (si.hub || r.hub) === h && ['submitted','wfp_confirmed'].includes(si.status)).length, 0)), rows.reduce((s, r) => s + r.covered, 0)]);
+  hubTotals.height = 22;
+  hubTotals.eachCell((cell, ci) => {
+    cell.fill = totalFill();
+    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle' };
+  });
+
+  autoFitColumns(ws3);
+
+  const buf = await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+}
+
 export async function exportCoverageTrackerExcel(
   filteredData: FilteredRow[],
   filename: string,
