@@ -479,8 +479,14 @@ function geminiOcrPlugin() {
         req.on('data', (c: Buffer) => chunks.push(c));
         req.on('end', async () => {
           try {
-            const { topic = '', count = 10, lang = 'en' } = JSON.parse(Buffer.concat(chunks).toString());
-            const prompt = `You are an expert humanitarian survey designer (ODK / SurveyCTO standard). Generate exactly ${count} survey questions about: "${topic}".
+            const { topic = '', count = 10, lang = 'en', fileContext = '' } = JSON.parse(Buffer.concat(chunks).toString());
+            const contextSection = fileContext
+              ? `\n\nREFERENCE FILE CONTENT (use this as context):\n${fileContext}\n\nGenerate questions that are relevant to the above content.`
+              : '';
+            const topicSection = topic.trim()
+              ? `about: "${topic}"`
+              : `based on the reference file content provided below`;
+            const prompt = `You are an expert humanitarian survey designer (ODK / SurveyCTO standard). Generate exactly ${count} survey questions ${topicSection}.
 Return ONLY a valid JSON array with no markdown, no explanation.
 Each item: { "type": string, "label": string, "label_ar": string|null, "required": boolean, "options": string[]|null, "variable_name": string }
 Allowed types: text, textarea, radio, checkbox, dropdown, rating, scale, number, integer, date, gps, yesno, phone, email
@@ -488,7 +494,7 @@ variable_name: short snake_case identifier (e.g. respondent_age, has_electricity
 options: only for radio/checkbox/dropdown, null otherwise.
 label_ar: Arabic translation of the label (if you can) otherwise null.
 Use varied types and make questions clear, specific, and relevant to the topic.
-${lang === 'ar' ? 'Write label in Arabic as the primary label, label_ar can be English translation.' : ''}`;
+${lang === 'ar' ? 'Write label in Arabic as the primary label, label_ar can be English translation.' : ''}${contextSection}`;
             let text = '';
             try {
               const { GoogleGenAI } = await import('@google/genai');

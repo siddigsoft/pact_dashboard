@@ -7,6 +7,7 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -31,6 +32,7 @@ import {
   Sparkles, Share2, QrCode, Code2, MessageCircleMore, Filter, Timer,
   CheckCheck, CircleDot, CircleX, ClipboardList,
   RefreshCw, FunctionSquare, PenLine, ArrowRightLeft, Activity, AlertCircle,
+  Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -100,6 +102,59 @@ interface AiQuestion {
   required: boolean;
   options: string[] | null;
   variable_name: string;
+}
+
+async function extractFileContext(file: File): Promise<string> {
+  const ext = file.name.toLowerCase().split('.').pop() ?? '';
+  if (ext === 'xlsx' || ext === 'xls') {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array' });
+    let text = `ODK XLSForm: "${file.name}"\n\n`;
+    const surveyWs = wb.Sheets['survey'] || wb.Sheets[wb.SheetNames[0]];
+    if (surveyWs) {
+      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(surveyWs, { defval: '' });
+      text += `Survey questions (${rows.length}):\n`;
+      rows.slice(0, 120).forEach((r, i) => {
+        const type = r['type'] || r['Type'] || '';
+        const name = r['name'] || r['Name'] || '';
+        const label = r['label'] || r['label::English'] || r['label::English (en)'] || r['Label'] || '';
+        const required = r['required'] || r['Required'] || '';
+        const hint = r['hint'] || r['Hint'] || '';
+        if (type || label) {
+          text += `${i + 1}. [${type}] ${name}: "${label}"${required === 'yes' || required === 'true' ? ' *required' : ''}${hint ? ` (hint: ${hint})` : ''}\n`;
+        }
+      });
+    }
+    const choicesWs = wb.Sheets['choices'];
+    if (choicesWs) {
+      const choices = XLSX.utils.sheet_to_json<Record<string, string>>(choicesWs, { defval: '' });
+      const listMap: Record<string, string[]> = {};
+      choices.forEach(r => {
+        const list = r['list_name'] || r['list name'] || '';
+        const lbl = r['label'] || r['label::English'] || r['label::English (en)'] || r['Label'] || '';
+        if (list && lbl) { if (!listMap[list]) listMap[list] = []; listMap[list].push(String(lbl)); }
+      });
+      if (Object.keys(listMap).length > 0) {
+        text += `\nChoice lists:\n`;
+        Object.entries(listMap).slice(0, 30).forEach(([list, opts]) => { text += `- ${list}: ${opts.join(', ')}\n`; });
+      }
+    }
+    return text.slice(0, 5000);
+  }
+  if (ext === 'docx' || ext === 'doc') {
+    const buffer = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buffer);
+    const xmlFile = zip.file('word/document.xml');
+    if (!xmlFile) return `Word Document: "${file.name}"\n(Could not extract content)`;
+    const xml = await xmlFile.async('string');
+    const plain = xml
+      .replace(/<w:p[ >]/g, '\n<')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/\n{3,}/g, '\n\n').trim();
+    return `Word Document: "${file.name}"\n\n${plain.slice(0, 5000)}`;
+  }
+  return '';
 }
 
 interface Response {
@@ -249,6 +304,7 @@ export default function SurveyDetail() {
   const [aiSuggestions, setAiSuggestions]   = useState<AiQuestion[]>([]);
   const [aiSelected, setAiSelected]         = useState<Set<number>>(new Set());
   const [aiLang, setAiLang]                 = useState<'en' | 'ar'>('en');
+  const [aiFile, setAiFile]                 = useState<File | null>(null);
   const [reviewTarget, setReviewTarget]     = useState<Response | null>(null);
   const [reviewStatus, setReviewStatus]     = useState<string>('approved');
   const [reviewComment, setReviewComment]   = useState('');
@@ -2469,7 +2525,7 @@ export default function SurveyDetail() {
 
       {/* ── AI Generate Questions Dialog ─────────────────────────────────── */}
       {aiOpen && (
-        <Dialog open onOpenChange={() => { setAiOpen(false); setAiSuggestions([]); }}>
+        <Dialog open onOpenChange={() => { setAiOpen(false); setAiSuggestions([]); setAiFile(null); }}>
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -2479,9 +2535,9 @@ export default function SurveyDetail() {
             <div className="space-y-4 py-1">
               {aiSuggestions.length === 0 ? (
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-500">Describe your survey topic and let AI generate questions following ODK/SurveyCTO best practices.</p>
+                  <p className="text-sm text-slate-500">Describe your topic below, or upload an ODK XLSForm / Word document for context — then let AI generate questions.</p>
                   <div className="space-y-2">
-                    <Label className="text-xs">Topic / Purpose</Label>
+                    <Label className="text-xs">Topic / Purpose <span className="text-slate-400 font-normal">(optional if file uploaded)</span></Label>
                     <Textarea
                       value={aiTopic}
                       onChange={e => setAiTopic(e.target.value)}
@@ -2489,6 +2545,31 @@ export default function SurveyDetail() {
                       rows={3}
                       data-testid="input-ai-topic"
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Reference File <span className="text-slate-400 font-normal">(optional — ODK XLSForm .xlsx or Word .docx)</span></Label>
+                    {aiFile ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                        <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0" />
+                        <span className="text-xs text-indigo-700 truncate flex-1">{aiFile.name}</span>
+                        <button onClick={() => setAiFile(null)} className="text-slate-400 hover:text-red-500 shrink-0" data-testid="btn-ai-file-clear">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 hover:border-violet-400 bg-white hover:bg-violet-50 px-3 py-2.5 text-xs text-slate-500 hover:text-violet-600 cursor-pointer transition-all" data-testid="label-ai-file-upload">
+                        <Upload className="w-3.5 h-3.5 shrink-0" />
+                        <span>Click to upload ODK XLSForm (.xlsx/.xls) or Word document (.docx)</span>
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls,.docx,.doc"
+                          className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) setAiFile(f); e.target.value = ''; }}
+                          data-testid="input-ai-file"
+                        />
+                      </label>
+                    )}
+                    <p className="text-[11px] text-slate-400">File content is extracted client-side and sent to the AI as context for more relevant question generation.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -2512,14 +2593,18 @@ export default function SurveyDetail() {
                     </div>
                   </div>
                   <Button
-                    disabled={!aiTopic.trim() || aiGenerating}
+                    disabled={(!aiTopic.trim() && !aiFile) || aiGenerating}
                     onClick={async () => {
                       setAiGenerating(true);
                       try {
+                        let fileContext = '';
+                        if (aiFile) {
+                          try { fileContext = await extractFileContext(aiFile); } catch { /* ignore parse errors */ }
+                        }
                         const res = await fetch('/api/generate-survey-questions', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang }),
+                          body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang, fileContext }),
                         });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error ?? 'AI generation failed');
