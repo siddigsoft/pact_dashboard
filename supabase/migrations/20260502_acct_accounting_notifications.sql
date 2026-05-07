@@ -180,12 +180,12 @@ BEGIN
         'accounting_grant_expiry',
         'Grant Expiring Soon',
         format('Grant "%s" expires in %s day(s) on %s. Awarded: %s %s',
-          NEW.name_en, v_days_left, NEW.end_date, NEW.award_amount, NEW.currency
+          NEW.grant_name, v_days_left, NEW.end_date, NEW.award_amount, NEW.currency
         ),
         '/accounting/grants',
         jsonb_build_object(
           'grant_id',     NEW.id,
-          'grant_name',   NEW.name_en,
+          'grant_name',   NEW.grant_name,
           'end_date',     NEW.end_date,
           'days_left',    v_days_left,
           'award_amount', NEW.award_amount
@@ -229,15 +229,15 @@ BEGIN
     PERFORM public.acct_notify_role_users(
       'accounting_period_close_overdue',
       'Fiscal Period Needs Closing',
-      format('Period "%s" ended on %s and is still open. Please initiate the period close workflow.',
-        NEW.period_name, NEW.end_date
+      format('Period #%s ended on %s and is still open. Please initiate the period close workflow.',
+        NEW.period_no, NEW.end_date
       ),
       '/accounting/period-close',
       jsonb_build_object(
-        'period_id',   NEW.id,
-        'period_name', NEW.period_name,
-        'end_date',    NEW.end_date,
-        'days_past',   CURRENT_DATE - NEW.end_date
+        'period_id',  NEW.id,
+        'period_no',  NEW.period_no,
+        'end_date',   NEW.end_date,
+        'days_past',  CURRENT_DATE - NEW.end_date
       )
     );
   END IF;

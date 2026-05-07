@@ -372,10 +372,19 @@ begin
   return new;
 end $$;
 
-drop trigger if exists acct_bridge_leave_requests on public.leave_requests;
-create trigger acct_bridge_leave_requests
-  after update on public.leave_requests
-  for each row execute function public.acct_trig_leave_requests();
+do $guard_leave$ begin
+  if to_regclass('public.leave_requests') is not null then
+    execute 'drop trigger if exists acct_bridge_leave_requests on public.leave_requests';
+    execute 'create trigger acct_bridge_leave_requests
+      after update on public.leave_requests
+      for each row execute function public.acct_trig_leave_requests()';
+    raise notice 'acct_bridge_leave_requests trigger created on leave_requests.';
+  else
+    raise notice 'SKIP: leave_requests table not found — acct_bridge_leave_requests trigger not created. '
+                 'Bind manually: CREATE TRIGGER acct_bridge_leave_requests AFTER UPDATE ON '
+                 'public.leave_requests FOR EACH ROW EXECUTE FUNCTION public.acct_trig_leave_requests();';
+  end if;
+end $guard_leave$;
 
 -- =============================================================================
 -- PART G: Fix — payroll_run_items column guard

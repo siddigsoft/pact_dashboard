@@ -24,11 +24,16 @@ Also adds:
 
 ## Prerequisites
 
-**All must be applied before Phase 4:**
+**All must be applied before Phase 4 bridges:**
 
 1. ✅ Phase 1 (1.1 + 1.2 + 1.3) — GL engine
 2. ✅ Phase 2 (`20260520_acct_phase2_gl_bridges.sql`) — bridge engine + P2P
 3. ✅ Phase 3 (`accounting_gl_bridges_phase3.sql`) — HR/grant bridges + RPCs
+4. ✅ **`20260520_acct_phase4_advanced.sql`** — creates `acct_tax_codes`, `acct_exchange_rates`, `acct_period_close_log`, and **`acct_budget_encumbrances`** (required by the encumbrance bridge trigger). Follow `docs/sql/PHASE4_ADVANCED_CONTROLS_MANUAL_APPLY.md`.
+
+**Apply order within Phase 4:**
+1. `20260520_acct_phase4_advanced.sql` → `docs/sql/PHASE4_ADVANCED_CONTROLS_MANUAL_APPLY.md`
+2. `accounting_gl_bridges_phase4.sql` ← **this file**
 
 Phase 4 has self-contained infrastructure guards (PART 0) so it applies safely
 even without Phase 2/3, but the triggers will be non-functional.
@@ -75,10 +80,15 @@ LIMIT 3;
 
 ```
 NOTICE: acct_budget_encumbrances trigger created.
+NOTICE: acct_bridge_leave_requests trigger created on leave_requests.
 ```
-or if `acct_budget_encumbrances` is absent:
+If `acct_budget_encumbrances` is absent (meaning `20260520_acct_phase4_advanced.sql` was not applied first):
 ```
-NOTICE: SKIP: acct_budget_encumbrances does not exist ...
+NOTICE: SKIP: acct_budget_encumbrances does not exist — run 20260520_acct_phase4_advanced.sql first, then re-run this script ...
+```
+If `leave_requests` is absent:
+```
+NOTICE: SKIP: leave_requests table not found — acct_bridge_leave_requests trigger not created ...
 ```
 
 ---
