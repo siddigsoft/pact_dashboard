@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PACT Command Center — Staff Onboarding Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;}
+
+  /* ── Page wrapper ── */
+  .page{max-width:780px;margin:0 auto;padding:32px 16px 64px;}
+
+  /* ── Email card ── */
+  .card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
+
+  /* ── Header banner ── */
+  .header{background:linear-gradient(135deg,#1a3a6b 0%,#2563eb 60%,#3b82f6 100%);padding:48px 40px 40px;text-align:center;}
+  .header img{height:52px;margin-bottom:20px;filter:brightness(0) invert(1);}
+  .header h1{color:#fff;font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.25;margin-bottom:8px;}
+  .header p{color:#bfdbfe;font-size:14px;font-weight:400;margin-top:6px;}
+  .badge-row{display:flex;justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap;}
+  .badge{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);
+         border-radius:999px;font-size:12px;font-weight:600;padding:4px 14px;}
+
+  /* ── Body ── */
+  .body{padding:40px;}
+  .salute{font-size:16px;color:#334155;margin-bottom:20px;line-height:1.7;}
+  .salute strong{color:#1e293b;}
+
+  /* ── Section title ── */
+  .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                 color:#2563eb;margin:36px 0 14px;}
+
+  /* ── Steps ── */
+  .steps{display:flex;flex-direction:column;gap:14px;}
+  .step{display:flex;align-items:flex-start;gap:14px;}
+  .step-num{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:#2563eb;
+             color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;
+             justify-content:center;margin-top:1px;}
+  .step-body{flex:1;}
+  .step-body strong{display:block;font-size:14px;font-weight:700;color:#1e293b;margin-bottom:3px;}
+  .step-body span{font-size:13px;color:#64748b;line-height:1.55;}
+  .step-link{font-size:13px;color:#2563eb;font-weight:600;word-break:break-all;}
+
+  /* ── Feature grid ── */
+  .feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:520px){.feat-grid{grid-template-columns:1fr;}}
+  .feat{border:1.5px solid #e2e8f0;border-radius:10px;padding:14px 16px;}
+  .feat-icon{font-size:22px;margin-bottom:8px;}
+  .feat strong{display:block;font-size:13px;font-weight:700;color:#1e293b;margin-bottom:4px;}
+  .feat span{font-size:12px;color:#64748b;line-height:1.5;}
+
+  /* ── Role callout ── */
+  .role-box{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:18px 20px;
+             display:flex;align-items:flex-start;gap:14px;}
+  .role-box .icon{font-size:28px;flex-shrink:0;}
+  .role-box strong{display:block;font-size:14px;font-weight:700;color:#1d4ed8;margin-bottom:4px;}
+  .role-box span{font-size:13px;color:#3b5299;line-height:1.55;}
+
+  /* ── Priority callout ── */
+  .priority-box{background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:18px 20px;margin-top:16px;}
+  .priority-box strong{display:block;font-size:14px;font-weight:700;color:#92400e;margin-bottom:6px;}
+  .priority-box ul{padding-left:18px;margin-top:4px;}
+  .priority-box li{font-size:13px;color:#78350f;line-height:1.7;}
+
+  /* ── CTA button ── */
+  .cta-wrap{text-align:center;margin:32px 0 8px;}
+  .cta{display:inline-block;background:#2563eb;color:#fff;text-decoration:none;
+       font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;
+       letter-spacing:.02em;}
+  .cta:hover{background:#1d4ed8;}
+
+  /* ── Divider ── */
+  .divider{border:none;border-top:1.5px solid #f1f5f9;margin:28px 0;}
+
+  /* ── Footer ── */
+  .footer{background:#f8fafc;padding:24px 40px;text-align:center;}
+  .footer p{font-size:12px;color:#94a3b8;line-height:1.7;}
+  .footer strong{color:#64748b;}
+
+  /* ── Print / guide section ── */
+  .guide-title{text-align:center;font-size:22px;font-weight:800;color:#1e293b;
+               margin:48px 0 6px;}
+  .guide-sub{text-align:center;font-size:14px;color:#64748b;margin-bottom:32px;}
+
+  /* Quick-reference table */
+  table.ref{width:100%;border-collapse:collapse;margin-top:8px;}
+  table.ref th{background:#1a3a6b;color:#fff;font-size:12px;font-weight:600;
+               padding:10px 14px;text-align:left;}
+  table.ref td{font-size:13px;color:#334155;padding:10px 14px;border-bottom:1px solid #e2e8f0;
+               vertical-align:top;}
+  table.ref tr:last-child td{border-bottom:none;}
+  table.ref tr:nth-child(even) td{background:#f8fafc;}
+
+  @media print{
+    body{background:#fff;}
+    .page{padding:0;}
+    .card{box-shadow:none;border-radius:0;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══════════════════════════════ EMAIL ═══════════════════════════════ -->
+  <div class="card">
+
+    <!-- Header -->
+    <div class="header">
+      <img src="/pact-logo.png" alt="PACT"/>
+      <h1>Welcome to PACT Command Center</h1>
+      <p>Your unified platform for projects, tasks, payroll & field operations</p>
+      <div class="badge-row">
+        <span class="badge">🔒 Secure</span>
+        <span class="badge">📱 Mobile Ready</span>
+        <span class="badge">🌐 app.pactorg.com</span>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="body">
+
+      <p class="salute">
+        Dear <strong>PACT Team</strong>,<br><br>
+        We are excited to officially launch the <strong>PACT Command Center</strong> — our centralized digital platform designed to manage everything from projects and daily tasks to contracts, payroll, and field operations in one place.<br><br>
+        To enable full automation of HR and financial processes — including contract management and payroll runs — <strong>we need all staff to be registered and active on the platform.</strong> Please follow the steps below to create your account today.
+      </p>
+
+      <!-- Role callout -->
+      <div class="role-box">
+        <div class="icon">👤</div>
+        <div>
+          <strong>Your Role: Employee</strong>
+          <span>All staff should register with the <strong>Employee</strong> role. Your account will be reviewed and activated by the administration team. Managers and directors will be assigned elevated roles by the system admin after registration.</span>
+        </div>
+      </div>
+
+      <!-- Registration steps -->
+      <div class="section-title">📋 Registration Steps</div>
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Open the Platform</strong>
+            <span>On any browser (Chrome recommended), go to:<br>
+            <a class="step-link" href="https://app.pactorg.com" target="_blank">https://app.pactorg.com</a></span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Click "Sign Up"</strong>
+            <span>On the login page, click the <em>Sign Up</em> or <em>Create Account</em> link below the login form.</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Enter Your Work Email &amp; Password</strong>
+            <span>Use your official PACT email address. Create a strong password (minimum 8 characters, include numbers and symbols).</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Select Role: Employee</strong>
+            <span>When prompted to select your role, choose <strong>Employee</strong>. Do not select any other role — the system admin will upgrade roles for managers as needed.</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <strong>Complete Your Profile</strong>
+            <span>Fill in your full name, department, and job title. Upload a profile photo if you wish. This helps your manager assign tasks and approve requests correctly.</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <strong>Wait for Activation</strong>
+            <span>Your account will be reviewed and activated by the admin team. You will receive a confirmation email once your account is ready.</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">7</div>
+          <div class="step-body">
+            <strong>Log In &amp; Explore</strong>
+            <span>Once activated, log in and explore your personal dashboard. Start with <em>My Tasks</em> and <em>My Board</em> to see what has been assigned to you.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Features -->
+      <div class="section-title">🚀 What You Can Do on the Platform</div>
+      <div class="feat-grid">
+
+        <div class="feat">
+          <div class="feat-icon">📋</div>
+          <strong>My Tasks</strong>
+          <span>View, update, and complete tasks assigned to you. Add comments, attach files, and log your daily output with proof uploads.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">🗂️</div>
+          <strong>Projects</strong>
+          <span>See all projects you are part of. Track progress, view milestones, and collaborate with your team in a structured workflow.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">📌</div>
+          <strong>My Board</strong>
+          <span>A personal Kanban board showing all your tasks across projects. Drag cards between columns (To Do → In Progress → Done) to stay organized.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">⏱️</div>
+          <strong>Timesheets</strong>
+          <span>Log your daily work hours. Timesheets feed directly into payroll calculations so accuracy is important.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">📄</div>
+          <strong>Contracts &amp; Payroll</strong>
+          <span>View your employment contract, track payment history, and download payslips — all digitally within the platform.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">🏖️</div>
+          <strong>Leave Requests</strong>
+          <span>Submit leave applications, check your leave balance, and track approval status in real time.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">📊</div>
+          <strong>Reports &amp; Analytics</strong>
+          <span>Access dashboards relevant to your work. See your task completion rates, project health, and field operation summaries.</span>
+        </div>
+
+        <div class="feat">
+          <div class="feat-icon">🔔</div>
+          <strong>Notifications</strong>
+          <span>Receive real-time alerts for task assignments, approvals, deadlines, and important announcements — in-app and via WhatsApp.</span>
+        </div>
+
+      </div>
+
+      <!-- Priority actions -->
+      <div class="section-title">⚡ Immediate Priority Actions</div>
+      <div class="priority-box">
+        <strong>Once registered, please complete the following right away:</strong>
+        <ul>
+          <li>Confirm your profile information (name, department, position, phone number)</li>
+          <li>Check for any tasks already assigned to you in <em>My Tasks</em></li>
+          <li>Inform your line manager that your account is active</li>
+          <li>Contract and payroll processing will begin once all staff are on board — <strong>register by the deadline communicated by your manager</strong></li>
+        </ul>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- For managers -->
+      <div class="section-title">🏢 For Managers &amp; Directors</div>
+      <p style="font-size:13px;color:#64748b;line-height:1.7;margin-bottom:16px;">
+        Once your team is registered, you will be able to:
+      </p>
+      <div class="feat-grid">
+        <div class="feat">
+          <div class="feat-icon">👥</div>
+          <strong>Team Management</strong>
+          <span>Assign tasks to team members, monitor workload, and track completion rates from your Team Monitor dashboard.</span>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">✅</div>
+          <strong>Approvals</strong>
+          <span>Approve leave requests, timesheets, expense submissions, and procurement requests — all in one place with a full audit trail.</span>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">💰</div>
+          <strong>Payroll &amp; Contracts</strong>
+          <span>Run payroll cycles, review staff contracts, approve salary changes, and generate payslips — automated once all staff are registered.</span>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">📈</div>
+          <strong>Portfolio Dashboard</strong>
+          <span>Cross-project KPI overview: budget utilization, milestone tracking, project health scores, and risk alerts — all in real time.</span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-wrap">
+        <a class="cta" href="https://app.pactorg.com" target="_blank">Register Now → app.pactorg.com</a>
+      </div>
+
+      <p style="text-align:center;font-size:12px;color:#94a3b8;margin-top:12px;">
+        If you have any issues registering, contact the IT team or your line manager immediately.
+      </p>
+
+    </div><!-- /body -->
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>
+        <strong>PACT Sudan — Command Center</strong><br>
+        This is an internal communication. Please do not share your login credentials.<br>
+        Platform: <a href="https://app.pactorg.com" style="color:#2563eb;">app.pactorg.com</a> &nbsp;·&nbsp; Support: IT Help Desk
+      </p>
+    </div>
+
+  </div><!-- /card -->
+
+  <!-- ═══════════════════════════ QUICK-REF GUIDE ══════════════════════════ -->
+  <h2 class="guide-title" style="margin-top:56px;">📖 Quick Reference Guide</h2>
+  <p class="guide-sub">Print or share this section with your team as a desk reference</p>
+
+  <div class="card" style="margin-bottom:24px;">
+    <div class="body">
+      <div class="section-title">Platform Modules at a Glance</div>
+      <table class="ref">
+        <tr>
+          <th>Module</th>
+          <th>Who Uses It</th>
+          <th>What It Does</th>
+        </tr>
+        <tr>
+          <td><strong>Projects</strong></td>
+          <td>All staff</td>
+          <td>Full project lifecycle — planning, execution, milestones, Gantt, budget, and health tracking</td>
+        </tr>
+        <tr>
+          <td><strong>My Tasks / Board</strong></td>
+          <td>All staff</td>
+          <td>Personal task list with Kanban board, due dates, priorities, subtasks, and output logging</td>
+        </tr>
+        <tr>
+          <td><strong>Daily Work</strong></td>
+          <td>All staff</td>
+          <td>Log daily accomplishments with proof uploads — feeds into performance reviews</td>
+        </tr>
+        <tr>
+          <td><strong>Timesheets</strong></td>
+          <td>All staff</td>
+          <td>Track work hours per project/activity — required for payroll accuracy</td>
+        </tr>
+        <tr>
+          <td><strong>HR Hub</strong></td>
+          <td>HR / Managers</td>
+          <td>Staff contracts, payroll runs, leave management, salary increments, performance reviews</td>
+        </tr>
+        <tr>
+          <td><strong>Finance</strong></td>
+          <td>Finance / Directors</td>
+          <td>Journal entries, budget vs actuals, donor fund tracking, procurement (P2P), payslip generation</td>
+        </tr>
+        <tr>
+          <td><strong>Site Visits / MMP</strong></td>
+          <td>Field staff / Coordinators</td>
+          <td>Monthly Monitoring Plans, GPS site visits, coverage tracking, coordinator dashboard</td>
+        </tr>
+        <tr>
+          <td><strong>Surveys</strong></td>
+          <td>Data collectors / M&amp;E</td>
+          <td>Build and distribute surveys, collect responses offline, analyze results with charts and cross-tabs</td>
+        </tr>
+        <tr>
+          <td><strong>Reports</strong></td>
+          <td>All roles</td>
+          <td>Generate PDF/Excel exports for projects, finance, HR, field operations, and donor reporting</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <div class="body">
+      <div class="section-title">User Roles Explained</div>
+      <table class="ref">
+        <tr>
+          <th>Role</th>
+          <th>Who Gets It</th>
+          <th>Key Permissions</th>
+        </tr>
+        <tr>
+          <td><strong>Employee</strong> ⭐</td>
+          <td>All staff (default)</td>
+          <td>View &amp; update own tasks, log work, submit leave, view own contract &amp; payslip, join projects</td>
+        </tr>
+        <tr>
+          <td><strong>Manager</strong></td>
+          <td>Team leads / Coordinators</td>
+          <td>Everything above + assign tasks, approve leave &amp; timesheets, view team dashboard</td>
+        </tr>
+        <tr>
+          <td><strong>Director</strong></td>
+          <td>Department heads</td>
+          <td>Portfolio view, cross-project analytics, approve budgets, access financial dashboards</td>
+        </tr>
+        <tr>
+          <td><strong>HR Admin</strong></td>
+          <td>HR team</td>
+          <td>Full HR hub access — payroll runs, contracts, salary management, EOSB calculations</td>
+        </tr>
+        <tr>
+          <td><strong>Finance Admin</strong></td>
+          <td>Finance team</td>
+          <td>Full accounting suite — GL, budgets, procurement, reconciliation, donor reporting</td>
+        </tr>
+        <tr>
+          <td><strong>Super Admin</strong></td>
+          <td>IT / System admin</td>
+          <td>Full platform access including user management, audit logs, and system settings</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="body">
+      <div class="section-title">Need Help?</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num" style="background:#059669;">✉</div>
+          <div class="step-body">
+            <strong>Contact IT Help Desk</strong>
+            <span>For login issues, account activation, or technical problems — reach out to the IT team or your system administrator.</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:#7c3aed;">📱</div>
+          <div class="step-body">
+            <strong>Mobile Access</strong>
+            <span>The platform works on all mobile browsers. Open <strong>app.pactorg.com</strong> on your phone and add it to your home screen for quick access.</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:#d97706;">🔐</div>
+          <div class="step-body">
+            <strong>Security Reminder</strong>
+            <span>Never share your password. The platform contains sensitive HR and financial data. If you suspect unauthorized access, inform IT immediately.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <p>PACT Command Center &nbsp;·&nbsp; Internal Use Only &nbsp;·&nbsp; Confidential<br>
+      <strong>app.pactorg.com</strong></p>
+    </div>
+  </div>
+
+</div><!-- /page -->
+</body>
+</html>
