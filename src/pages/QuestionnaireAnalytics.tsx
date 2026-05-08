@@ -6469,6 +6469,7 @@ const QuestionnaireAnalytics = () => {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
+                            onSelect={e => e.preventDefault()}
                             onClick={() => {
                               const filtered = enumTrackerRows.filter(r => {
                                 if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
@@ -6489,6 +6490,7 @@ const QuestionnaireAnalytics = () => {
                             Excel
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onSelect={e => e.preventDefault()}
                             onClick={() => {
                               const filtered = enumTrackerRows.filter(r => {
                                 if (enumHubFilter !== 'all' && r.hub !== enumHubFilter) return false;
