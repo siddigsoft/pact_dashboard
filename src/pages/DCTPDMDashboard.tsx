@@ -171,12 +171,17 @@ function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
   if (rows.length < 3) return [];
   const headers: string[] = rows[0] as string[];
   const idx = (col: string) => headers.indexOf(col);
+  // Try multiple possible column names for the same field (handles form version changes)
+  const firstOf = (row: any[], ...cols: string[]) => {
+    for (const c of cols) { const i = idx(c); if (i !== -1 && row[i] != null && row[i] !== '') return row[i]; }
+    return null;
+  };
   const chalNums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 999];
   const raw = (rows.slice(2) as any[][]).map((row) => ({
     id:             toNum(row[idx('_id')]),
     date:           row[idx('general_info/a_date')],
-    state:          toStr(row[idx('general_info/a_state')]),
-    locality:       toStr(row[idx('general_info/locality')]),
+    state:          toStr(firstOf(row, 'general_info/a_state', 'general_info/state', 'a_state', 'state')),
+    locality:       toStr(firstOf(row, 'general_info/locality', 'general_info/a_locality', 'locality', 'a_locality')),
     location:       toStr(row[idx('general_info/location')]),
     interviewer:    toStr(row[idx('identification/a_interviewer')]),
     deviceid:       toStr(row[idx('deviceid')]),
@@ -869,7 +874,11 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // Declared before groupedRows because groupedRows depends on it.
   const allStateRows = useMemo(() => {
     const reachedMap: Record<string, number> = {};
-    records.forEach(r => { if (r.state) reachedMap[r.state] = (reachedMap[r.state] || 0) + 1; });
+    records.forEach(r => {
+      // When state is null, infer it from the locality subcode prefix (e.g. "SD01003" → "SD01")
+      const state = r.state || (/^SD\d{2}\d+$/.test(r.locality ?? '') ? (r.locality as string).slice(0, 4) : null);
+      if (state) reachedMap[state] = (reachedMap[state] || 0) + 1;
+    });
     return Object.keys(SAMPLE_PLANNED).map(code => ({
       code,
       name: STATE_LABELS[code] || code,
@@ -1050,8 +1059,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     });
 
     filtered.forEach(r => {
-      if (!r.state) return;
-      const stateRows = rowsByState[r.state] ?? [];
+      // When state is null, infer it from the locality subcode prefix (e.g. "SD01003" → "SD01")
+      const state = r.state || (/^SD\d{2}\d+$/.test(r.locality ?? '') ? (r.locality as string).slice(0, 4) : null);
+      if (!state) return;
+      const stateRows = rowsByState[state] ?? [];
 
       if (stateRows.length === 1) {
         // Single locality in this state → all records for this state map to it,
