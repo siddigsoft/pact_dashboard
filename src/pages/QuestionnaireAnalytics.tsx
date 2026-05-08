@@ -4214,13 +4214,15 @@ const QuestionnaireAnalytics = () => {
         cell.font = { bold: true, color: { argb: PWHITE }, size: 10, name: 'Calibri' }; cell.border = pBorder();
         cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
       });
-      let pSeq = 0; let grandPaySites = 0;
+      // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
+      const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
+        a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
+      let pSeq = 0;
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
           sg.collectors.forEach((col, i) => {
             pSeq++;
             const sites = col.pdmSites;
-            grandPaySites += sites;
             const totalUsd = sites * costPerSite;
             const totalSdg = totalUsd * exchangeRate;
             const pdr = payWs.addRow([pSeq, col.name, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
@@ -4235,9 +4237,9 @@ const QuestionnaireAnalytics = () => {
           });
         });
       });
-      const grandPayUsd = grandPaySites * costPerSite;
+      const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
-      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', grandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
       ptot.height = 24;
       ptot.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
