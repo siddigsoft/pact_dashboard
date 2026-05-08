@@ -1097,6 +1097,19 @@ const QuestionnaireAnalytics = () => {
               if (idx >= 0) { (colMap as any).activity = idx; break; }
             }
           }
+          // Debug: log detected column mapping to browser console
+          console.log('[QA Upload] Detected column map:', {
+            hub: `col${colMap.hub}="${headerRow[colMap.hub]}"`,
+            state: `col${colMap.state}="${headerRow[colMap.state]}"`,
+            locality: `col${colMap.locality}="${headerRow[colMap.locality]}"`,
+            activitySite: `col${(colMap as any).activitySite}="${headerRow[(colMap as any).activitySite]}"`,
+            activity: `col${(colMap as any).activity}="${headerRow[(colMap as any).activity]}"`,
+            subActivity: `col${(colMap as any).subActivity}="${headerRow[(colMap as any).subActivity]}"`,
+            monitoringType: `col${(colMap as any).monitoringType}="${headerRow[(colMap as any).monitoringType]}"`,
+            dataCollector: `col${(colMap as any).dataCollector}="${headerRow[(colMap as any).dataCollector]}"`,
+            date: `col${(colMap as any).date}="${headerRow[(colMap as any).date]}"`,
+            partner: `col${(colMap as any).partner}="${headerRow[(colMap as any).partner]}"`,
+          });
         }
 
         const rows: QuestionnaireRow[] = rawData.slice(1).map((row) => {
@@ -1540,7 +1553,7 @@ const QuestionnaireAnalytics = () => {
     const stateActMatrix: Record<string, Record<string, { q: number; sites: Set<string> }>> = {};
 
     filteredData.forEach(row => {
-      const actKey = row.monitoringType || row.activity;
+      const actKey = row.activity || row.monitoringType;
       if (!actKey || !row.hub) return;
       if (!siteSetMatrix[actKey]) siteSetMatrix[actKey] = {};
       if (!siteSetMatrix[actKey][row.hub]) siteSetMatrix[actKey][row.hub] = new Set();
@@ -1564,7 +1577,7 @@ const QuestionnaireAnalytics = () => {
     const hubStateActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     const stateLocalActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     filteredData.forEach(row => {
-      const actKey = row.monitoringType || row.activity;
+      const actKey = row.activity || row.monitoringType;
       if (!actKey || !row.hub || !row.state) return;
       if (!hubStateActMatrix[row.hub]) hubStateActMatrix[row.hub] = {};
       if (!hubStateActMatrix[row.hub][actKey]) hubStateActMatrix[row.hub][actKey] = {};
@@ -1575,7 +1588,7 @@ const QuestionnaireAnalytics = () => {
     });
     // Build stateLocalActMatrix independently — only requires activity + state + locality (hub not needed)
     filteredData.forEach(row => {
-      const actKey = row.monitoringType || row.activity;
+      const actKey = row.activity || row.monitoringType;
       if (!actKey || !row.state || !row.locality) return;
       if (!stateLocalActMatrix[row.state]) stateLocalActMatrix[row.state] = {};
       if (!stateLocalActMatrix[row.state][actKey]) stateLocalActMatrix[row.state][actKey] = {};
