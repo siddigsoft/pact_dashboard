@@ -1527,7 +1527,7 @@ const QuestionnaireAnalytics = () => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
         const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => {
           const activities = [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count);
-          const pdmSites   = activities.reduce((s, a) => s + Math.floor(a.count / 7), 0);
+          const pdmSites   = activities.reduce((s, a) => s + (isPdmActivity(a.name) ? Math.floor(a.count / 7) : a.count), 0);
           return { name: c.name, questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
         });
         const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
@@ -4217,7 +4217,7 @@ const QuestionnaireAnalytics = () => {
         hg.states.forEach(sg => {
           sg.collectors.forEach((col, i) => {
             pSeq++;
-            const sites = col.sites.length;
+            const sites = col.pdmSites;
             grandPaySites += sites;
             const totalUsd = sites * costPerSite;
             const totalSdg = totalUsd * exchangeRate;
