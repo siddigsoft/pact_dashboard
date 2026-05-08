@@ -343,6 +343,11 @@ const QuestionnaireAnalytics = () => {
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentExportType, setPaymentExportType] = useState<'standard' | 'formatted'>('standard');
+  const [paymentCostPerSite, setPaymentCostPerSite] = useState('');
+  const [paymentExchangeRate, setPaymentExchangeRate] = useState('');
+  const [paymentPendingRows, setPaymentPendingRows] = useState<any[]>([]);
 
   const enumMmpOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -6475,7 +6480,9 @@ const QuestionnaireAnalytics = () => {
                                 if (enumStatusFilter === 'rejected'      && r.rejected     === 0) return false;
                                 return true;
                               });
-                              exportEnumeratorTrackerExcel(filtered, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                              setPaymentPendingRows(filtered);
+                              setPaymentExportType('standard');
+                              setPaymentDialogOpen(true);
                             }}
                           >
                             <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -6493,7 +6500,9 @@ const QuestionnaireAnalytics = () => {
                                 if (enumStatusFilter === 'rejected'      && r.rejected     === 0) return false;
                                 return true;
                               });
-                              exportEnumeratorTrackerFormattedExcel(filtered, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                              setPaymentPendingRows(filtered);
+                              setPaymentExportType('formatted');
+                              setPaymentDialogOpen(true);
                             }}
                           >
                             <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -7871,6 +7880,69 @@ const QuestionnaireAnalytics = () => {
                   Send {emailToUsers.length > 1 ? `to ${emailToUsers.length} recipients` : 'Email'}
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Payment Parameters Dialog ─────────────────────────── */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Payment Parameters</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="pay-cost">Cost per Site Visit (USD)</Label>
+              <Input
+                id="pay-cost"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 10.00"
+                value={paymentCostPerSite}
+                onChange={e => setPaymentCostPerSite(e.target.value)}
+                data-testid="input-payment-cost-usd"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pay-rate">Exchange Rate (SDG per 1 USD)</Label>
+              <Input
+                id="pay-rate"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="e.g. 2000"
+                value={paymentExchangeRate}
+                onChange={e => setPaymentExchangeRate(e.target.value)}
+                data-testid="input-payment-exchange-rate"
+              />
+            </div>
+            {paymentCostPerSite && paymentExchangeRate && Number(paymentCostPerSite) > 0 && Number(paymentExchangeRate) > 0 && (
+              <div className="rounded-md bg-muted/60 border p-3 text-sm space-y-1">
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Preview</p>
+                <p>1 site visit = <strong>${Number(paymentCostPerSite).toFixed(2)} USD</strong></p>
+                <p>= <strong>{(Number(paymentCostPerSite) * Number(paymentExchangeRate)).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG</strong></p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!paymentCostPerSite || !paymentExchangeRate || Number(paymentCostPerSite) <= 0 || Number(paymentExchangeRate) <= 0}
+              onClick={() => {
+                const cost = parseFloat(paymentCostPerSite) || 0;
+                const rate = parseFloat(paymentExchangeRate) || 0;
+                setPaymentDialogOpen(false);
+                if (paymentExportType === 'standard') {
+                  exportEnumeratorTrackerExcel(paymentPendingRows, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
+                } else {
+                  exportEnumeratorTrackerFormattedExcel(paymentPendingRows, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
+                }
+              }}
+              data-testid="button-payment-export-confirm"
+            >
+              Export with Payment
             </Button>
           </DialogFooter>
         </DialogContent>

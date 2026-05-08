@@ -800,9 +800,74 @@ export interface EnumTrackerEntry {
   sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string; activity: string }[];
 }
 
+function buildPaymentSheet(
+  wb: ExcelJS.Workbook,
+  rows: EnumTrackerEntry[],
+  costPerSite: number,
+  exchangeRate: number
+) {
+  const ws = wb.addWorksheet('Payment');
+  const PAY_COLS = 9;
+
+  const titleRow = ws.addRow(['Enumerator Payment Calculation']);
+  ws.mergeCells(titleRow.number, 1, titleRow.number, PAY_COLS);
+  titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow.height = 28;
+
+  ws.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
+
+  const paramRow = ws.addRow([
+    `Cost per Site Visit: $${costPerSite.toFixed(2)} USD`,
+    '', '', '',
+    `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`,
+  ]);
+  paramRow.font = { bold: true, size: 10, name: 'Calibri', color: { argb: NAVY } };
+  paramRow.height = 20;
+  ws.addRow([]);
+
+  const hdrRow = ws.addRow(['#', 'Enumerator', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
+  hdrRow.height = 22;
+  hdrRow.eachCell((cell, ci) => {
+    cell.fill = headerFill(); cell.font = headerFont(10); cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+  });
+
+  rows.forEach((r, i) => {
+    const covered = r.covered;
+    const totalUsd = covered * costPerSite;
+    const totalSdg = totalUsd * exchangeRate;
+    const dr = ws.addRow([i + 1, r.collectorName, r.hub, r.state, covered, costPerSite, totalUsd, exchangeRate, totalSdg]);
+    dr.height = 20;
+    dr.eachCell((cell, ci) => {
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+      cell.font = bodyFont(10);
+      if (i % 2 === 1) cell.fill = altFill();
+    });
+    dr.getCell(6).numFmt = '#,##0.00'; dr.getCell(7).numFmt = '#,##0.00';
+    dr.getCell(8).numFmt = '#,##0.00'; dr.getCell(9).numFmt = '#,##0.00';
+  });
+
+  const grandCovered = rows.reduce((s, r) => s + r.covered, 0);
+  const grandUsd = grandCovered * costPerSite;
+  const grandSdg = grandUsd * exchangeRate;
+  const totRow = ws.addRow(['', 'GRAND TOTAL', '', '', grandCovered, costPerSite, grandUsd, exchangeRate, grandSdg]);
+  totRow.height = 24;
+  totRow.eachCell((cell, ci) => {
+    cell.fill = headerFill(); cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: WHITE } };
+    cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+  });
+  totRow.getCell(6).numFmt = '#,##0.00'; totRow.getCell(7).numFmt = '#,##0.00';
+  totRow.getCell(8).numFmt = '#,##0.00'; totRow.getCell(9).numFmt = '#,##0.00';
+
+  autoFitColumns(ws);
+}
+
 export async function exportEnumeratorTrackerExcel(
   rows: EnumTrackerEntry[],
-  filename: string
+  filename: string,
+  costPerSite = 0,
+  exchangeRate = 0
 ) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -931,6 +996,8 @@ export async function exportEnumeratorTrackerExcel(
   }
   autoFitColumns(ws3);
 
+  if (costPerSite > 0) buildPaymentSheet(wb, rows, costPerSite, exchangeRate);
+
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
 }
@@ -938,7 +1005,9 @@ export async function exportEnumeratorTrackerExcel(
 // ── Formatted Enumerator Tracker Excel (Hub-grouped) ─────────────
 export async function exportEnumeratorTrackerFormattedExcel(
   rows: EnumTrackerEntry[],
-  filename: string
+  filename: string,
+  costPerSite = 0,
+  exchangeRate = 0
 ) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -1177,6 +1246,8 @@ export async function exportEnumeratorTrackerFormattedExcel(
     ws3.addRow([]);
   }
   autoFitColumns(ws3);
+
+  if (costPerSite > 0) buildPaymentSheet(wb, rows, costPerSite, exchangeRate);
 
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
