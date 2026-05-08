@@ -231,6 +231,21 @@ const STATE_LABELS: Record<string, string> = {
   SD04: 'West Darfur', SD18: 'West Kordofan',
 };
 
+// Reverse of STATE_LABELS — handles records where state is stored as a full name
+// e.g. "Khartoum" → "SD01", "River Nile" → "SD16"
+const STATE_NAME_TO_CODE: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_LABELS).map(([code, name]) => [name.toLowerCase(), code])
+);
+
+// Normalise a raw state value (code OR full name) → always returns a state code or null
+function resolveStateCode(raw: string | null): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (STATE_LABELS[s]) return s;                              // already a code
+  if (/^SD\d{2}\d+$/.test(s)) return s.slice(0, 4);         // locality subcode prefix
+  return STATE_NAME_TO_CODE[s.toLowerCase()] ?? null;        // full name lookup
+}
+
 const LOCALITY_LABELS: Record<string, string> = {
   SD16010: 'Hosh Banga',
   SD01003: 'Al Kadaro',
@@ -875,9 +890,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const allStateRows = useMemo(() => {
     const reachedMap: Record<string, number> = {};
     records.forEach(r => {
-      // When state is null, infer it from the locality subcode prefix (e.g. "SD01003" → "SD01")
-      const state = r.state || (/^SD\d{2}\d+$/.test(r.locality ?? '') ? (r.locality as string).slice(0, 4) : null);
-      if (state) reachedMap[state] = (reachedMap[state] || 0) + 1;
+      // resolveStateCode handles: state code ("SD01"), full name ("Khartoum"),
+      // locality subcode prefix ("SD01003" → "SD01"), and null
+      const code = resolveStateCode(r.state) ?? resolveStateCode(r.locality);
+      if (code) reachedMap[code] = (reachedMap[code] || 0) + 1;
     });
     return Object.keys(SAMPLE_PLANNED).map(code => ({
       code,
@@ -1033,7 +1049,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   [records]);
 
   const filtered = useMemo(() => records.filter(r => {
-    if (stateFilter     !== 'all' && r.state            !== stateFilter)            return false;
+    if (stateFilter !== 'all' && resolveStateCode(r.state) !== stateFilter) return false;
     if (sexFilter       !== 'all' && String(r.sex)      !== sexFilter)               return false;
     if (rcvFilter       !== 'all' && String(r.asstReceived) !== rcvFilter)           return false;
     if (collectorFilter === '__unassigned__' && r.interviewer) return false;
@@ -1058,25 +1074,31 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       }
     });
 
-    filtered.forEach(r => {
-      // When state is null, infer it from the locality subcode prefix (e.g. "SD01003" → "SD01")
-      const state = r.state || (/^SD\d{2}\d+$/.test(r.locality ?? '') ? (r.locality as string).slice(0, 4) : null);
-      if (!state) return;
-      const stateRows = rowsByState[state] ?? [];
+    // Build locality full-name → row ID map (handles records stored with display names)
+    const localityNameToRowId: Record<string, string> = {};
+    localityRows.forEach(row => {
+      if (row.locality) localityNameToRowId[normName(row.locality)] = row.id;
+    });
 
+    filtered.forEach(r => {
+      // ① Try direct locality-name match (e.g. "Bahri" → SD01-0, "Sharg An Neel" → SD01-1)
+      if (r.locality) {
+        const byName = localityNameToRowId[normName(r.locality)];
+        if (byName) { map[byName] = (map[byName] || 0) + 1; return; }
+        // ② Try locality subcode map (e.g. "SD01003" → SD01-0)
+        const byCode = SUBCODE_TO_ROW_ID[r.locality];
+        if (byCode) { map[byCode] = (map[byCode] || 0) + 1; return; }
+      }
+
+      // ③ Fall back to state-level routing (single- or multi-locality states)
+      const stateCode = resolveStateCode(r.state) ?? resolveStateCode(r.locality);
+      if (!stateCode) return;
+      const stateRows = rowsByState[stateCode] ?? [];
       if (stateRows.length === 1) {
-        // Single locality in this state → all records for this state map to it,
-        // no subcode lookup needed (covers ND/El Fasher, NK/Um Rawaba+Sheikan rolled up, RS/Port Sudan, RN/Shendi, etc.)
         map[stateRows[0].id] = (map[stateRows[0].id] || 0) + 1;
       } else if (stateRows.length > 1) {
-        // Multiple localities → try the subcode mapping to disambiguate
-        const rowId = r.locality ? SUBCODE_TO_ROW_ID[r.locality as string] : undefined;
-        if (rowId) {
-          map[rowId] = (map[rowId] || 0) + 1;
-        } else {
-          // Subcode not in map yet — assign to first locality of this state as best-effort fallback
-          map[stateRows[0].id] = (map[stateRows[0].id] || 0) + 1;
-        }
+        // Cannot disambiguate without a locality match — assign to first row
+        map[stateRows[0].id] = (map[stateRows[0].id] || 0) + 1;
       }
     });
 
