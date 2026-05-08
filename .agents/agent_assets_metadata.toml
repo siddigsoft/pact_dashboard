@@ -54,3 +54,9 @@ id = "GS3Ui62eytQ-Y57uinTHt"
 uri = "file://public/PACT_Command_Center_Staff_Onboarding.pptx"
 type = "slides"
 title = "PACT Command Center — Staff Onboarding Presentation (9 slides)"
+
+[[outputs]]
+id = "JndYRPG-AoiMmMzaJNosM"
+uri = "file://PACT_Platform_Technical_Brief.md"
+type = "text"
+title = "PACT Platform — IT Technical Brief"
