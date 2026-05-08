@@ -54,6 +54,60 @@ function autoFitColumns(ws: ExcelJS.Worksheet) {
   });
 }
 
+export interface PaymentSheetRow {
+  label: string;
+  sites: number;
+}
+
+function buildHubPaymentSheet(
+  wb: ExcelJS.Workbook,
+  rows: PaymentSheetRow[],
+  costPerSite: number,
+  exchangeRate: number
+) {
+  const ws = wb.addWorksheet('Payment');
+  const PAY_COLS = 6;
+  const titleRow = ws.addRow(['Payment Calculation — By Hub']);
+  ws.mergeCells(titleRow.number, 1, titleRow.number, PAY_COLS);
+  titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow.height = 28;
+  ws.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
+  const paramRow = ws.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
+  paramRow.font = { bold: true, size: 10, name: 'Calibri', color: { argb: NAVY } };
+  paramRow.height = 20;
+  ws.addRow([]);
+  const hdrRow = ws.addRow(['#', 'Hub', 'Total Sites', 'Cost/Site (USD)', 'Total (USD)', 'Total (SDG)']);
+  hdrRow.height = 22;
+  hdrRow.eachCell((cell, ci) => {
+    cell.fill = headerFill(); cell.font = headerFont(10); cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+  });
+  rows.forEach((r, i) => {
+    const totalUsd = r.sites * costPerSite;
+    const totalSdg = totalUsd * exchangeRate;
+    const dr = ws.addRow([i + 1, r.label, r.sites, costPerSite, totalUsd, totalSdg]);
+    dr.height = 20;
+    dr.eachCell((cell, ci) => {
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+      cell.font = bodyFont(10);
+      if (i % 2 === 1) cell.fill = altFill();
+    });
+    dr.getCell(4).numFmt = '#,##0.00'; dr.getCell(5).numFmt = '#,##0.00'; dr.getCell(6).numFmt = '#,##0.00';
+  });
+  const grandSites = rows.reduce((s, r) => s + r.sites, 0);
+  const grandUsd = grandSites * costPerSite;
+  const grandSdg = grandUsd * exchangeRate;
+  const totRow = ws.addRow(['', 'GRAND TOTAL', grandSites, costPerSite, grandUsd, grandSdg]);
+  totRow.height = 24;
+  totRow.eachCell((cell, ci) => {
+    cell.fill = headerFill(); cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: WHITE } };
+    cell.border = thinBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+  });
+  totRow.getCell(4).numFmt = '#,##0.00'; totRow.getCell(5).numFmt = '#,##0.00'; totRow.getCell(6).numFmt = '#,##0.00';
+  autoFitColumns(ws);
+}
+
 export interface TrackerExportData {
   title: string;
   headers: string[];
@@ -64,7 +118,10 @@ export interface TrackerExportData {
 
 export async function exportFormattedExcel(
   sheets: TrackerExportData[],
-  filename: string
+  filename: string,
+  paymentRows: PaymentSheetRow[] = [],
+  costPerSite = 0,
+  exchangeRate = 0
 ) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -125,6 +182,8 @@ export async function exportFormattedExcel(
 
     autoFitColumns(ws);
   });
+
+  if (paymentRows.length > 0 && costPerSite > 0) buildHubPaymentSheet(wb, paymentRows, costPerSite, exchangeRate);
 
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);

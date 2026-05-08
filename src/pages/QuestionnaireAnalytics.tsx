@@ -344,7 +344,7 @@ const QuestionnaireAnalytics = () => {
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [paymentExportType, setPaymentExportType] = useState<'standard' | 'formatted'>('standard');
+  const [paymentExportType, setPaymentExportType] = useState<'standard' | 'formatted' | 'csvEnum' | 'perHubExcel' | 'perHubFormatted'>('standard');
   const [paymentCostPerSite, setPaymentCostPerSite] = useState('');
   const [paymentExchangeRate, setPaymentExchangeRate] = useState('');
   const [paymentPendingRows, setPaymentPendingRows] = useState<any[]>([]);
@@ -3409,7 +3409,7 @@ const QuestionnaireAnalytics = () => {
     doc.save('tracker_activity_by_state.pdf');
   }, [trackerData]);
 
-  const exportTrackerPerHubExcel = useCallback(() => {
+  const exportTrackerPerHubExcel = useCallback((costPerSite = 0, exchangeRate = 0) => {
     const wb = XLSX.utils.book_new();
     trackerData.hubTrackers.forEach(ht => {
       const htRows: any[] = [];
@@ -3434,6 +3434,16 @@ const QuestionnaireAnalytics = () => {
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `${ht.hub}`.slice(0, 31));
     });
+    if (costPerSite > 0) {
+      const payRows = trackerData.hubTrackers.map((ht: any, i: number) => ({
+        '#': i + 1, 'Hub': ht.hub, 'Total Sites': ht.grandSites,
+        'Cost/Site (USD)': costPerSite, 'Total (USD)': ht.grandSites * costPerSite,
+        'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': ht.grandSites * costPerSite * exchangeRate,
+      }));
+      const gs = trackerData.hubTrackers.reduce((s: number, ht: any) => s + ht.grandSites, 0);
+      payRows.push({ '#': '', 'Hub': 'GRAND TOTAL', 'Total Sites': gs, 'Cost/Site (USD)': costPerSite, 'Total (USD)': gs * costPerSite, 'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': gs * costPerSite * exchangeRate });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payRows), 'Payment');
+    }
     XLSX.writeFile(wb, 'tracker_per_hub.xlsx');
   }, [trackerData]);
 
@@ -3849,7 +3859,7 @@ const QuestionnaireAnalytics = () => {
     await exportFormattedExcel(sheets, 'tracker_activity_by_state.xlsx');
   }, [trackerData]);
 
-  const exportTrackerPerHubFormattedExcel = useCallback(async () => {
+  const exportTrackerPerHubFormattedExcel = useCallback(async (costPerSite = 0, exchangeRate = 0) => {
     const sheets = trackerData.hubTrackers.map((ht: any) => {
       const headers = ['Activity'];
       ht.states.forEach((st: string) => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM`, `${st} DC`); });
@@ -3869,10 +3879,13 @@ const QuestionnaireAnalytics = () => {
       totR.push(ht.grandSites, ht.grandQ, htPdmSitesGrand || '-', ht.grandCollectors);
       return { title: ht.hub, headers, rows, totalRow: totR };
     });
-    await exportFormattedExcel(sheets, 'tracker_per_hub.xlsx');
+    const paymentRows = costPerSite > 0
+      ? trackerData.hubTrackers.map((ht: any) => ({ label: ht.hub, sites: ht.grandSites }))
+      : [];
+    await exportFormattedExcel(sheets, 'tracker_per_hub.xlsx', paymentRows, costPerSite, exchangeRate);
   }, [trackerData]);
 
-  const exportCsvEnumTableFormattedExcel = useCallback(async () => {
+  const exportCsvEnumTableFormattedExcel = useCallback(async (costPerSite = 0, exchangeRate = 0) => {
     if (trackerData.hubTrackers.length === 0) return;
 
     // Build: hub → activity → state → [{name, count}]
@@ -4120,6 +4133,59 @@ const QuestionnaireAnalytics = () => {
         cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
         cell.border = xBorder();
       });
+    }
+
+    if (costPerSite > 0) {
+      const PNAVY = 'FF0F2041', PWHITE = 'FFFFFFFF', PBORDER = 'FFC8CDD7';
+      const pBorder = (): Partial<ExcelJS.Borders> => { const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+      const payWs = wb.addWorksheet('Payment');
+      const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
+      payWs.mergeCells(ptitle.number, 1, ptitle.number, 9);
+      ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
+      payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
+      pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
+      payWs.addRow([]);
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
+      phdr.height = 22;
+      phdr.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
+        cell.font = { bold: true, color: { argb: PWHITE }, size: 10, name: 'Calibri' }; cell.border = pBorder();
+        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+      });
+      let pSeq = 0; let grandPaySites = 0;
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach((col, i) => {
+            pSeq++;
+            const sites = col.sites.length;
+            grandPaySites += sites;
+            const totalUsd = sites * costPerSite;
+            const totalSdg = totalUsd * exchangeRate;
+            const pdr = payWs.addRow([pSeq, col.name, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
+            pdr.height = 20;
+            pdr.eachCell((cell, ci) => {
+              cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+              cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+              if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+            });
+            pdr.getCell(6).numFmt = '#,##0.00'; pdr.getCell(7).numFmt = '#,##0.00';
+            pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
+          });
+        });
+      });
+      const grandPayUsd = grandPaySites * costPerSite;
+      const grandPaySdg = grandPayUsd * exchangeRate;
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', grandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      ptot.height = 24;
+      ptot.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
+        cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: PWHITE } };
+        cell.border = pBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+      });
+      ptot.getCell(6).numFmt = '#,##0.00'; ptot.getCell(7).numFmt = '#,##0.00';
+      ptot.getCell(8).numFmt = '#,##0.00'; ptot.getCell(9).numFmt = '#,##0.00';
+      payWs.columns.forEach(col => { let max = 10; col.eachCell?.({ includeEmpty: false }, c => { max = Math.max(max, (c.value?.toString() || '').length + 2); }); col.width = Math.min(max, 40); });
     }
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -5853,11 +5919,17 @@ const QuestionnaireAnalytics = () => {
                               <FileDown className="h-4 w-4 mr-2" />
                               PDF
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={exportTrackerPerHubExcel}>
+                            <DropdownMenuItem
+                              onSelect={e => e.preventDefault()}
+                              onClick={() => { setPaymentExportType('perHubExcel'); setPaymentDialogOpen(true); }}
+                            >
                               <FileSpreadsheet className="h-4 w-4 mr-2" />
                               Excel
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={exportTrackerPerHubFormattedExcel}>
+                            <DropdownMenuItem
+                              onSelect={e => e.preventDefault()}
+                              onClick={() => { setPaymentExportType('perHubFormatted'); setPaymentDialogOpen(true); }}
+                            >
                               <FileSpreadsheet className="h-4 w-4 mr-2" />
                               Formatted Excel
                             </DropdownMenuItem>
@@ -6201,7 +6273,7 @@ const QuestionnaireAnalytics = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       {csvEnumView === 'table' && trackerData.hubTrackers.length > 0 && (
-                        <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsvEnumTableFormattedExcel} data-testid="button-export-csv-enum-table">
+                        <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => { setPaymentExportType('csvEnum'); setPaymentDialogOpen(true); }} data-testid="button-export-csv-enum-table">
                           <FileSpreadsheet className="h-4 w-4" />
                           Export Tracker — Enumerators (CSV)
                         </Button>
@@ -7938,8 +8010,14 @@ const QuestionnaireAnalytics = () => {
                 setPaymentDialogOpen(false);
                 if (paymentExportType === 'standard') {
                   exportEnumeratorTrackerExcel(paymentPendingRows, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
-                } else {
+                } else if (paymentExportType === 'formatted') {
                   exportEnumeratorTrackerFormattedExcel(paymentPendingRows, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
+                } else if (paymentExportType === 'csvEnum') {
+                  exportCsvEnumTableFormattedExcel(cost, rate);
+                } else if (paymentExportType === 'perHubExcel') {
+                  exportTrackerPerHubExcel(cost, rate);
+                } else if (paymentExportType === 'perHubFormatted') {
+                  exportTrackerPerHubFormattedExcel(cost, rate);
                 }
               }}
               data-testid="button-payment-export-confirm"
