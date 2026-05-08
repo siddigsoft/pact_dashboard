@@ -273,7 +273,7 @@ export async function exportFormattedTrackerExcel(
     const pdmSitesCol = matrix.reduce((a: number, r: any) => a + Math.floor(r.cells[hi].questionnaires / 7), 0);
     totCells.push(ht.sites, ht.questionnaires, pdmSitesCol || '-', ht.collectors);
   });
-  const pdmSitesGrand = matrix.reduce((a: number, r: any) => a + Math.floor(r.totalQ / 7), 0);
+  const pdmSitesGrand = matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
   totCells.push(grandSites, grandQ, pdmSitesGrand || '-', grandCollectors);
   const totRow = ws.addRow(totCells);
   totRow.eachCell((cell) => {

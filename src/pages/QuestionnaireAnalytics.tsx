@@ -2596,7 +2596,7 @@ const QuestionnaireAnalytics = () => {
         const pdmCol = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
         totalVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || 0, hubTotals[hi].collectors);
       });
-      const pdmGrand = matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const pdmGrand = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       totalVals.push(grandSites, grandQ, pdmGrand || 0, grandCollectors);
       const tr1 = ws1.addRow(totalVals);
       tr1.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
@@ -2638,7 +2638,7 @@ const QuestionnaireAnalytics = () => {
           const pdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
           htTotalVals.push(ct.sites, ct.questionnaires, pdm || 0, ct.collectors);
         });
-        const htPdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+        const htPdm = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
         htTotalVals.push(ht.grandSites, ht.grandQ, htPdm || 0, ht.grandCollectors);
         const htTr = ws.addRow(htTotalVals);
         htTr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
@@ -2666,7 +2666,7 @@ const QuestionnaireAnalytics = () => {
           const pdm = st.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
           stTotalVals.push(ct.sites, ct.questionnaires, pdm || 0, ct.collectors);
         });
-        const stPdm = st.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+        const stPdm = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
         stTotalVals.push(st.grandSites, st.grandQ, stPdm || 0, st.grandCollectors);
         const stTr = ws.addRow(stTotalVals);
         stTr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
@@ -2702,7 +2702,7 @@ const QuestionnaireAnalytics = () => {
           const pdm = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
           totValsC.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdm, hubTotals[hi].collectors);
         });
-        const pdmGrandC = matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+        const pdmGrandC = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
         totValsC.push(grandSites, grandQ, pdmGrandC, grandCollectors);
         row(totValsC);
 
@@ -2765,7 +2765,7 @@ const QuestionnaireAnalytics = () => {
         const pdm = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
         s1Tot.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdm, hubTotals[hi].collectors);
       });
-      const pdmG = matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const pdmG = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       s1Tot.push(grandSites, grandQ, pdmG, grandCollectors);
       const tr1A = ws1.addRow(s1Tot);
       tr1A.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
@@ -2790,7 +2790,7 @@ const QuestionnaireAnalytics = () => {
           const pdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
           htTot.push(ct.sites, ct.questionnaires, pdm, ct.collectors);
         });
-        const htPdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+        const htPdm = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
         htTot.push(ht.grandSites, ht.grandQ, htPdm, ht.grandCollectors);
         const htTr = ws.addRow(htTot);
         htTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
@@ -2816,7 +2816,7 @@ const QuestionnaireAnalytics = () => {
           const pdm = st.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
           stTot.push(ct.sites, ct.questionnaires, pdm, ct.collectors);
         });
-        const stPdm = st.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+        const stPdm = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
         stTot.push(st.grandSites, st.grandQ, stPdm, st.grandCollectors);
         const stTr = ws.addRow(stTot);
         stTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
@@ -3060,7 +3060,7 @@ const QuestionnaireAnalytics = () => {
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    const pdmSitesGrand = matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+    const pdmSitesGrand = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
     totalRow['Total PDM Sites'] = pdmSitesGrand || 0;
     totalRow['Total Collectors'] = grandCollectors;
     trackerRows.push(totalRow);
@@ -3084,7 +3084,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
         htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       const sheetName = `Hub-${ht.hub}`.slice(0, 31);
@@ -3109,7 +3109,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = st.matrix.reduce((a, r) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
         stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + Math.floor(r.totalQ / 7), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       const sheetName = `State-${st.state}`.slice(0, 31);
@@ -3307,7 +3307,7 @@ const QuestionnaireAnalytics = () => {
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    const pdmSitesGrand2 = matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+    const pdmSitesGrand2 = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
     totalRow['Total PDM Sites'] = pdmSitesGrand2 || 0;
     totalRow['Total DC'] = grandCollectors;
     rows.push(totalRow);
@@ -3341,7 +3341,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
         htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
@@ -3365,7 +3365,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = st.matrix.reduce((a, r) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
         stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + Math.floor(r.totalQ / 7), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
@@ -3429,7 +3429,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
         htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `${ht.hub}`.slice(0, 31));
@@ -3493,7 +3493,7 @@ const QuestionnaireAnalytics = () => {
         row.activity, String(row.totalSites), String(row.totalQ),
         row.totalQ ? String(Math.floor(row.totalQ / 7)) : '-', String(row.totalCollectors),
       ]);
-      const htPdmSitesGrand = ht.matrix.reduce((a: number, r: any) => a + (Math.floor(r.totalQ / 7)), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       hubTotRows.push(['Grand Total', String(ht.grandSites), String(ht.grandQ), htPdmSitesGrand ? String(htPdmSitesGrand) : '-', String(ht.grandCollectors)]);
       y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], hubTotRows, y, { fontSize: 9, boldLastRow: true, columnStyles: { 0: { cellWidth: 65 } } });
       y += 12;
@@ -3522,7 +3522,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = st.matrix.reduce((a, r) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
         stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + Math.floor(r.totalQ / 7), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `${st.state}`.slice(0, 31));
@@ -3576,7 +3576,7 @@ const QuestionnaireAnalytics = () => {
         row.activity, String(row.totalSites), String(row.totalQ),
         row.totalQ ? String(Math.floor(row.totalQ / 7)) : '-', String(row.totalCollectors),
       ]);
-      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + Math.floor(r.totalQ / 7), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       stateTotRows.push(['Grand Total', String(st.grandSites), String(st.grandQ), stPdmSitesGrand ? String(stPdmSitesGrand) : '-', String(st.grandCollectors)]);
       y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], stateTotRows, y, { fontSize: 9, boldLastRow: true, columnStyles: { 0: { cellWidth: 65 } } });
       y += 12;
@@ -3833,7 +3833,7 @@ const QuestionnaireAnalytics = () => {
       row.totalQ ? String(Math.floor(row.totalQ / 7)) : '-',
       String(row.totalCollectors),
     ]);
-    const pdmSitesGrandPdf = matrix.reduce((a: number, r: any) => a + (Math.floor(r.totalQ / 7)), 0);
+    const pdmSitesGrandPdf = matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
     grandRows.push(['Grand Total', String(grandSites), String(grandQ), pdmSitesGrandPdf ? String(pdmSitesGrandPdf) : '-', String(grandCollectors)]);
     y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], grandRows, y, { fontSize: 9, boldLastRow: true, columnStyles: { 0: { cellWidth: 65 } } });
 
@@ -3875,7 +3875,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = ht.matrix.reduce((a: number, r: any) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
         totR.push(ct.sites, ct.questionnaires, pdmSitesCol || '-', ct.collectors);
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a: number, r: any) => a + (Math.floor(r.totalQ / 7)), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       totR.push(ht.grandSites, ht.grandQ, htPdmSitesGrand || '-', ht.grandCollectors);
       return { title: ht.hub, headers, rows, totalRow: totR };
     });
@@ -4020,7 +4020,7 @@ const QuestionnaireAnalytics = () => {
         const pdmCol = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
         sTotVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || '-', hubTotals[hi].collectors);
       });
-      const sPdmGrand = matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const sPdmGrand = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       sTotVals.push(grandSites, grandQ, sPdmGrand || '-', grandCollectors);
       const sTotRow = wsSummary.addRow(sTotVals);
       sTotRow.height = 20;
@@ -4123,7 +4123,7 @@ const QuestionnaireAnalytics = () => {
         const pdmCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
         totVals.push(ct.sites, ct.questionnaires, pdmCol || '-', ct.collectors);
       });
-      const grandPdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0);
+      const grandPdm = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       totVals.push(ht.grandSites, ht.grandQ, grandPdm || '-', ht.grandCollectors);
       const totRow = ws.addRow(totVals);
       totRow.height = 20;
@@ -4214,7 +4214,7 @@ const QuestionnaireAnalytics = () => {
         const pdmSitesCol = st.matrix.reduce((a: number, r: any) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
         totR.push(ct.sites, ct.questionnaires, pdmSitesCol || '-', ct.collectors);
       });
-      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + Math.floor(r.totalQ / 7), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       totR.push(st.grandSites, st.grandQ, stPdmSitesGrand || '-', st.grandCollectors);
       return { title: st.state, headers, rows, totalRow: totR };
     });
@@ -4298,7 +4298,7 @@ const QuestionnaireAnalytics = () => {
 
     if (trackerData && trackerData.matrix && trackerData.matrix.length > 0) {
       const { hubs: tH, matrix: tM, hubTotals: tHT, grandQ: tGQ, grandSites: tGS, grandCollectors: tGC } = trackerData;
-      const pdmGrand = tM.reduce((a: number, r: any) => a + (Math.floor(r.totalQ / 7)), 0);
+      const pdmGrand = tM.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       const actualSitesGrand = pdmGrand;
 
       addSection(ws1, 'Tracker Grand Totals');
@@ -4406,7 +4406,7 @@ const QuestionnaireAnalytics = () => {
 
     if (trackerData && trackerData.matrix && trackerData.matrix.length > 0) {
       const { hubs: tH, matrix: tM, hubTotals: tHT, grandQ: tGQ, grandSites: tGS, grandCollectors: tGC } = trackerData;
-      const pdmGrand = tM.reduce((a: number, r: any) => a + (Math.floor(r.totalQ / 7)), 0);
+      const pdmGrand = tM.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
       const actualSitesGrand = pdmGrand;
 
       if (y > 220) { doc.addPage(); addPageHeader(doc, 'Tracker Grand Totals'); y = 18; }
@@ -5886,7 +5886,7 @@ const QuestionnaireAnalytics = () => {
                           ))}
                           <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{trackerData.grandSites}</td>
                           <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{trackerData.grandQ}</td>
-                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{trackerData.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.totalQ / 7) : r.totalSites), 0) || '-'}</td>
+                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{trackerData.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalSites), 0) || '-'}</td>
                           <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs bg-primary/10">{trackerData.grandCollectors}</td>
                         </tr>
                       </tbody>
@@ -6019,7 +6019,7 @@ const QuestionnaireAnalytics = () => {
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.totalQ / 7) : r.totalSites), 0); return total || '-'; })()}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalSites), 0); return total || '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
                                 </tr>
                               </tbody>
@@ -6150,7 +6150,7 @@ const QuestionnaireAnalytics = () => {
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{st.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{st.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = st.matrix.reduce((a, r) => a + Math.floor(r.totalQ / 7), 0); return total || '-'; })()}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0); return total || '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{st.grandCollectors}</td>
                                 </tr>
                               </tbody>
@@ -6313,7 +6313,7 @@ const QuestionnaireAnalytics = () => {
                               <div className="flex items-center gap-3">
                                 <Badge variant="outline" className="font-mono text-blue-600">{ht.grandSites} Sites</Badge>
                                 <Badge variant="secondary" className="font-mono">{ht.grandQ} Q</Badge>
-                                {(() => { const p = ht.matrix.reduce((a, r) => a + Math.floor(r.totalQ / 7), 0); return p > 0 ? <Badge variant="outline" className="font-mono text-amber-600">{p} PDM</Badge> : null; })()}
+                                {(() => { const p = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0); return p > 0 ? <Badge variant="outline" className="font-mono text-amber-600">{p} PDM</Badge> : null; })()}
                                 <Badge variant="outline" className="font-mono text-purple-600">{ht.grandCollectors} DC</Badge>
                                 {expandedRows.has(`csv-tbl-hub-${ht.hub}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                               </div>
@@ -6375,7 +6375,7 @@ const QuestionnaireAnalytics = () => {
                                       ))}
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
-                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const t = ht.matrix.reduce((a, r) => a + (Math.floor(r.totalQ / 7)), 0); return t || '-'; })()}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const t = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0); return t || '-'; })()}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
                                     </tr>
                                   </tbody>
@@ -6959,7 +6959,7 @@ const QuestionnaireAnalytics = () => {
 
                       {trackerData && trackerData.matrix && trackerData.matrix.length > 0 && (() => {
                         const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, grandQ: tGrandQ, grandSites: tGrandSites, grandCollectors: tGrandCollectors } = trackerData;
-                        const pdmSitesGrand = tMatrix.reduce((a: number, r: any) => a + (Math.floor(r.totalQ / 7)), 0);
+                        const pdmSitesGrand = tMatrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
                         const actualSitesGrand = pdmSitesGrand;
                         return (
                           <div>
