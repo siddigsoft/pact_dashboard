@@ -1480,7 +1480,7 @@ const QuestionnaireAnalytics = () => {
 
   const trackerData = useMemo(() => {
     const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
-    const activities = [...new Set(filteredData.map(r => r.activity || r.monitoringType))].filter(Boolean).sort();
+    const activities = [...new Set(filteredData.map(r => r.monitoringType || r.activity))].filter(Boolean).sort();
     const states = [...new Set(filteredData.map(r => r.state))].filter(Boolean).sort();
 
     const siteSetMatrix: Record<string, Record<string, Set<string>>> = {};
@@ -1489,7 +1489,7 @@ const QuestionnaireAnalytics = () => {
     const stateActMatrix: Record<string, Record<string, { q: number; sites: Set<string> }>> = {};
 
     filteredData.forEach(row => {
-      const actKey = row.activity || row.monitoringType;
+      const actKey = row.monitoringType || row.activity;
       if (!actKey || !row.hub) return;
       if (!siteSetMatrix[actKey]) siteSetMatrix[actKey] = {};
       if (!siteSetMatrix[actKey][row.hub]) siteSetMatrix[actKey][row.hub] = new Set();
@@ -1513,7 +1513,7 @@ const QuestionnaireAnalytics = () => {
     const hubStateActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     const stateLocalActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     filteredData.forEach(row => {
-      const actKey = row.activity || row.monitoringType;
+      const actKey = row.monitoringType || row.activity;
       if (!actKey || !row.hub || !row.state) return;
       if (!hubStateActMatrix[row.hub]) hubStateActMatrix[row.hub] = {};
       if (!hubStateActMatrix[row.hub][actKey]) hubStateActMatrix[row.hub][actKey] = {};
@@ -1524,7 +1524,7 @@ const QuestionnaireAnalytics = () => {
     });
     // Build stateLocalActMatrix independently — only requires activity + state + locality (hub not needed)
     filteredData.forEach(row => {
-      const actKey = row.activity || row.monitoringType;
+      const actKey = row.monitoringType || row.activity;
       if (!actKey || !row.state || !row.locality) return;
       if (!stateLocalActMatrix[row.state]) stateLocalActMatrix[row.state] = {};
       if (!stateLocalActMatrix[row.state][actKey]) stateLocalActMatrix[row.state][actKey] = {};
@@ -1536,7 +1536,7 @@ const QuestionnaireAnalytics = () => {
 
     const hubTrackers = hubs.map(hub => {
       const hubStates = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.state))].filter(Boolean).sort();
-      const hubActivities = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.activity || r.monitoringType))].filter(Boolean).sort();
+      const hubActivities = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.monitoringType || r.activity))].filter(Boolean).sort();
       const mRows = hubActivities.map(act => {
         const cells = hubStates.map(st => ({
           questionnaires: hubStateActMatrix[hub]?.[act]?.[st]?.q || 0,
@@ -1565,7 +1565,7 @@ const QuestionnaireAnalytics = () => {
 
     const stateTrackers = states.map(state => {
       const stLocalities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.locality))].filter(Boolean).sort();
-      const stActivities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.activity || r.monitoringType))].filter(Boolean).sort();
+      const stActivities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.monitoringType || r.activity))].filter(Boolean).sort();
       const mRows = stActivities.map(act => {
         const cells = stLocalities.map(loc => ({
           questionnaires: stateLocalActMatrix[state]?.[act]?.[loc]?.q || 0,
