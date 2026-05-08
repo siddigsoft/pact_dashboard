@@ -3494,13 +3494,12 @@ const QuestionnaireAnalytics = () => {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `${ht.hub}`.slice(0, 31));
     });
     if (costPerSite > 0) {
-      const payRows = trackerData.hubTrackers.map((ht: any, i: number) => ({
-        '#': i + 1, 'Hub': ht.hub, 'Total Sites': ht.grandSites,
-        'Cost/Site (USD)': costPerSite, 'Total (USD)': ht.grandSites * costPerSite,
-        'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': ht.grandSites * costPerSite * exchangeRate,
-      }));
-      const gs = trackerData.hubTrackers.reduce((s: number, ht: any) => s + ht.grandSites, 0);
-      payRows.push({ '#': '', 'Hub': 'GRAND TOTAL', 'Total Sites': gs, 'Cost/Site (USD)': costPerSite, 'Total (USD)': gs * costPerSite, 'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': gs * costPerSite * exchangeRate });
+      const payRows = trackerData.hubTrackers.map((ht: any, i: number) => {
+        const pdmAdj = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
+        return { '#': i + 1, 'Hub': ht.hub, 'PDM Sites': pdmAdj, 'Cost/Site (USD)': costPerSite, 'Total (USD)': pdmAdj * costPerSite, 'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': pdmAdj * costPerSite * exchangeRate };
+      });
+      const gs = payRows.reduce((s: number, r: any) => s + r['PDM Sites'], 0);
+      payRows.push({ '#': '', 'Hub': 'GRAND TOTAL', 'PDM Sites': gs, 'Cost/Site (USD)': costPerSite, 'Total (USD)': gs * costPerSite, 'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': gs * costPerSite * exchangeRate });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payRows), 'Payment');
     }
     XLSX.writeFile(wb, 'tracker_per_hub.xlsx');
@@ -3939,7 +3938,10 @@ const QuestionnaireAnalytics = () => {
       return { title: ht.hub, headers, rows, totalRow: totR };
     });
     const paymentRows = costPerSite > 0
-      ? trackerData.hubTrackers.map((ht: any) => ({ label: ht.hub, sites: ht.grandSites }))
+      ? trackerData.hubTrackers.map((ht: any) => {
+          const pdmAdj = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
+          return { label: ht.hub, sites: pdmAdj };
+        })
       : [];
     await exportFormattedExcel(sheets, 'tracker_per_hub.xlsx', paymentRows, costPerSite, exchangeRate);
   }, [trackerData]);
