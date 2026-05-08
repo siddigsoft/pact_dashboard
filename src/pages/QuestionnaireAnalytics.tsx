@@ -2562,10 +2562,10 @@ const QuestionnaireAnalytics = () => {
           doc.text(hub, 14, y); y += 3;
           const aRows = tMatrix.filter(row => row.cells[hi].questionnaires > 0 || row.cells[hi].sites > 0).map(row => [
             row.activity, String(row.cells[hi].sites || '-'), String(row.cells[hi].questionnaires || '-'),
-            row.cells[hi].questionnaires ? String(Math.floor(row.cells[hi].questionnaires / 7)) : '-',
+            row.cells[hi].questionnaires ? String(row.isPdm ? Math.floor(row.cells[hi].questionnaires / 7) : row.cells[hi].questionnaires) : '-',
             String(row.cells[hi].collectors || '-'),
           ]);
-          const hubPdm = tMatrix.reduce((a: number, r: any) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
+          const hubPdm = tMatrix.reduce((a: number, r: any) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
           aRows.push(['Total', String(tHubTotals[hi].sites), String(tHubTotals[hi].questionnaires), hubPdm ? String(hubPdm) : '-', String(tHubTotals[hi].collectors)]);
           y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], aRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
           y += 6;
@@ -2582,10 +2582,10 @@ const QuestionnaireAnalytics = () => {
           doc.text(`State: ${st}`, 18, y); y += 3;
           const sRows = ht.matrix.filter(row => row.cells[si].questionnaires > 0 || row.cells[si].sites > 0).map(row => [
             row.activity, String(row.cells[si].sites || '-'), String(row.cells[si].questionnaires || '-'),
-            row.cells[si].questionnaires ? String(Math.floor(row.cells[si].questionnaires / 7)) : '-',
+            row.cells[si].questionnaires ? String(row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires) : '-',
             String(row.cells[si].collectors || '-'),
           ]);
-          const colPdm = ht.matrix.reduce((a: number, r: any) => a + (Math.floor(r.cells[si].questionnaires / 7)), 0);
+          const colPdm = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? Math.floor(r.cells[si].questionnaires / 7) : r.cells[si].questionnaires), 0);
           sRows.push(['Total', String(ht.colTotals[si].sites), String(ht.colTotals[si].questionnaires), colPdm ? String(colPdm) : '-', String(ht.colTotals[si].collectors)]);
           y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], sRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
           y += 5;
@@ -2602,10 +2602,10 @@ const QuestionnaireAnalytics = () => {
           doc.text(`Locality: ${loc}`, 18, y); y += 3;
           const lRows = st.matrix.filter(row => row.cells[li].questionnaires > 0 || row.cells[li].sites > 0).map(row => [
             row.activity, String(row.cells[li].sites || '-'), String(row.cells[li].questionnaires || '-'),
-            row.cells[li].questionnaires ? String(Math.floor(row.cells[li].questionnaires / 7)) : '-',
+            row.cells[li].questionnaires ? String(row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires) : '-',
             String(row.cells[li].collectors || '-'),
           ]);
-          const locPdm = st.matrix.reduce((a: number, r: any) => a + (Math.floor(r.cells[li].questionnaires / 7)), 0);
+          const locPdm = st.matrix.reduce((a: number, r: any) => a + (r.isPdm ? Math.floor(r.cells[li].questionnaires / 7) : r.cells[li].questionnaires), 0);
           lRows.push(['Total', String(st.colTotals[li].sites), String(st.colTotals[li].questionnaires), locPdm ? String(locPdm) : '-', String(st.colTotals[li].collectors)]);
           y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], lRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
           y += 5;
@@ -2643,19 +2643,19 @@ const QuestionnaireAnalytics = () => {
         const vals: (string | number)[] = [row.activity];
         hubs.forEach((_, hi) => {
           vals.push(row.cells[hi].sites, row.cells[hi].questionnaires,
-            Math.floor(row.cells[hi].questionnaires / 7), row.cells[hi].collectors);
+            (row.isPdm ? Math.floor(row.cells[hi].questionnaires / 7) : row.cells[hi].questionnaires), row.cells[hi].collectors);
         });
-        vals.push(row.totalSites, row.totalQ, Math.floor(row.totalQ / 7), row.totalCollectors);
+        vals.push(row.totalSites, row.totalQ, (row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ), row.totalCollectors);
         const dr = ws1.addRow(vals);
         dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
       });
 
       const totalVals: (string | number)[] = ['Grand Total'];
       hubs.forEach((_, hi) => {
-        const pdmCol = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
+        const pdmCol = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
         totalVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || 0, hubTotals[hi].collectors);
       });
-      const pdmGrand = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const pdmGrand = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       totalVals.push(grandSites, grandQ, pdmGrand || 0, grandCollectors);
       const tr1 = ws1.addRow(totalVals);
       tr1.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
@@ -2669,7 +2669,7 @@ const QuestionnaireAnalytics = () => {
       stateBreakdown.forEach(sb => {
         sb.activities.forEach(a => {
           if (a.questionnaires > 0) {
-            const dr = ws2.addRow([sb.state, a.activity, a.sites, a.questionnaires, Math.floor(a.questionnaires / 7)]);
+            const dr = ws2.addRow([sb.state, a.activity, a.sites, a.questionnaires, isPdmActivity(a.activity) ? Math.floor(a.questionnaires / 7) : a.questionnaires]);
             dr.eachCell(c => { c.font = bFont; c.border = border; if (sri % 2 === 1) c.fill = altBg; });
             sri++;
           }
@@ -2686,18 +2686,18 @@ const QuestionnaireAnalytics = () => {
           const vals: (string | number)[] = [row.activity];
           ht.states.forEach((_, si) => {
             vals.push(row.cells[si].sites, row.cells[si].questionnaires,
-              Math.floor(row.cells[si].questionnaires / 7), row.cells[si].collectors);
+              (row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires), row.cells[si].collectors);
           });
-          vals.push(row.totalSites, row.totalQ, Math.floor(row.totalQ / 7), row.totalCollectors);
+          vals.push(row.totalSites, row.totalQ, (row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ), row.totalCollectors);
           const dr = ws.addRow(vals);
           dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
         });
         const htTotalVals: (string | number)[] = ['Total'];
         ht.colTotals.forEach((ct, ci) => {
-          const pdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+          const pdm = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
           htTotalVals.push(ct.sites, ct.questionnaires, pdm || 0, ct.collectors);
         });
-        const htPdm = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+        const htPdm = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
         htTotalVals.push(ht.grandSites, ht.grandQ, htPdm || 0, ht.grandCollectors);
         const htTr = ws.addRow(htTotalVals);
         htTr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
@@ -2714,18 +2714,18 @@ const QuestionnaireAnalytics = () => {
           const vals: (string | number)[] = [row.activity];
           st.localities.forEach((_, li) => {
             vals.push(row.cells[li].sites, row.cells[li].questionnaires,
-              Math.floor(row.cells[li].questionnaires / 7), row.cells[li].collectors);
+              (row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires), row.cells[li].collectors);
           });
-          vals.push(row.totalSites, row.totalQ, Math.floor(row.totalQ / 7), row.totalCollectors);
+          vals.push(row.totalSites, row.totalQ, (row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ), row.totalCollectors);
           const dr = ws.addRow(vals);
           dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
         });
         const stTotalVals: (string | number)[] = ['Total'];
         st.colTotals.forEach((ct, ci) => {
-          const pdm = st.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+          const pdm = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
           stTotalVals.push(ct.sites, ct.questionnaires, pdm || 0, ct.collectors);
         });
-        const stPdm = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+        const stPdm = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
         stTotalVals.push(st.grandSites, st.grandQ, stPdm || 0, st.grandCollectors);
         const stTr = ws.addRow(stTotalVals);
         stTr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
@@ -2754,14 +2754,14 @@ const QuestionnaireAnalytics = () => {
         lines.push(`=== ${summaryName} ===`);
         row(['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC']);
         matrix.forEach(r => {
-          row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, Math.floor(c.questionnaires / 7), c.collectors]), r.totalSites, r.totalQ, Math.floor(r.totalQ / 7), r.totalCollectors]);
+          row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, r.isPdm ? Math.floor(c.questionnaires / 7) : c.questionnaires, c.collectors]), r.totalSites, r.totalQ, r.isPdm ? Math.floor(r.totalQ / 7) : r.totalQ, r.totalCollectors]);
         });
         const totValsC: any[] = ['Grand Total'];
         hubs.forEach((_, hi) => {
-          const pdm = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
+          const pdm = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
           totValsC.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdm, hubTotals[hi].collectors);
         });
-        const pdmGrandC = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+        const pdmGrandC = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
         totValsC.push(grandSites, grandQ, pdmGrandC, grandCollectors);
         row(totValsC);
 
@@ -2769,7 +2769,7 @@ const QuestionnaireAnalytics = () => {
           lines.push(''); lines.push(`=== Hub: ${ht.hub} ===`);
           row(['Activity', ...ht.states.flatMap(s => [`${s} Sites`, `${s} Actual`, `${s} PDM`, `${s} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC']);
           ht.matrix.forEach(r => {
-            row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, Math.floor(c.questionnaires / 7), c.collectors]), r.totalSites, r.totalQ, Math.floor(r.totalQ / 7), r.totalCollectors]);
+            row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, r.isPdm ? Math.floor(c.questionnaires / 7) : c.questionnaires, c.collectors]), r.totalSites, r.totalQ, r.isPdm ? Math.floor(r.totalQ / 7) : r.totalQ, r.totalCollectors]);
           });
         });
 
@@ -2777,7 +2777,7 @@ const QuestionnaireAnalytics = () => {
           lines.push(''); lines.push(`=== State: ${st.state} ===`);
           row(['Activity', ...st.localities.flatMap(l => [`${l} Sites`, `${l} Actual`, `${l} PDM`, `${l} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC']);
           st.matrix.forEach(r => {
-            row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, Math.floor(c.questionnaires / 7), c.collectors]), r.totalSites, r.totalQ, Math.floor(r.totalQ / 7), r.totalCollectors]);
+            row([r.activity, ...r.cells.flatMap(c => [c.sites, c.questionnaires, r.isPdm ? Math.floor(c.questionnaires / 7) : c.questionnaires, c.collectors]), r.totalSites, r.totalQ, r.isPdm ? Math.floor(r.totalQ / 7) : r.totalQ, r.totalCollectors]);
           });
         });
 
@@ -2814,17 +2814,17 @@ const QuestionnaireAnalytics = () => {
       hr1.height = 22;
       matrix.forEach((r, ri) => {
         const vals: (string | number)[] = [r.activity];
-        r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, Math.floor(c.questionnaires / 7), c.collectors); });
-        vals.push(r.totalSites, r.totalQ, Math.floor(r.totalQ / 7), r.totalCollectors);
+        r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, r.isPdm ? Math.floor(c.questionnaires / 7) : c.questionnaires, c.collectors); });
+        vals.push(r.totalSites, r.totalQ, r.isPdm ? Math.floor(r.totalQ / 7) : r.totalQ, r.totalCollectors);
         const dr = ws1.addRow(vals);
         dr.eachCell(c => { c.font = bFontA; c.border = bdrA(); if (ri % 2 === 1) c.fill = altFillA; });
       });
       const s1Tot: (string | number)[] = ['Grand Total'];
       hubs.forEach((_, hi) => {
-        const pdm = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
+        const pdm = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
         s1Tot.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdm, hubTotals[hi].collectors);
       });
-      const pdmG = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const pdmG = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       s1Tot.push(grandSites, grandQ, pdmG, grandCollectors);
       const tr1A = ws1.addRow(s1Tot);
       tr1A.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
@@ -2839,17 +2839,17 @@ const QuestionnaireAnalytics = () => {
         hdr.height = 22;
         ht.matrix.forEach((r, ri) => {
           const vals: (string | number)[] = [r.activity];
-          r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, Math.floor(c.questionnaires / 7), c.collectors); });
-          vals.push(r.totalSites, r.totalQ, Math.floor(r.totalQ / 7), r.totalCollectors);
+          r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, r.isPdm ? Math.floor(c.questionnaires / 7) : c.questionnaires, c.collectors); });
+          vals.push(r.totalSites, r.totalQ, r.isPdm ? Math.floor(r.totalQ / 7) : r.totalQ, r.totalCollectors);
           const dr = ws.addRow(vals);
           dr.eachCell(c => { c.font = bFontA; c.border = bdrA(); if (ri % 2 === 1) c.fill = altFillA; });
         });
         const htTot: (string | number)[] = ['Total'];
         ht.colTotals.forEach((ct, ci) => {
-          const pdm = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+          const pdm = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
           htTot.push(ct.sites, ct.questionnaires, pdm, ct.collectors);
         });
-        const htPdm = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+        const htPdm = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
         htTot.push(ht.grandSites, ht.grandQ, htPdm, ht.grandCollectors);
         const htTr = ws.addRow(htTot);
         htTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
@@ -2865,17 +2865,17 @@ const QuestionnaireAnalytics = () => {
         hdr.height = 22;
         st.matrix.forEach((r, ri) => {
           const vals: (string | number)[] = [r.activity];
-          r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, Math.floor(c.questionnaires / 7), c.collectors); });
-          vals.push(r.totalSites, r.totalQ, Math.floor(r.totalQ / 7), r.totalCollectors);
+          r.cells.forEach(c => { vals.push(c.sites, c.questionnaires, r.isPdm ? Math.floor(c.questionnaires / 7) : c.questionnaires, c.collectors); });
+          vals.push(r.totalSites, r.totalQ, r.isPdm ? Math.floor(r.totalQ / 7) : r.totalQ, r.totalCollectors);
           const dr = ws.addRow(vals);
           dr.eachCell(c => { c.font = bFontA; c.border = bdrA(); if (ri % 2 === 1) c.fill = altFillA; });
         });
         const stTot: (string | number)[] = ['Total'];
         st.colTotals.forEach((ct, ci) => {
-          const pdm = st.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+          const pdm = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
           stTot.push(ct.sites, ct.questionnaires, pdm, ct.collectors);
         });
-        const stPdm = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+        const stPdm = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
         stTot.push(st.grandSites, st.grandQ, stPdm, st.grandCollectors);
         const stTr = ws.addRow(stTot);
         stTr.eachCell(c => { c.fill = totFillA; c.font = { ...bFontA, bold: true }; c.border = bdrA(); });
@@ -3100,12 +3100,12 @@ const QuestionnaireAnalytics = () => {
       hubs.forEach((hub, hi) => {
         r[`${hub} Sites`] = row.cells[hi].sites;
         r[`${hub} Actual`] = row.cells[hi].questionnaires;
-        r[`${hub} PDM Sites`] = Math.floor(row.cells[hi].questionnaires / 7);
+        r[`${hub} PDM Sites`] = row.isPdm ? Math.floor(row.cells[hi].questionnaires / 7) : row.cells[hi].questionnaires;
         r[`${hub} Collectors`] = row.cells[hi].collectors;
       });
       r['Total Sites'] = row.totalSites;
       r['Total Actual'] = row.totalQ;
-      r['Total PDM Sites'] = Math.floor(row.totalQ / 7);
+      r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ;
       r['Total Collectors'] = row.totalCollectors;
       trackerRows.push(r);
     });
@@ -3113,13 +3113,13 @@ const QuestionnaireAnalytics = () => {
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      const pdmSitesCol = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
+      const pdmSitesCol = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
       totalRow[`${hub} PDM Sites`] = pdmSitesCol || 0;
       totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    const pdmSitesGrand = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+    const pdmSitesGrand = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
     totalRow['Total PDM Sites'] = pdmSitesGrand || 0;
     totalRow['Total Collectors'] = grandCollectors;
     trackerRows.push(totalRow);
@@ -3132,18 +3132,18 @@ const QuestionnaireAnalytics = () => {
         ht.states.forEach((st, si) => {
           r[`${st} Sites`] = row.cells[si].sites;
           r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = Math.floor(row.cells[si].questionnaires / 7);
+          r[`${st} PDM Sites`] = row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires;
           r[`${st} DC`] = row.cells[si].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.floor(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
         htRows.push(r);
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
         htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       const sheetName = `Hub-${ht.hub}`.slice(0, 31);
@@ -3157,18 +3157,18 @@ const QuestionnaireAnalytics = () => {
         st.localities.forEach((loc, li) => {
           r[`${loc} Sites`] = row.cells[li].sites;
           r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = Math.floor(row.cells[li].questionnaires / 7);
+          r[`${loc} PDM Sites`] = row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires;
           r[`${loc} DC`] = row.cells[li].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.floor(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
         stRows.push(r);
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = st.matrix.reduce((a, r) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
         stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       const sheetName = `State-${st.state}`.slice(0, 31);
@@ -3389,18 +3389,18 @@ const QuestionnaireAnalytics = () => {
         ht.states.forEach((st, si) => {
           r[`${st} Sites`] = row.cells[si].sites;
           r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = Math.floor(row.cells[si].questionnaires / 7);
+          r[`${st} PDM Sites`] = row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires;
           r[`${st} DC`] = row.cells[si].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.floor(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
         htRows.push(r);
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
         htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
@@ -3413,18 +3413,18 @@ const QuestionnaireAnalytics = () => {
         st.localities.forEach((loc, li) => {
           r[`${loc} Sites`] = row.cells[li].sites;
           r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = Math.floor(row.cells[li].questionnaires / 7);
+          r[`${loc} PDM Sites`] = row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires;
           r[`${loc} DC`] = row.cells[li].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.floor(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
         stRows.push(r);
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = st.matrix.reduce((a, r) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
         stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
@@ -3477,18 +3477,18 @@ const QuestionnaireAnalytics = () => {
         ht.states.forEach((st, si) => {
           r[`${st} Sites`] = row.cells[si].sites;
           r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = Math.floor(row.cells[si].questionnaires / 7);
+          r[`${st} PDM Sites`] = row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires;
           r[`${st} DC`] = row.cells[si].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.floor(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
         htRows.push(r);
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (Math.floor(r.cells[ci].questionnaires / 7)), 0);
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
         htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `${ht.hub}`.slice(0, 31));
@@ -3570,18 +3570,18 @@ const QuestionnaireAnalytics = () => {
         st.localities.forEach((loc, li) => {
           r[`${loc} Sites`] = row.cells[li].sites;
           r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = Math.floor(row.cells[li].questionnaires / 7);
+          r[`${loc} PDM Sites`] = row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires;
           r[`${loc} DC`] = row.cells[li].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.floor(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
         stRows.push(r);
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = st.matrix.reduce((a, r) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
         stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `${st.state}`.slice(0, 31));
@@ -4039,9 +4039,9 @@ const QuestionnaireAnalytics = () => {
 
         const actVals: (string | number)[] = [mRow.activity];
         mRow.cells.forEach(c => {
-          actVals.push(c.sites || '-', c.questionnaires || '-', c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-');
+          actVals.push(c.sites || '-', c.questionnaires || '-', mRow.isPdm ? (c.questionnaires ? Math.floor(c.questionnaires / 7) : '-') : (c.questionnaires || '-'), c.collectors || '-');
         });
-        actVals.push(mRow.totalSites, mRow.totalQ, mRow.totalQ ? Math.floor(mRow.totalQ / 7) : '-', mRow.totalCollectors);
+        actVals.push(mRow.totalSites, mRow.totalQ, mRow.isPdm ? (mRow.totalQ ? Math.floor(mRow.totalQ / 7) : '-') : (mRow.totalQ || '-'), mRow.totalCollectors);
         const actRowS = wsSummary.addRow(actVals);
         actRowS.height = 18;
         const altBg = ri % 2 === 1 ? XLIGHT : 'FFFFFFFF';
@@ -4059,7 +4059,7 @@ const QuestionnaireAnalytics = () => {
           const subVals: (string | number)[] = [`   · ${collName}`];
           hubs.forEach(h => {
             const cnt = hubColLookup.get(h)?.get(mRow.activity)?.get(collName) || 0;
-            subVals.push('-', cnt || '-', cnt ? Math.floor(cnt / 7) : '-', '');
+            subVals.push('-', cnt || '-', mRow.isPdm ? (cnt ? Math.floor(cnt / 7) : '-') : (cnt || '-'), '');
           });
           subVals.push('', '', '', '');
           const subRowS = wsSummary.addRow(subVals);
@@ -4076,10 +4076,10 @@ const QuestionnaireAnalytics = () => {
       // Total row
       const sTotVals: (string | number)[] = ['Total'];
       hubs.forEach((_, hi) => {
-        const pdmCol = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
+        const pdmCol = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
         sTotVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || '-', hubTotals[hi].collectors);
       });
-      const sPdmGrand = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      const sPdmGrand = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       sTotVals.push(grandSites, grandQ, sPdmGrand || '-', grandCollectors);
       const sTotRow = wsSummary.addRow(sTotVals);
       sTotRow.height = 20;
@@ -4139,9 +4139,9 @@ const QuestionnaireAnalytics = () => {
 
         const actVals: (string | number)[] = [mRow.activity];
         mRow.cells.forEach(c => {
-          actVals.push(c.sites || '-', c.questionnaires || '-', c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-');
+          actVals.push(c.sites || '-', c.questionnaires || '-', mRow.isPdm ? (c.questionnaires ? Math.floor(c.questionnaires / 7) : '-') : (c.questionnaires || '-'), c.collectors || '-');
         });
-        actVals.push(mRow.totalSites, mRow.totalQ, mRow.totalQ ? Math.floor(mRow.totalQ / 7) : '-', mRow.totalCollectors);
+        actVals.push(mRow.totalSites, mRow.totalQ, mRow.isPdm ? (mRow.totalQ ? Math.floor(mRow.totalQ / 7) : '-') : (mRow.totalQ || '-'), mRow.totalCollectors);
         const actRow = ws.addRow(actVals);
         actRow.height = 18;
         const altBg = ri % 2 === 1 ? XLIGHT : 'FFFFFFFF';
@@ -5923,13 +5923,13 @@ const QuestionnaireAnalytics = () => {
                               <Fragment key={trackerData.hubs[ci]}>
                                 <td className="text-center py-2 px-2 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                 <td className="text-center py-2 px-2 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
-                                <td className="text-center py-2 px-2 border text-amber-600 font-mono text-xs">{row.isPdm ? (cell.questionnaires ? Math.floor(cell.questionnaires / 7) : '-') : (cell.sites || '-')}</td>
+                                <td className="text-center py-2 px-2 border text-amber-600 font-mono text-xs">{row.isPdm ? (cell.questionnaires ? Math.floor(cell.questionnaires / 7) : '-') : (cell.questionnaires || '-')}</td>
                                 <td className="text-center py-2 px-2 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                               </Fragment>
                             ))}
                             <td className="text-center py-2 px-2 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                             <td className="text-center py-2 px-2 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
-                            <td className="text-center py-2 px-2 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{row.isPdm ? (row.totalQ ? Math.floor(row.totalQ / 7) : '-') : (row.totalSites || '-')}</td>
+                            <td className="text-center py-2 px-2 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{row.isPdm ? (row.totalQ ? Math.floor(row.totalQ / 7) : '-') : (row.totalQ || '-')}</td>
                             <td className="text-center py-2 px-2 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                           </tr>
                         ))}
@@ -5939,13 +5939,13 @@ const QuestionnaireAnalytics = () => {
                             <Fragment key={trackerData.hubs[hi]}>
                               <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{ht.sites}</td>
                               <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{ht.questionnaires}</td>
-                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{trackerData.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].sites), 0) || '-'}</td>
+                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{trackerData.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0) || '-'}</td>
                               <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs">{ht.collectors}</td>
                             </Fragment>
                           ))}
                           <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{trackerData.grandSites}</td>
                           <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{trackerData.grandQ}</td>
-                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{trackerData.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalSites), 0) || '-'}</td>
+                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{trackerData.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0) || '-'}</td>
                           <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs bg-primary/10">{trackerData.grandCollectors}</td>
                         </tr>
                       </tbody>
@@ -6056,13 +6056,13 @@ const QuestionnaireAnalytics = () => {
                                       <Fragment key={ht.states[ci]}>
                                         <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
-                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{row.isPdm ? (cell.questionnaires ? Math.floor(cell.questionnaires / 7) : '-') : (cell.sites || '-')}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{row.isPdm ? (cell.questionnaires ? Math.floor(cell.questionnaires / 7) : '-') : (cell.questionnaires || '-')}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                                       </Fragment>
                                     ))}
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
-                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{row.isPdm ? (row.totalQ ? Math.floor(row.totalQ / 7) : '-') : (row.totalSites || '-')}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{row.isPdm ? (row.totalQ ? Math.floor(row.totalQ / 7) : '-') : (row.totalQ || '-')}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                                   </tr>
                                 ))}
@@ -6072,13 +6072,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={ht.states[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
-                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const total = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].sites), 0); return total || '-'; })()}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const total = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0); return total || '-'; })()}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalSites), 0); return total || '-'; })()}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0); return total || '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
                                 </tr>
                               </tbody>
