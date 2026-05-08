@@ -133,21 +133,35 @@ const DEFAULT_COLUMN_MAP = {
 // Keyword lists for every mapped field — ordered most-specific first so exact
 // matches win over partial ones.  The parser scans the header row and picks
 // the first column whose lowercased header contains any keyword.
+// Keywords are ordered most-specific → least-specific (first match wins for
+// the column search within each keyword's own pass).
 const HEADER_KEYWORDS: Record<string, string[]> = {
-  hub:           ['hub name', 'hub_name', 'hub', 'sub office', 'sub_office', 'office'],
+  hub:           ['wfp hub', 'hub name', 'hub_name', 'hub', 'sub office', 'sub_office', 'office'],
   state:         ['state name', 'state_name', 'state', 'governorate', 'ولاية', 'region'],
   locality:      ['locality name', 'locality_name', 'locality', 'محلية', 'district', 'sub-district'],
-  activitySite:  ['activity site', 'activity_site', 'site name', 'site_name', 'sitename', 'site', 'village', 'قرية', 'camp', 'location'],
-  activity:      ['activity type', 'activity_type', 'activity', 'program type', 'programme', 'program', 'نشاط'],
-  subActivity:   ['sub activity', 'sub_activity', 'subactivity', 'sub-activity'],
+  // 'sitename' / 'fullsitename' must come BEFORE 'activity site' so Feb-format
+  // SECTION_1/sitename columns win over the UUID-valued "select activity site" column.
+  activitySite:  ['sitename', 'fullsitename', 'site name', 'site_name', 'activity site', 'activity_site', 'site', 'village', 'قرية', 'camp', 'location'],
+  // More-specific phrases first so Jan "confirm the activity" / Feb "activity implemented"
+  // are matched before the generic 'activity' keyword (which would also match activitySite headers).
+  activity:      ['confirm the activity', 'activity implemented', 'what is the activity', 'activity type', 'activity_type', 'نشاط', 'activity'],
+  // Jan template: "specific activity you are monitoring"; Feb: "specific sub-activity"
+  subActivity:   ['sub activity', 'sub_activity', 'subactivity', 'sub-activity', 'specific sub', 'specific activity', 'you are monitoring'],
   monitoringType: ['what kind of process monitoring', 'process monitoring', 'monitoring type', 'kind of monitoring', 'type of monitoring', 'نوع المراقبة'],
-  dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
+  // Both templates use "Name of interviewer" — add before generic fallbacks.
+  dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector', 'name of interviewer', 'interviewer'],
   deviceId:      ['deviceid', 'device_id', 'device id', 'معرف الجهاز', 'device identifier', 'imei'],
   supervisor:    ['field supervisor', 'supervisor name', 'supervisor', 'superviser', 'فيلد سوبرفايزر'],
   date:          ['submission date', 'submitdate', 'submit_date', 'date_time', 'today', 'date', 'start'],
   siteId:        ['site id', 'site_id', 'siteid', '_uuid', 'uuid'],
   partner:       ['implementing partner', 'partner name', 'partner_name', 'ip name', 'ip_name', 'partner'],
 };
+
+// ── Known hub-name set ────────────────────────────────────────────────────────
+// Used to validate whether a cell value is actually a hub name.  When the file
+// has no hub column the parser may default to col 0 (start timestamp) which is
+// non-empty and would block the STATE_TO_HUB_NAME fallback without this check.
+const KNOWN_HUBS_LC: Set<string> = new Set(hubs.map(h => h.name.toLowerCase()));
 
 // ── State-name → Hub-name lookup ─────────────────────────────────────────────
 // Built dynamically from the authoritative hubs/sudanStates data so it never
@@ -1060,18 +1074,50 @@ const QuestionnaireAnalytics = () => {
         const colMap = { ...DEFAULT_COLUMN_MAP };
         if (rawData.length > 0) {
           const headerRow = rawData[0].map((h: any) => (h || '').toString().toLowerCase().trim());
-          // Detect every mapped field by header keyword — most-specific keyword wins
+          // Detect every mapped field using keyword-priority ordering:
+          // for each keyword (most-specific first), find the first column whose
+          // lowercased header contains that keyword; stop at the first hit.
+          // This prevents a less-specific keyword (e.g. 'activity') from matching
+          // an earlier column (e.g. 'activity site') when a more-specific keyword
+          // would have correctly matched a later column.
           Object.entries(HEADER_KEYWORDS).forEach(([field, keywords]) => {
-            const idx = headerRow.findIndex((h: string) => keywords.some(kw => h.includes(kw)));
-            if (idx >= 0) (colMap as any)[field] = idx;
+            let found = -1;
+            for (const kw of keywords) {
+              const idx = headerRow.findIndex((h: string) => h.includes(kw));
+              if (idx >= 0) { found = idx; break; }
+            }
+            if (found >= 0) (colMap as any)[field] = found;
           });
+          // Safety: if 'activity' and 'activitySite' still resolve to the same
+          // column (can happen with very short headers), scan past activitySite.
+          if ((colMap as any).activity === (colMap as any).activitySite) {
+            const skip = (colMap as any).activitySite as number;
+            for (const kw of HEADER_KEYWORDS.activity) {
+              const idx = headerRow.findIndex((h: string, i: number) => i > skip && h.includes(kw));
+              if (idx >= 0) { (colMap as any).activity = idx; break; }
+            }
+          }
         }
 
         const rows: QuestionnaireRow[] = rawData.slice(1).map((row) => {
           const rawHub   = (row[colMap.hub]   || '').toString().trim();
           const rawState = (row[colMap.state] || '').toString().trim();
-          // Auto-derive hub from state when the file omits the hub column
-          const derivedHub = rawHub || STATE_TO_HUB_NAME.get(rawState.toLowerCase()) || '';
+          // Validate hub: if the detected hub column contains a non-hub value
+          // (e.g. a timestamp when the file has no hub column), fall back to
+          // STATE_TO_HUB_NAME so February-format files are handled correctly.
+          const derivedHub = (rawHub && KNOWN_HUBS_LC.has(rawHub.toLowerCase()))
+            ? rawHub
+            : (STATE_TO_HUB_NAME.get(rawState.toLowerCase()) || rawHub || '');
+          // Handle Excel serial dates (e.g. 46032 = 2026-01-10).
+          const rawDate = row[colMap.date];
+          let dateStr = '';
+          if (rawDate instanceof Date) {
+            dateStr = rawDate.toISOString().slice(0, 10);
+          } else if (typeof rawDate === 'number' && rawDate > 40000 && rawDate < 60000) {
+            dateStr = new Date((rawDate - 25569) * 86400 * 1000).toISOString().slice(0, 10);
+          } else {
+            dateStr = (rawDate || '').toString().trim();
+          }
           return {
             hub:           derivedHub,
             state:         rawState,
@@ -1083,7 +1129,7 @@ const QuestionnaireAnalytics = () => {
             dataCollector: (row[colMap.dataCollector] || '').toString().trim(),
             deviceId:      (row[colMap.deviceId]      || '').toString().trim(),
             supervisor:    (row[colMap.supervisor]    || '').toString().trim(),
-            date:          (row[colMap.date]          || '').toString().trim(),
+            date:          dateStr,
             siteId:        (row[colMap.siteId]        || '').toString().trim(),
             partner:       (row[colMap.partner]       || '').toString().trim(),
           };
