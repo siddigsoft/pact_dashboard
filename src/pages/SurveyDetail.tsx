@@ -32,7 +32,7 @@ import {
   Sparkles, Share2, QrCode, Code2, MessageCircleMore, Filter, Timer,
   CheckCheck, CircleDot, CircleX, ClipboardList,
   RefreshCw, FunctionSquare, PenLine, ArrowRightLeft, Activity, AlertCircle,
-  Upload,
+  Upload, LayoutList, BookOpen, GripVertical, CheckSquare2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,12 +58,21 @@ type QuestionType =
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
-  | 'calculate' | 'begin_repeat' | 'grid_table';
+  | 'calculate' | 'begin_repeat' | 'grid_table'
+  | 'likert' | 'signature';
 
-interface SkipLogic {
-  condition_question_id: string;
+interface SkipCondition {
+  question_id: string;
   operator: 'equals' | 'not_equals' | 'contains' | 'answered' | 'not_answered' | 'greater_than' | 'less_than';
   value?: string;
+}
+
+interface SkipLogic {
+  condition_question_id?: string;
+  operator?: 'equals' | 'not_equals' | 'contains' | 'answered' | 'not_answered' | 'greater_than' | 'less_than';
+  value?: string;
+  logic?: 'AND' | 'OR';
+  conditions?: SkipCondition[];
 }
 
 interface Survey {
@@ -243,6 +252,13 @@ const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
     ],
   },
   {
+    label: 'Specialized',
+    types: [
+      { type: 'likert',    label: 'Likert Scale', icon: LayoutList },
+      { type: 'signature', label: 'Signature',    icon: PenLine },
+    ],
+  },
+  {
     label: 'Layout & Structure',
     types: [
       { type: 'section_header', label: 'Section Header',   icon: Minus },
@@ -283,8 +299,17 @@ export default function SurveyDetail() {
   // Responses tab extras
   const [responsesView, setResponsesView] = useState<'list' | 'table'>('list');
   const [responseSearch, setResponseSearch] = useState('');
+  const [responseDateFrom, setResponseDateFrom] = useState('');
+  const [responseDateTo, setResponseDateTo] = useState('');
   const [selectedSubmission, setSelectedSubmission] = useState<Response | null>(null);
   const [deleteResponseTarget, setDeleteResponseTarget] = useState<Response | null>(null);
+
+  // Builder extras — bulk select + drag-and-drop + library
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [draggedQId, setDraggedQId] = useState<string | null>(null);
+  const [dragOverQId, setDragOverQId] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [librarySaveTarget, setLibrarySaveTarget] = useState<Question | null>(null);
 
   // Cross-tabulation state
   const [crossTabRow, setCrossTabRow] = useState<string>('');
@@ -463,6 +488,10 @@ export default function SurveyDetail() {
           ],
           min_rows: 1,
           max_rows: 10,
+        } :
+        type === 'likert' ? {
+          likert_rows: ['Row 1', 'Row 2', 'Row 3'],
+          likert_cols: ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'],
         } : {};
       const { error } = await supabase.from('survey_questions').insert({
         survey_id: id,
@@ -621,10 +650,48 @@ export default function SurveyDetail() {
 
   const getAnswerDisplay = (q: Question, ans?: Answer): string => {
     if (!ans) return '';
+    if (q.type === 'grid_table') {
+      if (Array.isArray(ans.answer_json)) return `${(ans.answer_json as unknown[]).length} row(s)`;
+      return '';
+    }
+    if (q.type === 'likert') {
+      if (ans.answer_json && typeof ans.answer_json === 'object' && !Array.isArray(ans.answer_json)) {
+        const entries = Object.entries(ans.answer_json as Record<string, string>);
+        return entries.map(([r, c]) => `${r}: ${c}`).join(' | ');
+      }
+      return '';
+    }
+    if (q.type === 'signature') return ans.answer_json ? '[signature]' : '';
     if (Array.isArray(ans.answer_json)) return (ans.answer_json as string[]).join(', ');
     if (ans.answer_text) return ans.answer_text;
     if (ans.answer_json !== null && ans.answer_json !== undefined) return String(ans.answer_json);
     return '';
+  };
+
+  // Question library helpers
+  const LIBRARY_KEY = 'pact_survey_library';
+  const getLibrary = (): (Partial<Question> & { _libId: string; _libName: string })[] => {
+    try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) ?? '[]'); } catch { return []; }
+  };
+  const saveToLibrary = (q: Question) => {
+    const lib = getLibrary();
+    const entry = {
+      _libId: crypto.randomUUID(),
+      _libName: q.label,
+      type: q.type, label: q.label, label_ar: q.label_ar,
+      description: q.description, description_ar: q.description_ar,
+      options: q.options, options_ar: q.options_ar,
+      settings: { ...q.settings, skip_logic: undefined },
+      required: q.required,
+    };
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify([...lib, entry]));
+    toast({ title: 'Saved to library' });
+    setLibrarySaveTarget(null);
+  };
+  const removeFromLibrary = (libId: string) => {
+    const lib = getLibrary().filter(e => e._libId !== libId);
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib));
+    toast({ title: 'Removed from library' });
   };
 
   const getChartData = (q: Question) => {
@@ -848,6 +915,30 @@ export default function SurveyDetail() {
           onMoveDown={() => reorderQuestion(node.q.id, 'down')}
           saving={updateQuestion.isPending}
           deleting={deleteQuestion.isPending}
+          isDraggedOver={dragOverQId === node.q.id}
+          onDragStart={() => setDraggedQId(node.q.id)}
+          onDragOver={() => setDragOverQId(node.q.id)}
+          onDragLeave={() => setDragOverQId(null)}
+          onDrop={async () => {
+            setDragOverQId(null);
+            if (!draggedQId || draggedQId === node.q.id) { setDraggedQId(null); return; }
+            const dragged = questions.find(x => x.id === draggedQId);
+            if (!dragged) { setDraggedQId(null); return; }
+            const tmp = dragged.order_index;
+            await Promise.all([
+              supabase.from('survey_questions').update({ order_index: node.q.order_index }).eq('id', dragged.id),
+              supabase.from('survey_questions').update({ order_index: tmp }).eq('id', node.q.id),
+            ]);
+            qc.invalidateQueries({ queryKey: ['survey-questions', surveyId] });
+            setDraggedQId(null);
+          }}
+          isBulkSelected={bulkSelected.has(node.q.id)}
+          onBulkToggle={(v) => {
+            const next = new Set(bulkSelected);
+            if (v) next.add(node.q.id); else next.delete(node.q.id);
+            setBulkSelected(next);
+          }}
+          onSaveToLibrary={() => saveToLibrary(node.q)}
         />
       );
     });
@@ -1032,7 +1123,10 @@ export default function SurveyDetail() {
 
           {nonStructural.length > 0 && !qLoading && (() => {
             const reqCount = nonStructural.filter(q => q.required).length;
-            const condCount = nonStructural.filter(q => !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id).length;
+            const condCount = nonStructural.filter(q => {
+              const sl = q.settings?.skip_logic as SkipLogic | undefined;
+              return !!(sl?.condition_question_id || (sl?.conditions && sl.conditions.length > 0));
+            }).length;
             const groupCount = questions.filter(q => q.type === 'begin_group').length;
             return (
               <div className="flex items-center gap-3 text-[11px] text-slate-400 px-1 flex-wrap">
@@ -1059,10 +1153,108 @@ export default function SurveyDetail() {
             )}
           </div>
 
+          {/* Bulk select toolbar */}
+          {canManage && bulkSelected.size > 0 && (
+            <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2">
+              <CheckSquare2 className="w-4 h-4 text-indigo-500 shrink-0" />
+              <span className="text-xs font-semibold text-indigo-700">{bulkSelected.size} selected</span>
+              <div className="flex items-center gap-1 ml-auto">
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-violet-700 hover:bg-violet-100" onClick={() => {
+                  const nonStructural = questions.filter(q => !['section_header','begin_group'].includes(q.type));
+                  setBulkSelected(new Set(nonStructural.map(q => q.id)));
+                }}>Select all</Button>
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-6 px-2 text-xs text-emerald-700 hover:bg-emerald-100"
+                  onClick={() => {
+                    const lib = getLibrary();
+                    const toSave = questions.filter(q => bulkSelected.has(q.id));
+                    toSave.forEach(q => saveToLibrary(q));
+                    toast({ title: `Saved ${toSave.length} question${toSave.length !== 1 ? 's' : ''} to library` });
+                  }}
+                ><BookOpen className="w-3 h-3 mr-1" />Save to library</Button>
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
+                  onClick={async () => {
+                    if (!confirm(`Delete ${bulkSelected.size} selected question(s)?`)) return;
+                    await Promise.all([...bulkSelected].map(qid => supabase.from('survey_questions').delete().eq('id', qid)));
+                    qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+                    setBulkSelected(new Set());
+                  }}
+                ><Trash2 className="w-3 h-3 mr-1" />Delete</Button>
+                <button onClick={() => setBulkSelected(new Set())} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X className="w-3 h-3" /></button>
+              </div>
+            </div>
+          )}
+
           {canManage && (
-            <Button variant="outline" onClick={() => { setAddToGroupId(null); setAddTypeOpen(true); }} className="w-full gap-1.5" data-testid="btn-add-question">
-              <Plus className="w-4 h-4" />Add Question
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => { setAddToGroupId(null); setAddTypeOpen(true); }} className="flex-1 gap-1.5" data-testid="btn-add-question">
+                <Plus className="w-4 h-4" />Add Question
+              </Button>
+              <Button variant="outline" onClick={() => setLibraryOpen(true)} className="gap-1.5 shrink-0 text-violet-600 border-violet-200 hover:bg-violet-50" data-testid="btn-library">
+                <BookOpen className="w-4 h-4" />Library
+              </Button>
+            </div>
+          )}
+
+          {/* Question Library Dialog */}
+          {libraryOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setLibraryOpen(false)}>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+                  <BookOpen className="w-5 h-5 text-violet-500" />
+                  <h3 className="text-sm font-bold text-slate-800 flex-1">Question Library</h3>
+                  <button onClick={() => setLibraryOpen(false)} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-4 space-y-2">
+                  {getLibrary().length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <BookOpen className="w-8 h-8 opacity-20 mx-auto mb-2" />
+                      <p className="text-sm">No saved questions yet.</p>
+                      <p className="text-xs mt-1">Use the bookmark icon on any question to save it here.</p>
+                    </div>
+                  ) : (
+                    getLibrary().map((item: Question) => (
+                      <div key={item.id} className="flex items-center gap-3 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2.5 hover:border-violet-300 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{item.label}</p>
+                          <p className="text-[10px] text-slate-400 capitalize">{item.type.replace(/_/g, ' ')}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-xs bg-violet-600 hover:bg-violet-700 shrink-0"
+                          onClick={async () => {
+                            const maxOrder = questions.length > 0 ? Math.max(...questions.map(q => q.order_index)) : -1;
+                            const { error } = await supabase.from('survey_questions').insert({
+                              survey_id: id,
+                              type: item.type,
+                              label: item.label,
+                              label_ar: item.label_ar,
+                              description: item.description,
+                              description_ar: item.description_ar,
+                              options: item.options,
+                              options_ar: item.options_ar,
+                              required: item.required,
+                              order_index: maxOrder + 1,
+                              settings: { ...item.settings, skip_logic: undefined },
+                            });
+                            if (!error) {
+                              qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+                              toast({ title: 'Question added from library' });
+                            }
+                          }}
+                        >Add</Button>
+                        <button onClick={() => { removeFromLibrary(item.id); }} className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-400" title="Remove from library">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -1142,6 +1334,29 @@ export default function SurveyDetail() {
               <Button size="sm" variant="outline" onClick={exportExcel} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-excel">
                 <FileSpreadsheet className="w-3.5 h-3.5" />Excel
               </Button>
+                  {/* Date range filter */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={responseDateFrom}
+                  onChange={e => setResponseDateFrom(e.target.value)}
+                  className="h-8 text-xs rounded-lg border border-slate-200 px-2 bg-white"
+                  title="From date"
+                />
+                <span className="text-slate-300 text-xs">–</span>
+                <input
+                  type="date"
+                  value={responseDateTo}
+                  onChange={e => setResponseDateTo(e.target.value)}
+                  className="h-8 text-xs rounded-lg border border-slate-200 px-2 bg-white"
+                  title="To date"
+                />
+                {(responseDateFrom || responseDateTo) && (
+                  <button onClick={() => { setResponseDateFrom(''); setResponseDateTo(''); }} className="p-1 text-slate-400 hover:text-red-500" title="Clear date filter">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
               {/* Count */}
               <span className="text-[11px] text-slate-400 ml-auto shrink-0">
                 {(() => {
@@ -1149,7 +1364,9 @@ export default function SurveyDetail() {
                     const q = responseSearch.toLowerCase();
                     const ms = !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
                     const mr = reviewFilter === 'all' || (r.review_status ?? 'pending') === reviewFilter;
-                    return ms && mr;
+                    const df = !responseDateFrom || new Date(r.submitted_at) >= new Date(responseDateFrom);
+                    const dt = !responseDateTo   || new Date(r.submitted_at) <= new Date(responseDateTo + 'T23:59:59');
+                    return ms && mr && df && dt;
                   });
                   return `${filtered.length} of ${responses.length}`;
                 })()}
@@ -1169,7 +1386,9 @@ export default function SurveyDetail() {
               const q = responseSearch.toLowerCase();
               const ms = !q || (r.respondent_name ?? '').toLowerCase().includes(q) || (r.respondent_email ?? '').toLowerCase().includes(q);
               const mr = reviewFilter === 'all' || (r.review_status ?? 'pending') === reviewFilter;
-              return ms && mr;
+              const df = !responseDateFrom || new Date(r.submitted_at) >= new Date(responseDateFrom);
+              const dt = !responseDateTo   || new Date(r.submitted_at) <= new Date(responseDateTo + 'T23:59:59');
+              return ms && mr && df && dt;
             });
 
             if (responsesView === 'table') {
@@ -1654,6 +1873,60 @@ export default function SurveyDetail() {
                       <span key={word} className={`font-medium ${color}`} style={{ fontSize: `${size}rem`, opacity }}>
                         {word}
                       </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Drop-off Analysis ───────────────────────────────────────────── */}
+          {responses.length > 0 && nonStructural.length > 1 && (() => {
+            // For multi-page surveys, show how many respondents answered each question
+            // Drop-off = how many stopped after this question vs prior
+            const qsWithCount = nonStructural.map((q, qi) => {
+              const answered = allAnswers.filter(a => a.question_id === q.id).length;
+              return { q, qi, answered };
+            });
+            const maxAnswered = Math.max(...qsWithCount.map(x => x.answered), 1);
+            if (maxAnswered === 0) return null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-rose-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Drop-off Analysis</h3>
+                  <span className="text-[11px] text-slate-400 ml-1">— how many respondents answered each question</span>
+                </div>
+                <div className="space-y-2">
+                  {qsWithCount.map(({ q, qi, answered }, i) => {
+                    const prev = i === 0 ? maxAnswered : qsWithCount[i - 1].answered;
+                    const dropPct = prev > 0 ? Math.round(((prev - answered) / prev) * 100) : 0;
+                    const barPct  = Math.round((answered / maxAnswered) * 100);
+                    return (
+                      <div key={q.id} className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-400 w-6 shrink-0">Q{qi + 1}</span>
+                          <span className="text-xs text-slate-600 flex-1 truncate">{q.label}</span>
+                          <span className="text-xs font-semibold text-slate-700 shrink-0">{answered}</span>
+                          {i > 0 && dropPct > 0 && (
+                            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0',
+                              dropPct >= 30 ? 'bg-red-100 text-red-600' : dropPct >= 10 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                            )}>−{dropPct}%</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 shrink-0" />
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={cn('h-full rounded-full transition-all duration-700',
+                                barPct >= 80 ? 'bg-indigo-500' : barPct >= 50 ? 'bg-amber-400' : 'bg-rose-400'
+                              )}
+                              style={{ width: `${barPct}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-400 w-8 text-right shrink-0">{barPct}%</span>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -2938,12 +3211,21 @@ const SKIP_OPERATORS: { value: SkipLogic['operator']; label: string }[] = [
 
 function QuestionCard({
   q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, saving, deleting,
+  isDraggedOver, onDragStart, onDragOver, onDragLeave, onDrop, isBulkSelected, onBulkToggle, onSaveToLibrary,
 }: {
   q: Question; idx: number; total: number; allQuestions: Question[]; canManage: boolean;
   isEditing: boolean; onEdit: () => void;
   onUpdate: (p: Partial<Question>) => void;
   onDelete: () => void; onDuplicate: () => void; onMoveUp: () => void; onMoveDown: () => void;
   saving: boolean; deleting: boolean;
+  isDraggedOver?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: () => void;
+  onDragLeave?: () => void;
+  onDrop?: () => void;
+  isBulkSelected?: boolean;
+  onBulkToggle?: (v: boolean) => void;
+  onSaveToLibrary?: () => void;
 }) {
   const [labelDraft, setLabelDraft]     = useState(q.label);
   const [labelArDraft, setLabelArDraft] = useState(q.label_ar ?? '');
@@ -2971,26 +3253,59 @@ function QuestionCard({
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [varNameDraft, setVarNameDraft] = useState<string>(String(q.settings?.variable_name ?? ''));
   const [formulaDraft, setFormulaDraft] = useState<string>(String(q.settings?.formula ?? ''));
-  const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
-  const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
-  const [skipOp, setSkipOp] = useState<SkipLogic['operator']>(existingSkip?.operator ?? 'equals');
-  const [skipVal, setSkipVal] = useState(existingSkip?.value ?? '');
+
+  // Multi-condition skip logic
+  const initSkipConds: SkipCondition[] = (() => {
+    if (existingSkip?.conditions) return existingSkip.conditions;
+    if (existingSkip?.condition_question_id) return [{ question_id: existingSkip.condition_question_id, operator: existingSkip.operator ?? 'equals', value: existingSkip.value }];
+    return [];
+  })();
+  const [skipEnabled, setSkipEnabled] = useState(initSkipConds.length > 0);
+  const [skipLogicMode, setSkipLogicMode] = useState<'AND' | 'OR'>(existingSkip?.logic ?? 'AND');
+  const [skipConditions, setSkipConditions] = useState<SkipCondition[]>(initSkipConds.length > 0 ? initSkipConds : [{ question_id: '', operator: 'equals', value: '' }]);
+
+  // Validation settings (text / textarea / number / integer)
+  const [minLength, setMinLength] = useState<string>(String(q.settings?.min_length ?? ''));
+  const [maxLength, setMaxLength] = useState<string>(String(q.settings?.max_length ?? ''));
+  const [pattern, setPattern]     = useState<string>(String(q.settings?.pattern ?? ''));
+
+  // Likert settings
+  const [likertRows, setLikertRows] = useState<string[]>((q.settings?.likert_rows as string[] | undefined) ?? ['Row 1', 'Row 2', 'Row 3']);
+  const [likertCols, setLikertCols] = useState<string[]>((q.settings?.likert_cols as string[] | undefined) ?? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']);
+  const [newLikertRow, setNewLikertRow] = useState('');
+  const [newLikertCol, setNewLikertCol] = useState('');
+
+  // Conditional options — option visible only when a prior question equals a value
+  type CondOptRule = { option: string; depends_on: string; depends_value: string };
+  const [condOptRules, setCondOptRules] = useState<CondOptRule[]>((q.settings?.conditional_options as CondOptRule[] | undefined) ?? []);
 
   const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
   const hasOptions = ['radio','checkbox','dropdown'].includes(q.type);
   const isSection = q.type === 'section_header';
+  const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(q.type);
 
-  const prevQuestions = allQuestions.filter((pq, i) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
-  const valueNeeded = !['answered','not_answered'].includes(skipOp);
+  const prevQuestions = allQuestions.filter((pq) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
+
+  const addSkipCond = () => setSkipConditions(prev => [...prev, { question_id: '', operator: 'equals', value: '' }]);
+  const removeSkipCond = (i: number) => setSkipConditions(prev => prev.filter((_, j) => j !== i));
+  const updateSkipCond = (i: number, patch: Partial<SkipCondition>) => setSkipConditions(prev => prev.map((c, j) => j === i ? { ...c, ...patch } : c));
 
   const save = () => {
-    const skipLogic: SkipLogic | undefined = skipEnabled && skipQId
-      ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
+    const validConds = skipConditions.filter(c => c.question_id);
+    const skipLogic: SkipLogic | undefined = skipEnabled && validConds.length > 0
+      ? { logic: skipLogicMode, conditions: validConds }
       : undefined;
     const scaleSettings = q.type === 'scale'      ? { min: scaleMin, max: scaleMax } : {};
     const gpsSettings   = q.type === 'gps'        ? { accuracy_threshold: gpsAccThreshold, capture_altitude: gpsCaptureAlt, allow_manual: gpsAllowManual } : {};
     const calcSettings  = q.type === 'calculate'  ? { formula: formulaDraft.trim() } : {};
     const gridSettings  = q.type === 'grid_table' ? { grid_columns: gridCols, min_rows: gridMinRows, max_rows: gridMaxRows } : {};
+    const likertSettings = q.type === 'likert'    ? { likert_rows: likertRows, likert_cols: likertCols } : {};
+    const validationSettings = hasValidation ? {
+      ...(minLength.trim() ? { min_length: Number(minLength) } : {}),
+      ...(maxLength.trim() ? { max_length: Number(maxLength) } : {}),
+      ...(pattern.trim()   ? { pattern } : {}),
+    } : {};
+    const condOptSettings = hasOptions && condOptRules.length > 0 ? { conditional_options: condOptRules } : {};
     const paddedOptsAr = hasOptions
       ? optsDraft.map((_, i) => optsArDraft[i] ?? '')
       : null;
@@ -3003,7 +3318,8 @@ function QuestionCard({
       options: hasOptions ? optsDraft.filter(Boolean) : null,
       options_ar: paddedOptsAr,
       settings: {
-        ...q.settings, ...scaleSettings, ...gpsSettings, ...calcSettings, ...gridSettings, skip_logic: skipLogic,
+        ...q.settings, ...scaleSettings, ...gpsSettings, ...calcSettings, ...gridSettings, ...likertSettings, ...validationSettings, ...condOptSettings,
+        skip_logic: skipLogic,
         ...(varNameDraft.trim() ? { variable_name: varNameDraft.trim() } : {}),
       },
     });
@@ -3032,12 +3348,28 @@ function QuestionCard({
     );
   }
 
-  const hasSkip = !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id;
+  const existingSl = q.settings?.skip_logic as SkipLogic | undefined;
+  const hasSkip = !!(existingSl?.condition_question_id || (existingSl?.conditions && existingSl.conditions.length > 0));
 
   return (
-    <div className={cn('bg-white rounded-xl border transition-colors', isEditing ? 'border-indigo-300' : 'border-slate-200')}>
+    <div
+      className={cn('bg-white rounded-xl border transition-colors', isEditing ? 'border-indigo-300' : 'border-slate-200', isDraggedOver && 'border-indigo-400 bg-indigo-50/10')}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={e => { e.preventDefault(); onDragOver?.(); }}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       {/* Question header */}
       <div className="flex items-center gap-3 p-3">
+        <GripVertical className="w-3.5 h-3.5 text-slate-300 shrink-0 cursor-grab" />
+        <input
+          type="checkbox"
+          checked={!!isBulkSelected}
+          onChange={e => onBulkToggle?.(e.target.checked)}
+          className="rounded shrink-0 accent-indigo-600"
+          title="Select for bulk actions"
+        />
         <span className="text-[11px] font-mono text-slate-400 w-5 text-center shrink-0">{idx + 1}</span>
         <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
           <QIcon className="w-3.5 h-3.5 text-indigo-600" />
@@ -3077,6 +3409,7 @@ function QuestionCard({
               <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
               <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
               <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600" title="Duplicate question"><Copy className="w-3.5 h-3.5" /></button>
+              <button onClick={() => onSaveToLibrary?.()} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-violet-600" title="Save to library"><BookOpen className="w-3.5 h-3.5" /></button>
               <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')} title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
               <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
@@ -3409,61 +3742,147 @@ function QuestionCard({
             </div>
           )}
 
+          {/* Validation settings */}
+          {hasValidation && (
+            <div className="border border-blue-200 rounded-xl p-3 space-y-3 bg-blue-50/30">
+              <p className="text-xs font-semibold text-blue-800 flex items-center gap-1">
+                <CheckSquare2 className="w-3 h-3" />Validation Constraints
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Min length / value</Label>
+                  <Input value={minLength} onChange={e => setMinLength(e.target.value)} type="number" className="h-7 text-xs" placeholder="e.g. 5" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Max length / value</Label>
+                  <Input value={maxLength} onChange={e => setMaxLength(e.target.value)} type="number" className="h-7 text-xs" placeholder="e.g. 250" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-slate-500">Pattern (regex)</Label>
+                <Input value={pattern} onChange={e => setPattern(e.target.value)} className="h-7 text-xs font-mono" placeholder="e.g. ^[A-Z]{2}\\d{4}$" />
+                <p className="text-[10px] text-slate-400">Regular expression the answer must match.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Likert settings */}
+          {q.type === 'likert' && (
+            <div className="border border-violet-200 rounded-xl p-3 space-y-3 bg-violet-50/30">
+              <p className="text-xs font-semibold text-violet-800 flex items-center gap-1">
+                <LayoutList className="w-3 h-3" />Likert Scale Settings
+              </p>
+              <div className="space-y-2">
+                <Label className="text-[10px] text-slate-500">Rows (statements)</Label>
+                {likertRows.map((r, ri) => (
+                  <div key={ri} className="flex items-center gap-1.5">
+                    <Input value={r} onChange={e => setLikertRows(prev => prev.map((x, i) => i === ri ? e.target.value : x))} className="h-7 text-xs flex-1" />
+                    <button onClick={() => setLikertRows(prev => prev.filter((_, i) => i !== ri))} disabled={likertRows.length <= 1} className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                ))}
+                <div className="flex items-center gap-1.5">
+                  <Input value={newLikertRow} onChange={e => setNewLikertRow(e.target.value)} placeholder="Add row…" className="h-7 text-xs flex-1"
+                    onKeyDown={e => { if (e.key === 'Enter' && newLikertRow.trim()) { setLikertRows(p => [...p, newLikertRow.trim()]); setNewLikertRow(''); }}} />
+                  <button onClick={() => { if (newLikertRow.trim()) { setLikertRows(p => [...p, newLikertRow.trim()]); setNewLikertRow(''); }}} className="p-1 text-violet-600 hover:bg-violet-100 rounded"><Plus className="w-3 h-3" /></button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] text-slate-500">Columns (scale points)</Label>
+                {likertCols.map((c, ci) => (
+                  <div key={ci} className="flex items-center gap-1.5">
+                    <Input value={c} onChange={e => setLikertCols(prev => prev.map((x, i) => i === ci ? e.target.value : x))} className="h-7 text-xs flex-1" />
+                    <button onClick={() => setLikertCols(prev => prev.filter((_, i) => i !== ci))} disabled={likertCols.length <= 2} className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                ))}
+                <div className="flex items-center gap-1.5">
+                  <Input value={newLikertCol} onChange={e => setNewLikertCol(e.target.value)} placeholder="Add column…" className="h-7 text-xs flex-1"
+                    onKeyDown={e => { if (e.key === 'Enter' && newLikertCol.trim()) { setLikertCols(p => [...p, newLikertCol.trim()]); setNewLikertCol(''); }}} />
+                  <button onClick={() => { if (newLikertCol.trim()) { setLikertCols(p => [...p, newLikertCol.trim()]); setNewLikertCol(''); }}} className="p-1 text-violet-600 hover:bg-violet-100 rounded"><Plus className="w-3 h-3" /></button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conditional answer options */}
+          {hasOptions && (
+            <div className="border border-emerald-200 rounded-xl p-3 space-y-3 bg-emerald-50/30">
+              <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1">
+                <GitBranch className="w-3 h-3" />Conditional Options
+                <span className="text-slate-400 font-normal ml-1">(show option only when a prior question equals a value)</span>
+              </p>
+              {condOptRules.map((rule, ri) => (
+                <div key={ri} className="flex items-center gap-1.5 flex-wrap">
+                  <Select value={rule.option} onValueChange={v => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, option: v } : r))}>
+                    <SelectTrigger className="h-7 text-xs w-32 shrink-0"><SelectValue placeholder="Option…" /></SelectTrigger>
+                    <SelectContent>{optsDraft.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <span className="text-[10px] text-slate-400 shrink-0">shows when</span>
+                  <Select value={rule.depends_on} onValueChange={v => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, depends_on: v } : r))}>
+                    <SelectTrigger className="h-7 text-xs w-36 shrink-0"><SelectValue placeholder="Question…" /></SelectTrigger>
+                    <SelectContent>{prevQuestions.map(pq => <SelectItem key={pq.id} value={pq.id}>{pq.label.slice(0, 30)}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <span className="text-[10px] text-slate-400 shrink-0">=</span>
+                  <Input value={rule.depends_value} onChange={e => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, depends_value: e.target.value } : r))} className="h-7 text-xs w-24 shrink-0" placeholder="value…" />
+                  <button onClick={() => setCondOptRules(prev => prev.filter((_, i) => i !== ri))} className="p-1 text-slate-300 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                </div>
+              ))}
+              {prevQuestions.length > 0 && optsDraft.length > 0 && (
+                <button
+                  onClick={() => setCondOptRules(prev => [...prev, { option: optsDraft[0] ?? '', depends_on: prevQuestions[0]?.id ?? '', depends_value: '' }])}
+                  className="text-xs text-emerald-700 flex items-center gap-1 hover:underline"
+                ><Plus className="w-3 h-3" />Add condition</button>
+              )}
+            </div>
+          )}
+
+          {/* Multi-condition skip logic */}
           <div className="border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40">
             <div className="flex items-center gap-2">
               <input type="checkbox" id={`skip-${q.id}`} checked={skipEnabled} onChange={e => setSkipEnabled(e.target.checked)} className="rounded" />
               <Label htmlFor={`skip-${q.id}`} className="text-xs font-semibold text-amber-800 flex items-center gap-1">
                 <GitBranch className="w-3 h-3" />Show this question only if…
               </Label>
+              {skipEnabled && skipConditions.length > 1 && (
+                <div className="ml-auto flex items-center gap-1">
+                  <span className="text-[10px] text-amber-700">Match:</span>
+                  <button onClick={() => setSkipLogicMode('AND')} className={cn('px-2 py-0.5 text-[10px] font-semibold rounded', skipLogicMode === 'AND' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700')}>ALL</button>
+                  <button onClick={() => setSkipLogicMode('OR')} className={cn('px-2 py-0.5 text-[10px] font-semibold rounded', skipLogicMode === 'OR' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700')}>ANY</button>
+                </div>
+              )}
             </div>
 
             {skipEnabled && (
-              <div className="space-y-2 pl-5">
+              <div className="space-y-2 pl-2">
                 {prevQuestions.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No previous questions available for conditions.</p>
                 ) : (
                   <>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-slate-500">Question</Label>
-                      <Select value={skipQId} onValueChange={setSkipQId}>
-                        <SelectTrigger className="h-7 text-xs">
-                          <SelectValue placeholder="Select a question…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {prevQuestions.map(pq => (
-                            <SelectItem key={pq.id} value={pq.id} className="text-xs">
-                              {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-slate-500">Condition</Label>
-                      <Select value={skipOp} onValueChange={v => setSkipOp(v as SkipLogic['operator'])}>
-                        <SelectTrigger className="h-7 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SKIP_OPERATORS.map(op => (
-                            <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {valueNeeded && (
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-slate-500">Value</Label>
-                        <Input
-                          value={skipVal}
-                          onChange={e => setSkipVal(e.target.value)}
-                          placeholder="Enter expected answer…"
-                          className="h-7 text-xs"
-                        />
+                    {skipConditions.map((cond, ci) => (
+                      <div key={ci} className="flex items-center gap-1 flex-wrap bg-amber-50 rounded-lg p-2 border border-amber-100">
+                        {skipConditions.length > 1 && (
+                          <span className="text-[10px] font-bold text-amber-600 w-6 text-center shrink-0">{skipLogicMode === 'AND' ? 'AND' : 'OR'}</span>
+                        )}
+                        <Select value={cond.question_id} onValueChange={v => updateSkipCond(ci, { question_id: v })}>
+                          <SelectTrigger className="h-7 text-xs flex-1 min-w-[120px]"><SelectValue placeholder="Question…" /></SelectTrigger>
+                          <SelectContent>
+                            {prevQuestions.map(pq => <SelectItem key={pq.id} value={pq.id} className="text-xs">{pq.label.slice(0, 40)}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Select value={cond.operator} onValueChange={v => updateSkipCond(ci, { operator: v as SkipCondition['operator'] })}>
+                          <SelectTrigger className="h-7 text-xs w-32 shrink-0"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {SKIP_OPERATORS.map(op => <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        {!['answered','not_answered'].includes(cond.operator) && (
+                          <Input value={cond.value ?? ''} onChange={e => updateSkipCond(ci, { value: e.target.value })} placeholder="value…" className="h-7 text-xs w-24 shrink-0" />
+                        )}
+                        <button onClick={() => removeSkipCond(ci)} disabled={skipConditions.length <= 1} className="p-1 text-amber-300 hover:text-red-400 disabled:opacity-30 shrink-0"><Trash2 className="w-3 h-3" /></button>
                       </div>
-                    )}
+                    ))}
+                    <button onClick={addSkipCond} className="flex items-center gap-1 text-xs text-amber-700 hover:underline">
+                      <Plus className="w-3 h-3" />Add condition
+                    </button>
                   </>
                 )}
               </div>
@@ -3664,6 +4083,47 @@ function SubmissionDialog({
                       </a>
                     )}
                   </div>
+                );
+              } else if (q.type === 'grid_table' && ans.answer_json) {
+                const rows = (() => { try { return JSON.parse(String(ans.answer_json)) as Array<Record<string, string>>; } catch { return null; } })();
+                type GridCol = { id: string; label: string; type: string };
+                const cols = (q.settings?.grid_columns as GridCol[] | undefined) ?? [];
+                displayValue = rows && cols.length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50">
+                          <th className="px-2 py-1.5 text-left text-[10px] font-bold text-slate-400 border-b border-slate-200 w-6">#</th>
+                          {cols.map(c => <th key={c.id} className="px-2 py-1.5 text-left text-[10px] font-semibold text-slate-600 border-b border-slate-200">{c.label}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row, ri) => (
+                          <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                            <td className="px-2 py-1.5 text-[10px] font-semibold text-slate-400 border-b border-slate-100">{ri + 1}</td>
+                            {cols.map(c => <td key={c.id} className="px-2 py-1.5 text-slate-700 border-b border-slate-100">{row[c.id] ?? '—'}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <span className="text-slate-300 italic text-sm">No answer</span>;
+              } else if (q.type === 'likert' && ans.answer_json) {
+                const val = (() => { try { return typeof ans.answer_json === 'object' ? ans.answer_json as Record<string, string> : JSON.parse(String(ans.answer_json)); } catch { return null; } })();
+                const cols = (q.settings?.likert_cols as string[] | undefined) ?? [];
+                displayValue = val ? (
+                  <div className="space-y-1">
+                    {Object.entries(val).map(([row, col]) => (
+                      <div key={row} className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-600 flex-1 truncate">{row}</span>
+                        <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0', cols.indexOf(col as string) >= cols.length / 2 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600')}>{col as string}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <span className="text-slate-300 italic text-sm">No answer</span>;
+              } else if (q.type === 'signature' && ans.answer_json) {
+                displayValue = (
+                  <img src={String(ans.answer_json)} alt="Signature" className="max-h-20 rounded border border-slate-200 bg-white" />
                 );
               } else {
                 const value = ans.answer_text

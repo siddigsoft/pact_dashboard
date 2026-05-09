@@ -9,7 +9,7 @@ import {
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
   Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
-  FunctionSquare, Plus, Table2, Trash2,
+  FunctionSquare, Plus, Table2, Trash2, PenLine,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,12 +25,21 @@ type QuestionType =
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
-  | 'calculate' | 'begin_repeat' | 'grid_table';
+  | 'calculate' | 'begin_repeat' | 'grid_table'
+  | 'likert' | 'signature';
 
-interface SkipLogic {
-  condition_question_id: string;
+interface SkipCondition {
+  question_id: string;
   operator: 'equals' | 'not_equals' | 'contains' | 'answered' | 'not_answered' | 'greater_than' | 'less_than';
   value?: string;
+}
+
+interface SkipLogic {
+  condition_question_id?: string;
+  operator?: 'equals' | 'not_equals' | 'contains' | 'answered' | 'not_answered' | 'greater_than' | 'less_than';
+  value?: string;
+  logic?: 'AND' | 'OR';
+  conditions?: SkipCondition[];
 }
 
 interface Survey {
@@ -82,35 +91,48 @@ function evaluateFormula(formula: string, questions: Question[], answers: Record
 }
 
 // ── Skip logic evaluation ─────────────────────────────────────────────────────
+function evalOneCond(cond: SkipCondition, answers: Record<string, AnswerValue>): boolean {
+  const trigger = answers[cond.question_id];
+  const triggerStr = Array.isArray(trigger) ? trigger.join(',') : String(trigger ?? '');
+  switch (cond.operator) {
+    case 'answered':     return trigger !== null && trigger !== undefined && trigger !== '' && !(Array.isArray(trigger) && trigger.length === 0);
+    case 'not_answered': return trigger === null || trigger === undefined || trigger === '' || (Array.isArray(trigger) && trigger.length === 0);
+    case 'equals':       return triggerStr === (cond.value ?? '');
+    case 'not_equals':   return triggerStr !== (cond.value ?? '');
+    case 'contains':     return triggerStr.toLowerCase().includes((cond.value ?? '').toLowerCase());
+    case 'greater_than': return Number(trigger) > Number(cond.value ?? 0);
+    case 'less_than':    return Number(trigger) < Number(cond.value ?? 0);
+    default:             return true;
+  }
+}
+
 function isVisible(q: Question, allQuestions: Question[], answers: Record<string, AnswerValue>): boolean {
-  // Check parent group visibility first (if inside a group)
   if (q.group_id) {
     const parent = allQuestions.find(g => g.id === q.group_id);
     if (parent && !isVisible(parent, allQuestions, answers)) return false;
   }
-  // Check own skip logic
   const sl = q.settings?.skip_logic as SkipLogic | undefined;
-  if (!sl?.condition_question_id) return true;
-  const trigger = answers[sl.condition_question_id];
-  const triggerStr = Array.isArray(trigger) ? trigger.join(',') : String(trigger ?? '');
-  switch (sl.operator) {
-    case 'answered':
-      return trigger !== null && trigger !== undefined && trigger !== '' && !(Array.isArray(trigger) && trigger.length === 0);
-    case 'not_answered':
-      return trigger === null || trigger === undefined || trigger === '' || (Array.isArray(trigger) && trigger.length === 0);
-    case 'equals':
-      return triggerStr === (sl.value ?? '');
-    case 'not_equals':
-      return triggerStr !== (sl.value ?? '');
-    case 'contains':
-      return triggerStr.toLowerCase().includes((sl.value ?? '').toLowerCase());
-    case 'greater_than':
-      return Number(trigger) > Number(sl.value ?? 0);
-    case 'less_than':
-      return Number(trigger) < Number(sl.value ?? 0);
-    default:
-      return true;
+  if (!sl) return true;
+
+  // Multi-condition format
+  if (sl.conditions && sl.conditions.length > 0) {
+    const results = sl.conditions.map(c => evalOneCond(c, answers));
+    return sl.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
   }
+  // Legacy single-condition format
+  if (!sl.condition_question_id) return true;
+  return evalOneCond({ question_id: sl.condition_question_id, operator: sl.operator ?? 'equals', value: sl.value }, answers);
+}
+
+// ── Answer piping ─────────────────────────────────────────────────────────────
+function pipeLabel(label: string, questions: Question[], answers: Record<string, AnswerValue>): string {
+  return label.replace(/\$\{([^}]+)\}/g, (_, key) => {
+    const q = questions.find(q => (String(q.settings?.variable_name ?? '')) === key || q.id === key);
+    if (!q) return `$\{${key}}`;
+    const val = answers[q.id];
+    if (val === null || val === undefined || val === '') return `$\{${key}}`;
+    return Array.isArray(val) ? val.join(', ') : String(val);
+  });
 }
 
 // ── Helper components ─────────────────────────────────────────────────────────
@@ -510,6 +532,76 @@ function FileAttachment({ value, onChange }: { value: string | null; onChange: (
   );
 }
 
+function SignaturePad({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const getCtx = () => canvasRef.current?.getContext('2d');
+
+  const startDraw = (e: React.PointerEvent) => {
+    drawing.current = true;
+    const ctx = getCtx(); if (!ctx) return;
+    const r = canvasRef.current!.getBoundingClientRect();
+    ctx.beginPath(); ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+    canvasRef.current!.setPointerCapture(e.pointerId);
+  };
+  const draw = (e: React.PointerEvent) => {
+    if (!drawing.current) return;
+    const ctx = getCtx(); if (!ctx) return;
+    const r = canvasRef.current!.getBoundingClientRect();
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#1e293b';
+    ctx.lineTo(e.clientX - r.left, e.clientY - r.top); ctx.stroke();
+  };
+  const endDraw = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    onChange(canvasRef.current?.toDataURL('image/png') ?? '');
+  };
+  const clear = () => {
+    const ctx = getCtx(); if (!ctx || !canvasRef.current) return;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    onChange('');
+  };
+  useEffect(() => {
+    if (value && canvasRef.current) {
+      const img = new Image(); img.src = value;
+      img.onload = () => getCtx()?.drawImage(img, 0, 0);
+    }
+  }, []);
+
+  return (
+    <div className="space-y-2">
+      <div className="relative rounded-xl border-2 border-slate-200 bg-white overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          width={600} height={160}
+          className="w-full touch-none cursor-crosshair"
+          style={{ height: 160 }}
+          onPointerDown={startDraw} onPointerMove={draw} onPointerUp={endDraw} onPointerLeave={endDraw}
+        />
+        {!value && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="flex flex-col items-center gap-1 text-slate-300">
+              <PenLine className="w-6 h-6" />
+              <span className="text-xs">Sign here</span>
+            </div>
+          </div>
+        )}
+        <div className="absolute bottom-2 right-2">
+          <button type="button" onClick={clear} className="text-[10px] text-slate-400 hover:text-red-500 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
+            Clear
+          </button>
+        </div>
+        <div className="absolute bottom-0 left-4 right-4 h-px bg-slate-200" style={{ bottom: 32 }} />
+      </div>
+      {value && (
+        <p className="text-xs text-emerald-600 flex items-center gap-1">
+          <Check className="w-3 h-3" />Signature captured
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main fill page ─────────────────────────────────────────────────────────────
 export default function SurveyFill() {
   const { id } = useParams<{ id: string }>();
@@ -639,23 +731,50 @@ export default function SurveyFill() {
   const submitMutation = useMutation({
     mutationFn: async () => {
       const newErrors: Record<string, string> = {};
-      for (const q of questions.filter(q => visibleIds.has(q.id) && q.required && !['section_header','begin_group'].includes(q.type))) {
+
+      // Required + min/max/pattern validation
+      for (const q of questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type))) {
         if (q.type === 'grid_table') {
-          const rows = gridTableRows[q.id] ?? [];
-          const hasAnyValue = rows.some(row => Object.values(row).some(v => v !== ''));
-          if (!hasAnyValue) newErrors[q.id] = 'This question is required';
+          if (q.required) {
+            const rows = gridTableRows[q.id] ?? [];
+            const hasAnyValue = rows.some(row => Object.values(row).some(v => v !== ''));
+            if (!hasAnyValue) newErrors[q.id] = 'This question is required';
+          }
           continue;
         }
         const val = answers[q.id];
         const missing = val === null || val === undefined || val === '' ||
-          (Array.isArray(val) && val.length === 0);
-        if (missing) newErrors[q.id] = 'This question is required';
+          (Array.isArray(val) && val.length === 0) ||
+          (typeof val === 'object' && !Array.isArray(val) && Object.keys(val as object).length === 0);
+        if (q.required && missing) { newErrors[q.id] = 'This question is required'; continue; }
+        if (!missing && typeof val === 'string') {
+          const minLen = q.settings?.min_length ? Number(q.settings.min_length) : null;
+          const maxLen = q.settings?.max_length ? Number(q.settings.max_length) : null;
+          const pat    = q.settings?.pattern    ? String(q.settings.pattern)    : null;
+          if (minLen && val.length < minLen) { newErrors[q.id] = `Minimum ${minLen} characters required`; continue; }
+          if (maxLen && val.length > maxLen) { newErrors[q.id] = `Maximum ${maxLen} characters allowed`; continue; }
+          if (pat) { try { if (!new RegExp(pat).test(val)) newErrors[q.id] = `Value does not match required format`; } catch { /* ignore bad pattern */ } }
+        }
       }
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
         throw new Error('Please answer all required questions');
       }
       setErrors({});
+
+      // Duplicate response detection (same respondent + same survey in last 24h)
+      if (currentUser?.id) {
+        const { data: dupCheck } = await supabase
+          .from('survey_responses')
+          .select('id')
+          .eq('survey_id', id!)
+          .eq('respondent_id', currentUser.id)
+          .gte('submitted_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          .limit(1);
+        if (dupCheck && dupCheck.length > 0) {
+          throw new Error('You have already submitted a response to this survey in the last 24 hours.');
+        }
+      }
 
       // Generate ID client-side so anon users don't need SELECT permission after insert
       const responseId = crypto.randomUUID();
@@ -707,7 +826,8 @@ export default function SurveyFill() {
         .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat','grid_table'].includes(q.type))
         .map(q => {
           const val = answers[q.id] ?? null;
-          const isJson = jsonTypes.includes(q.type);
+          const jsonTypes2 = [...jsonTypes, 'likert', 'signature'];
+          const isJson = jsonTypes2.includes(q.type);
           return {
             response_id: responseId,
             question_id: q.id,
@@ -1160,7 +1280,22 @@ export default function SurveyFill() {
 
     // Regular question
     const err = errors[q.id];
-    const hasSkip = !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id;
+    const slQ = q.settings?.skip_logic as SkipLogic | undefined;
+    const hasSkip = !!(slQ?.condition_question_id || (slQ?.conditions && slQ.conditions.length > 0));
+
+    // Conditional options: filter options based on prior answers
+    type CondOptRule = { option: string; depends_on: string; depends_value: string };
+    const condOptRules = (q.settings?.conditional_options as CondOptRule[] | undefined) ?? [];
+    const filteredOptions = (q.options ?? []).filter((opt) => {
+      const rule = condOptRules.find(r => r.option === opt);
+      if (!rule) return true;
+      const triggerVal = answers[rule.depends_on];
+      const tv = Array.isArray(triggerVal) ? triggerVal : [String(triggerVal ?? '')];
+      return tv.includes(rule.depends_value);
+    });
+
+    const rawLabel = lang === 'ar' && q.label_ar ? q.label_ar : q.label;
+    const displayLabel = pipeLabel(rawLabel, questions, answers);
 
     return (
       <div
@@ -1175,7 +1310,7 @@ export default function SurveyFill() {
           <div className="flex items-start gap-1 justify-between">
             <div className="flex items-start gap-1">
               <p className="text-sm font-semibold text-slate-800 leading-snug">
-                {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+                {displayLabel}
               </p>
               {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
             </div>
@@ -1306,7 +1441,8 @@ export default function SurveyFill() {
 
         {q.type === 'radio' && (
           <div className="space-y-2">
-            {(q.options ?? []).map((opt, i) => {
+            {filteredOptions.map((opt) => {
+              const i = (q.options ?? []).indexOf(opt);
               const displayOpt = lang === 'ar' && q.options_ar?.[i] ? q.options_ar[i] : opt;
               return (
                 <label key={opt} className={cn(
@@ -1331,7 +1467,8 @@ export default function SurveyFill() {
 
         {q.type === 'checkbox' && (
           <div className="space-y-2">
-            {(q.options ?? []).map((opt, i) => {
+            {filteredOptions.map((opt) => {
+              const i = (q.options ?? []).indexOf(opt);
               const checked = ((answers[q.id] as string[]) ?? []).includes(opt);
               const displayOpt = lang === 'ar' && q.options_ar?.[i] ? q.options_ar[i] : opt;
               return (
@@ -1359,12 +1496,56 @@ export default function SurveyFill() {
               <SelectValue placeholder={lang === 'ar' ? 'اختر خياراً…' : 'Select an option…'} />
             </SelectTrigger>
             <SelectContent>
-              {(q.options ?? []).map((opt, i) => {
+              {filteredOptions.map((opt) => {
+                const i = (q.options ?? []).indexOf(opt);
                 const displayOpt = lang === 'ar' && q.options_ar?.[i] ? q.options_ar[i] : opt;
                 return <SelectItem key={opt} value={opt}>{displayOpt}</SelectItem>;
               })}
             </SelectContent>
           </Select>
+        )}
+
+        {q.type === 'likert' && (() => {
+          const rows = (q.settings?.likert_rows as string[] | undefined) ?? ['Row 1', 'Row 2', 'Row 3'];
+          const cols = (q.settings?.likert_cols as string[] | undefined) ?? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'];
+          const val = (answers[q.id] as Record<string, string>) ?? {};
+          return (
+            <div className="overflow-x-auto rounded-xl border border-indigo-100">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-indigo-50">
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-indigo-600 uppercase tracking-wide border-b border-indigo-100 min-w-[120px]" />
+                    {cols.map(col => (
+                      <th key={col} className="px-2 py-2 text-center text-[10px] font-semibold text-indigo-700 border-b border-indigo-100 min-w-[80px] whitespace-nowrap">{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, ri) => (
+                    <tr key={row} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                      <td className="px-3 py-2.5 text-xs font-medium text-slate-700 border-b border-slate-100">{row}</td>
+                      {cols.map(col => (
+                        <td key={col} className="px-2 py-2.5 text-center border-b border-slate-100">
+                          <input
+                            type="radio"
+                            name={`likert-${q.id}-${row}`}
+                            checked={val[row] === col}
+                            onChange={() => setAnswer(q.id, { ...val, [row]: col })}
+                            className="accent-indigo-600 w-4 h-4"
+                            data-testid={`likert-${q.id}-${ri}-${col}`}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+
+        {q.type === 'signature' && (
+          <SignaturePad value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
         )}
 
         {q.type === 'rating' && (
