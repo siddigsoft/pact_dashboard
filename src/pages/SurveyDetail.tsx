@@ -150,7 +150,7 @@ async function extractFileContext(file: File): Promise<string> {
         Object.entries(listMap).slice(0, 30).forEach(([list, opts]) => { text += `- ${list}: ${opts.join(', ')}\n`; });
       }
     }
-    return text.slice(0, 5000);
+    return text.slice(0, 20000);
   }
   if (ext === 'docx' || ext === 'doc') {
     const buffer = await file.arrayBuffer();
@@ -161,9 +161,10 @@ async function extractFileContext(file: File): Promise<string> {
     const plain = xml
       .replace(/<w:p[ >]/g, '\n<')
       .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+      .replace(/[ \t]+/g, ' ')
       .replace(/\n{3,}/g, '\n\n').trim();
-    return `Word Document: "${file.name}"\n\n${plain.slice(0, 5000)}`;
+    return `Word Document: "${file.name}"\n\n${plain.slice(0, 40000)}`;
   }
   return '';
 }
