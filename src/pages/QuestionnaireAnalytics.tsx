@@ -1521,7 +1521,8 @@ const QuestionnaireAnalytics = () => {
       const entry = collMap.get(collector)!;
       entry.questionnaires++;
       if (row.activitySite) entry.sites.add(row.activitySite.trim());
-      if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
+      const actKey = row.monitoringType || row.activity;
+      if (actKey) entry.activities.set(actKey, (entry.activities.get(actKey) || 0) + 1);
     });
     return [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hub, sm]) => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
