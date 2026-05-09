@@ -332,9 +332,13 @@ async function callGroqText(
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
       const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
-      const isDailyLimit = res.status === 429 && (errMsg.includes('per day') || errMsg.includes('RPD'));
       const isGone = res.status === 404 || errMsg.toLowerCase().includes('decommission') || errMsg.toLowerCase().includes('no longer supported') || errMsg.toLowerCase().includes('not found');
-      if (isDailyLimit || isGone) { markModelUnavailable(unavailableGroqModels, model); continue; }
+      const isRateLimit = res.status === 429;
+      // Rate limits and gone models: skip to next — only throw on unexpected errors
+      if (isRateLimit || isGone) {
+        if (isGone) markModelUnavailable(unavailableGroqModels, model);
+        continue;
+      }
       throw new Error(`Groq text error: ${errMsg}`);
     }
     const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
@@ -561,10 +565,11 @@ Use varied question types and make each question clear and specific.`;
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              // Groq fallback for file mode: use a larger context window than topic mode
-              // but stay within ~20 000 token prompt budget (llama3-70b handles ~8k tokens input).
-              // 12 000 chars ≈ 3 000 tokens of file content, leaving room for the JSON schema prompt.
-              const GROQ_CTX_MAX = 12000;
+              // Groq fallback for file mode: keep total prompt under ~5 000 tokens.
+              // 5 000 chars ≈ 1 250 tokens of file context; combined with the fixed schema
+              // instructions (~1 500 tokens) the full prompt stays under 3 000 tokens,
+              // safely within the smallest model's 6 000 TPM budget.
+              const GROQ_CTX_MAX = 5000;
               const groqCtxEn  = fileContext   ? `\n\nENGLISH REFERENCE FILE CONTENT:\n${fileContext.slice(0, GROQ_CTX_MAX)}\n`   : '';
               const groqCtxAr  = fileContextAr ? `\n\nARABIC REFERENCE FILE CONTENT:\n${fileContextAr.slice(0, GROQ_CTX_MAX)}\n` : '';
               const groqPrompt = hasFile
