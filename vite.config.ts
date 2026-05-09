@@ -565,15 +565,37 @@ Use varied question types and make each question clear and specific.`;
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              // Groq fallback for file mode: keep total prompt under ~5 000 tokens.
-              // 5 000 chars ≈ 1 250 tokens of file context; combined with the fixed schema
-              // instructions (~1 500 tokens) the full prompt stays under 3 000 tokens,
-              // safely within the smallest model's 6 000 TPM budget.
-              const GROQ_CTX_MAX = 5000;
-              const groqCtxEn  = fileContext   ? `\n\nENGLISH REFERENCE FILE CONTENT:\n${fileContext.slice(0, GROQ_CTX_MAX)}\n`   : '';
-              const groqCtxAr  = fileContextAr ? `\n\nARABIC REFERENCE FILE CONTENT:\n${fileContextAr.slice(0, GROQ_CTX_MAX)}\n` : '';
+              // Groq fallback — build a fresh prompt with strictly trimmed context.
+              // Avoid prompt.replace() since DOCX content contains $-signs and other
+              // characters that corrupt String.prototype.replace() replacement strings.
+              // 3 500 chars ≈ 875 tokens per file; total prompt stays well under 6 000 TPM.
+              const GROQ_CTX_MAX = 3500;
+              const groqCtxEnTrimmed  = fileContext   ? fileContext.slice(0, GROQ_CTX_MAX)   : '';
+              const groqCtxArTrimmed  = fileContextAr ? fileContextAr.slice(0, GROQ_CTX_MAX) : '';
+              const groqCtxEnSection  = groqCtxEnTrimmed  ? `\n\nENGLISH REFERENCE FILE CONTENT:\n${groqCtxEnTrimmed}\n`  : '';
+              const groqCtxArSection  = groqCtxArTrimmed  ? `\n\nARABIC REFERENCE FILE CONTENT:\n${groqCtxArTrimmed}\n`   : '';
               const groqPrompt = hasFile
-                ? prompt.replace(contextSection, groqCtxEn).replace(contextArSection, groqCtxAr)
+                ? `You are an expert humanitarian survey designer (ODK / SurveyCTO standard).
+The user has uploaded one or more reference survey files below.
+Your task: extract and convert EVERY question and section header found in the file(s) into the JSON format below.
+CRITICAL RULES:
+- Do NOT skip any question, table, or section title — extract ALL of them
+- Do NOT invent new questions
+- For numbered sections use type "section_header"
+- For tables with multiple columns use type "grid_table"
+- For checkbox lists use type "checkbox"
+- For yes/no dropdowns use type "yesno"
+- For open text answers use type "textarea"
+${groqCtxEnSection}${groqCtxArSection}
+Return ONLY a valid JSON array with no markdown, no explanation.
+Schema: { "type": string, "label": string, "label_ar": string|null, "required": boolean, "options": string[]|null, "options_ar": string[]|null, "variable_name": string, "settings": object|null }
+Allowed types: text, textarea, radio, checkbox, dropdown, rating, scale, number, integer, date, gps, yesno, phone, email, section_header, likert, grid_table
+For "grid_table": settings = { "grid_columns": [ { "id": "col_1", "label": "Column Header", "type": "text"|"number"|"date"|"dropdown", "options": null } ], "min_rows": 3, "max_rows": 10 }
+For "likert": settings = { "likert_rows": string[], "likert_cols": string[] }
+variable_name: short unique snake_case identifier per item.
+options: array only for radio/checkbox/dropdown, null otherwise.
+${langInstruction}
+${topic.trim() ? 'Additional context: ' + topic : ''}`
                 : prompt;
               const r = await callGroqText([{ role: 'user', content: groqPrompt }]);
               text = r.text.replace(/```json\n?|```\n?/g, '').trim();
