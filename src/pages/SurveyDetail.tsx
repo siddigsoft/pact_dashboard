@@ -2822,8 +2822,24 @@ export default function SurveyDetail() {
               {aiSuggestions.length === 0 ? (
                 <div className="space-y-4">
                   <p className="text-sm text-slate-500">Describe your topic below, or upload an ODK XLSForm / Word document for context — then let AI generate questions.</p>
+                  {/* Mode banner */}
+                  {(aiFile || aiFileAr) ? (
+                    <div className="flex items-start gap-2 rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-2.5">
+                      <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-indigo-800">File mode — all questions will be extracted</p>
+                        <p className="text-[11px] text-indigo-500 mt-0.5">Every question found in the uploaded file(s) will be converted. The "Number of questions" field is ignored.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+                      <Sparkles className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-slate-500">Topic mode — describe your survey topic and choose how many questions to generate. Or upload a file above to extract questions from it instead.</p>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
-                    <Label className="text-xs">Topic / Purpose <span className="text-slate-400 font-normal">(optional if file uploaded)</span></Label>
+                    <Label className="text-xs">Topic / Purpose <span className="text-slate-400 font-normal">{(aiFile || aiFileAr) ? '(optional extra context for the AI)' : '(required — describe your survey)'}</span></Label>
                     <Textarea
                       value={aiTopic}
                       onChange={e => setAiTopic(e.target.value)}
@@ -2874,18 +2890,21 @@ export default function SurveyDetail() {
                     <p className="text-[11px] text-slate-400">Files are read client-side and sent to the AI as context. Upload separate files for each language for best results.</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Number of questions</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={aiCount}
-                        onChange={e => setAiCount(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="h-8 text-xs"
-                        data-testid="input-ai-count"
-                      />
-                    </div>
+                  <div className={cn('grid gap-3', (aiFile || aiFileAr) ? 'grid-cols-1' : 'grid-cols-2')}>
+                    {/* Number of questions — only shown in topic mode (no file) */}
+                    {!(aiFile || aiFileAr) && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Number of questions</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={aiCount}
+                          onChange={e => setAiCount(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="h-8 text-xs"
+                          data-testid="input-ai-count"
+                        />
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       <Label className="text-xs">Language</Label>
                       <Select value={aiLang} onValueChange={v => setAiLang(v as 'en' | 'ar' | 'both')}>
