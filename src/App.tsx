@@ -201,6 +201,7 @@ const AccountingConsolidation = lazy(() => import('./pages/AccountingConsolidati
 const AccountingBudgetPlanning = lazy(() => import('./pages/AccountingBudgetPlanning'));
 const AccountingSearch = lazy(() => import('./pages/AccountingSearch'));
 const AccountingGLAudit = lazy(() => import('./pages/AccountingGLAudit'));
+const AccountingAMLCompliance = lazy(() => import('./pages/AccountingAMLCompliance'));
 const FinanceAuditTrail = lazy(() => import('./pages/FinanceAuditTrail'));
 // HR audit gaps H2-H5: self-service pages
 const MyAdvances = lazy(() => import('./pages/MyAdvances'));
@@ -561,6 +562,7 @@ const AppRoutes = () => {
         <Route path="/accounting/budget-planning" element={<SuperAdminRoute><PageWrapper><AccountingBudgetPlanning /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/search" element={<SuperAdminRoute><PageWrapper><AccountingSearch /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/gl-audit" element={<SuperAdminRoute><PageWrapper><AccountingGLAudit /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/aml" element={<SuperAdminRoute><PageWrapper><AccountingAMLCompliance /></PageWrapper></SuperAdminRoute>} />
         <Route path="/finance/audit-trail" element={<SuperAdminRoute><PageWrapper><FinanceAuditTrail /></PageWrapper></SuperAdminRoute>} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />

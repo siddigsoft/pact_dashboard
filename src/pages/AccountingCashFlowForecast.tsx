@@ -112,7 +112,7 @@ export default function AccountingCashFlowForecast() {
     const monthlyPOSpread = openPOs / 4;
     for (let i = 0; i < 12; i++) {
       const d = addMonths(startOfMonth(new Date()), i);
-      const inflows = monthlyInflow * (1 + (Math.random() * 0.1 - 0.05));
+      const inflows = monthlyInflow;
       const extraOut = i < 3 ? monthlyEncSpread : 0;
       const poOut = i < 4 ? monthlyPOSpread : 0;
       const outflows = monthlyOutflow + extraOut + poOut;

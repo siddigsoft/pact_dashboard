@@ -1001,20 +1001,23 @@ export default function AccountingFinanceDashboard() {
         <QuickLink href="/accounting/budget-encumbrance" icon={Wallet}       color="text-violet-600 dark:text-violet-400" label="Budget Encumbrance"    sub="Commitment accounting" />
         <QuickLink href="/accounting/sod"               icon={ShieldAlert}   color="text-rose-600 dark:text-rose-400"     label="Segregation of Duties" sub="Self-approval detection" />
         <QuickLink href="/accounting/donor-reports"     icon={Heart}         color="text-pink-600 dark:text-pink-400"     label="Donor Fund Reports"    sub="Fund restriction split" />
-        <QuickLink href="/accounting/multi-currency"    icon={Shield}        color="text-teal-600 dark:text-teal-400"     label="AML & Sanctions"       sub="Compliance checks" />
+        <QuickLink href="/accounting/aml"               icon={Shield}        color="text-teal-600 dark:text-teal-400"     label="AML & Compliance"      sub="Transaction monitoring" />
       </div>
 
       <SectionHeading label="Phase 5 — Grants & Consolidation" labelAr="المنح والتوحيد" />
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
         <QuickLink href="/accounting/grants"            icon={Award}        color="text-amber-600 dark:text-amber-400"   label="Grant Tracking"        sub="Donor grants & burn rate" />
         <QuickLink href="/accounting/cost-allocation"   icon={Zap}          color="text-violet-600 dark:text-violet-400" label="Cost Allocation"       sub="Overhead distribution" />
+        <QuickLink href="/accounting/depreciation-run"  icon={RotateCcw}    color="text-slate-500 dark:text-slate-400"   label="Depreciation Run"      sub="Batch GL posting" />
         <QuickLink href="/accounting/consolidation"     icon={Building2}    color="text-teal-600 dark:text-teal-400"     label="Consolidation"         sub="Multi-entity P&L" />
+        <QuickLink href="/accounting/budget-planning"   icon={PiggyBank}    color="text-purple-600 dark:text-purple-400" label="Budget Planning"        sub="Set account targets" />
       </div>
 
       <SectionHeading label="Tools" labelAr="الأدوات" />
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-5">
-        <QuickLink href="/accounting/search"            icon={ClipboardList} color="text-blue-600 dark:text-blue-400"   label="Accounting Search"     sub="Search all records" />
-        <QuickLink href="/accounting/finance-dashboard" icon={Activity}      color="text-emerald-600 dark:text-emerald-400" label="Finance Dashboard" sub="KPIs & overview" />
+        <QuickLink href="/accounting/search"            icon={ClipboardList} color="text-blue-600 dark:text-blue-400"    label="Accounting Search"     sub="Search all records" />
+        <QuickLink href="/accounting/gl-audit"          icon={Activity}      color="text-indigo-600 dark:text-indigo-400" label="GL Bridge Audit"       sub="Posting log & coverage" />
+        <QuickLink href="/accounting/finance-dashboard" icon={BarChart3}     color="text-emerald-600 dark:text-emerald-400" label="Finance Dashboard"   sub="KPIs & overview" />
       </div>
 
       {/* ── live module status ── */}
