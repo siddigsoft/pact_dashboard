@@ -1530,7 +1530,7 @@ const QuestionnaireAnalytics = () => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
         const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => {
           const activities = [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count);
-          const pdmSites   = Math.floor(c.pdmCount / 7);
+          const pdmSites   = Math.floor(c.pdmCount / 7) + (c.questionnaires - c.pdmCount);
           return { name: c.name, questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
         });
         const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
@@ -3498,7 +3498,7 @@ const QuestionnaireAnalytics = () => {
     });
     if (costPerSite > 0) {
       const payRows = trackerData.hubTrackers.map((ht: any, i: number) => {
-        const pdmAdj = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : 0), 0);
+        const pdmAdj = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
         return { '#': i + 1, 'Hub': ht.hub, 'PDM Sites': pdmAdj, 'Cost/Site (USD)': costPerSite, 'Total (USD)': pdmAdj * costPerSite, 'Rate (SDG/USD)': exchangeRate, 'Total (SDG)': pdmAdj * costPerSite * exchangeRate };
       });
       const gs = payRows.reduce((s: number, r: any) => s + r['PDM Sites'], 0);
@@ -3942,7 +3942,7 @@ const QuestionnaireAnalytics = () => {
     });
     const paymentRows = costPerSite > 0
       ? trackerData.hubTrackers.map((ht: any) => {
-          const pdmAdj = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : 0), 0);
+          const pdmAdj = ht.matrix.reduce((a: number, r: any) => a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
           return { label: ht.hub, sites: pdmAdj };
         })
       : [];
@@ -4219,7 +4219,7 @@ const QuestionnaireAnalytics = () => {
       });
       // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
       const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
-        a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : 0), 0);
+        a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       let pSeq = 0;
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
