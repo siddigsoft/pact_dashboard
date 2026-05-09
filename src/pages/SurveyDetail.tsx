@@ -58,7 +58,7 @@ type QuestionType =
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
-  | 'calculate' | 'begin_repeat';
+  | 'calculate' | 'begin_repeat' | 'grid_table';
 
 interface SkipLogic {
   condition_question_id: string;
@@ -245,10 +245,11 @@ const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
   {
     label: 'Layout & Structure',
     types: [
-      { type: 'section_header', label: 'Section Header', icon: Minus },
-      { type: 'begin_group',    label: 'Group',           icon: Folder },
-      { type: 'begin_repeat',   label: 'Repeat Group',    icon: RefreshCw },
-      { type: 'calculate',      label: 'Calculated Field', icon: FunctionSquare },
+      { type: 'section_header', label: 'Section Header',   icon: Minus },
+      { type: 'begin_group',    label: 'Group',             icon: Folder },
+      { type: 'begin_repeat',   label: 'Repeat Group',      icon: RefreshCw },
+      { type: 'calculate',      label: 'Calculated Field',  icon: FunctionSquare },
+      { type: 'grid_table',     label: 'Grid / Table',      icon: Table2 },
     ],
   },
 ];
@@ -452,7 +453,17 @@ export default function SurveyDetail() {
       const defaultLabel =
         type === 'section_header' ? 'Section Title' :
         type === 'begin_group'    ? 'Group Name'    : 'Untitled question';
-      const defaultSettings: Record<string, unknown> = type === 'scale' ? { min: 1, max: 10 } : {};
+      const defaultSettings: Record<string, unknown> =
+        type === 'scale' ? { min: 1, max: 10 } :
+        type === 'grid_table' ? {
+          grid_columns: [
+            { id: 'col_1', label: 'Column 1', type: 'text' },
+            { id: 'col_2', label: 'Column 2', type: 'text' },
+            { id: 'col_3', label: 'Column 3', type: 'text' },
+          ],
+          min_rows: 1,
+          max_rows: 10,
+        } : {};
       const { error } = await supabase.from('survey_questions').insert({
         survey_id: id,
         type,
@@ -2948,6 +2959,15 @@ function QuestionCard({
   const [gpsCaptureAlt, setGpsCaptureAlt]     = useState(q.settings?.capture_altitude !== false);
   const [gpsAllowManual, setGpsAllowManual]   = useState(q.settings?.allow_manual !== false);
 
+  type GridCol = { id: string; label: string; type: 'text' | 'number' | 'date' | 'dropdown'; options?: string[] };
+  const [gridCols, setGridCols] = useState<GridCol[]>(
+    (q.settings?.grid_columns as GridCol[] | undefined) ??
+    [{ id: 'col_1', label: 'Column 1', type: 'text' }]
+  );
+  const [gridMinRows, setGridMinRows] = useState(Number(q.settings?.min_rows ?? 1));
+  const [gridMaxRows, setGridMaxRows] = useState(Number(q.settings?.max_rows ?? 10));
+  const [newColLabel, setNewColLabel] = useState('');
+
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [varNameDraft, setVarNameDraft] = useState<string>(String(q.settings?.variable_name ?? ''));
   const [formulaDraft, setFormulaDraft] = useState<string>(String(q.settings?.formula ?? ''));
@@ -2967,9 +2987,10 @@ function QuestionCard({
     const skipLogic: SkipLogic | undefined = skipEnabled && skipQId
       ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
       : undefined;
-    const scaleSettings = q.type === 'scale'     ? { min: scaleMin, max: scaleMax } : {};
-    const gpsSettings   = q.type === 'gps'       ? { accuracy_threshold: gpsAccThreshold, capture_altitude: gpsCaptureAlt, allow_manual: gpsAllowManual } : {};
-    const calcSettings  = q.type === 'calculate' ? { formula: formulaDraft.trim() } : {};
+    const scaleSettings = q.type === 'scale'      ? { min: scaleMin, max: scaleMax } : {};
+    const gpsSettings   = q.type === 'gps'        ? { accuracy_threshold: gpsAccThreshold, capture_altitude: gpsCaptureAlt, allow_manual: gpsAllowManual } : {};
+    const calcSettings  = q.type === 'calculate'  ? { formula: formulaDraft.trim() } : {};
+    const gridSettings  = q.type === 'grid_table' ? { grid_columns: gridCols, min_rows: gridMinRows, max_rows: gridMaxRows } : {};
     const paddedOptsAr = hasOptions
       ? optsDraft.map((_, i) => optsArDraft[i] ?? '')
       : null;
@@ -2982,7 +3003,7 @@ function QuestionCard({
       options: hasOptions ? optsDraft.filter(Boolean) : null,
       options_ar: paddedOptsAr,
       settings: {
-        ...q.settings, ...scaleSettings, ...gpsSettings, ...calcSettings, skip_logic: skipLogic,
+        ...q.settings, ...scaleSettings, ...gpsSettings, ...calcSettings, ...gridSettings, skip_logic: skipLogic,
         ...(varNameDraft.trim() ? { variable_name: varNameDraft.trim() } : {}),
       },
     });
@@ -3261,6 +3282,129 @@ function QuestionCard({
                     </div>
                   );
                 })()}
+              </div>
+            </div>
+          )}
+
+          {q.type === 'grid_table' && (
+            <div className="border border-teal-200 rounded-xl p-3 space-y-4 bg-teal-50/40">
+              <p className="text-xs font-semibold text-teal-800 flex items-center gap-1.5">
+                <Table2 className="w-3.5 h-3.5" />Grid Columns
+              </p>
+
+              {/* Column list */}
+              <div className="space-y-2">
+                {gridCols.map((col, ci) => (
+                  <div key={col.id} className="flex items-center gap-1.5 bg-white border border-teal-100 rounded-lg p-2">
+                    <span className="text-[10px] font-mono text-teal-400 w-5 shrink-0">{ci + 1}</span>
+                    <Input
+                      value={col.label}
+                      onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label: e.target.value } : c))}
+                      placeholder="Column header…"
+                      className="h-7 text-xs flex-1"
+                    />
+                    <Select
+                      value={col.type}
+                      onValueChange={v => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, type: v as GridCol['type'] } : c))}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-28 shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="date">Date</SelectItem>
+                        <SelectItem value="dropdown">Dropdown</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <button
+                      onClick={() => setGridCols(prev => prev.filter((_, i) => i !== ci))}
+                      disabled={gridCols.length <= 1}
+                      className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Dropdown options for dropdown columns */}
+              {gridCols.filter(c => c.type === 'dropdown').map(col => (
+                <div key={col.id} className="space-y-1.5 pl-4 border-l-2 border-teal-200">
+                  <p className="text-[10px] font-semibold text-teal-700">Options for "{col.label}"</p>
+                  {(col.options ?? []).map((opt, oi) => (
+                    <div key={oi} className="flex items-center gap-1.5">
+                      <Input
+                        value={opt}
+                        onChange={e => setGridCols(prev => prev.map(c => c.id === col.id ? { ...c, options: (c.options ?? []).map((o, j) => j === oi ? e.target.value : o) } : c))}
+                        className="h-6 text-xs flex-1"
+                        placeholder={`Option ${oi + 1}`}
+                      />
+                      <button
+                        onClick={() => setGridCols(prev => prev.map(c => c.id === col.id ? { ...c, options: (c.options ?? []).filter((_, j) => j !== oi) } : c))}
+                        className="p-1 text-slate-300 hover:text-red-400"
+                      >
+                        <Trash2 className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setGridCols(prev => prev.map(c => c.id === col.id ? { ...c, options: [...(c.options ?? []), ''] } : c))}
+                    className="text-[10px] text-teal-600 hover:text-teal-800 flex items-center gap-1 font-medium"
+                  >
+                    <Plus className="w-2.5 h-2.5" />Add option
+                  </button>
+                </div>
+              ))}
+
+              {/* Add column */}
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={newColLabel}
+                  onChange={e => setNewColLabel(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newColLabel.trim()) {
+                      setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), type: 'text' }]);
+                      setNewColLabel('');
+                    }
+                  }}
+                  placeholder="New column name…"
+                  className="h-7 text-xs flex-1"
+                />
+                <button
+                  onClick={() => {
+                    if (!newColLabel.trim()) return;
+                    setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), type: 'text' }]);
+                    setNewColLabel('');
+                  }}
+                  className="p-1.5 text-teal-600 hover:bg-teal-100 rounded"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Row limits */}
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-teal-100">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Min rows</Label>
+                  <Input
+                    type="number"
+                    value={gridMinRows}
+                    onChange={e => setGridMinRows(Math.max(1, Number(e.target.value)))}
+                    className="h-7 text-xs"
+                    min={1} max={gridMaxRows}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Max rows</Label>
+                  <Input
+                    type="number"
+                    value={gridMaxRows}
+                    onChange={e => setGridMaxRows(Math.max(gridMinRows, Number(e.target.value)))}
+                    className="h-7 text-xs"
+                    min={gridMinRows} max={50}
+                  />
+                </div>
               </div>
             </div>
           )}

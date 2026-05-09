@@ -9,7 +9,7 @@ import {
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
   Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
-  FunctionSquare, Plus,
+  FunctionSquare, Plus, Table2, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,7 @@ type QuestionType =
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
-  | 'calculate' | 'begin_repeat';
+  | 'calculate' | 'begin_repeat' | 'grid_table';
 
 interface SkipLogic {
   condition_question_id: string;
@@ -527,6 +527,8 @@ export default function SurveyFill() {
   const startTimeRef = useState(() => Date.now())[0];
   // Repeat group rows: { [groupId]: [{ [childQId]: AnswerValue }, ...] }
   const [repeatRows, setRepeatRows] = useState<Record<string, Array<Record<string, AnswerValue>>>>({});
+  // Grid table rows: { [questionId]: [{ [colId]: string }, ...] }
+  const [gridTableRows, setGridTableRows] = useState<Record<string, Array<Record<string, string>>>>({});
 
   const draftKey = id ? `survey_draft_${id}` : null;
 
@@ -638,6 +640,12 @@ export default function SurveyFill() {
     mutationFn: async () => {
       const newErrors: Record<string, string> = {};
       for (const q of questions.filter(q => visibleIds.has(q.id) && q.required && !['section_header','begin_group'].includes(q.type))) {
+        if (q.type === 'grid_table') {
+          const rows = gridTableRows[q.id] ?? [];
+          const hasAnyValue = rows.some(row => Object.values(row).some(v => v !== ''));
+          if (!hasAnyValue) newErrors[q.id] = 'This question is required';
+          continue;
+        }
         const val = answers[q.id];
         const missing = val === null || val === undefined || val === '' ||
           (Array.isArray(val) && val.length === 0);
@@ -681,8 +689,22 @@ export default function SurveyFill() {
         });
       }
 
+      // Grid table rows: stored as answer_json array of row objects
+      const gridTableAnswerRows: { response_id: string; question_id: string; answer_text: string | null; answer_json: unknown }[] = [];
+      for (const [qid, rows] of Object.entries(gridTableRows)) {
+        if (!visibleIds.has(qid)) continue;
+        const filledRows = rows.filter(row => Object.values(row).some(v => v !== ''));
+        if (filledRows.length === 0) continue;
+        gridTableAnswerRows.push({
+          response_id: responseId,
+          question_id: qid,
+          answer_text: null,
+          answer_json: filledRows,
+        });
+      }
+
       const answerRows = questions
-        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat'].includes(q.type))
+        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat','grid_table'].includes(q.type))
         .map(q => {
           const val = answers[q.id] ?? null;
           const isJson = jsonTypes.includes(q.type);
@@ -695,7 +717,7 @@ export default function SurveyFill() {
         })
         .filter(a => a.answer_text !== null || a.answer_json !== null);
 
-      const allRows = [...answerRows, ...repeatAnswerRows].filter(a => a.answer_text !== null || a.answer_json !== null);
+      const allRows = [...answerRows, ...repeatAnswerRows, ...gridTableAnswerRows].filter(a => a.answer_text !== null || a.answer_json !== null);
       if (allRows.length) {
         const { error: aErr } = await supabase.from('survey_answers').insert(allRows);
         if (aErr) throw aErr;
@@ -960,6 +982,123 @@ export default function SurveyFill() {
               <Plus className="w-3.5 h-3.5" />Add Another Row
             </button>
           </div>
+        </div>
+      );
+    }
+
+    // Grid / Table question
+    if (q.type === 'grid_table') {
+      type GridCol = { id: string; label: string; type: 'text' | 'number' | 'date' | 'dropdown'; options?: string[] };
+      const cols = (q.settings?.grid_columns as GridCol[] | undefined) ?? [];
+      if (cols.length === 0) return null;
+      const minRows = Number(q.settings?.min_rows ?? 1);
+      const maxRows = Number(q.settings?.max_rows ?? 10);
+      const rows = gridTableRows[q.id] ?? Array.from({ length: Math.max(minRows, 1) }, () => ({}));
+
+      const setCell = (rowIdx: number, colId: string, val: string) => {
+        setGridTableRows(prev => {
+          const cur = prev[q.id] ?? Array.from({ length: Math.max(minRows, 1) }, () => ({}));
+          const next = cur.map((row, i) => i === rowIdx ? { ...row, [colId]: val } : row);
+          return { ...prev, [q.id]: next };
+        });
+        setErrors(prev => { const n = { ...prev }; delete n[q.id]; return n; });
+      };
+      const addRow = () => {
+        if (rows.length >= maxRows) return;
+        setGridTableRows(prev => ({ ...prev, [q.id]: [...(prev[q.id] ?? [{}]), {}] }));
+      };
+      const removeRow = (rowIdx: number) => {
+        setGridTableRows(prev => {
+          const cur = prev[q.id] ?? [{}];
+          if (cur.length <= Math.max(minRows, 1)) return prev;
+          return { ...prev, [q.id]: cur.filter((_, i) => i !== rowIdx) };
+        });
+      };
+
+      const err = errors[q.id];
+      return (
+        <div key={q.id} className="space-y-2">
+          <div className="flex items-start gap-2">
+            <Table2 className="w-4 h-4 text-teal-500 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-800">
+                {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+                {q.required && <span className="text-red-400 ml-1">*</span>}
+              </p>
+              {q.description && <p className="text-xs text-slate-500 mt-0.5">{q.description}</p>}
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500 pl-6">{err}</p>}
+          <div className="overflow-x-auto rounded-xl border border-teal-200">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-teal-50">
+                  <th className="px-2 py-2 text-left text-[10px] font-bold text-teal-600 uppercase tracking-wide border-b border-teal-200 w-8">#</th>
+                  {cols.map(col => (
+                    <th key={col.id} className="px-3 py-2 text-left text-[10px] font-bold text-teal-700 uppercase tracking-wide border-b border-teal-200 whitespace-nowrap">
+                      {col.label}
+                    </th>
+                  ))}
+                  {rows.length > Math.max(minRows, 1) && (
+                    <th className="w-8 border-b border-teal-200 bg-teal-50" />
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIdx) => (
+                  <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                    <td className="px-2 py-1.5 text-center text-[10px] font-semibold text-slate-400 border-b border-slate-100">
+                      {rowIdx + 1}
+                    </td>
+                    {cols.map(col => {
+                      const cellVal = row[col.id] ?? '';
+                      return (
+                        <td key={col.id} className="px-1.5 py-1 border-b border-slate-100 min-w-[100px]">
+                          {col.type === 'dropdown' ? (
+                            <Select value={cellVal} onValueChange={v => setCell(rowIdx, col.id, v)}>
+                              <SelectTrigger className="h-7 text-xs border-0 shadow-none bg-transparent focus:ring-1 focus:ring-teal-300">
+                                <SelectValue placeholder="Select…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(col.options ?? []).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <input
+                              type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
+                              value={cellVal}
+                              onChange={e => setCell(rowIdx, col.id, e.target.value)}
+                              className="w-full h-7 px-2 text-xs rounded border-0 bg-transparent focus:outline-none focus:ring-1 focus:ring-teal-300 focus:bg-white transition-colors"
+                              placeholder={col.type === 'date' ? '' : '—'}
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
+                    {rows.length > Math.max(minRows, 1) && (
+                      <td className="px-1 py-1 border-b border-slate-100">
+                        <button
+                          onClick={() => removeRow(rowIdx)}
+                          className="p-1 text-slate-300 hover:text-red-400 transition-colors"
+                          title="Remove row"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length < maxRows && (
+            <button
+              onClick={addRow}
+              className="flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-800 transition-colors pl-1"
+            >
+              <Plus className="w-3.5 h-3.5" />Add Row
+            </button>
+          )}
         </div>
       );
     }
