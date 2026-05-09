@@ -318,9 +318,9 @@ async function callGroqText(
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
   const TEXT_MODELS = [
     'llama-3.3-70b-versatile',
-    'llama3-70b-8192',
+    'llama-3.1-8b-instant',
     'gemma2-9b-it',
-    'llama3-8b-8192',
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
   ];
   for (const model of TEXT_MODELS) {
     if (isModelUnavailable(unavailableGroqModels, model)) continue;
@@ -333,7 +333,8 @@ async function callGroqText(
       const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
       const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
       const isDailyLimit = res.status === 429 && (errMsg.includes('per day') || errMsg.includes('RPD'));
-      if (isDailyLimit) { markModelUnavailable(unavailableGroqModels, model); continue; }
+      const isGone = res.status === 404 || errMsg.toLowerCase().includes('decommission') || errMsg.toLowerCase().includes('no longer supported') || errMsg.toLowerCase().includes('not found');
+      if (isDailyLimit || isGone) { markModelUnavailable(unavailableGroqModels, model); continue; }
       throw new Error(`Groq text error: ${errMsg}`);
     }
     const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
