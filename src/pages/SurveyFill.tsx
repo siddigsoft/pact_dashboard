@@ -9,7 +9,7 @@ import {
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
   Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
-  FunctionSquare, Plus, Table2, Trash2, PenLine,
+  FunctionSquare, Plus, Table2, Trash2, PenLine, Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,7 @@ type QuestionType =
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
   | 'calculate' | 'begin_repeat' | 'grid_table'
-  | 'likert' | 'signature';
+  | 'likert' | 'signature' | 'note' | 'acknowledge';
 
 interface SkipCondition {
   question_id: string;
@@ -733,7 +733,7 @@ export default function SurveyFill() {
       const newErrors: Record<string, string> = {};
 
       // Required + min/max/pattern validation
-      for (const q of questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type))) {
+      for (const q of questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group','note'].includes(q.type))) {
         if (q.type === 'grid_table') {
           if (q.required) {
             const rows = gridTableRows[q.id] ?? [];
@@ -823,7 +823,7 @@ export default function SurveyFill() {
       }
 
       const answerRows = questions
-        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat','grid_table'].includes(q.type))
+        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat','grid_table','note'].includes(q.type))
         .map(q => {
           const val = answers[q.id] ?? null;
           const jsonTypes2 = [...jsonTypes, 'likert', 'signature'];
@@ -1288,6 +1288,67 @@ export default function SurveyFill() {
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">
             {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
           </p>
+        </div>
+      );
+    }
+
+    // Note / Text Block — read-only informational display
+    if (q.type === 'note') {
+      return (
+        <div key={q.id} className="bg-sky-50 border border-sky-200 rounded-2xl p-4 flex items-start gap-3">
+          <Info className="w-4 h-4 text-sky-500 mt-0.5 shrink-0" />
+          <div className="flex-1 space-y-1">
+            <p className="text-sm font-semibold text-sky-800 leading-snug">
+              {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+            </p>
+            {(q.description || q.description_ar) && (
+              <div className="space-y-0.5">
+                {q.description && <p className="text-xs text-sky-700 leading-relaxed">{q.description}</p>}
+                {q.description_ar && <p className="text-xs text-sky-700 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Acknowledgement — respondent must check a box to confirm
+    if (q.type === 'acknowledge') {
+      const checked = answers[q.id] === 'true';
+      const err = errors[q.id];
+      return (
+        <div key={q.id} className={cn('bg-white rounded-2xl border p-5 space-y-3 transition-colors', err ? 'border-red-300' : 'border-amber-200')} data-testid={`question-${q.id}`}>
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-1">
+            <p className="text-sm font-semibold text-amber-900 leading-snug">
+              {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+              {q.required && <span className="text-red-500 ml-1">*</span>}
+            </p>
+            {(q.description || q.description_ar) && (
+              <div className="space-y-0.5">
+                {q.description && <p className="text-xs text-amber-700 leading-relaxed">{q.description}</p>}
+                {q.description_ar && <p className="text-xs text-amber-700 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>}
+              </div>
+            )}
+          </div>
+          <label className="flex items-start gap-3 cursor-pointer select-none group">
+            <div className={cn(
+              'mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+              checked ? 'bg-amber-500 border-amber-500' : 'border-slate-300 group-hover:border-amber-400'
+            )}>
+              {checked && <Check className="w-3 h-3 text-white" />}
+            </div>
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={checked}
+              onChange={e => setAnswer(q.id, String(e.target.checked))}
+              data-testid={`acknowledge-${q.id}`}
+            />
+            <span className="text-sm text-slate-700 font-medium leading-snug">
+              {lang === 'ar' ? 'أقر بالاطلاع على ما سبق وأوافق عليه' : 'I have read and acknowledge the above'}
+            </span>
+          </label>
+          {err && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{err}</p>}
         </div>
       );
     }

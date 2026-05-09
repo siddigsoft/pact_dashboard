@@ -558,7 +558,15 @@ Use varied question types and make each question clear and specific.`;
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              const r = await callGroqText([{ role: 'user', content: prompt }]);
+              // Groq's free tier has a strict tokens-per-minute limit.
+              // Trim file context to ~4 000 chars so the prompt stays under ~12 000 tokens.
+              const GROQ_CTX_MAX = 4000;
+              const groqCtxEn  = fileContext   ? `\n\nENGLISH REFERENCE FILE CONTENT:\n${fileContext.slice(0, GROQ_CTX_MAX)}\n`   : '';
+              const groqCtxAr  = fileContextAr ? `\n\nARABIC REFERENCE FILE CONTENT:\n${fileContextAr.slice(0, GROQ_CTX_MAX)}\n` : '';
+              const groqPrompt = hasFile
+                ? prompt.replace(contextSection, groqCtxEn).replace(contextArSection, groqCtxAr)
+                : prompt;
+              const r = await callGroqText([{ role: 'user', content: groqPrompt }]);
               text = r.text.replace(/```json\n?|```\n?/g, '').trim();
             }
             const jsonMatch = text.match(/\[[\s\S]*\]/);

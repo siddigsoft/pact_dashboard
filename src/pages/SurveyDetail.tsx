@@ -59,7 +59,7 @@ type QuestionType =
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
   | 'calculate' | 'begin_repeat' | 'grid_table'
-  | 'likert' | 'signature';
+  | 'likert' | 'signature' | 'note' | 'acknowledge';
 
 interface SkipCondition {
   question_id: string;
@@ -257,8 +257,10 @@ const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
   {
     label: 'Specialized',
     types: [
-      { type: 'likert',    label: 'Likert Scale', icon: LayoutList },
-      { type: 'signature', label: 'Signature',    icon: PenLine },
+      { type: 'likert',      label: 'Likert Scale',        icon: LayoutList },
+      { type: 'signature',   label: 'Signature',           icon: PenLine },
+      { type: 'note',        label: 'Note / Text Block',   icon: MessageSquare },
+      { type: 'acknowledge', label: 'Acknowledgement',     icon: CheckSquare2 },
     ],
   },
   {
@@ -979,7 +981,7 @@ export default function SurveyDetail() {
   );
 
   const scfg = STATUS_CFG[survey.status];
-  const nonStructural = questions.filter(q => !['section_header','begin_group','begin_repeat'].includes(q.type));
+  const nonStructural = questions.filter(q => !['section_header','begin_group','begin_repeat','note'].includes(q.type));
 
   const addGroupLabel = addToGroupId
     ? questions.find(q => q.id === addToGroupId)?.label ?? 'group'
@@ -3448,6 +3450,7 @@ function QuestionCard({
   const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
   const hasOptions = ['radio','checkbox','dropdown'].includes(q.type);
   const isSection = q.type === 'section_header';
+  const isNote = q.type === 'note';
   const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(q.type);
 
   const prevQuestions = allQuestions.filter((pq) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
@@ -3508,6 +3511,72 @@ function QuestionCard({
               : <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 className="w-3 h-3" /></button>
             }
             <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Note / Text Block card ───────────────────────────────────────────────────
+  if (isNote) {
+    return (
+      <div
+        className={cn('bg-sky-50 rounded-xl border border-sky-200 transition-colors', isDraggedOver && 'border-indigo-400 bg-indigo-50/10')}
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={e => { e.preventDefault(); onDragOver?.(); }}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        <div className="flex items-center gap-2 px-4 py-2.5">
+          <GripVertical className="w-3.5 h-3.5 text-sky-300 shrink-0 cursor-grab" />
+          <input
+            type="checkbox"
+            checked={!!isBulkSelected}
+            onChange={e => onBulkToggle?.(e.target.checked)}
+            className="rounded shrink-0 accent-indigo-600"
+            title="Select for bulk actions"
+          />
+          <div className="w-6 h-6 rounded-lg bg-sky-100 flex items-center justify-center shrink-0">
+            <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-sky-800 truncate">{q.label}</p>
+            {q.description && <p className="text-[10px] text-sky-500 italic truncate">{q.description}</p>}
+          </div>
+          <span className="text-[10px] text-sky-500 bg-sky-100 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Note</span>
+          {canManage && (
+            <div className="flex items-center gap-0.5 ml-1">
+              {isEditing
+                ? <Button size="sm" onClick={save} className="h-6 px-2 text-xs">Save</Button>
+                : <button onClick={onEdit} className="p-1 rounded hover:bg-sky-100 text-sky-400 hover:text-sky-600"><Edit3 className="w-3 h-3" /></button>
+              }
+              <button onClick={onDuplicate} className="p-1 rounded hover:bg-sky-100 text-sky-400 hover:text-sky-600" title="Duplicate"><Copy className="w-3 h-3" /></button>
+              <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-sky-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+            </div>
+          )}
+        </div>
+        {isEditing && (
+          <div className="border-t border-sky-200 p-4 bg-white space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Heading (English)</Label>
+                <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} placeholder="Note heading…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">العنوان (Arabic)</Label>
+                <Input dir="rtl" lang="ar" value={labelArDraft} onChange={e => setLabelArDraft(e.target.value)} placeholder="العنوان بالعربية…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Body text (English, optional)</Label>
+                <Textarea value={descDraft} onChange={e => setDescDraft(e.target.value)} rows={3} placeholder="Explanatory text shown below the heading…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">النص التفصيلي (Arabic — اختياري)</Label>
+                <Textarea dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} rows={3} placeholder="النص بالعربية…" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400">Notes are display-only — respondents read them but do not answer them.</p>
           </div>
         )}
       </div>
