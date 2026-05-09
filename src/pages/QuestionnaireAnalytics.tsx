@@ -1508,7 +1508,7 @@ const QuestionnaireAnalytics = () => {
   };
 
   const csvEnumData = useMemo(() => {
-    type CsvColl = { name: string; questionnaires: number; sites: Set<string>; activities: Map<string, number> };
+    type CsvColl = { name: string; questionnaires: number; pdmCount: number; sites: Set<string>; activities: Map<string, number> };
     const hubMap = new Map<string, Map<string, Map<string, CsvColl>>>();
     filteredData.forEach(row => {
       const hub = row.hub || '—';
@@ -1517,18 +1517,20 @@ const QuestionnaireAnalytics = () => {
       if (!hubMap.has(hub)) hubMap.set(hub, new Map());
       if (!hubMap.get(hub)!.has(state)) hubMap.get(hub)!.set(state, new Map());
       const collMap = hubMap.get(hub)!.get(state)!;
-      if (!collMap.has(collector)) collMap.set(collector, { name: collector, questionnaires: 0, sites: new Set(), activities: new Map() });
+      if (!collMap.has(collector)) collMap.set(collector, { name: collector, questionnaires: 0, pdmCount: 0, sites: new Set(), activities: new Map() });
       const entry = collMap.get(collector)!;
       entry.questionnaires++;
+      // Track PDM questionnaires separately using monitoringType || activity for accurate detection
+      if (isPdmActivity(row.monitoringType || row.activity)) entry.pdmCount++;
       if (row.activitySite) entry.sites.add(row.activitySite.trim());
-      const actKey = row.monitoringType || row.activity;
-      if (actKey) entry.activities.set(actKey, (entry.activities.get(actKey) || 0) + 1);
+      // Keep activity key using row.activity so Summary/CSV sheets display all activity names unchanged
+      if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
     });
     return [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hub, sm]) => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
         const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => {
           const activities = [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count);
-          const pdmSites   = activities.reduce((s, a) => s + (isPdmActivity(a.name) ? Math.floor(a.count / 7) : 0), 0);
+          const pdmSites   = Math.floor(c.pdmCount / 7);
           return { name: c.name, questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
         });
         const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
