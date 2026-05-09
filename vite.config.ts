@@ -545,6 +545,7 @@ Use varied question types and make each question clear and specific.`;
                   const response = await ai.models.generateContent({
                     model,
                     contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    config: { maxOutputTokens: 8192 },
                   });
                   text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
                   tried = true;
