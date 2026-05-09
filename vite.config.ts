@@ -318,8 +318,9 @@ async function callGroqText(
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
   const TEXT_MODELS = [
     'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'mixtral-8x7b-32768',
+    'llama3-70b-8192',
+    'gemma2-9b-it',
+    'llama3-8b-8192',
   ];
   for (const model of TEXT_MODELS) {
     if (isModelUnavailable(unavailableGroqModels, model)) continue;
