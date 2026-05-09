@@ -112,6 +112,7 @@ interface AiQuestion {
   options: string[] | null;
   options_ar: string[] | null;
   variable_name: string;
+  settings?: Record<string, unknown> | null;
 }
 
 async function extractFileContext(file: File): Promise<string> {
@@ -611,6 +612,16 @@ export default function SurveyDetail() {
       const cells = cols.map(q => {
         const a = ra.find(x => x.question_id === q.id);
         if (!a) return '""';
+        if (q.type === 'grid_table') {
+          const gridRows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
+          if (!gridRows) return '""';
+          return esc(gridRows.map((row, i) => `R${i + 1}: ${Object.values(row).join(' | ')}`).join('; '));
+        }
+        if (q.type === 'likert') {
+          const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
+          if (!val) return '""';
+          return esc(Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | '));
+        }
         if (Array.isArray(a.answer_json)) return esc((a.answer_json as string[]).join('; '));
         if (a.answer_text) return esc(a.answer_text);
         if (a.answer_json !== null && a.answer_json !== undefined) return esc(String(a.answer_json));
@@ -637,6 +648,14 @@ export default function SurveyDetail() {
       const cells = cols.map(q => {
         const a = ra.find(x => x.question_id === q.id);
         if (!a) return '';
+        if (q.type === 'grid_table') {
+          const gridRows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
+          return gridRows ? gridRows.map((row, i) => `R${i + 1}: ${Object.values(row).join(' | ')}`).join('; ') : '';
+        }
+        if (q.type === 'likert') {
+          const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
+          return val ? Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | ') : '';
+        }
         if (Array.isArray(a.answer_json)) return (a.answer_json as string[]).join('; ');
         if (a.answer_text) return a.answer_text;
         if (a.answer_json !== null && a.answer_json !== undefined) return String(a.answer_json);
@@ -2036,6 +2055,8 @@ export default function SurveyDetail() {
                 const isChoice = ['radio', 'checkbox', 'dropdown'].includes(q.type);
                 const isRating = ['rating', 'scale'].includes(q.type);
                 const isText   = ['text','textarea','phone','email','number','integer','barcode','gps','date','time','datetime'].includes(q.type);
+                const isLikert = q.type === 'likert';
+                const isGrid   = q.type === 'grid_table';
                 const textAnswers  = getTextAnswers(q);
                 const choiceDist   = isChoice ? getChoiceDistribution(q) : [];
                 const ratingDist   = isRating ? getRatingDistribution(q) : [];
@@ -2164,6 +2185,105 @@ export default function SurveyDetail() {
                             <p className="text-sm text-slate-400 italic">No text responses recorded.</p>
                           )}
                         </div>
+
+                      ) : isLikert ? (
+                        /* ── Likert: aggregated row × column distribution ── */
+                        (() => {
+                          const likertRows = (q.settings?.likert_rows as string[] | undefined) ?? [];
+                          const likertCols = (q.settings?.likert_cols as string[] | undefined) ?? [];
+                          if (!likertRows.length || !likertCols.length) return (
+                            <div className="flex items-center justify-center py-4 text-slate-400 text-sm italic">{answered} response{answered !== 1 ? 's' : ''} recorded</div>
+                          );
+                          const rowColCounts: Record<string, Record<string, number>> = {};
+                          likertRows.forEach(r => { rowColCounts[r] = {}; likertCols.forEach(c => { rowColCounts[r][c] = 0; }); });
+                          allAnswers.filter(a => a.question_id === q.id && a.answer_json).forEach(a => {
+                            const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
+                            if (!val) return;
+                            Object.entries(val).forEach(([row, col]) => {
+                              if (rowColCounts[row] && rowColCounts[row][col as string] !== undefined) rowColCounts[row][col as string]++;
+                            });
+                          });
+                          return (
+                            <div className="space-y-4">
+                              {likertRows.map(row => {
+                                const rowTotal = likertCols.reduce((s, c) => s + (rowColCounts[row]?.[c] ?? 0), 0);
+                                const maxCount = Math.max(...likertCols.map(c => rowColCounts[row]?.[c] ?? 0), 1);
+                                return (
+                                  <div key={row}>
+                                    <p className="text-xs font-semibold text-slate-700 mb-1.5 leading-snug truncate" title={row}>{row}</p>
+                                    <div className="space-y-1">
+                                      {likertCols.map((col, ci) => {
+                                        const count = rowColCounts[row]?.[col] ?? 0;
+                                        const pct = rowTotal > 0 ? Math.round((count / rowTotal) * 100) : 0;
+                                        return (
+                                          <div key={col} className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-500 w-24 shrink-0 truncate" title={col}>{col}</span>
+                                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.round((count / maxCount) * 100)}%`, backgroundColor: CHART_COLORS[ci % CHART_COLORS.length] }} />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-slate-700 w-5 text-right shrink-0 tabular-nums">{count}</span>
+                                            <span className="text-[10px] text-slate-400 w-8 shrink-0 tabular-nums">{pct}%</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
+
+                      ) : isGrid ? (
+                        /* ── Grid table: top values per column ── */
+                        (() => {
+                          type GridCol = { id: string; label: string; type: string };
+                          const gridCols = (q.settings?.grid_columns as GridCol[] | undefined) ?? [];
+                          if (!gridCols.length) return (
+                            <div className="flex items-center justify-center py-4 text-slate-400 text-sm italic">{answered} response{answered !== 1 ? 's' : ''} recorded</div>
+                          );
+                          const colValues: Record<string, string[]> = {};
+                          gridCols.forEach(gc => { colValues[gc.id] = []; });
+                          allAnswers.filter(a => a.question_id === q.id && a.answer_json).forEach(a => {
+                            const rows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
+                            if (!rows) return;
+                            rows.forEach(row => { gridCols.forEach(gc => { const v = row[gc.id]; if (v != null && String(v).trim()) colValues[gc.id].push(String(v)); }); });
+                          });
+                          return (
+                            <div className="space-y-4">
+                              {gridCols.map((gc, gci) => {
+                                const vals = colValues[gc.id] ?? [];
+                                const counts: Record<string, number> = {};
+                                vals.forEach(v => { counts[v] = (counts[v] ?? 0) + 1; });
+                                const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                                const maxCount = sorted.length > 0 ? sorted[0][1] : 1;
+                                return (
+                                  <div key={gc.id}>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{gc.label}</p>
+                                    {sorted.length === 0 ? (
+                                      <p className="text-xs text-slate-400 italic">No entries</p>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {sorted.map(([val, count]) => (
+                                          <div key={val} className="flex items-center gap-2">
+                                            <span className="text-xs text-slate-600 w-28 shrink-0 truncate" title={val}>{val}</span>
+                                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.round((count / maxCount) * 100)}%`, backgroundColor: CHART_COLORS[gci % CHART_COLORS.length] }} />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-slate-700 w-5 text-right shrink-0 tabular-nums">{count}</span>
+                                          </div>
+                                        ))}
+                                        {vals.length > sorted.reduce((s, [, c]) => s + c, 0) && (
+                                          <p className="text-[10px] text-slate-400 italic mt-0.5">{vals.length} total entries, top 6 shown</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
 
                       ) : (
                         <div className="flex items-center justify-center py-4 text-slate-400 text-sm italic">
@@ -3001,7 +3121,10 @@ export default function SurveyDetail() {
                               required: q.required,
                               options: q.options,
                               options_ar: q.options_ar ?? null,
-                              settings: q.variable_name ? { variable_name: q.variable_name } : {},
+                              settings: {
+                                ...(q.settings ?? {}),
+                                ...(q.variable_name ? { variable_name: q.variable_name } : {}),
+                              },
                             },
                           });
                         }

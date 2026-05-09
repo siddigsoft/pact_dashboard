@@ -326,7 +326,7 @@ async function callGroqText(
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 2048 }),
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 8192 }),
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
@@ -493,13 +493,33 @@ function geminiOcrPlugin() {
               // ── FILE MODE: extract every question from the uploaded file(s) ──
               ? `You are an expert humanitarian survey designer (ODK / SurveyCTO standard).
 The user has uploaded one or more reference survey files below.
-Your task: extract and convert EVERY question found in the file(s) into the JSON format below — do NOT skip any question, do NOT invent new ones, and do NOT limit the count.
-For each question, infer the best matching type from the allowed list.
+Your task: extract and convert EVERY question and section header found in the file(s) into the JSON format below.
+CRITICAL RULES:
+- Do NOT skip any question, table, or section title — extract ALL of them
+- Do NOT invent new questions
+- Do NOT limit the count — include every single item
+- For numbered sections (e.g. "SECTION 3. WORKLOAD") use type "section_header"
+- For tables with multiple columns (like planning/activity tables), use type "grid_table"
+- For questions with checkbox lists, use type "checkbox"
+- For yes/no dropdowns ("Choose an item"), use type "yesno"
+- For open text answers, use type "textarea"
 ${contextSection}${contextArSection}
 Return ONLY a valid JSON array with no markdown, no explanation.
-Each item: { "type": string, "label": string, "label_ar": string|null, "required": boolean, "options": string[]|null, "options_ar": string[]|null, "variable_name": string }
-Allowed types: text, textarea, radio, checkbox, dropdown, rating, scale, number, integer, date, gps, yesno, phone, email
-variable_name: short snake_case identifier — unique per question.
+
+Standard item schema:
+{ "type": string, "label": string, "label_ar": string|null, "required": boolean, "options": string[]|null, "options_ar": string[]|null, "variable_name": string, "settings": object|null }
+
+Allowed types: text, textarea, radio, checkbox, dropdown, rating, scale, number, integer, date, gps, yesno, phone, email, section_header, likert, grid_table
+
+For "section_header": label = the section title text, options = null, settings = null.
+
+For "grid_table" (use for any table/grid in the document):
+settings must be: { "grid_columns": [ { "id": "col_1", "label": "Column Header", "type": "text"|"number"|"date"|"dropdown", "options": string[]|null } ], "min_rows": 3, "max_rows": 10 }
+options = null for grid_table items.
+
+For "likert": settings = { "likert_rows": string[], "likert_cols": string[] }, options = null.
+
+variable_name: short unique snake_case identifier per item.
 options: array only for radio/checkbox/dropdown (English), null otherwise.
 options_ar: Arabic translations of options (same order), null if not applicable.
 ${langInstruction}
