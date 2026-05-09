@@ -316,9 +316,10 @@ async function callGroqText(
 ): Promise<{ text: string }> {
   const apiKey = process.env.GROQ_API_KEY || '';
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
+  // llama-3.3-70b-versatile: ~12k TPM  |  gemma2-9b-it: ~15k TPM
+  // llama-3.1-8b-instant excluded — only 6k TPM, too low for JSON survey extraction.
   const TEXT_MODELS = [
     'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant',
     'gemma2-9b-it',
     'meta-llama/llama-4-maverick-17b-128e-instruct',
   ];
@@ -327,7 +328,7 @@ async function callGroqText(
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 8192 }),
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 4096 }),
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
