@@ -559,9 +559,10 @@ Use varied question types and make each question clear and specific.`;
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              // Groq's free tier has a strict tokens-per-minute limit.
-              // Trim file context to ~4 000 chars so the prompt stays under ~12 000 tokens.
-              const GROQ_CTX_MAX = 4000;
+              // Groq fallback for file mode: use a larger context window than topic mode
+              // but stay within ~20 000 token prompt budget (llama3-70b handles ~8k tokens input).
+              // 12 000 chars ≈ 3 000 tokens of file content, leaving room for the JSON schema prompt.
+              const GROQ_CTX_MAX = 12000;
               const groqCtxEn  = fileContext   ? `\n\nENGLISH REFERENCE FILE CONTENT:\n${fileContext.slice(0, GROQ_CTX_MAX)}\n`   : '';
               const groqCtxAr  = fileContextAr ? `\n\nARABIC REFERENCE FILE CONTENT:\n${fileContextAr.slice(0, GROQ_CTX_MAX)}\n` : '';
               const groqPrompt = hasFile
