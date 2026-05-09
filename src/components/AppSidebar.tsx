@@ -76,6 +76,7 @@
     ArrowLeftRight,
     PiggyBank,
     Search,
+    GraduationCap,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -695,6 +696,9 @@
     const helpItems: MenuGroup['items'] = [];
     if (!isHidden('/changelog')) {
       helpItems.push({ id: 'changelog', title: "What's New", url: "/changelog", icon: Sparkles, priority: 0, isPinned: isPinned('/changelog') });
+    }
+    if (!isHidden('/staff-onboarding')) {
+      helpItems.push({ id: 'staff-onboarding', title: "Staff Onboarding", url: "/staff-onboarding", icon: GraduationCap, priority: 0.5, isPinned: isPinned('/staff-onboarding') });
     }
     if (!isHidden('/documentation')) {
       helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });
