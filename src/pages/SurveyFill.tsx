@@ -1145,7 +1145,16 @@ export default function SurveyFill() {
                 {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
                 {q.required && <span className="text-red-400 ml-1">*</span>}
               </p>
-              {q.description && <p className="text-xs text-slate-500 mt-0.5">{q.description}</p>}
+              {(q.description || q.description_ar) && (
+                <div className="mt-0.5 space-y-0.5">
+                  {q.description && (
+                    <p className="text-xs text-slate-500 italic leading-relaxed">{q.description}</p>
+                  )}
+                  {q.description_ar && (
+                    <p className="text-xs text-slate-500 italic leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           {err && <p className="text-xs text-red-500 pl-6">{err}</p>}
@@ -1253,10 +1262,15 @@ export default function SurveyFill() {
               <p className={cn('text-sm font-semibold', titleColors[ci])}>
                 {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
               </p>
-              {(lang === 'ar' ? (q.description_ar || q.description) : q.description) && (
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {lang === 'ar' ? (q.description_ar || q.description) : q.description}
-                </p>
+              {(q.description || q.description_ar) && (
+                <div className="mt-0.5 space-y-0.5">
+                  {q.description && (
+                    <p className="text-xs text-slate-400 italic leading-relaxed">{q.description}</p>
+                  )}
+                  {q.description_ar && (
+                    <p className="text-xs text-slate-400 italic leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1320,10 +1334,15 @@ export default function SurveyFill() {
               </span>
             )}
           </div>
-          {(lang === 'ar' ? (q.description_ar || q.description) : q.description) && (
-            <p className="text-xs text-slate-500 mt-1">
-              {lang === 'ar' ? (q.description_ar || q.description) : q.description}
-            </p>
+          {(q.description || q.description_ar) && (
+            <div className="mt-1 space-y-0.5">
+              {q.description && (
+                <p className="text-xs text-slate-500 italic leading-relaxed">{q.description}</p>
+              )}
+              {q.description_ar && (
+                <p className="text-xs text-slate-500 italic leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+              )}
+            </div>
           )}
         </div>
 

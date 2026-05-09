@@ -3541,6 +3541,11 @@ function QuestionCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
+          {(q.description || q.description_ar) && (
+            <p className="text-[10px] text-slate-400 italic truncate mt-0.5 leading-relaxed">
+              {q.description}{q.description && q.description_ar ? '  ·  ' : ''}{q.description_ar ?? ''}
+            </p>
+          )}
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[10px] text-slate-400 capitalize">{q.type.replace(/_/g, ' ')}</p>
             {q.settings?.variable_name && (
@@ -3600,12 +3605,12 @@ function QuestionCard({
                 <Input dir="rtl" lang="ar" value={labelArDraft} onChange={e => setLabelArDraft(e.target.value)} placeholder="نص السؤال بالعربية…" data-testid={`input-label-ar-${q.id}`} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Helper text <span className="text-slate-400 font-normal">(English, optional)</span></Label>
-                <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown below the question…" />
+                <Label className="text-xs">Hint <span className="text-slate-400 font-normal">(English, optional)</span></Label>
+                <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Guidance shown in italic below the question…" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">نص المساعدة <span className="text-slate-400 font-normal">(Arabic, optional)</span></Label>
-                <Input dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} placeholder="نص المساعدة بالعربية…" />
+                <Label className="text-xs">تلميح <span className="text-slate-400 font-normal">(Arabic — اختياري)</span></Label>
+                <Input dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} placeholder="تلميح يظهر أسفل السؤال بالعربية…" />
               </div>
             </div>
             <button
