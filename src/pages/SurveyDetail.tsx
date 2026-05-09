@@ -110,6 +110,7 @@ interface AiQuestion {
   label_ar: string | null;
   required: boolean;
   options: string[] | null;
+  options_ar: string[] | null;
   variable_name: string;
 }
 
@@ -329,8 +330,9 @@ export default function SurveyDetail() {
   const [aiGenerating, setAiGenerating]     = useState(false);
   const [aiSuggestions, setAiSuggestions]   = useState<AiQuestion[]>([]);
   const [aiSelected, setAiSelected]         = useState<Set<number>>(new Set());
-  const [aiLang, setAiLang]                 = useState<'en' | 'ar'>('en');
+  const [aiLang, setAiLang]                 = useState<'en' | 'ar' | 'both'>('en');
   const [aiFile, setAiFile]                 = useState<File | null>(null);
+  const [aiFileAr, setAiFileAr]             = useState<File | null>(null);
   const [reviewTarget, setReviewTarget]     = useState<Response | null>(null);
   const [reviewStatus, setReviewStatus]     = useState<string>('approved');
   const [reviewComment, setReviewComment]   = useState('');
@@ -2809,7 +2811,7 @@ export default function SurveyDetail() {
 
       {/* ── AI Generate Questions Dialog ─────────────────────────────────── */}
       {aiOpen && (
-        <Dialog open onOpenChange={() => { setAiOpen(false); setAiSuggestions([]); setAiFile(null); }}>
+        <Dialog open onOpenChange={() => { setAiOpen(false); setAiSuggestions([]); setAiFile(null); setAiFileAr(null); }}>
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -2830,65 +2832,85 @@ export default function SurveyDetail() {
                       data-testid="input-ai-topic"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Reference File <span className="text-slate-400 font-normal">(optional — ODK XLSForm .xlsx or Word .docx)</span></Label>
-                    {aiFile ? (
-                      <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-                        <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0" />
-                        <span className="text-xs text-indigo-700 truncate flex-1">{aiFile.name}</span>
-                        <button onClick={() => setAiFile(null)} className="text-slate-400 hover:text-red-500 shrink-0" data-testid="btn-ai-file-clear">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 hover:border-violet-400 bg-white hover:bg-violet-50 px-3 py-2.5 text-xs text-slate-500 hover:text-violet-600 cursor-pointer transition-all" data-testid="label-ai-file-upload">
-                        <Upload className="w-3.5 h-3.5 shrink-0" />
-                        <span>Click to upload ODK XLSForm (.xlsx/.xls) or Word document (.docx)</span>
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls,.docx,.doc"
-                          className="hidden"
-                          onChange={e => { const f = e.target.files?.[0]; if (f) setAiFile(f); e.target.value = ''; }}
-                          data-testid="input-ai-file"
-                        />
-                      </label>
-                    )}
-                    <p className="text-[11px] text-slate-400">File content is extracted client-side and sent to the AI as context for more relevant question generation.</p>
+                  {/* Reference files — English + Arabic */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Reference Files <span className="text-slate-400 font-normal">(optional — ODK XLSForm .xlsx or Word .docx)</span></Label>
+
+                    {/* English file */}
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">English File</p>
+                      {aiFile ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                          <FileSpreadsheet className="w-4 h-4 text-indigo-500 shrink-0" />
+                          <span className="text-xs text-indigo-700 truncate flex-1">{aiFile.name}</span>
+                          <button onClick={() => setAiFile(null)} className="text-slate-400 hover:text-red-500 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 hover:border-violet-400 bg-white hover:bg-violet-50 px-3 py-2.5 text-xs text-slate-500 hover:text-violet-600 cursor-pointer transition-all" data-testid="label-ai-file-upload">
+                          <Upload className="w-3.5 h-3.5 shrink-0" />
+                          <span>Upload English XLSForm / Word doc…</span>
+                          <input type="file" accept=".xlsx,.xls,.docx,.doc" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setAiFile(f); e.target.value = ''; }} data-testid="input-ai-file" />
+                        </label>
+                      )}
+                    </div>
+
+                    {/* Arabic file */}
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Arabic File <span className="font-normal normal-case">(عربي)</span></p>
+                      {aiFileAr ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                          <FileSpreadsheet className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span className="text-xs text-amber-700 truncate flex-1">{aiFileAr.name}</span>
+                          <button onClick={() => setAiFileAr(null)} className="text-slate-400 hover:text-red-500 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 hover:border-amber-400 bg-white hover:bg-amber-50 px-3 py-2.5 text-xs text-slate-500 hover:text-amber-600 cursor-pointer transition-all" data-testid="label-ai-file-ar-upload">
+                          <Upload className="w-3.5 h-3.5 shrink-0" />
+                          <span>Upload Arabic XLSForm / Word doc…</span>
+                          <input type="file" accept=".xlsx,.xls,.docx,.doc" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setAiFileAr(f); e.target.value = ''; }} data-testid="input-ai-file-ar" />
+                        </label>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400">Files are read client-side and sent to the AI as context. Upload separate files for each language for best results.</p>
                   </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Number of questions</Label>
-                      <Select value={String(aiCount)} onValueChange={v => setAiCount(Number(v))}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {[5,8,10,15,20].map(n => <SelectItem key={n} value={String(n)}>{n} questions</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={aiCount}
+                        onChange={e => setAiCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="h-8 text-xs"
+                        data-testid="input-ai-count"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Language</Label>
-                      <Select value={aiLang} onValueChange={v => setAiLang(v as 'en' | 'ar')}>
+                      <Select value={aiLang} onValueChange={v => setAiLang(v as 'en' | 'ar' | 'both')}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="en">English</SelectItem>
                           <SelectItem value="ar">Arabic (عربي)</SelectItem>
+                          <SelectItem value="both">Both (EN + AR)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   <Button
-                    disabled={(!aiTopic.trim() && !aiFile) || aiGenerating}
+                    disabled={(!aiTopic.trim() && !aiFile && !aiFileAr) || aiGenerating}
                     onClick={async () => {
                       setAiGenerating(true);
                       try {
                         let fileContext = '';
-                        if (aiFile) {
-                          try { fileContext = await extractFileContext(aiFile); } catch { /* ignore parse errors */ }
-                        }
+                        let fileContextAr = '';
+                        if (aiFile)   { try { fileContext   = await extractFileContext(aiFile);   } catch { /* ignore */ } }
+                        if (aiFileAr) { try { fileContextAr = await extractFileContext(aiFileAr); } catch { /* ignore */ } }
                         const res = await fetch('/api/generate-survey-questions', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang, fileContext }),
+                          body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang, fileContext, fileContextAr }),
                         });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error ?? 'AI generation failed');
@@ -2959,6 +2981,7 @@ export default function SurveyDetail() {
                               label_ar: q.label_ar ?? null,
                               required: q.required,
                               options: q.options,
+                              options_ar: q.options_ar ?? null,
                               settings: q.variable_name ? { variable_name: q.variable_name } : {},
                             },
                           });
