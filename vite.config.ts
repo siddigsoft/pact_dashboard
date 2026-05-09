@@ -543,7 +543,23 @@ Use varied question types and make each question clear and specific.`;
             }
             const jsonMatch = text.match(/\[[\s\S]*\]/);
             if (!jsonMatch) throw new Error('No JSON array in AI response');
-            const questions = JSON.parse(jsonMatch[0]);
+            let jsonStr = jsonMatch[0];
+            // Attempt 1: direct parse
+            let questions: any[];
+            try {
+              questions = JSON.parse(jsonStr);
+            } catch {
+              // Attempt 2: strip trailing commas before ] or }
+              const cleaned = jsonStr.replace(/,\s*([}\]])/g, '$1');
+              try {
+                questions = JSON.parse(cleaned);
+              } catch {
+                // Attempt 3: truncate at the last fully-closed object and close the array
+                const lastClose = cleaned.lastIndexOf('}');
+                if (lastClose < 0) throw new Error('No JSON array in AI response');
+                questions = JSON.parse(cleaned.slice(0, lastClose + 1) + ']');
+              }
+            }
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ questions }));
