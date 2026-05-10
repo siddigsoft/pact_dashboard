@@ -334,6 +334,7 @@ export default function SurveyDetail() {
   const [aiGenerating, setAiGenerating]     = useState(false);
   const [aiSuggestions, setAiSuggestions]   = useState<AiQuestion[]>([]);
   const [aiSelected, setAiSelected]         = useState<Set<number>>(new Set());
+  const [aiChunkStatus, setAiChunkStatus]   = useState<{ current: number; total: number; done: boolean } | null>(null);
   const [aiLang, setAiLang]                 = useState<'en' | 'ar' | 'both'>('en');
   const [aiFile, setAiFile]                 = useState<File | null>(null);
   const [aiFileAr, setAiFileAr]             = useState<File | null>(null);
@@ -953,7 +954,7 @@ export default function SurveyDetail() {
               supabase.from('survey_questions').update({ order_index: node.q.order_index }).eq('id', dragged.id),
               supabase.from('survey_questions').update({ order_index: tmp }).eq('id', node.q.id),
             ]);
-            qc.invalidateQueries({ queryKey: ['survey-questions', surveyId] });
+            qc.invalidateQueries({ queryKey: ['survey-questions', id] });
             setDraggedQId(null);
           }}
           isBulkSelected={bulkSelected.has(node.q.id)}
@@ -3044,20 +3045,70 @@ export default function SurveyDetail() {
                     disabled={(!aiTopic.trim() && !aiFile && !aiFileAr) || aiGenerating}
                     onClick={async () => {
                       setAiGenerating(true);
+                      setAiSuggestions([]);
+                      setAiSelected(new Set());
+                      setAiChunkStatus(null);
                       try {
                         let fileContext = '';
                         let fileContextAr = '';
                         if (aiFile)   { try { fileContext   = await extractFileContext(aiFile);   } catch { /* ignore */ } }
                         if (aiFileAr) { try { fileContextAr = await extractFileContext(aiFileAr); } catch { /* ignore */ } }
-                        const res = await fetch('/api/generate-survey-questions', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang, fileContext, fileContextAr }),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error ?? 'AI generation failed');
-                        setAiSuggestions(data.questions ?? []);
-                        setAiSelected(new Set(data.questions.map((_: AiQuestion, i: number) => i)));
+                        const hasFile = !!(fileContext || fileContextAr);
+
+                        if (hasFile) {
+                          // Progressive chunked mode — one API call per chunk, results appear live
+                          const CHUNK_EN = 6000;
+                          const CHUNK_AR = 3000;
+                          const totalChunks = Math.min(Math.max(1, Math.ceil(fileContext.length / CHUNK_EN)), 13);
+                          const seen = new Set<string>();
+                          const accumulated: AiQuestion[] = [];
+
+                          for (let i = 0; i < totalChunks; i++) {
+                            setAiChunkStatus({ current: i + 1, total: totalChunks, done: false });
+                            const chunkEn = fileContext.slice(i * CHUNK_EN, (i + 1) * CHUNK_EN);
+                            const chunkAr = fileContextAr ? fileContextAr.slice(i * CHUNK_AR, (i + 1) * CHUNK_AR) : '';
+                            if (!chunkEn && !chunkAr) break;
+                            try {
+                              const res = await fetch('/api/generate-survey-questions', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang, fileContext: chunkEn, fileContextAr: chunkAr }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) { if (i === 0) throw new Error(data.error ?? 'AI generation failed'); break; }
+                              const newQs: AiQuestion[] = [];
+                              for (const q of (data.questions ?? [])) {
+                                const key = String(q.variable_name || q.label || '').toLowerCase().trim();
+                                if (key && !seen.has(key)) { seen.add(key); newQs.push(q); }
+                              }
+                              if (newQs.length > 0) {
+                                accumulated.push(...newQs);
+                                setAiSuggestions([...accumulated]);
+                                setAiSelected(prev => {
+                                  const n = new Set(prev);
+                                  for (let j = accumulated.length - newQs.length; j < accumulated.length; j++) n.add(j);
+                                  return n;
+                                });
+                              }
+                            } catch (chunkErr: any) {
+                              if (i === 0) throw chunkErr;
+                              break;
+                            }
+                          }
+                          setAiChunkStatus(prev => prev ? { ...prev, done: true } : null);
+                          if (accumulated.length === 0) throw new Error('No questions could be extracted from the file');
+                        } else {
+                          // Topic mode — single call
+                          const res = await fetch('/api/generate-survey-questions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ topic: aiTopic, count: aiCount, lang: aiLang, fileContext: '', fileContextAr: '' }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error ?? 'AI generation failed');
+                          setAiSuggestions(data.questions ?? []);
+                          setAiSelected(new Set((data.questions ?? []).map((_: AiQuestion, i: number) => i)));
+                        }
                       } catch (e: any) {
                         toast({ title: 'AI generation failed', description: e.message, variant: 'destructive' });
                       } finally {

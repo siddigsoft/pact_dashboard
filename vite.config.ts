@@ -566,75 +566,27 @@ Use varied question types and make each question clear and specific.`;
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              if (!hasFile) {
-                // Topic mode — single Groq call, no chunking needed
-                const r = await callGroqText([{ role: 'user', content: prompt }]);
-                text = r.text.replace(/```json\n?|```\n?/g, '').trim();
-              } else {
-                // File mode — chunked extraction.
-                // Each chunk uses a DIFFERENT Groq model so each call draws from
-                // its own independent TPM budget — no rate-limit collisions.
-                // Chunk size: 6 000 EN chars + 3 000 AR chars per chunk.
-                // 3 chunks × 3 models = 18 000 chars EN coverage (~50 %+ of most DOCX files).
-                const CHUNK_EN   = 6000;
-                const CHUNK_AR   = 3000;
-                const MAX_CHUNKS = 3;
-                // One model per chunk — independent TPM budgets
-                const CHUNK_MODELS = [
-                  'llama-3.3-70b-versatile',
-                  'gemma2-9b-it',
-                  'meta-llama/llama-4-maverick-17b-128e-instruct',
-                ];
-                const groqKey  = process.env.GROQ_API_KEY || '';
-                const allItems: any[] = [];
-                const seen     = new Set<string>();
-
-                for (let i = 0; i < MAX_CHUNKS; i++) {
-                  const en = fileContext   ? fileContext.slice(i * CHUNK_EN, (i + 1) * CHUNK_EN)   : '';
-                  const ar = fileContextAr ? fileContextAr.slice(i * CHUNK_AR, (i + 1) * CHUNK_AR) : '';
-                  if (!en) break; // past end of document
-
-                  const s1 = `\n\nENGLISH FILE EXCERPT (part ${i + 1} of ${MAX_CHUNKS}):\n${en}\n`;
-                  const s2 = ar ? `\n\nARABIC FILE EXCERPT (part ${i + 1} of ${MAX_CHUNKS}):\n${ar}\n` : '';
-                  const chunkPrompt = `You are an expert humanitarian survey designer (ODK standard).
-Extract every question and section header from this excerpt. Do not skip any. Do not invent questions not in the excerpt.
-Use type "section_header" for section titles, "checkbox" for checkbox lists, "yesno" for yes/no dropdowns, "grid_table" for tables, "textarea" for open text.
+              // Groq fallback — single call. The frontend handles chunking and sends
+              // one small chunk per request, so each call stays within TPM budgets.
+              const GROQ_CTX_MAX = 5000;
+              const groqEn = fileContext   ? fileContext.slice(0, GROQ_CTX_MAX)   : '';
+              const groqAr = fileContextAr ? fileContextAr.slice(0, GROQ_CTX_MAX) : '';
+              const s1 = groqEn ? `\n\nENGLISH FILE CONTENT:\n${groqEn}\n` : '';
+              const s2 = groqAr ? `\n\nARABIC FILE CONTENT:\n${groqAr}\n`  : '';
+              const groqPrompt = hasFile
+                ? `You are an expert humanitarian survey designer (ODK standard).
+Extract every question and section header from the file excerpt below. Do not skip any. Do not invent questions.
+Use "section_header" for section titles, "checkbox" for checkbox lists, "yesno" for yes/no dropdowns, "grid_table" for tables, "textarea" for open text.
 ${s1}${s2}
-Return ONLY a valid JSON array ([] if no questions found in this excerpt).
+Return ONLY a valid JSON array ([] if empty).
 Schema: { "type": string, "label": string, "label_ar": string|null, "required": boolean, "options": string[]|null, "options_ar": string[]|null, "variable_name": string, "settings": object|null }
 Allowed types: text, textarea, radio, checkbox, dropdown, rating, scale, number, integer, date, gps, yesno, phone, email, section_header, likert, grid_table
-For "grid_table": settings = { "grid_columns": [{ "id": "col_1", "label": "Column Header", "type": "text", "options": null }], "min_rows": 3, "max_rows": 10 }
-variable_name: short unique snake_case, unique per item.
-options: array only for radio/checkbox/dropdown, null otherwise.
-${langInstruction}`;
-
-                  const model = CHUNK_MODELS[i % CHUNK_MODELS.length];
-                  try {
-                    const cRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-                      body: JSON.stringify({ model, messages: [{ role: 'user', content: chunkPrompt }], temperature: 0.2, max_tokens: 4096 }),
-                    });
-                    if (!cRes.ok) continue; // skip chunk on any error
-                    const cData = await cRes.json() as any;
-                    const cText = (cData.choices?.[0]?.message?.content || '').replace(/```json\n?|```\n?/g, '').trim();
-                    const m = cText.match(/\[[\s\S]*\]/);
-                    if (m) {
-                      let items: any[] = [];
-                      try { items = JSON.parse(m[0]); } catch {
-                        const clean = m[0].replace(/,\s*([}\]])/g, '$1');
-                        try { items = JSON.parse(clean); } catch { items = []; }
-                      }
-                      for (const q of items) {
-                        const key = String(q.variable_name || q.label || '').toLowerCase().trim();
-                        if (key && !seen.has(key)) { seen.add(key); allItems.push(q); }
-                      }
-                    }
-                  } catch { continue; } // network / parse error — skip chunk
-                }
-                // Serialise merged list so the normal JSON-parse block below picks it up
-                text = JSON.stringify(allItems.length ? allItems : []);
-              }
+For "grid_table": settings = { "grid_columns": [{"id":"col_1","label":"Column Header","type":"text","options":null}], "min_rows": 3, "max_rows": 10 }
+variable_name: short unique snake_case per item. options: array only for radio/checkbox/dropdown, null otherwise.
+${langInstruction}${topic.trim() ? '\nAdditional context: ' + topic : ''}`
+                : prompt;
+              const r = await callGroqText([{ role: 'user', content: groqPrompt }]);
+              text = r.text.replace(/```json\n?|```\n?/g, '').trim();
             }
             const jsonMatch = text.match(/\[[\s\S]*\]/);
             if (!jsonMatch) throw new Error('No JSON array in AI response');
