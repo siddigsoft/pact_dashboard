@@ -125,7 +125,7 @@ async function extractFileContext(file: File): Promise<string> {
     if (surveyWs) {
       const rows = XLSX.utils.sheet_to_json<Record<string, string>>(surveyWs, { defval: '' });
       text += `Survey questions (${rows.length}):\n`;
-      rows.slice(0, 120).forEach((r, i) => {
+      rows.slice(0, 500).forEach((r, i) => {
         const type = r['type'] || r['Type'] || '';
         const name = r['name'] || r['Name'] || '';
         const label = r['label'] || r['label::English'] || r['label::English (en)'] || r['Label'] || '';
@@ -150,7 +150,7 @@ async function extractFileContext(file: File): Promise<string> {
         Object.entries(listMap).slice(0, 30).forEach(([list, opts]) => { text += `- ${list}: ${opts.join(', ')}\n`; });
       }
     }
-    return text.slice(0, 20000);
+    return text.slice(0, 80000);
   }
   if (ext === 'docx' || ext === 'doc') {
     const buffer = await file.arrayBuffer();
@@ -3059,7 +3059,7 @@ export default function SurveyDetail() {
                           // Progressive chunked mode — one API call per chunk, results appear live
                           const CHUNK_EN = 6000;
                           const CHUNK_AR = 3000;
-                          const totalChunks = Math.min(Math.max(1, Math.ceil(fileContext.length / CHUNK_EN)), 13);
+                          const totalChunks = Math.min(Math.max(1, Math.ceil(fileContext.length / CHUNK_EN)), 25);
                           const seen = new Set<string>();
                           const accumulated: AiQuestion[] = [];
 
