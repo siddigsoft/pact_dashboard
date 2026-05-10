@@ -4081,6 +4081,7 @@ function QuestionCard({
   onBulkToggle?: (v: boolean) => void;
   onSaveToLibrary?: () => void;
 }) {
+  const [typeDraft, setTypeDraft]       = useState<QuestionType>(q.type);
   const [labelDraft, setLabelDraft]     = useState(q.label);
   const [labelArDraft, setLabelArDraft] = useState(q.label_ar ?? '');
   const [descDraft, setDescDraft]       = useState(q.description ?? '');
@@ -4133,11 +4134,11 @@ function QuestionCard({
   type CondOptRule = { option: string; depends_on: string; depends_value: string };
   const [condOptRules, setCondOptRules] = useState<CondOptRule[]>((q.settings?.conditional_options as CondOptRule[] | undefined) ?? []);
 
-  const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
-  const hasOptions = ['radio','checkbox','dropdown'].includes(q.type);
-  const isSection = q.type === 'section_header';
-  const isNote = q.type === 'note';
-  const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(q.type);
+  const QIcon = ALL_Q_TYPES.find(t => t.type === typeDraft)?.icon ?? FileText;
+  const hasOptions = ['radio','checkbox','dropdown'].includes(typeDraft);
+  const isSection = typeDraft === 'section_header';
+  const isNote = typeDraft === 'note';
+  const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(typeDraft);
 
   const prevQuestions = allQuestions.filter((pq) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
 
@@ -4165,6 +4166,7 @@ function QuestionCard({
       ? optsDraft.map((_, i) => optsArDraft[i] ?? '')
       : null;
     onUpdate({
+      type: typeDraft,
       label: labelDraft.trim() || q.label,
       label_ar: labelArDraft.trim() || null,
       description: descDraft.trim() || null,
@@ -4351,6 +4353,36 @@ function QuestionCard({
       {isEditing && (
         <div className="border-t border-indigo-100 p-4 space-y-4 bg-indigo-50/30">
           <div className="space-y-3">
+            {/* Question type selector */}
+            <div className="space-y-1">
+              <Label className="text-xs flex items-center gap-1.5">
+                <QIcon className="w-3 h-3 text-slate-400" />
+                Question Type
+              </Label>
+              <Select value={typeDraft} onValueChange={v => setTypeDraft(v as QuestionType)}>
+                <SelectTrigger className="h-8 text-xs w-full sm:w-64" data-testid={`select-qtype-${q.id}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Q_TYPE_GROUPS.filter(g => g.label !== 'Layout & Structure').map(g => (
+                    <div key={g.label}>
+                      <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{g.label}</div>
+                      {g.types.map(t => {
+                        const TIcon = t.icon;
+                        return (
+                          <SelectItem key={t.type} value={t.type} className="text-xs">
+                            <span className="flex items-center gap-1.5">
+                              <TIcon className="w-3 h-3 text-slate-500" />
+                              {t.label}
+                            </span>
+                          </SelectItem>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs">Question text <span className="text-slate-400 font-normal">(English)</span></Label>
