@@ -1209,12 +1209,12 @@ export default function SurveyFill() {
                 {q.required && <span className="text-red-400 ml-1">*</span>}
               </p>
               {(q.description || q.description_ar) && (
-                <div className="mt-0.5 space-y-0.5">
+                <div className="mt-1.5 space-y-1">
                   {q.description && (
-                    <p className="text-xs text-slate-500 italic leading-relaxed">{q.description}</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">{q.description}</p>
                   )}
                   {q.description_ar && (
-                    <p className="text-xs text-slate-500 italic leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+                    <p className="text-sm text-slate-500 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
                   )}
                 </div>
               )}
@@ -1326,12 +1326,12 @@ export default function SurveyFill() {
                 {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
               </p>
               {(q.description || q.description_ar) && (
-                <div className="mt-0.5 space-y-0.5">
+                <div className="mt-1.5 space-y-1">
                   {q.description && (
-                    <p className="text-xs text-slate-400 italic leading-relaxed">{q.description}</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">{q.description}</p>
                   )}
                   {q.description_ar && (
-                    <p className="text-xs text-slate-400 italic leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+                    <p className="text-sm text-slate-500 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
                   )}
                 </div>
               )}
@@ -1347,10 +1347,19 @@ export default function SurveyFill() {
     // Section header (flat divider)
     if (q.type === 'section_header') {
       return (
-        <div key={q.id} className="pt-4 pb-1">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">
-            {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
-          </p>
+        <div key={q.id} className="pt-6 pb-1">
+          <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-200">
+            <div className="w-1 h-6 rounded-full bg-indigo-500 shrink-0" />
+            <p className="text-base font-bold text-slate-700 tracking-wide leading-tight">
+              {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
+            </p>
+          </div>
+          {(q.description || q.description_ar) && (
+            <div className="mt-2 pl-4 space-y-0.5">
+              {q.description && <p className="text-sm text-slate-500 leading-relaxed">{q.description}</p>}
+              {q.description_ar && <p className="text-sm text-slate-500 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>}
+            </div>
+          )}
         </div>
       );
     }
@@ -1445,12 +1454,12 @@ export default function SurveyFill() {
         data-testid={`question-${q.id}`}
       >
         <div>
-          <div className="flex items-start gap-1 justify-between">
-            <div className="flex items-start gap-1">
-              <p className="text-sm font-semibold text-slate-800 leading-snug">
+          <div className="flex items-start gap-1.5 justify-between">
+            <div className="flex items-start gap-1.5 flex-1 min-w-0">
+              <p className="text-[15px] font-semibold text-slate-800 leading-snug">
                 {displayLabel}
               </p>
-              {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
+              {q.required && <span className="text-red-500 text-base leading-none shrink-0 mt-0.5">*</span>}
             </div>
             {hasSkip && (
               <span className="flex items-center gap-0.5 text-[10px] text-amber-600 shrink-0 ml-2">
@@ -1459,12 +1468,12 @@ export default function SurveyFill() {
             )}
           </div>
           {(q.description || q.description_ar) && (
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-1.5 pl-0.5 space-y-1">
               {q.description && (
-                <p className="text-xs text-slate-500 italic leading-relaxed">{q.description}</p>
+                <p className="text-sm text-slate-500 leading-relaxed">{q.description}</p>
               )}
               {q.description_ar && (
-                <p className="text-xs text-slate-500 italic leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+                <p className="text-sm text-slate-500 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
               )}
             </div>
           )}
