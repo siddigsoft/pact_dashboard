@@ -127,12 +127,51 @@ export default function AccountingGLAudit() {
 
   const loadCoverage = useCallback(async () => {
     setCoverageLoading(true);
+    // Use v_acct_gl_bridge_summary (Phase 2 view); derive coverage fields in JS
     const { data } = await supabase
-      .from('acct_gl_bridge_coverage' as any)
-      .select('*')
-      .order('last_event_at', { ascending: false })
-      .limit(100);
-    setCoverage(((data ?? []) as any[]) as CoverageRow[]);
+      .from('v_acct_gl_bridge_summary' as any)
+      .select('source_table, event_type, success_count, error_count, skipped_count, last_fired_at, last_error')
+      .order('last_fired_at', { ascending: false })
+      .limit(200);
+    // Group by source_table and compute aggregate CoverageRow fields
+    const grouped: Record<string, CoverageRow> = {};
+    for (const row of ((data ?? []) as any[])) {
+      const key = row.source_table as string;
+      const s = Number(row.success_count ?? 0);
+      const e = Number(row.error_count ?? 0);
+      const sk = Number(row.skipped_count ?? 0);
+      if (!grouped[key]) {
+        grouped[key] = {
+          source_table: key,
+          total_events: 0,
+          success_count: 0,
+          error_count: 0,
+          skipped_count: 0,
+          success_pct: 0,
+          last_event_at: row.last_fired_at ?? null,
+          last_error_at: e > 0 ? (row.last_fired_at ?? null) : null,
+          health_status: 'no_data',
+        };
+      }
+      grouped[key].total_events  += s + e + sk;
+      grouped[key].success_count += s;
+      grouped[key].error_count   += e;
+      grouped[key].skipped_count += sk;
+      if (row.last_fired_at && (!grouped[key].last_event_at || row.last_fired_at > grouped[key].last_event_at!)) {
+        grouped[key].last_event_at = row.last_fired_at;
+      }
+    }
+    const rows: CoverageRow[] = Object.values(grouped).map(c => {
+      const total = c.success_count + c.error_count;
+      c.success_pct = total > 0 ? Math.round((c.success_count / total) * 100) : 0;
+      c.health_status = c.total_events === 0
+        ? 'no_data'
+        : c.error_count === 0
+          ? 'healthy'
+          : c.success_pct >= 80 ? 'healthy' : 'degraded';
+      return c;
+    }).sort((a, b) => (b.last_event_at ?? '').localeCompare(a.last_event_at ?? ''));
+    setCoverage(rows);
     setCoverageLoading(false);
   }, []);
 

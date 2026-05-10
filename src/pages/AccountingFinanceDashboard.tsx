@@ -322,23 +322,24 @@ export default function AccountingFinanceDashboard() {
         const d = subMonths(new Date(), 5 - i);
         return { label: format(d, 'MMM yy'), start: format(startOfMonth(d), 'yyyy-MM-dd'), end: format(endOfMonth(d), 'yyyy-MM-dd') };
       });
-      const results: MonthlyRevenueExpense[] = [];
-      for (const m of months) {
-        const { data } = await supabase.from('acct_journal_lines')
+      const monthData = await Promise.all(months.map(m =>
+        supabase.from('acct_journal_lines')
           .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
           .in('acct_accounts.account_type', ['revenue', 'expense'])
           .eq('acct_journal_entries.status', 'posted')
           .gte('acct_journal_entries.posting_date', m.start)
-          .lte('acct_journal_entries.posting_date', m.end);
+          .lte('acct_journal_entries.posting_date', m.end)
+      ));
+      const results: MonthlyRevenueExpense[] = months.map((m, i) => {
         let rev = 0, exp = 0;
-        for (const l of (data ?? []) as any[]) {
+        for (const l of ((monthData[i].data ?? []) as any[])) {
           const type = (l.acct_accounts as any)?.account_type;
           const amt = Number(l.functional_amount ?? 0);
           if (type === 'revenue' && l.debit_credit === 'CR') rev += amt;
           if (type === 'expense' && l.debit_credit === 'DR') exp += amt;
         }
-        results.push({ month: m.label, revenue: rev, expense: exp });
-      }
+        return { month: m.label, revenue: rev, expense: exp };
+      });
       setMonthlyRevExp({ data: results, loading: false, error: null });
     } catch { setMonthlyRevExp({ data: [], loading: false, error: null }); }
   }, []);
@@ -403,9 +404,13 @@ export default function AccountingFinanceDashboard() {
       const [acctRes, fundRes, periodRes] = await Promise.all([
         supabase.from('acct_accounts').select('id').limit(5000),
         supabase.from('acct_funds').select('id').limit(500),
-        supabase.from('acct_fiscal_periods').select('id, period_name, is_open').limit(100),
+        supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status').order('start_date', { ascending: false }).limit(100),
       ]);
-      const activePeriod = ((periodRes.data ?? []) as any[]).find(p => p.is_open)?.period_name ?? null;
+      const periods = (periodRes.data ?? []) as any[];
+      const openPeriod = periods.find((p: any) => p.status === 'open' || p.status === 'soft_closed');
+      const activePeriod = openPeriod
+        ? `P${String(openPeriod.period_no).padStart(2, '0')} · ${format(parseISO(openPeriod.start_date), 'MMM d')}–${format(parseISO(openPeriod.end_date), 'MMM d yy')}`
+        : null;
       setCOA({
         data: {
           accountCount: (acctRes.error?.code === '42P01') ? 0 : (acctRes.data?.length ?? 0),
