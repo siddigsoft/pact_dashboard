@@ -348,12 +348,12 @@ export default function AccountingFinanceDashboard() {
   const loadPOs = useCallback(async () => {
     setPOs(p => ({ ...p, loading: true, error: null }));
     try {
-      const { data, error } = await supabase.from('acct_purchase_orders').select('total_amount, status').limit(2000);
+      const { data, error } = await supabase.from('acct_purchase_orders').select('amount, status').limit(2000);
       if (error?.code === '42P01') { setPOs({ data: { pendingCount: 0, pendingAmount: 0, draftCount: 0, approvedCount: 0 }, loading: false, error: null }); return; }
       if (error) throw error;
       const rows = (data ?? []) as any[];
       const pending = rows.filter(r => r.status === 'submitted');
-      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.total_amount ?? 0), 0), draftCount: rows.filter(r => r.status === 'draft').length, approvedCount: rows.filter(r => r.status === 'approved').length }, loading: false, error: null });
+      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.amount ?? 0), 0), draftCount: rows.filter(r => r.status === 'draft').length, approvedCount: rows.filter(r => r.status === 'approved').length }, loading: false, error: null });
     } catch (e: any) { setPOs({ data: null, loading: false, error: e.message }); }
   }, []);
 

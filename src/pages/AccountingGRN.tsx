@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
-interface PO { id: string; po_number: string; title: string; vendor_id: string | null; total_amount: number; currency: string }
+interface PO { id: string; po_number: string; title: string; vendor_id: string | null; amount: number; currency: string }
 interface Vendor { id: string; name_en: string }
 
 interface GRN {
@@ -89,7 +89,7 @@ export default function AccountingGRN() {
     setLoading(true);
     const [{ data: grnData }, { data: poData }, { data: vData }, { data: cData }] = await Promise.all([
       supabase.from('acct_grn_receipts').select('*').order('created_at', { ascending: false }),
-      supabase.from('acct_purchase_orders').select('id, po_number, title, vendor_id, total_amount, currency').order('created_at', { ascending: false }),
+      supabase.from('acct_purchase_orders').select('id, po_number, title, vendor_id, amount, currency').order('created_at', { ascending: false }),
       supabase.from('acct_vendors').select('id, name_en').order('name_en'),
       supabase.from('countries').select('id, name_en').eq('is_active', true).order('name_en'),
     ]);

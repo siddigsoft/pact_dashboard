@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
-interface PO { id: string; po_number: string; title: string; total_amount: number; currency: string }
+interface PO { id: string; po_number: string; title: string; amount: number; currency: string }
 interface GRN { id: string; grn_number: string; title: string }
 interface Vendor { id: string; name_en: string; vendor_code: string | null }
 interface Fund { id: string; code: string; name_en: string }
@@ -96,7 +96,7 @@ export default function AccountingAPInvoices() {
     setLoading(true);
     const [{ data: invData }, { data: poData }, { data: grnData }, { data: vData }, { data: fData }, { data: aData }, { data: cData }] = await Promise.all([
       supabase.from('acct_invoices').select('*').order('created_at', { ascending: false }),
-      supabase.from('acct_purchase_orders').select('id, po_number, title, total_amount, currency').order('created_at', { ascending: false }),
+      supabase.from('acct_purchase_orders').select('id, po_number, title, amount, currency').order('created_at', { ascending: false }),
       supabase.from('acct_grn_receipts').select('id, grn_number').order('created_at', { ascending: false }),
       supabase.from('acct_vendors').select('id, name_en, vendor_code').order('name_en'),
       supabase.from('acct_funds').select('id, code, name_en').order('code'),
