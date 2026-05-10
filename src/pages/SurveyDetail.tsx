@@ -77,6 +77,7 @@ interface SkipLogic {
 
 interface Survey {
   id: string;
+  short_code: string | null;
   title: string;
   title_ar: string | null;
   description: string | null;
@@ -630,7 +631,8 @@ export default function SurveyDetail() {
   });
 
   const copyFillLink = () => {
-    const url = `${window.location.origin}/s/${id}`;
+    const slug = survey?.short_code ?? survey?.id ?? id;
+    const url = `${window.location.origin}/s/${slug}`;
     navigator.clipboard.writeText(url).then(() => {
       toast({ title: 'Link copied!', description: 'Share this link with your respondents.' });
     }).catch(() => {
@@ -1034,7 +1036,7 @@ export default function SurveyDetail() {
             <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 h-4 border', scfg.color)}>{scfg.label}</Badge>
             {survey.status === 'active' && (
               <>
-                <a href={`/s/${survey.id}`} target="_blank" rel="noopener noreferrer"
+                <a href={`/s/${survey.short_code ?? survey.id}`} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline">
                   <ExternalLink className="w-3 h-3" />Fill Link
                 </a>
@@ -2538,7 +2540,7 @@ export default function SurveyDetail() {
               {survey.status === 'active' && (
                 <div className="flex items-center gap-2">
                   <a
-                    href={`/s/${survey.id}`}
+                    href={`/s/${survey.short_code ?? survey.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors"
@@ -3125,7 +3127,7 @@ export default function SurveyDetail() {
             </Button>
             {survey.status === 'active' && (
               <a
-                href={`/s/${survey.id}`}
+                href={`/s/${survey.short_code ?? survey.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:underline"
@@ -3447,7 +3449,7 @@ export default function SurveyDetail() {
               </DialogTitle>
             </DialogHeader>
             {(() => {
-              const fillUrl = `${window.location.origin}/s/${survey.id}`;
+              const fillUrl = `${window.location.origin}/s/${survey.short_code ?? survey.id}`;
               const embedCode = `<iframe src="${fillUrl}" width="100%" height="600" frameborder="0" style="border-radius:12px;border:1px solid #e2e8f0;"></iframe>`;
               const waMsg = encodeURIComponent(`Please fill out this survey: ${survey.title}\n${fillUrl}`);
               const waUrl = `https://wa.me/?text=${waMsg}`;

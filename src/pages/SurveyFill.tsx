@@ -44,6 +44,7 @@ interface SkipLogic {
 
 interface Survey {
   id: string;
+  short_code: string | null;
   title: string;
   title_ar: string | null;
   description: string | null;
@@ -655,9 +656,51 @@ export default function SurveyFill() {
     } catch { /* ignore quota errors */ }
   }, [answers, draftKey]);
 
+  const loadDraft = () => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft?.answers) { setAnswers(draft.answers); setHasDraft(false); }
+    } catch { /* ignore */ }
+  };
+
+  const clearDraft = () => {
+    if (draftKey) try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    setHasDraft(false);
+  };
+
+  // Detect whether the URL param is a full UUID or a short_code
+  const isUuidParam = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id ?? '');
+
+  const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
+    queryKey: ['survey-fill', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const base = supabase.from('surveys').select('*');
+      const { data, error } = await (isUuidParam ? base.eq('id', id!) : base.eq('short_code', id!)).single();
+      if (error) throw error;
+      return data as Survey;
+    },
+  });
+
+  // The real UUID — used for all child table queries
+  const surveyId = survey?.id;
+
+  const { data: questions = [], isLoading: qLoading } = useQuery<Question[]>({
+    queryKey: ['survey-fill-questions', surveyId],
+    enabled: !!surveyId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('survey_questions').select('*').eq('survey_id', surveyId!).order('order_index');
+      if (error) throw error;
+      return (data ?? []) as Question[];
+    },
+  });
+
   // Sync calculate fields: recompute all formula questions whenever answers or
-  // questions change.  Runs as a proper effect (not during render) to avoid
-  // React "setState during render" warnings and unnecessary render cycles.
+  // questions change.  MUST appear after the questions declaration to avoid a
+  // temporal dead-zone crash ("Cannot access 'questions' before initialization").
   useEffect(() => {
     const calcQs = questions.filter(q => q.type === 'calculate');
     if (calcQs.length === 0) return;
@@ -676,50 +719,15 @@ export default function SurveyFill() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, answers]);
 
-  const loadDraft = () => {
-    if (!draftKey) return;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (draft?.answers) { setAnswers(draft.answers); setHasDraft(false); }
-    } catch { /* ignore */ }
-  };
-
-  const clearDraft = () => {
-    if (draftKey) try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
-    setHasDraft(false);
-  };
-
-  const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
-    queryKey: ['survey-fill', id],
-    enabled: !!id,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('surveys').select('*').eq('id', id!).single();
-      if (error) throw error;
-      return data as Survey;
-    },
-  });
-
-  const { data: questions = [], isLoading: qLoading } = useQuery<Question[]>({
-    queryKey: ['survey-fill-questions', id],
-    enabled: !!id,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('survey_questions').select('*').eq('survey_id', id!).order('order_index');
-      if (error) throw error;
-      return (data ?? []) as Question[];
-    },
-  });
-
   const responseLimit = survey ? Number(survey.settings?.response_limit || 0) : 0;
   const { data: responseCount = 0 } = useQuery<number>({
-    queryKey: ['survey-fill-count', id],
-    enabled: !!id && !!survey && responseLimit > 0,
+    queryKey: ['survey-fill-count', surveyId],
+    enabled: !!surveyId && responseLimit > 0,
     queryFn: async () => {
       const { count, error } = await supabase
         .from('survey_responses')
         .select('*', { count: 'exact', head: true })
-        .eq('survey_id', id!);
+        .eq('survey_id', surveyId!);
       if (error) return 0;
       return count ?? 0;
     },
@@ -766,11 +774,11 @@ export default function SurveyFill() {
       setErrors({});
 
       // Duplicate response detection (same respondent + same survey in last 24h)
-      if (currentUser?.id) {
+      if (currentUser?.id && surveyId) {
         const { data: dupCheck } = await supabase
           .from('survey_responses')
           .select('id')
-          .eq('survey_id', id!)
+          .eq('survey_id', surveyId)
           .eq('respondent_id', currentUser.id)
           .gte('submitted_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
           .limit(1);
@@ -784,7 +792,7 @@ export default function SurveyFill() {
       const durationSeconds = Math.round((Date.now() - startTimeRef) / 1000);
       const { error: rErr } = await supabase.from('survey_responses').insert({
         id: responseId,
-        survey_id: id,
+        survey_id: surveyId,
         respondent_id: currentUser?.id ?? null,
         respondent_name: currentUser?.fullName ?? (respondentName.trim() || null),
         respondent_email: currentUser?.email ?? (respondentEmail.trim() || null),
