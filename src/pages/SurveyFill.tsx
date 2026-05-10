@@ -1344,18 +1344,17 @@ export default function SurveyFill() {
       );
     }
 
-    // Section header (flat divider)
+    // Section header (colored banner)
     if (q.type === 'section_header') {
       return (
         <div key={q.id} className="pt-6 pb-1">
-          <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-200">
-            <div className="w-1 h-6 rounded-full bg-indigo-500 shrink-0" />
-            <p className="text-base font-bold text-slate-700 tracking-wide leading-tight">
+          <div className="rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-5 py-3 shadow-sm">
+            <p className="text-[15px] font-bold text-white tracking-wide leading-snug">
               {lang === 'ar' && q.label_ar ? q.label_ar : q.label}
             </p>
           </div>
           {(q.description || q.description_ar) && (
-            <div className="mt-2 pl-4 space-y-0.5">
+            <div className="mt-2 px-1 space-y-0.5">
               {q.description && <p className="text-sm text-slate-500 leading-relaxed">{q.description}</p>}
               {q.description_ar && <p className="text-sm text-slate-500 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>}
             </div>
@@ -1448,15 +1447,18 @@ export default function SurveyFill() {
       <div
         key={q.id}
         className={cn(
-          'bg-white rounded-2xl border p-5 space-y-3 transition-colors',
+          'bg-white rounded-2xl border overflow-hidden transition-colors',
           err ? 'border-red-300' : 'border-slate-200',
         )}
         data-testid={`question-${q.id}`}
       >
+        {/* Colored top accent bar */}
+        <div className={cn('h-1 w-full', err ? 'bg-red-400' : 'bg-indigo-400')} />
+        <div className="p-5 space-y-3">
         <div>
           <div className="flex items-start gap-1.5 justify-between">
             <div className="flex items-start gap-1.5 flex-1 min-w-0">
-              <p className="text-[15px] font-semibold text-slate-800 leading-snug">
+              <p className="text-[15px] font-bold text-slate-800 leading-snug">
                 {displayLabel}
               </p>
               {q.required && <span className="text-red-500 text-base leading-none shrink-0 mt-0.5">*</span>}
@@ -1468,12 +1470,12 @@ export default function SurveyFill() {
             )}
           </div>
           {(q.description || q.description_ar) && (
-            <div className="mt-1.5 pl-0.5 space-y-1">
+            <div className="mt-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1">
               {q.description && (
-                <p className="text-sm text-slate-500 leading-relaxed">{q.description}</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{q.description}</p>
               )}
               {q.description_ar && (
-                <p className="text-sm text-slate-500 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
+                <p className="text-sm text-slate-600 leading-relaxed text-right" dir="rtl">{q.description_ar}</p>
               )}
             </div>
           )}
@@ -1794,6 +1796,7 @@ export default function SurveyFill() {
             <AlertCircle className="w-3 h-3" />{err}
           </p>
         )}
+        </div>{/* end p-5 wrapper */}
       </div>
     );
   };
