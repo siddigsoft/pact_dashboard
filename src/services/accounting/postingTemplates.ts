@@ -76,21 +76,35 @@ export const COA_ACCOUNTS: Record<string, string> = {
   '6100': 'Management Salaries',
   '6110': 'Management Benefits',
   '6200': 'EOSB Expense — Staff Gratuity',
+  '6150': 'Staff Medical & Health',
   '6310': 'Legal Fees',
   '6400': 'Depreciation Expense',
 };
 
 // ─── Category → account code map for ops cost submissions ────────────────────
+// Keep in sync with acct_bridge_ops_cost_account() in
+// supabase/migrations/20260511_general_expense_categories.sql
 export const OPS_COST_ACCOUNT_MAP: Record<string, string> = {
-  incentives:        '5070',
-  communications:    '5800',
-  training:          '5320',
-  general_transport: '5700',
-  equipment:         '5200',
-  printing:          '5200',
-  meetings:          '5320',
-  permits:           '6310',
-  other:             '5050',
+  // field-ops categories (original)
+  incentives:              '5070',
+  communications:          '5800',
+  training:                '5320',
+  general_transport:       '5700',
+  equipment:               '5200',
+  printing:                '5200',
+  meetings:                '5320',
+  permits:                 '6310',
+  other:                   '5050',
+  // general staff expense categories
+  meals:                   '5310',  // Per Diem & Subsistence
+  accommodation:           '5310',  // Per Diem & Subsistence
+  fuel:                    '5700',  // Programme Vehicle & Fuel
+  airfare:                 '5700',  // Programme Vehicle & Fuel
+  taxi:                    '5700',  // Programme Vehicle & Fuel
+  supplies:                '5200',  // Programme Supplies
+  office_supplies:         '5200',  // Programme Supplies
+  professional_development:'5320',  // Training & Workshops
+  medical:                 '6150',  // Staff Medical & Health
 };
 
 // ─── Complete posting template registry ──────────────────────────────────────
