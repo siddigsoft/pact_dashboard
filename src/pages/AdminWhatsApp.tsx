@@ -16,7 +16,7 @@ import {
   MessageSquare, CheckCircle2, XCircle, RefreshCw, Send, Webhook,
   Copy, Phone, BarChart3, AlertTriangle, ArrowLeft, Clock,
   ChevronDown, ChevronUp, Activity, Inbox, Reply, User, ArrowUpRight,
-  ArrowDownLeft, Settings, Info,
+  ArrowDownLeft, Settings, Info, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isValid } from "date-fns";
@@ -144,6 +144,8 @@ export default function AdminWhatsAppPage() {
   const [sendingReply, setSendingReply] = useState(false);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const [noIntegrationCount, setNoIntegrationCount] = useState(0);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
@@ -192,6 +194,25 @@ export default function AdminWhatsAppPage() {
   }, [isSuperAdmin]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    (async () => {
+      try {
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+        const { data } = await supabase
+          .from('whatsapp_logs')
+          .select('user_id')
+          .eq('status', 'skipped')
+          .ilike('error_message', '%no_integration%')
+          .gte('created_at', since.toISOString())
+          .not('user_id', 'is', null);
+        const unique = new Set((data ?? []).map((r: { user_id: string }) => r.user_id)).size;
+        setNoIntegrationCount(unique);
+      } catch { /* non-fatal */ }
+    })();
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     if (threadEndRef.current) {
@@ -499,6 +520,27 @@ export default function AdminWhatsAppPage() {
           </div>
         </div>
       </div>
+
+      {/* Unregistered-users banner (#49) */}
+      {noIntegrationCount >= 5 && !bannerDismissed && (
+        <div
+          data-testid="banner-no-integration"
+          className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800/40 dark:text-amber-200"
+        >
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="flex-1 leading-snug">
+            <span className="font-semibold">{noIntegrationCount} staff member{noIntegrationCount !== 1 ? 's' : ''}</span> were skipped in the last 30 days because they haven't connected WhatsApp.
+            {' '}Remind them to go to <span className="font-mono text-xs bg-amber-100 dark:bg-amber-800/40 px-1 rounded">Settings → Notifications → WhatsApp</span> to opt in.
+          </p>
+          <button
+            data-testid="button-dismiss-no-integration-banner"
+            onClick={() => setBannerDismissed(true)}
+            className="shrink-0 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 p-0.5 rounded"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stats Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

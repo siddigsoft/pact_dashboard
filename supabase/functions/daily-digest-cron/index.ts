@@ -117,7 +117,7 @@ interface Msg { title_en: string; title_ar: string; en: string; ar: string; acti
 // ─── fetchers ─────────────────────────────────────────────────────────────────
 async function fetchCoordinators(sb: ReturnType<typeof createClient>): Promise<CoordRow[]> {
   const { data } = await sb.from('mmp_site_entries')
-    .select('id, accepted_by, status, hub_office, verified_at, dispatched_at')
+    .select('id, accepted_by, status, hub_office, verified_at, completed_at, dispatched_at')
     .not('accepted_by', 'is', null).limit(8000)
 
   const map = new Map<string, CoordRow>()
@@ -136,7 +136,7 @@ async function fetchCoordinators(sb: ReturnType<typeof createClient>): Promise<C
     const verified = ['verified', 'completed', 'accepted'].includes(st)
     const returned = st === 'returned'
     const pending = !verified && !returned
-    if (verified) { r.totalVerified++; if (e.verified_at && (!r.lastVerifiedAt || e.verified_at > r.lastVerifiedAt)) r.lastVerifiedAt = e.verified_at }
+    if (verified) { r.totalVerified++; const ts = (e.completed_at ?? e.verified_at) as string | null; if (ts && (!r.lastVerifiedAt || ts > r.lastVerifiedAt)) r.lastVerifiedAt = ts }
     if (returned) r.totalReturned++
     if (pending) { r.pendingVerification++; if (e.dispatched_at && (!r.oldestPendingAt || e.dispatched_at < r.oldestPendingAt)) r.oldestPendingAt = e.dispatched_at }
   }
@@ -241,7 +241,7 @@ async function fetchWeeklyStats(sb: ReturnType<typeof createClient>): Promise<We
   try {
     const weekStart = startOfWeekIso()
     const [a, b, c, d] = await Promise.all([
-      sb.from('mmp_site_entries').select('id', { count: 'exact', head: true }).in('status', ['verified', 'completed']).gte('verified_at', weekStart),
+      sb.from('mmp_site_entries').select('id', { count: 'exact', head: true }).in('status', ['verified', 'completed']).or(`verified_at.gte.${weekStart},completed_at.gte.${weekStart}`),
       sb.from('down_payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'approved').gte('updated_at', weekStart),
       sb.from('mmp_site_entries').select('id', { count: 'exact', head: true }).not('status', 'in', '("verified","completed","returned","accepted")'),
       sb.from('down_payment_requests').select('id', { count: 'exact', head: true }).in('status', ['pending_supervisor', 'pending_admin']),

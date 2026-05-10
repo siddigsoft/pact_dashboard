@@ -1840,8 +1840,31 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isMa
   const [rewardAmount, setRewardAmount] = useState(task?.completionRewardAmount ? String(task.completionRewardAmount) : '');
   const [rewardCurrency, setRewardCurrency] = useState(task?.completionRewardCurrency ?? 'USD');
   const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>(task?.rewardDeductions ?? []);
+  const [editAttachments, setEditAttachments] = useState<TaskAttachment[]>(task?.attachments ?? []);
+  const [editUploading, setEditUploading] = useState(false);
+  const editFileRef = useRef<HTMLInputElement>(null);
+  const [editDeps, setEditDeps] = useState<Dependency[]>(task?.dependencies ?? []);
+  const [editDepText, setEditDepText] = useState('');
 
   if (!task) return null;
+
+  const handleEditAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditUploading(true);
+    try {
+      const path = `task-attachments/${task.id}/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from('chat-files').upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('chat-files').getPublicUrl(path);
+      setEditAttachments(prev => [...prev, { name: file.name, url: urlData.publicUrl, uploadedAt: new Date().toISOString() }]);
+    } catch (err) {
+      console.error('Attachment upload error:', err);
+    } finally {
+      setEditUploading(false);
+      if (editFileRef.current) editFileRef.current.value = '';
+    }
+  };
 
   const handleSave = async () => {
     const canEditReward = isAdmin || isManager;
@@ -1858,6 +1881,8 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isMa
       completionRewardAmount: reward,
       completionRewardCurrency: currency,
       rewardDeductions: canEditReward ? rewardDeductions : task.rewardDeductions,
+      attachments: editAttachments,
+      dependencies: editDeps,
     });
     onClose();
   };
@@ -1961,6 +1986,78 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isMa
               />
             </div>
           ) : null}
+
+          {/* Attachments (#33) */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Attachments</Label>
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              {editAttachments.map((a, i) => (
+                <div key={i} className="flex items-center gap-1 text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
+                  <Paperclip className="w-3 h-3 text-slate-400 shrink-0" />
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate max-w-[140px]">{a.name}</a>
+                  <button type="button" onClick={() => setEditAttachments(prev => prev.filter((_, j) => j !== i))}>
+                    <X className="w-3 h-3 text-slate-400 hover:text-red-500" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input ref={editFileRef} type="file" className="hidden" onChange={handleEditAttachment} data-testid="input-edit-task-attachment" />
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1.5" disabled={editUploading} onClick={() => editFileRef.current?.click()} data-testid="button-edit-add-attachment">
+                {editUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+                {editUploading ? 'Uploading…' : 'Add File'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Dependencies (#34) */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dependencies</Label>
+            <div className="flex flex-wrap gap-1 mb-1">
+              {editDeps.length === 0
+                ? <p className="text-[11px] text-muted-foreground">No dependencies added</p>
+                : editDeps.map((d, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-2 py-0.5">
+                      <Link2 className="w-2.5 h-2.5" />{d.label}
+                      <button type="button" onClick={() => setEditDeps(prev => prev.filter((_, j) => j !== i))}>
+                        <X className="w-2.5 h-2.5 hover:text-red-500" />
+                      </button>
+                    </span>
+                  ))
+              }
+            </div>
+            <div className="flex gap-2">
+              <Input
+                className="h-7 text-xs flex-1"
+                placeholder="e.g. Approval from HR, Budget confirmed…"
+                value={editDepText}
+                onChange={e => setEditDepText(e.target.value)}
+                data-testid="input-edit-dependency"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && editDepText.trim()) {
+                    setEditDeps(prev => [...prev, { type: 'custom', label: editDepText.trim(), value: editDepText.trim() }]);
+                    setEditDepText('');
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={!editDepText.trim()}
+                data-testid="button-edit-add-dependency"
+                onClick={() => {
+                  if (editDepText.trim()) {
+                    setEditDeps(prev => [...prev, { type: 'custom', label: editDepText.trim(), value: editDepText.trim() }]);
+                    setEditDepText('');
+                  }
+                }}
+              >
+                Add
+              </Button>
+            </div>
+          </div>
         </div>
         <DialogFooter className="gap-2 border-t pt-3">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
