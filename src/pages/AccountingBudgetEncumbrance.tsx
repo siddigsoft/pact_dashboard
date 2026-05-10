@@ -196,7 +196,12 @@ export default function AccountingBudgetEncumbrance() {
       <PageInfoBanner
         title="Budget Encumbrance & Commitment Accounting"
         description="Track budget commitments from Purchase Requisitions and Purchase Orders before they become actual expenses. Encumbrances reduce the available budget to prevent overspending."
-        workflowSteps={['PR / PO Created (Encumbrance Opens)', 'Budget Availability Checked', 'Invoice Received (Encumbrance Liquidated)', 'Expense Posted to GL']}
+        workflowSteps={[
+          { step: 1, role: 'System',        action: 'Encumbrance Opens',       description: 'Budget is reserved automatically when a PR or PO is approved.' },
+          { step: 2, role: 'System',        action: 'Budget Check',            description: 'System verifies remaining budget before committing funds.' },
+          { step: 3, role: 'System',        action: 'Encumbrance Liquidated',  description: 'Reservation is released when the matching AP invoice is posted.' },
+          { step: 4, role: 'System',        action: 'Post Expense to GL',      description: 'Final expense hits the general ledger via the GL Bridge.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

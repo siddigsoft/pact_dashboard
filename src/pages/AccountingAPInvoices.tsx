@@ -234,7 +234,14 @@ export default function AccountingAPInvoices() {
       <PageInfoBanner
         title="AP Invoices"
         description="Manage accounts payable invoices. Invoices go through matching (PO + GRN), approval, GL posting, and payment. 3-way matching ensures invoice integrity before payment."
-        workflowSteps={['Create Invoice', 'Submit', '3-Way Match (PO+GRN+Invoice)', 'Finance Approval', 'Post to GL', 'Record Payment']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Create Invoice',          description: 'Enter vendor invoice details and link to PO and GRN.' },
+          { step: 2, role: 'Finance Admin', action: 'Submit',                  description: 'Submit invoice for 3-way match verification.' },
+          { step: 3, role: 'System',        action: '3-Way Match',             description: 'System verifies PO, GRN and invoice quantities and amounts align.' },
+          { step: 4, role: 'Finance Admin', action: 'Finance Approval',        description: 'Finance team approves the matched invoice.' },
+          { step: 5, role: 'System',        action: 'Post to GL',              description: 'Invoice is automatically journalised to the general ledger.' },
+          { step: 6, role: 'Finance Admin', action: 'Record Payment',          description: 'Payment is recorded and a cheque or transfer is issued.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

@@ -212,7 +212,12 @@ export default function AccountingPeriodClose() {
       <PageInfoBanner
         title="Period Close Management"
         description="Guided period-close workflow. Each period progresses from Open → Soft Closed → Hard Closed → Locked. Pre-close checks verify journals, bank reconciliation, and AP invoices before each transition."
-        workflowSteps={['Open', 'Soft Close (restrict new posts)', 'Hard Close (no new journals)', 'Locked (permanent)']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Open',                   description: 'Period is open; all journal entries are permitted.' },
+          { step: 2, role: 'Finance Admin', action: 'Soft Close',             description: 'Restrict new posts — only period-close adjustments allowed.' },
+          { step: 3, role: 'Finance Admin', action: 'Hard Close',             description: 'No new journal entries allowed; period is finalised.' },
+          { step: 4, role: 'Super Admin',   action: 'Locked',                 description: 'Period is permanently locked; no changes possible.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

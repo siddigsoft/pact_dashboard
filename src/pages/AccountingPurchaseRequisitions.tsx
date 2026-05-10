@@ -204,7 +204,13 @@ export default function AccountingPurchaseRequisitions() {
       <PageInfoBanner
         title="Purchase Requisitions"
         description="Request purchases before they are converted to Purchase Orders. PRs go through a review and approval workflow before a PO can be raised."
-        workflowSteps={['Create Draft', 'Submit for Review', 'Finance Review', 'Manager Approval', 'Convert to PO']}
+        workflowSteps={[
+          { step: 1, role: 'Requestor',     action: 'Create Draft',       description: 'Fill in item description, quantity, estimated cost and required date.' },
+          { step: 2, role: 'Requestor',     action: 'Submit for Review',  description: 'Submit the PR to trigger the approval workflow.' },
+          { step: 3, role: 'Finance Admin', action: 'Finance Review',     description: 'Finance checks budget availability and GL coding.' },
+          { step: 4, role: 'Admin',         action: 'Manager Approval',   description: 'Department head approves the purchase need.' },
+          { step: 5, role: 'Finance Admin', action: 'Convert to PO',      description: 'Approved PR is converted into a formal Purchase Order.' },
+        ]}
       />
 
       {/* Header */}

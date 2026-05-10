@@ -415,7 +415,12 @@ export default function AccountingBudgetPlanning() {
       <PageInfoBanner
         title="Budget Planning"
         description="Set and manage budget targets for each account per fiscal period and fund. Budget lines feed directly into the Budget vs Actual variance analysis."
-        workflowSteps={['Select Period & Fund', 'Enter Budget Targets', 'Save Lines', 'Track in Budget vs Actual']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Select Period & Fund',    description: 'Choose the fiscal period and fund to plan against.' },
+          { step: 2, role: 'Finance Admin', action: 'Enter Budget Targets',    description: 'Set budget amounts per GL account line.' },
+          { step: 3, role: 'Finance Admin', action: 'Save & Submit',           description: 'Budget lines are saved and submitted for approval.' },
+          { step: 4, role: 'Finance Admin', action: 'Track vs Actual',         description: 'Monitor spend against plan in the Budget vs Actual report.' },
+        ]}
       />
 
       {/* Header */}

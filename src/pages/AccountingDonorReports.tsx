@@ -156,7 +156,12 @@ export default function AccountingDonorReports() {
       <PageInfoBanner
         title="Donor-Restricted Fund Reporting"
         description="Track revenue and expenditure by fund type (unrestricted, donor-restricted, board-designated, quasi-endowment). Includes inter-fund elimination analysis for consolidated reporting."
-        workflowSteps={['Tag Journal Lines to Fund', 'Review Fund Activity', 'Check Restrictions Compliance', 'Generate Elimination Entries']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Tag Journal Lines',       description: 'Each journal line is tagged to a specific donor fund.' },
+          { step: 2, role: 'Finance Admin', action: 'Review Fund Activity',    description: 'Monitor income and expenditure per fund in real time.' },
+          { step: 3, role: 'Finance Admin', action: 'Check Restrictions',      description: 'Verify spend aligns with donor-imposed restriction type.' },
+          { step: 4, role: 'Finance Admin', action: 'Generate Eliminations',   description: 'Inter-fund transfers are eliminated for consolidated reporting.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

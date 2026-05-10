@@ -206,7 +206,12 @@ export default function AccountingChequeRegister() {
       <PageInfoBanner
         title="Cheque & Payment Register"
         description="Track all outgoing payments — cheques, bank transfers, cash, and mobile money. Link payments to AP invoices and bank accounts for full reconciliation."
-        workflowSteps={['Create Payment', 'Issue / Authorize', 'Present to Bank', 'Cleared / Bounced / Voided']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Create Payment',          description: 'Record a cheque or payment against an AP invoice.' },
+          { step: 2, role: 'Finance Admin', action: 'Issue & Authorize',       description: 'Authorised signatory approves and issues the cheque.' },
+          { step: 3, role: 'Finance Admin', action: 'Present to Bank',         description: 'Cheque is presented to the bank for clearance.' },
+          { step: 4, role: 'System',        action: 'Update Status',           description: 'Status updated to Cleared, Bounced or Voided based on bank confirmation.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

@@ -149,7 +149,12 @@ export default function AccountingSOD() {
       <PageInfoBanner
         title="Segregation of Duties (SOD)"
         description="Detects journal entries where the same user both created and posted (self-approved). SOD violations indicate a control weakness — either enforce mode (blocks posting) or log-only mode."
-        workflowSteps={['Journal Created by User A', 'Must be reviewed & approved by User B', 'SOD violation if A = B', 'Log or Block based on enforcement flag']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Create Journal',          description: 'User A creates and submits a journal entry.' },
+          { step: 2, role: 'Finance Admin', action: 'Review & Approve',        description: 'A different user (User B) must review and approve the entry.' },
+          { step: 3, role: 'System',        action: 'Detect Violation',        description: 'System flags a violation if the creator and approver are the same person.' },
+          { step: 4, role: 'System',        action: 'Enforce SOD',             description: 'Action taken (log or block) based on the SOD enforcement flag setting.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

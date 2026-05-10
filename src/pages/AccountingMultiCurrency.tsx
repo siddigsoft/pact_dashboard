@@ -158,7 +158,12 @@ export default function AccountingMultiCurrency() {
       <PageInfoBanner
         title="Multi-Currency & Exchange Rates"
         description="Maintain historical exchange rate tables for all currency pairs. Rates are used for journal revaluation, AP invoice conversion, and multi-currency reporting."
-        workflowSteps={['Add Exchange Rate', 'Set Effective Date', 'Used in Journals & Invoices', 'Period-End Revaluation']}
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Add Exchange Rate',       description: 'Enter the exchange rate between two currencies.' },
+          { step: 2, role: 'Finance Admin', action: 'Set Effective Date',      description: 'Specify the date from which the rate is valid.' },
+          { step: 3, role: 'System',        action: 'Apply Rate',              description: 'Rate is automatically applied when posting multi-currency transactions.' },
+          { step: 4, role: 'Finance Admin', action: 'Period-End Revaluation',  description: 'Run period-end revaluation to adjust foreign currency balances.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

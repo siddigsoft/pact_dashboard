@@ -192,7 +192,13 @@ export default function AccountingGRN() {
       <PageInfoBanner
         title="Goods Receipt Notes (GRN)"
         description="Record the receipt and inspection of goods against Purchase Orders. GRNs form the basis of 3-way matching (PO + GRN + Invoice) before payment."
-        workflowSteps={['Create GRN', 'Mark Received', 'Inspection', 'Accept / Partial / Reject', 'Triggers AP Invoice Match']}
+        workflowSteps={[
+          { step: 1, role: 'Field Staff',   action: 'Create GRN',              description: 'Create a goods receipt note referencing the Purchase Order.' },
+          { step: 2, role: 'Field Staff',   action: 'Mark Received',           description: 'Record quantity and condition of items received.' },
+          { step: 3, role: 'Field Staff',   action: 'Inspection',              description: 'Inspect goods for quality, quantity and specification.' },
+          { step: 4, role: 'Supervisor',    action: 'Accept / Partial / Reject', description: 'Record acceptance, partial receipt, or rejection with reason.' },
+          { step: 5, role: 'System',        action: 'Trigger Invoice Match',   description: 'Accepted GRN becomes available for 3-way match with AP invoice.' },
+        ]}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
