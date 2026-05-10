@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+import pactLogo from '@/assets/logo.png';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
@@ -939,9 +940,31 @@ export default function SurveyFill() {
     : 100;
 
   if (surveyLoading || qLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mr-2" />
-      <span className="text-slate-500">Loading survey…</span>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-indigo-50">
+      <div className="flex flex-col items-center gap-6">
+        {/* Logo with pulse ring */}
+        <div className="relative flex items-center justify-center">
+          <span className="absolute inline-flex h-24 w-24 rounded-full bg-indigo-200 opacity-50 animate-ping" />
+          <div className="relative w-20 h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center p-2">
+            <img src={pactLogo} alt="PACT" className="w-full h-full object-contain" />
+          </div>
+        </div>
+        {/* Brand name */}
+        <div className="text-center space-y-1">
+          <p className="text-lg font-bold text-slate-700 tracking-wide">PACT Command Center</p>
+          <p className="text-sm text-slate-400">Loading survey, please wait…</p>
+        </div>
+        {/* Progress dots */}
+        <div className="flex items-center gap-1.5">
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 
