@@ -50,6 +50,7 @@ interface SalaryConfig {
 interface RetainerInfo {
   classification_id: string | null;
   classification_level: string | null;
+  role_scope: string | null;
   amount_cents: number;
   currency: string;
   frequency: string;
@@ -422,7 +423,7 @@ export default function PayrollAdmin() {
         supabase.from('employee_salary_config').select('*'),
         supabase
           .from('current_user_classifications' as any)
-          .select('id, user_id, classification_level, retainer_amount_cents, retainer_currency, retainer_frequency, is_active, effective_from, effective_to')
+          .select('id, user_id, classification_level, role_scope, retainer_amount_cents, retainer_currency, retainer_frequency, is_active, effective_from, effective_to')
           .then(r => r, () => ({ data: [] as any[] })),
       ]);
       const deptMap: Record<string, string> = {};
@@ -434,6 +435,7 @@ export default function PayrollAdmin() {
         retainerMap[r.user_id] = {
           classification_id: r.id ?? null,
           classification_level: r.classification_level ?? null,
+          role_scope: r.role_scope ?? null,
           amount_cents: Number(r.retainer_amount_cents ?? 0),
           currency: r.retainer_currency ?? 'SDG',
           frequency: r.retainer_frequency ?? 'monthly',
@@ -935,9 +937,8 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
           // still let the new row insert and we'd end up with two active
           // overlapping retainers for the same user.
           const { error: closeErr } = await (supabase as any).from('user_classifications').update({
-            effective_to: closeAt,
+            effective_until: closeAt,
             is_active: false,
-            updated_at: now,
           }).eq('id', existingRetainer.classification_id);
           if (closeErr) {
             failures.push(`retainer (could not close prior row: ${closeErr.message})`);
@@ -949,13 +950,15 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
         const insertPayload: Record<string, unknown> = {
           user_id: emp.id,
           classification_level: existingRetainer?.classification_level ?? 'standard',
+          role_scope: existingRetainer?.role_scope ?? null,
+          has_retainer: rActive,
           retainer_amount_cents: rAmountCents,
           retainer_currency: rCurrency,
           retainer_frequency: rFrequency,
           is_active: rActive,
           effective_from: rEffFrom || format(new Date(), 'yyyy-MM-dd'),
-          effective_to: rEffTo || null,
-          created_by: authUser?.id ?? null,
+          effective_until: rEffTo || null,
+          assigned_by: authUser?.id ?? null,
         };
         const { error: retErr } = await (supabase as any).from('user_classifications').insert(insertPayload);
         if (retErr) failures.push(`retainer (${retErr.message})`);
