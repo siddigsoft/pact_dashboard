@@ -338,6 +338,8 @@ export default function SurveyDetail() {
   const [aiLang, setAiLang]                 = useState<'en' | 'ar' | 'both'>('en');
   const [aiFile, setAiFile]                 = useState<File | null>(null);
   const [aiFileAr, setAiFileAr]             = useState<File | null>(null);
+  const [aiSkipExisting, setAiSkipExisting] = useState(true);
+  const [aiSkippedCount, setAiSkippedCount] = useState(0);
   const [reviewTarget, setReviewTarget]     = useState<Response | null>(null);
   const [reviewStatus, setReviewStatus]     = useState<string>('approved');
   const [reviewComment, setReviewComment]   = useState('');
@@ -3041,6 +3043,27 @@ export default function SurveyDetail() {
                       </Select>
                     </div>
                   </div>
+                  {/* Skip-existing toggle — only shown when the survey already has questions */}
+                  {questions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAiSkipExisting(v => !v)}
+                      className={cn(
+                        'flex items-center gap-2.5 w-full px-3 py-2 rounded-xl border text-xs font-medium transition-colors text-left',
+                        aiSkipExisting
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                      )}
+                    >
+                      <span className={cn('relative inline-flex h-4 w-7 items-center rounded-full transition-colors shrink-0', aiSkipExisting ? 'bg-emerald-500' : 'bg-slate-300')}>
+                        <span className={cn('inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', aiSkipExisting ? 'translate-x-3.5' : 'translate-x-0.5')} />
+                      </span>
+                      {aiSkipExisting
+                        ? `Skip ${questions.length} questions already in this survey — only show new ones`
+                        : `Show all questions (including ${questions.length} already in this survey)`}
+                    </button>
+                  )}
+
                   <Button
                     disabled={(!aiTopic.trim() && !aiFile && !aiFileAr) || aiGenerating}
                     onClick={async () => {
@@ -3048,6 +3071,7 @@ export default function SurveyDetail() {
                       setAiSuggestions([]);
                       setAiSelected(new Set());
                       setAiChunkStatus(null);
+                      setAiSkippedCount(0);
                       try {
                         let fileContext = '';
                         let fileContextAr = '';
@@ -3055,12 +3079,23 @@ export default function SurveyDetail() {
                         if (aiFileAr) { try { fileContextAr = await extractFileContext(aiFileAr); } catch { /* ignore */ } }
                         const hasFile = !!(fileContext || fileContextAr);
 
+                        // Pre-seed seen with existing survey questions when skip-existing is on
+                        const seen = new Set<string>();
+                        if (aiSkipExisting && questions.length > 0) {
+                          for (const q of questions) {
+                            const vn = String((q.settings as Record<string,unknown>)?.variable_name ?? '').toLowerCase().trim();
+                            const lb = String(q.label ?? '').toLowerCase().trim();
+                            if (vn) seen.add(vn);
+                            if (lb) seen.add(lb);
+                          }
+                        }
+                        let skippedTotal = 0;
+
                         if (hasFile) {
                           // Progressive chunked mode — one API call per chunk, results appear live
                           const CHUNK_EN = 6000;
                           const CHUNK_AR = 3000;
                           const totalChunks = Math.min(Math.max(1, Math.ceil(fileContext.length / CHUNK_EN)), 25);
-                          const seen = new Set<string>();
                           const accumulated: AiQuestion[] = [];
 
                           for (let i = 0; i < totalChunks; i++) {
@@ -3082,10 +3117,12 @@ export default function SurveyDetail() {
                               for (const q of (data.questions ?? [])) {
                                 const key = String(q.variable_name || q.label || '').toLowerCase().trim();
                                 if (key && !seen.has(key)) { seen.add(key); newQs.push(q); }
+                                else if (key) skippedTotal++;
                               }
                               if (newQs.length > 0) {
                                 accumulated.push(...newQs);
                                 setAiSuggestions([...accumulated]);
+                                setAiSkippedCount(skippedTotal);
                                 setAiSelected(prev => {
                                   const n = new Set(prev);
                                   for (let j = accumulated.length - newQs.length; j < accumulated.length; j++) n.add(j);
@@ -3098,6 +3135,7 @@ export default function SurveyDetail() {
                             }
                           }
                           setAiChunkStatus(prev => prev ? { ...prev, done: true } : null);
+                          setAiSkippedCount(skippedTotal);
                           if (accumulated.length === 0) throw new Error('No questions could be extracted from the file');
                         } else {
                           // Topic mode — single call
@@ -3108,8 +3146,15 @@ export default function SurveyDetail() {
                           });
                           const data = await res.json();
                           if (!res.ok) throw new Error(data.error ?? 'AI generation failed');
-                          setAiSuggestions(data.questions ?? []);
-                          setAiSelected(new Set((data.questions ?? []).map((_: AiQuestion, i: number) => i)));
+                          const allTopicQs: AiQuestion[] = data.questions ?? [];
+                          const filteredTopicQs = allTopicQs.filter((q: AiQuestion) => {
+                            const key = String(q.variable_name || q.label || '').toLowerCase().trim();
+                            if (!key || seen.has(key)) { skippedTotal++; return false; }
+                            seen.add(key); return true;
+                          });
+                          setAiSkippedCount(skippedTotal);
+                          setAiSuggestions(filteredTopicQs);
+                          setAiSelected(new Set(filteredTopicQs.map((_: AiQuestion, i: number) => i)));
                         }
                       } catch (e: any) {
                         toast({ title: 'AI generation failed', description: e.message, variant: 'destructive' });
@@ -3125,8 +3170,15 @@ export default function SurveyDetail() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-700">{aiSuggestions.length} questions generated — select which to add:</p>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-slate-700">{aiSuggestions.length} questions generated — select which to add:</p>
+                      {aiSkippedCount > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">
+                          <span>✓</span>{aiSkippedCount} already in survey, skipped
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setAiSelected(new Set(aiSuggestions.map((_, i) => i)))} className="text-[11px] text-indigo-600 hover:underline">All</button>
                       <button onClick={() => setAiSelected(new Set())} className="text-[11px] text-slate-400 hover:underline">None</button>
