@@ -3675,14 +3675,18 @@ export default function SurveyDetail() {
 
                         if (hasFile) {
                           // Progressive chunked mode — one API call per chunk, results appear live
-                          const CHUNK_EN = 6000;
-                          const CHUNK_AR = 3000;
-                          const totalChunks = Math.min(Math.max(1, Math.ceil(fileContext.length / CHUNK_EN)), 25);
+                          // Use large chunks (20k chars) so most Word docs fit in a single call,
+                          // and compute totalChunks from whichever file is longer.
+                          const CHUNK_EN = 20000;
+                          const CHUNK_AR = 20000;
+                          const chunksForEn = fileContext   ? Math.ceil(fileContext.length   / CHUNK_EN) : 0;
+                          const chunksForAr = fileContextAr ? Math.ceil(fileContextAr.length / CHUNK_AR) : 0;
+                          const totalChunks = Math.min(Math.max(1, chunksForEn, chunksForAr), 25);
                           const accumulated: AiQuestion[] = [];
 
                           for (let i = 0; i < totalChunks; i++) {
                             setAiChunkStatus({ current: i + 1, total: totalChunks, done: false });
-                            const chunkEn = fileContext.slice(i * CHUNK_EN, (i + 1) * CHUNK_EN);
+                            const chunkEn = fileContext   ? fileContext.slice(i * CHUNK_EN, (i + 1) * CHUNK_EN)     : '';
                             const chunkAr = fileContextAr ? fileContextAr.slice(i * CHUNK_AR, (i + 1) * CHUNK_AR) : '';
                             if (!chunkEn && !chunkAr) break;
                             // Small pause between chunks to stay within Groq TPM limits

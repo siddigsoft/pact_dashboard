@@ -590,9 +590,9 @@ Use varied question types and make each question clear and specific.`;
               }
               if (!tried) throw new Error('Gemini exhausted');
             } catch {
-              // Groq fallback — single call. The frontend handles chunking and sends
-              // one small chunk per request, so each call stays within TPM budgets.
-              const GROQ_CTX_MAX = 5000;
+              // Groq fallback — single call. The frontend sends one chunk per request.
+              // 20k chars (~5k tokens) fits well within Groq's 32k context window.
+              const GROQ_CTX_MAX = 20000;
               const groqEn = fileContext   ? fileContext.slice(0, GROQ_CTX_MAX)   : '';
               const groqAr = fileContextAr ? fileContextAr.slice(0, GROQ_CTX_MAX) : '';
               const s1 = groqEn ? `\n\nENGLISH FILE CONTENT:\n${groqEn}\n` : '';
