@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -22,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
-interface PO { id: string; po_number: string; title: string; amount: number; currency: string }
+interface PO { id: string; po_number: string; title: string; total_amount: number; currency: string }
 interface GRN { id: string; grn_number: string; title: string }
 interface Vendor { id: string; name_en: string; vendor_code: string | null }
 interface Fund { id: string; code: string; name_en: string }
@@ -70,11 +69,11 @@ export default function AccountingAPInvoices() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const { countries } = useAppContext();
   const { toast } = useToast();
 
   const [invoices, setInvoices]   = useState<APInvoice[]>([]);
   const [pos, setPOs]             = useState<PO[]>([]);
+  const [countries, setCountries] = useState<{id:string;name_en:string}[]>([]);
   const [grns, setGRNs]           = useState<GRN[]>([]);
   const [vendors, setVendors]     = useState<Vendor[]>([]);
   const [funds, setFunds]         = useState<Fund[]>([]);
@@ -95,13 +94,14 @@ export default function AccountingAPInvoices() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: invData }, { data: poData }, { data: grnData }, { data: vData }, { data: fData }, { data: aData }] = await Promise.all([
+    const [{ data: invData }, { data: poData }, { data: grnData }, { data: vData }, { data: fData }, { data: aData }, { data: cData }] = await Promise.all([
       supabase.from('acct_invoices').select('*').order('created_at', { ascending: false }),
       supabase.from('acct_purchase_orders').select('id, po_number, title, total_amount, currency').order('created_at', { ascending: false }),
       supabase.from('acct_grn_receipts').select('id, grn_number').order('created_at', { ascending: false }),
       supabase.from('acct_vendors').select('id, name_en, vendor_code').order('name_en'),
       supabase.from('acct_funds').select('id, code, name_en').order('code'),
       supabase.from('acct_accounts').select('id, code, name_en').order('code'),
+      supabase.from('countries').select('id, name_en').eq('is_active', true).order('name_en'),
     ]);
     const loaded = (invData ?? []) as APInvoice[];
     setInvoices(loaded);
@@ -110,6 +110,7 @@ export default function AccountingAPInvoices() {
     setVendors((vData ?? []) as Vendor[]);
     setFunds((fData ?? []) as Fund[]);
     setAccounts((aData ?? []) as Account[]);
+    setCountries((cData ?? []) as {id:string;name_en:string}[]);
 
     if (loaded.length > 0) {
       const bridgeIds = loaded

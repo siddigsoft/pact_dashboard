@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -70,13 +69,13 @@ export default function AccountingPurchaseRequisitions() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'project_manager', 'program_manager']);
   const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const { countries } = useAppContext();
   const { toast } = useToast();
 
   const [prs, setPRs]       = useState<PR[]>([]);
   const [funds, setFunds]   = useState<Fund[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [countries, setCountries] = useState<{id:string;name_en:string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -93,16 +92,18 @@ export default function AccountingPurchaseRequisitions() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: prData }, { data: fundsData }, { data: acctData }, { data: profData }] = await Promise.all([
+    const [{ data: prData }, { data: fundsData }, { data: acctData }, { data: profData }, { data: cData }] = await Promise.all([
       supabase.from('acct_purchase_requisitions').select('*').order('created_at', { ascending: false }),
       supabase.from('acct_funds').select('id, code, name_en').order('code'),
       supabase.from('acct_accounts').select('id, code, name_en').order('code'),
       supabase.from('profiles').select('id, full_name').order('full_name'),
+      supabase.from('countries').select('id, name_en').eq('is_active', true).order('name_en'),
     ]);
     setPRs((prData ?? []) as PR[]);
     setFunds((fundsData ?? []) as Fund[]);
     setAccounts((acctData ?? []) as Account[]);
     setProfiles((profData ?? []) as Profile[]);
+    setCountries((cData ?? []) as {id:string;name_en:string}[]);
     setLoading(false);
   }, []);
 

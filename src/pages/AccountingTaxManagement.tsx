@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -59,10 +58,10 @@ export default function AccountingTaxManagement() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canEdit  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const { countries } = useAppContext();
   const { toast } = useToast();
 
   const [taxCodes, setTaxCodes]   = useState<TaxCode[]>([]);
+  const [countries, setCountries] = useState<{id:string;name_en:string;flag_emoji?:string|null}[]>([]);
   const [accounts, setAccounts]   = useState<Account[]>([]);
   const [summary, setSummary]     = useState<TaxSummaryRow[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -86,12 +85,14 @@ export default function AccountingTaxManagement() {
     setTableExists(true);
     setTaxCodes((taxData ?? []) as TaxCode[]);
 
-    const [{ data: aData }, { data: sumData }] = await Promise.all([
+    const [{ data: aData }, { data: sumData }, { data: cData }] = await Promise.all([
       supabase.from('acct_accounts').select('id, code, name_en').order('code'),
       supabase.rpc('acct_tax_summary').catch(() => ({ data: [] })),
+      supabase.from('countries').select('id, name_en, flag_emoji').eq('is_active', true).order('name_en'),
     ]);
     setAccounts((aData ?? []) as Account[]);
     setSummary((sumData ?? []) as TaxSummaryRow[]);
+    setCountries((cData ?? []) as {id:string;name_en:string;flag_emoji?:string|null}[]);
     setLoading(false);
   }, []);
 

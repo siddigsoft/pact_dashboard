@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -22,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
-interface PO { id: string; po_number: string; title: string; vendor_id: string | null; amount: number; currency: string }
+interface PO { id: string; po_number: string; title: string; vendor_id: string | null; total_amount: number; currency: string }
 interface Vendor { id: string; name_en: string }
 
 interface GRN {
@@ -67,12 +66,12 @@ export default function AccountingGRN() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor', 'project_manager', 'program_manager']);
   const canInspect = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const { countries } = useAppContext();
   const { toast } = useToast();
 
   const [grns, setGRNs]       = useState<GRN[]>([]);
   const [pos, setPOs]         = useState<PO[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [countries, setCountries] = useState<{id:string;name_en:string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -88,14 +87,16 @@ export default function AccountingGRN() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: grnData }, { data: poData }, { data: vData }] = await Promise.all([
+    const [{ data: grnData }, { data: poData }, { data: vData }, { data: cData }] = await Promise.all([
       supabase.from('acct_grn_receipts').select('*').order('created_at', { ascending: false }),
       supabase.from('acct_purchase_orders').select('id, po_number, title, vendor_id, total_amount, currency').order('created_at', { ascending: false }),
       supabase.from('acct_vendors').select('id, name_en').order('name_en'),
+      supabase.from('countries').select('id, name_en').eq('is_active', true).order('name_en'),
     ]);
     setGRNs((grnData ?? []) as GRN[]);
     setPOs((poData ?? []) as PO[]);
     setVendors((vData ?? []) as Vendor[]);
+    setCountries((cData ?? []) as {id:string;name_en:string}[]);
     setLoading(false);
   }, []);
 

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -71,10 +70,10 @@ export default function AccountingChequeRegister() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canAction  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
-  const { countries } = useAppContext();
   const { toast } = useToast();
 
   const [cheques, setCheques]         = useState<Cheque[]>([]);
+  const [countries, setCountries] = useState<{id:string;name_en:string}[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [apInvoices, setAPInvoices]   = useState<APInvoice[]>([]);
   const [vendors, setVendors]         = useState<Vendor[]>([]);
@@ -95,18 +94,20 @@ export default function AccountingChequeRegister() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: chequeData }, { data: bankData }, { data: invData }, { data: vData }, { data: fData }] = await Promise.all([
+    const [{ data: chequeData }, { data: bankData }, { data: invData }, { data: vData }, { data: fData }, { data: cData }] = await Promise.all([
       supabase.from('acct_cheque_register').select('*').order('created_at', { ascending: false }),
       supabase.from('acct_bank_accounts').select('id, account_name, account_number, bank_name').order('account_name'),
       supabase.from('acct_invoices').select('id, invoice_number, total_amount, currency').order('created_at', { ascending: false }),
       supabase.from('acct_vendors').select('id, name_en, vendor_code').order('name_en'),
       supabase.from('acct_funds').select('id, code, name_en').order('code'),
+      supabase.from('countries').select('id, name_en').eq('is_active', true).order('name_en'),
     ]);
     setCheques((chequeData ?? []) as Cheque[]);
     setBankAccounts((bankData ?? []) as BankAccount[]);
     setAPInvoices((invData ?? []) as APInvoice[]);
     setVendors((vData ?? []) as Vendor[]);
     setFunds((fData ?? []) as Fund[]);
+    setCountries((cData ?? []) as {id:string;name_en:string}[]);
     setLoading(false);
   }, []);
 
