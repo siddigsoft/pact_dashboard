@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 
 type QuestionType =
-  | 'text' | 'textarea' | 'radio' | 'checkbox'
+  | 'text' | 'textarea' | 'radio' | 'checkbox' | 'yesno'
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
@@ -1575,6 +1575,36 @@ export default function SurveyFill() {
               className="pl-9"
               data-testid={`datetime-answer-${q.id}`}
             />
+          </div>
+        )}
+
+        {q.type === 'yesno' && (
+          <div className="flex gap-3">
+            {(['Yes', 'No'] as const).map((opt) => {
+              const arLabel = opt === 'Yes' ? 'نعم' : 'لا';
+              const display = lang === 'ar' ? arLabel : opt;
+              const isSelected = answers[q.id] === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setAnswer(q.id, isSelected ? null : opt)}
+                  data-testid={`yesno-${q.id}-${opt}`}
+                  className={cn(
+                    'flex-1 py-3 rounded-xl border-2 text-sm font-semibold transition-all',
+                    opt === 'Yes'
+                      ? isSelected
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50/50'
+                      : isSelected
+                        ? 'border-red-400 bg-red-50 text-red-700'
+                        : 'border-slate-200 text-slate-500 hover:border-red-300 hover:bg-red-50/50',
+                  )}
+                >
+                  {display}
+                </button>
+              );
+            })}
           </div>
         )}
 

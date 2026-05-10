@@ -54,7 +54,7 @@ import {
 type SurveyStatus = 'draft' | 'active' | 'closed';
 
 type QuestionType =
-  | 'text' | 'textarea' | 'radio' | 'checkbox'
+  | 'text' | 'textarea' | 'radio' | 'checkbox' | 'yesno'
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
   | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group'
@@ -226,6 +226,7 @@ const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
   {
     label: 'Choice',
     types: [
+      { type: 'yesno',    label: 'Yes / No',        icon: ToggleLeft },
       { type: 'radio',    label: 'Multiple Choice', icon: List },
       { type: 'checkbox', label: 'Checkboxes',      icon: CheckSquare },
       { type: 'dropdown', label: 'Dropdown',        icon: ChevronDownIcon },
@@ -542,7 +543,7 @@ export default function SurveyDetail() {
         label_ar: overrides?.label_ar ?? null,
         required: overrides?.required ?? false,
         order_index: nextIndex,
-        options: overrides?.options ?? (['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null),
+        options: overrides?.options ?? (type === 'yesno' ? ['Yes', 'No'] : ['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null),
         settings: { ...defaultSettings, ...(overrides?.settings ?? {}) },
         group_id: resolvedGroupId,
       });
@@ -2182,7 +2183,7 @@ export default function SurveyDetail() {
 
           {/* ── Cross-Tabulation ────────────────────────────────────────────── */}
           {responses.length > 0 && (() => {
-            const choiceQs = nonStructural.filter(q => ['radio','checkbox','dropdown'].includes(q.type));
+            const choiceQs = nonStructural.filter(q => ['radio','checkbox','dropdown','yesno'].includes(q.type));
             if (choiceQs.length < 2) return null;
             const ctData = crossTabRow && crossTabCol && crossTabRow !== crossTabCol
               ? getCrossTabData(crossTabRow, crossTabCol)
@@ -2277,7 +2278,7 @@ export default function SurveyDetail() {
                 const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
                 const parentGroup = q.group_id ? questions.find(g => g.id === q.group_id) : null;
                 const { answered, total, pct: ratePct } = getResponseRate(q);
-                const isChoice = ['radio', 'checkbox', 'dropdown'].includes(q.type);
+                const isChoice = ['radio', 'checkbox', 'dropdown', 'yesno'].includes(q.type);
                 const isRating = ['rating', 'scale'].includes(q.type);
                 const isText   = ['text','textarea','phone','email','number','integer','barcode','gps','date','time','datetime'].includes(q.type);
                 const isLikert = q.type === 'likert';
@@ -4136,6 +4137,7 @@ function QuestionCard({
 
   const QIcon = ALL_Q_TYPES.find(t => t.type === typeDraft)?.icon ?? FileText;
   const hasOptions = ['radio','checkbox','dropdown'].includes(typeDraft);
+  const isYesNo = typeDraft === 'yesno';
   const isSection = typeDraft === 'section_header';
   const isNote = typeDraft === 'note';
   const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(typeDraft);
@@ -4167,13 +4169,13 @@ function QuestionCard({
       : null;
     onUpdate({
       type: typeDraft,
+      options: isYesNo ? ['Yes', 'No'] : (hasOptions ? optsDraft.filter(Boolean) : null),
       label: labelDraft.trim() || q.label,
       label_ar: labelArDraft.trim() || null,
       description: descDraft.trim() || null,
       description_ar: descArDraft.trim() || null,
       required: reqDraft,
-      options: hasOptions ? optsDraft.filter(Boolean) : null,
-      options_ar: paddedOptsAr,
+      options_ar: isYesNo ? null : paddedOptsAr,
       settings: {
         ...q.settings, ...scaleSettings, ...gpsSettings, ...calcSettings, ...gridSettings, ...likertSettings, ...validationSettings, ...condOptSettings,
         skip_logic: skipLogic,
@@ -4436,6 +4438,21 @@ function QuestionCard({
               <p className="text-[10px] text-slate-400">Used in exports, skip logic, and ODK/XLSForm compatibility. Letters, numbers, underscores only.</p>
             </div>
           </div>
+
+          {isYesNo && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Answer options</Label>
+              <div className="flex gap-2">
+                {['Yes', 'No'].map(opt => (
+                  <div key={opt} className={cn(
+                    'flex-1 text-center py-2 rounded-xl border-2 text-sm font-semibold',
+                    opt === 'Yes' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600',
+                  )}>{opt}</div>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-400">Yes / No options are fixed and cannot be customised.</p>
+            </div>
+          )}
 
           {hasOptions && (
             <div className="space-y-1.5">
