@@ -164,7 +164,7 @@ async function extractFileContext(file: File): Promise<string> {
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
       .replace(/[ \t]+/g, ' ')
       .replace(/\n{3,}/g, '\n\n').trim();
-    return `Word Document: "${file.name}"\n\n${plain.slice(0, 40000)}`;
+    return `Word Document: "${file.name}"\n\n${plain.slice(0, 80000)}`;
   }
   return '';
 }
