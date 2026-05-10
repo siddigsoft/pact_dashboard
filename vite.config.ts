@@ -318,13 +318,13 @@ async function callGroqText(
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
   const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
   // Models in priority order — skip any the OCR loop already burned daily quota on
+  // Only list models confirmed active on Groq (2025). Deprecated IDs cause 404 → poison the cache.
   const TEXT_MODELS = [
-    'llama-3.3-70b-versatile',          // ~32k TPM on-demand
-    'llama3-70b-8192',                   // legacy alias, separate quota bucket
-    'llama-3.1-70b-versatile',           // alias fallback
-    'gemma2-9b-it',                      // 15k TPM
-    'meta-llama/llama-4-maverick-17b-128e-instruct',
-    'llama3-8b-8192',                    // small but fast, last resort
+    'llama-3.3-70b-versatile',                       // primary — high TPM
+    'meta-llama/llama-4-scout-17b-16e-instruct',     // Llama 4 Scout — separate quota
+    'gemma2-9b-it',                                  // Google Gemma — 15k TPM
+    'meta-llama/llama-4-maverick-17b-128e-instruct', // Llama 4 Maverick
+    'llama-3.1-8b-instant',                          // small/fast last resort
   ];
   for (const model of TEXT_MODELS) {
     if (isModelUnavailable(unavailableGroqModels, model)) continue;
