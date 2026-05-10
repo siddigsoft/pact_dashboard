@@ -5,19 +5,20 @@
 -- =============================================================================
 
 -- 1. Add optional enrichment columns to the bridge log table
---    These are NULL by default; Phase 5 triggers can populate them.
+--    These are NULL by default; triggers populate them on insert.
 ALTER TABLE public.acct_gl_bridge_log
   ADD COLUMN IF NOT EXISTS je_reference  text,
   ADD COLUMN IF NOT EXISTS je_description text;
 
 COMMENT ON COLUMN public.acct_gl_bridge_log.je_reference  IS
-  'Journal entry reference number populated when bridge posts successfully.';
+  'Journal entry reference (e.g. JE-42) populated when bridge posts successfully.';
 COMMENT ON COLUMN public.acct_gl_bridge_log.je_description IS
   'Short description of the posted journal entry.';
 
 -- 2. Backfill je_reference from acct_journal_entries where linkable
+--    entry_no is the sequential number on the journal entry (e.g. 1 → "JE-0001")
 UPDATE public.acct_gl_bridge_log bl
-SET    je_reference  = je.reference,
+SET    je_reference  = 'JE-' || lpad(je.entry_no::text, 4, '0'),
        je_description = left(je.description_en, 200)
 FROM   public.acct_journal_entries je
 WHERE  bl.journal_entry_id = je.id
@@ -32,7 +33,7 @@ SET search_path = public
 AS $$
 BEGIN
   IF NEW.journal_entry_id IS NOT NULL AND NEW.je_reference IS NULL THEN
-    SELECT reference, left(description_en, 200)
+    SELECT 'JE-' || lpad(entry_no::text, 4, '0'), left(description_en, 200)
       INTO NEW.je_reference, NEW.je_description
       FROM public.acct_journal_entries
      WHERE id = NEW.journal_entry_id;
@@ -46,7 +47,7 @@ CREATE TRIGGER trg_bridge_log_enrich
   BEFORE INSERT ON public.acct_gl_bridge_log
   FOR EACH ROW EXECUTE FUNCTION public.acct_bridge_log_enrich();
 
--- 4. Filtered RPC used by GL Audit log tab (falls back gracefully if RPC missing)
+-- 4. Filtered RPC used by GL Audit log tab
 CREATE OR REPLACE FUNCTION public.get_gl_bridge_log(
   p_source_table text  DEFAULT NULL,
   p_status       text  DEFAULT NULL,
@@ -86,7 +87,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_gl_bridge_log(text, text, date, date, int) TO authenticated;
 
--- 5. Smoke-test
--- SELECT * FROM public.acct_gl_bridge_log LIMIT 1;
+-- 5. Smoke-test queries (run after applying to verify)
+-- SELECT COUNT(*) FROM public.acct_gl_bridge_log WHERE je_reference IS NOT NULL;
 -- SELECT * FROM public.get_gl_bridge_log(NULL, NULL, NULL, NULL, 5);
 -- SELECT * FROM public.v_acct_gl_bridge_summary LIMIT 5;
