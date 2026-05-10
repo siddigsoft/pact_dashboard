@@ -121,7 +121,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NEW.result = 'error' THEN
+  IF NEW.status = 'error' THEN
     PERFORM public.acct_notify_role_users(
       'accounting_gl_bridge_failure',
       'GL Bridge Posting Failed',
