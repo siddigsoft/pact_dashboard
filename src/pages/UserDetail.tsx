@@ -7,7 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -75,6 +75,97 @@ const UserDetail: FC = () => {
   // on consecutive saves within the same session.
   const savedDepartmentIdRef = useRef<string | null>(null);
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
+
+  // ── Contract documents ────────────────────────────────────────────────────
+  interface StaffContract {
+    id: string;
+    profile_id: string;
+    file_name: string;
+    file_path: string;
+    file_size: number | null;
+    file_type: string | null;
+    notes: string | null;
+    uploaded_by: string | null;
+    created_at: string;
+    uploader_name?: string;
+  }
+  const [contracts, setContracts] = useState<StaffContract[]>([]);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  const [contractUploading, setContractUploading] = useState(false);
+  const [contractNotes, setContractNotes] = useState('');
+  const [contractDeleteId, setContractDeleteId] = useState<string | null>(null);
+  const contractFileRef = useRef<HTMLInputElement>(null);
+
+  const fetchContracts = async (profileId: string) => {
+    setContractsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('staff_contracts')
+        .select('*, uploader:uploaded_by(full_name)')
+        .eq('profile_id', profileId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setContracts((data ?? []).map((r: any) => ({ ...r, uploader_name: r.uploader?.full_name ?? null })));
+    } catch (e: any) {
+      toast({ title: 'Failed to load contracts', description: e.message, variant: 'destructive' });
+    } finally {
+      setContractsLoading(false);
+    }
+  };
+
+  const handleContractUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setContractUploading(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const safeExt = ext ? `.${ext}` : '';
+      const timestamp = Date.now();
+      const path = `${user.id}/${timestamp}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('staff-contracts').upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const { error: insertError } = await supabase.from('staff_contracts').insert({
+        profile_id: user.id,
+        file_name: file.name,
+        file_path: path,
+        file_size: file.size,
+        file_type: file.type || null,
+        notes: contractNotes.trim() || null,
+        uploaded_by: currentUser?.id ?? null,
+      });
+      if (insertError) throw insertError;
+      toast({ title: 'Contract uploaded', description: file.name });
+      setContractNotes('');
+      if (contractFileRef.current) contractFileRef.current.value = '';
+      await fetchContracts(user.id);
+    } catch (e: any) {
+      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setContractUploading(false);
+    }
+  };
+
+  const handleContractDownload = async (contract: StaffContract) => {
+    try {
+      const { data, error } = await supabase.storage.from('staff-contracts').createSignedUrl(contract.file_path, 120);
+      if (error) throw error;
+      window.open(data.signedUrl, '_blank');
+    } catch (e: any) {
+      toast({ title: 'Download failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleContractDelete = async (contract: StaffContract) => {
+    try {
+      await supabase.storage.from('staff-contracts').remove([contract.file_path]);
+      await supabase.from('staff_contracts').delete().eq('id', contract.id);
+      toast({ title: 'Contract deleted', description: contract.file_name });
+      setContractDeleteId(null);
+      if (user) await fetchContracts(user.id);
+    } catch (e: any) {
+      toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
+    }
+  };
 
   // Classification management
   const { canManageFinances } = useAuthorization();
@@ -287,6 +378,11 @@ const UserDetail: FC = () => {
       setEmpSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (user?.id) fetchContracts(user.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     const fetchClassificationHistory = async () => {
@@ -753,8 +849,9 @@ const UserDetail: FC = () => {
                   { value: 'profile',        icon: <UserIcon className="h-4 w-4" />,    label: 'Profile'       },
                   { value: 'employment',     icon: <Briefcase className="h-4 w-4" />,   label: 'Employment'    },
                   { value: 'location',       icon: <MapPin className="h-4 w-4" />,      label: 'Location'      },
-                  { value: 'performance',    icon: <Award className="h-4 w-4" />,       label: 'Performance'   },
-                  { value: 'bank',           icon: <CreditCard className="h-4 w-4" />,  label: 'Bank'          },
+                  { value: 'performance',    icon: <Award className="h-4 w-4" />,          label: 'Performance'   },
+                  { value: 'bank',           icon: <CreditCard className="h-4 w-4" />,     label: 'Bank'          },
+                  { value: 'contracts',      icon: <FileSignature className="h-4 w-4" />,  label: 'Contracts'     },
                   ...(canManageClassifications
                     ? [{ value: 'classification', icon: <ShieldCheck className="h-4 w-4" />, label: 'Classification' }]
                     : []),
@@ -1240,6 +1337,161 @@ const UserDetail: FC = () => {
                 </Card>
               </TabsContent>
             )}
+
+            {/* ── CONTRACTS TAB ────────────────────────────────────────────── */}
+            <TabsContent
+              value="contracts"
+              className="p-5 sm:p-6 space-y-5 mt-0"
+            >
+
+              {/* Upload card — admin only */}
+              {isAdmin && (
+                <Card className="border border-indigo-200 bg-indigo-50/40 shadow-sm">
+                  <CardHeader className="p-4 border-b border-indigo-100 bg-indigo-50">
+                    <div className="flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-indigo-600" />
+                      <CardTitle className="text-sm font-semibold text-indigo-800">Upload Contract Document</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-3">
+                    <p className="text-xs text-muted-foreground">Accepted formats: PDF, DOCX, DOC, JPG, PNG (max 20 MB)</p>
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Notes (optional) — e.g. 'Renewal 2025', 'Signed copy'"
+                        value={contractNotes}
+                        onChange={e => setContractNotes(e.target.value)}
+                        className="text-sm"
+                        data-testid="input-contract-notes"
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={contractFileRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          className="hidden"
+                          onChange={handleContractUpload}
+                          data-testid="input-contract-file"
+                        />
+                        <Button
+                          onClick={() => contractFileRef.current?.click()}
+                          disabled={contractUploading}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+                          data-testid="button-upload-contract"
+                        >
+                          {contractUploading
+                            ? <><Loader2 className="h-4 w-4 animate-spin" />Uploading…</>
+                            : <><Upload className="h-4 w-4" />Choose File & Upload</>}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Contract list */}
+              <Card className="shadow-sm">
+                <CardHeader className="p-4 border-b bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileSignature className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold">
+                        Contract Documents
+                        {contracts.length > 0 && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">({contracts.length} file{contracts.length !== 1 ? 's' : ''})</span>
+                        )}
+                      </CardTitle>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => user && fetchContracts(user.id)}
+                      disabled={contractsLoading}
+                      className="h-7 px-2 text-xs"
+                    >
+                      {contractsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Refresh'}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {contractsLoading ? (
+                    <div className="flex items-center justify-center gap-3 py-12 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span className="text-sm">Loading contracts…</span>
+                    </div>
+                  ) : contracts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3 text-muted-foreground">
+                      <div className="p-4 rounded-full bg-muted/50">
+                        <FileSignature className="h-8 w-8" />
+                      </div>
+                      <p className="text-sm font-medium">No contracts uploaded yet</p>
+                      {isAdmin && <p className="text-xs">Use the upload panel above to add the first contract</p>}
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {contracts.map(c => {
+                        const isConfirmingDelete = contractDeleteId === c.id;
+                        const sizeKb = c.file_size ? (c.file_size / 1024).toFixed(0) : null;
+                        const sizeMb = c.file_size && c.file_size > 1024 * 1024 ? (c.file_size / 1024 / 1024).toFixed(1) + ' MB' : sizeKb ? sizeKb + ' KB' : null;
+                        const isPdf = c.file_type === 'application/pdf' || c.file_name.toLowerCase().endsWith('.pdf');
+                        const uploadDate = new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                        return (
+                          <div key={c.id} className="flex items-start gap-4 p-4 hover:bg-muted/30 transition-colors">
+                            {/* File icon */}
+                            <div className={`shrink-0 p-2.5 rounded-xl ${isPdf ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-foreground truncate">{c.file_name}</p>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                                <span className="text-xs text-muted-foreground">{uploadDate}</span>
+                                {sizeMb && <span className="text-xs text-muted-foreground">{sizeMb}</span>}
+                                {c.uploader_name && <span className="text-xs text-muted-foreground">by {c.uploader_name}</span>}
+                              </div>
+                              {c.notes && (
+                                <p className="text-xs text-indigo-700 bg-indigo-50 rounded px-2 py-0.5 mt-1.5 inline-block">{c.notes}</p>
+                              )}
+                            </div>
+                            {/* Actions */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleContractDownload(c)}
+                                className="h-8 w-8 p-0 text-indigo-600 hover:bg-indigo-50"
+                                title="Download / Preview"
+                                data-testid={`button-download-contract-${c.id}`}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {isAdmin && !isConfirmingDelete && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setContractDeleteId(c.id)}
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                  title="Delete"
+                                  data-testid={`button-delete-contract-${c.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isAdmin && isConfirmingDelete && (
+                                <div className="flex items-center gap-1">
+                                  <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => handleContractDelete(c)}>Delete</Button>
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setContractDeleteId(null)}>Cancel</Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
           </Tabs>
         </Card>
       </div>
