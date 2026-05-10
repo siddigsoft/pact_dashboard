@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { POSTING_TEMPLATES, COA_ACCOUNTS, type PostingTemplate } from '@/services/accounting/postingTemplates';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format } from 'date-fns';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -349,6 +350,25 @@ export default function AccountingGLBridge() {
           Refresh
         </Button>
       </div>
+
+      {/* Page Info Banner */}
+      <PageInfoBanner
+        title="GL Bridge Engine — محرك الجسر المالي"
+        description="The GL Bridge Engine automatically converts operational activity into General Ledger journal entries — without any manual data entry. Whenever a cost submission is marked as paid, or a down-payment request is fully settled, a database trigger fires and posts the correct double-entry journal directly to the GL. This page lets you monitor each bridge's health, view the full audit log of every posting event, run a reconciliation check to confirm the GL matches the source sub-ledgers, and read the complete posting map showing exactly which accounts are debited and credited for each event type. Each bridge can be individually enabled or disabled via its feature flag."
+        descriptionAr="محرك الجسر المالي يحوّل النشاط التشغيلي تلقائياً إلى قيود يومية في دفتر الأستاذ العام — دون أي إدخال يدوي. عندما يُسجَّل صرف مستحقات كـ«مدفوع»، أو يُسدَّد طلب دفعة مقدّمة بالكامل، تنطلق إشارة قاعدة البيانات وتُنشئ القيد المزدوج الصحيح مباشرةً في الأستاذ العام. تتيح هذه الصفحة مراقبة حالة كل جسر، وعرض سجل المراجعة الكامل لكل عملية ترحيل، وتشغيل فحص التوفيق للتحقق من تطابق الأستاذ العام مع دفاتر المصادر الفرعية، والاطلاع على خريطة الترحيل الكاملة التي تبيّن الحسابات المدينة والدائنة لكل نوع من أنواع الأحداث. يمكن تفعيل كل جسر أو تعطيله بشكل مستقل عبر علامة الميزة الخاصة به."
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Approve / Mark Paid', description: 'A cost submission status changes to "paid", or a down-payment is fully settled in the system.' },
+          { step: 2, role: 'System', action: 'DB Trigger Fires', description: 'A PostgreSQL trigger on the source table detects the status change and calls the bridge function.' },
+          { step: 3, role: 'System', action: 'Journal Posted to GL', description: 'The bridge function creates a balanced double-entry journal in acct_journal_entries and logs the result in acct_gl_bridge_log.' },
+          { step: 4, role: 'Super Admin', action: 'Monitor & Reconcile', description: 'Use this page to check bridge health, review the audit log, and run the reconciliation check to confirm GL = sub-ledger totals.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'مدير المالية', action: 'الموافقة / التسجيل كمدفوع', description: 'يتغير حالة طلب التكاليف إلى «مدفوع»، أو يُسدَّد طلب الدفعة المقدّمة بالكامل في النظام.' },
+          { step: 2, role: 'النظام', action: 'اشتعال إشارة قاعدة البيانات', description: 'تكتشف إشارة PostgreSQL على جدول المصدر تغيير الحالة وتستدعي دالة الجسر.' },
+          { step: 3, role: 'النظام', action: 'ترحيل القيد إلى الأستاذ العام', description: 'تنشئ دالة الجسر قيداً مزدوجاً متوازناً في acct_journal_entries وتسجّل النتيجة في acct_gl_bridge_log.' },
+          { step: 4, role: 'المشرف والمدير', action: 'المراقبة والتوفيق', description: 'استخدم هذه الصفحة للتحقق من صحة الجسر ومراجعة سجل المراجعة وتشغيل فحص التوفيق لتأكيد مطابقة الأستاذ العام للأرصدة الفرعية.' },
+        ]}
+      />
 
       {/* KPI bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
