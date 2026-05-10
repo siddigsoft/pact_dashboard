@@ -7,24 +7,52 @@
 -- Apply   : MANUAL — paste into Supabase SQL editor
 -- Safe    : YES — fully idempotent.
 --           • acct_bridge_post_journal deduplicates on idempotency_key
---             (source_table::source_id::event_type) — running twice is safe.
 --           • The WHERE NOT EXISTS guard skips records already in the log.
--- Rollback: Delete the journal entries and log rows created:
---           DELETE FROM acct_journal_entries
---            WHERE source_type IN ('operational_cost_submissions','down_payment_requests')
---              AND idempotency_key LIKE '%::backfill';
---           (Only backfill entries use the '::backfill' event_type suffix.)
 -- =============================================================================
 
 set lock_timeout = '5s';
 
 -- =============================================================================
--- STEP 0 — Dry-run counts (review these before running Steps 1 & 2)
+-- STEP 0 — Fix the broken notification trigger (NEW.result → NEW.status)
+-- This must run before Steps 1 & 2 or every INSERT into acct_gl_bridge_log
+-- will fail with "record new has no field result".
 -- =============================================================================
 
--- How many paid cost submissions have NO GL entry yet?
+CREATE OR REPLACE FUNCTION public.acct_trg_gl_bridge_failure()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.status = 'error' THEN
+    PERFORM public.acct_notify_role_users(
+      'accounting_gl_bridge_failure',
+      'GL Bridge Posting Failed',
+      format('GL bridge posting failed for %s (record %s): %s',
+        COALESCE(NEW.source_table, 'unknown table'),
+        COALESCE(NEW.source_id::text, '?'),
+        COALESCE(NEW.error_message, 'No details available')
+      ),
+      '/accounting/gl-bridge',
+      jsonb_build_object(
+        'log_id',       NEW.id,
+        'source_table', NEW.source_table,
+        'source_id',    NEW.source_id,
+        'error',        NEW.error_message
+      )
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- =============================================================================
+-- STEP 1 — Dry-run counts (review before continuing)
+-- =============================================================================
+
 select
-  count(*)                                      as total_paid_costs,
+  count(*) as total_paid_costs,
   count(*) filter (
     where not exists (
       select 1 from public.acct_gl_bridge_log l
@@ -32,14 +60,13 @@ select
          and l.source_id    = ocs.id
          and l.status       = 'success'
     )
-  )                                              as needs_backfill
+  ) as needs_backfill
 from public.operational_cost_submissions ocs
 where lower(ocs.status) = 'paid'
   and coalesce(ocs.amount_cents, 0) > 0;
 
--- How many fully-paid down-payments have NO GL entry yet?
 select
-  count(*)                                      as total_fully_paid_dp,
+  count(*) as total_fully_paid_dp,
   count(*) filter (
     where not exists (
       select 1 from public.acct_gl_bridge_log l
@@ -47,14 +74,13 @@ select
          and l.source_id    = dp.id
          and l.status       = 'success'
     )
-  )                                              as needs_backfill
+  ) as needs_backfill
 from public.down_payment_requests dp
 where lower(dp.status) = 'fully_paid'
   and coalesce(dp.total_paid_amount, dp.requested_amount, 0) > 0;
 
 -- =============================================================================
--- STEP 1 — Backfill: operational_cost_submissions (status = 'paid')
--- Mirrors exactly what acct_trig_operational_cost_submissions() does.
+-- STEP 2 — Backfill: operational_cost_submissions (status = 'paid')
 -- =============================================================================
 
 do $$
@@ -64,7 +90,6 @@ declare
   v_amount      numeric(20,4);
   v_expense_acc text;
   v_ok          int := 0;
-  v_skip        int := 0;
   v_err         int := 0;
 begin
   for rec in
@@ -72,7 +97,6 @@ begin
       from public.operational_cost_submissions
      where lower(status) = 'paid'
        and coalesce(amount_cents, 0) > 0
-       -- only process records with no successful GL entry yet
        and not exists (
              select 1
                from public.acct_gl_bridge_log l
@@ -125,30 +149,25 @@ begin
       when others then
         declare v_msg text := sqlerrm;
         begin
-          -- BRIDGE_SKIP means the engine or bridge flag is OFF — stop entirely
           if v_msg like 'BRIDGE_SKIP%' then
-            raise notice 'Bridge is disabled — halting backfill. Enable acct.posting_engine.enabled and acct.bridge.operational_cost_submissions first.';
+            raise notice 'Bridge flag is OFF — enable acct.posting_engine.enabled and acct.bridge.operational_cost_submissions first, then re-run.';
             return;
           end if;
-
           insert into public.acct_gl_bridge_log
             (source_table, source_id, event_type, status, error_message)
           values
             ('operational_cost_submissions', rec.id, 'ops_cost_paid', 'error', v_msg);
-
           v_err := v_err + 1;
-          raise notice 'ERROR on ops cost id=%: %', rec.id, v_msg;
+          raise notice 'ERROR ops cost id=%: %', rec.id, v_msg;
         end;
     end;
   end loop;
 
-  raise notice '=== Ops Cost Backfill complete: % posted, % errors, % already had GL entries (skipped by WHERE guard) ===',
-    v_ok, v_err, v_skip;
+  raise notice '=== Ops Cost Backfill: % posted, % errors ===', v_ok, v_err;
 end $$;
 
 -- =============================================================================
--- STEP 2 — Backfill: down_payment_requests (status = 'fully_paid')
--- Mirrors exactly what acct_trig_down_payment_requests() does.
+-- STEP 3 — Backfill: down_payment_requests (status = 'fully_paid')
 -- =============================================================================
 
 do $$
@@ -216,42 +235,28 @@ begin
         declare v_msg text := sqlerrm;
         begin
           if v_msg like 'BRIDGE_SKIP%' then
-            raise notice 'Bridge is disabled — halting backfill. Enable acct.posting_engine.enabled and acct.bridge.down_payment_requests first.';
+            raise notice 'Bridge flag is OFF — enable acct.posting_engine.enabled and acct.bridge.down_payment_requests first, then re-run.';
             return;
           end if;
-
           insert into public.acct_gl_bridge_log
             (source_table, source_id, event_type, status, error_message)
           values
             ('down_payment_requests', rec.id, 'down_payment_fully_paid', 'error', v_msg);
-
           v_err := v_err + 1;
-          raise notice 'ERROR on down payment id=%: %', rec.id, v_msg;
+          raise notice 'ERROR down payment id=%: %', rec.id, v_msg;
         end;
     end;
   end loop;
 
-  raise notice '=== Down Payment Backfill complete: % posted, % errors ===',
-    v_ok, v_err;
+  raise notice '=== Down Payment Backfill: % posted, % errors ===', v_ok, v_err;
 end $$;
 
 -- =============================================================================
--- STEP 3 — Verification: check results after running Steps 1 & 2
+-- STEP 4 — Verify: these queries should return 0 rows when complete
 -- =============================================================================
 
--- Bridge log summary after backfill
-select
-  source_table,
-  event_type,
-  status,
-  count(*) as count
-from public.acct_gl_bridge_log
-where source_table in ('operational_cost_submissions', 'down_payment_requests')
-group by source_table, event_type, status
-order by source_table, status;
-
--- Records still missing GL (should be 0 after a clean run)
-select 'operational_cost_submissions' as source_table, id, status, amount_cents / 100.0 as amount
+select 'operational_cost_submissions' as source_table, id, status,
+       amount_cents / 100.0 as amount
   from public.operational_cost_submissions
  where lower(status) = 'paid'
    and coalesce(amount_cents, 0) > 0
@@ -274,11 +279,9 @@ select 'down_payment_requests', id, status,
             and l.status = 'success'
        );
 
--- Common errors to fix before re-running:
--- • BRIDGE_NO_PERIOD   → create/open a fiscal period covering the record dates
--- • BRIDGE_NO_FUND     → ensure at least one active fund (code = GENERAL) exists
--- • BRIDGE_NO_POSTER   → ensure at least one super_admin profile exists
--- • BRIDGE_SKIP        → enable feature flags (acct.posting_engine.enabled,
---                         acct.bridge.operational_cost_submissions,
---                         acct.bridge.down_payment_requests)
--- • BRIDGE_ACCOUNT_NOT_FOUND → run the COA seed migration first
+-- Bridge log summary
+select source_table, event_type, status, count(*)
+  from public.acct_gl_bridge_log
+ where source_table in ('operational_cost_submissions','down_payment_requests')
+ group by source_table, event_type, status
+ order by source_table, status;
