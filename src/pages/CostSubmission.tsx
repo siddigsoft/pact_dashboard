@@ -255,6 +255,7 @@ const CostSubmission = () => {
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
+  const [opsGlLogMap, setOpsGlLogMap] = useState<Map<string, string>>(new Map());
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
 
@@ -268,6 +269,27 @@ const CostSubmission = () => {
       .in('id', ids)
       .then(({ data }) => {
         setMmpOptions((data || []).map((m: { id: string; name: string }) => ({ id: m.id, name: m.name })));
+      });
+  }, [operationalCosts]);
+
+  // Fetch GL bridge log for paid/reconciled operational cost submissions
+  useEffect(() => {
+    const paidIds = operationalCosts
+      .filter(o => o.status === 'paid' || o.status === 'reconciled')
+      .map(o => o.id);
+    if (paidIds.length === 0) { setOpsGlLogMap(new Map()); return; }
+    supabase
+      .from('acct_gl_bridge_log' as any)
+      .select('source_id, status')
+      .eq('source_table', 'operational_cost_submissions')
+      .in('source_id', paidIds.slice(0, 500))
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        const map = new Map<string, string>();
+        for (const row of (data ?? []) as { source_id: string; status: string }[]) {
+          if (!map.has(row.source_id)) map.set(row.source_id, row.status);
+        }
+        setOpsGlLogMap(map);
       });
   }, [operationalCosts]);
   
@@ -3954,6 +3976,13 @@ const CostSubmission = () => {
                                 <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusColors[derivedStatus] || statusColors.pending}`}>
                                   {statusLabels[derivedStatus] || derivedStatus}
                                 </span>
+                                {(derivedStatus === 'paid' || derivedStatus === 'reconciled') && (() => {
+                                  const glStatus = opsGlLogMap.get(oc.id);
+                                  if (!glStatus) return null;
+                                  const glCls = glStatus === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : glStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+                                  const glLabel = glStatus === 'success' ? 'GL ✓' : glStatus === 'error' ? 'GL ✗' : 'GL~';
+                                  return <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${glCls}`} data-testid={`status-gl-compact-${oc.id}`}><Receipt className="h-2.5 w-2.5" />{glLabel}</span>;
+                                })()}
                                 {canTier1Approve(oc) && (
                                   <>
                                     <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
@@ -4322,6 +4351,26 @@ const CostSubmission = () => {
                                     )}
                                     <span>Reconciled</span>
                                   </div>
+                                  {(() => {
+                                    const glStatus = opsGlLogMap.get(oc.id);
+                                    const glCls = glStatus === 'success'
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                      : glStatus === 'error'
+                                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400'
+                                      : glStatus === 'skipped'
+                                      ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                      : 'bg-muted text-muted-foreground';
+                                    const glLabel = glStatus === 'success' ? 'GL Posted' : glStatus === 'error' ? 'GL Error' : glStatus === 'skipped' ? 'GL Skipped' : 'GL Pending';
+                                    return (
+                                      <>
+                                        <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        <div data-testid={`status-gl-${oc.id}`} className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${glCls}`}>
+                                          <FileText className="h-3 w-3" />
+                                          <span>{glLabel}</span>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                 </>
                               )}
                             </div>

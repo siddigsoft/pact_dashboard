@@ -231,7 +231,7 @@ const MMPSiteEntriesTable = ({
     const completedBy = site.completed_by || ad['completed_by'] || ad['Completed By'] || 
       (isSiteTerminalCompletion ? (site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By']) : undefined) || undefined;
     const completedAt = site.completed_at || ad['completed_at'] || (ad['Completed At'] ? new Date(ad['Completed At']).toISOString() : undefined) || 
-      (isSiteTerminalCompletion ? (site.updated_at || site.last_modified) : undefined) || undefined;
+      (isSiteTerminalCompletion ? site.created_at : undefined) || undefined;
 
     // Time-to-complete: how long from dispatch → completion (only when both are present)
     const timeToCompleteMs = diffMsBetween(dispatchedAt, completedAt);

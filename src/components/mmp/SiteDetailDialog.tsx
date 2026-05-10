@@ -149,7 +149,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const completedAt = site.completed_at
       || ad['completed_at']
       || (ad['Completed At'] ? new Date(ad['Completed At']).toISOString() : undefined)
-      || (isTerminalForCompletion ? updatedAt : undefined)
+      || (isTerminalForCompletion ? createdAt : undefined)
       || undefined;
 
     // Extract GPS coordinates from registry lookup
@@ -1214,7 +1214,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     </p>
                     <p className="text-[11px] text-gray-500 mt-0.5">
                       {row.isLegacyFallbackCompleted
-                        ? 'Approximate — derived from last edit because this row pre-dates the completion timestamp'
+                        ? 'Approximate — derived from record creation date because this row pre-dates the completion timestamp'
                         : 'First time this site reached a completed state'}
                     </p>
                   </div>
