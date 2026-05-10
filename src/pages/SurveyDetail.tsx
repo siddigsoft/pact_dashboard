@@ -3068,6 +3068,8 @@ export default function SurveyDetail() {
                             const chunkEn = fileContext.slice(i * CHUNK_EN, (i + 1) * CHUNK_EN);
                             const chunkAr = fileContextAr ? fileContextAr.slice(i * CHUNK_AR, (i + 1) * CHUNK_AR) : '';
                             if (!chunkEn && !chunkAr) break;
+                            // Small pause between chunks to stay within Groq TPM limits
+                            if (i > 0) await new Promise(r => setTimeout(r, 800));
                             try {
                               const res = await fetch('/api/generate-survey-questions', {
                                 method: 'POST',

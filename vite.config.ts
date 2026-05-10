@@ -316,34 +316,58 @@ async function callGroqText(
 ): Promise<{ text: string }> {
   const apiKey = process.env.GROQ_API_KEY || '';
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
-  // llama-3.3-70b-versatile: ~12k TPM  |  gemma2-9b-it: ~15k TPM
-  // llama-3.1-8b-instant excluded — only 6k TPM, too low for JSON survey extraction.
+  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  // Models in priority order — skip any the OCR loop already burned daily quota on
   const TEXT_MODELS = [
-    'llama-3.3-70b-versatile',
-    'gemma2-9b-it',
+    'llama-3.3-70b-versatile',          // ~32k TPM on-demand
+    'llama3-70b-8192',                   // legacy alias, separate quota bucket
+    'llama-3.1-70b-versatile',           // alias fallback
+    'gemma2-9b-it',                      // 15k TPM
     'meta-llama/llama-4-maverick-17b-128e-instruct',
+    'llama3-8b-8192',                    // small but fast, last resort
   ];
   for (const model of TEXT_MODELS) {
     if (isModelUnavailable(unavailableGroqModels, model)) continue;
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 4096 }),
-    });
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
-      const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
-      const isGone = res.status === 404 || errMsg.toLowerCase().includes('decommission') || errMsg.toLowerCase().includes('no longer supported') || errMsg.toLowerCase().includes('not found');
-      const isRateLimit = res.status === 429;
-      // Rate limits and gone models: skip to next — only throw on unexpected errors
-      if (isRateLimit || isGone) {
-        if (isGone) markModelUnavailable(unavailableGroqModels, model);
-        continue;
+    // Retry up to 3 times for per-minute (TPM) rate limits
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 8192 }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
+        const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
+        const isGone = res.status === 404
+          || errMsg.toLowerCase().includes('decommission')
+          || errMsg.toLowerCase().includes('no longer supported')
+          || errMsg.toLowerCase().includes('not found');
+        const isTPM = errMsg.includes('per minute') || errMsg.includes('TPM') || errMsg.includes('tokens per minute');
+        const isRPD = (errMsg.includes('per day') || errMsg.includes('RPD') || errMsg.includes('requests per day')) && !isTPM;
+        const isDailyLimit = res.status === 429 && isRPD;
+        const isMinuteLimit = res.status === 429 && !isDailyLimit;
+
+        if (isGone || isDailyLimit) {
+          markModelUnavailable(unavailableGroqModels, model);
+          break; // try next model
+        }
+        if (isMinuteLimit) {
+          // Parse retry-after from header or message body
+          const headerRetry = parseInt(res.headers.get('retry-after') || '0', 10);
+          const msgMatch = errMsg.match(/(?:try again in|retry after|in)\s+(\d+(?:\.\d+)?)s/i);
+          const msgRetry = msgMatch ? Math.ceil(parseFloat(msgMatch[1])) : 0;
+          const waitSec = Math.max(headerRetry, msgRetry, 20); // at least 20s
+          console.log(`[Groq text] TPM rate limit on ${model}, attempt ${attempt + 1} — waiting ${waitSec}s`);
+          await sleep(waitSec * 1000);
+          continue; // retry same model after wait
+        }
+        // Unexpected error — skip to next model
+        console.warn(`[Groq text] ${model} error: ${errMsg.slice(0, 120)}`);
+        break;
       }
-      throw new Error(`Groq text error: ${errMsg}`);
+      const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      return { text: data.choices?.[0]?.message?.content || '' };
     }
-    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-    return { text: data.choices?.[0]?.message?.content || '' };
   }
   throw new Error('All Groq text models unavailable.');
 }
