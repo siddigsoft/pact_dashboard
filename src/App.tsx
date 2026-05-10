@@ -346,7 +346,8 @@ const AuthGuard = ({ children }) => {
     !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report', '/staff-onboarding'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/') &&
-    !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill'))
+    !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill')) &&
+    !location.pathname.startsWith('/s/')
   ) {
     const target = `${location.pathname}${location.search}${location.hash}`;
     const redirectTo = `/auth?redirect=${encodeURIComponent(target)}`;
@@ -374,6 +375,7 @@ const AppRoutes = () => {
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
+      <Route path="/s/:id" element={<SurveyFill />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>

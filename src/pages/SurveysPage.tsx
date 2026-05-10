@@ -205,7 +205,7 @@ export default function SurveysPage() {
   });
 
   const copyLink = (survey: Survey) => {
-    const url = `${window.location.origin}/surveys/${survey.id}/fill`;
+    const url = `${window.location.origin}/s/${survey.id}`;
     navigator.clipboard.writeText(url).then(() =>
       toast({ title: 'Link copied!', description: 'Share this link with respondents.' })
     );
@@ -667,7 +667,7 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <a href={`/surveys/${survey.id}/fill`} target="_blank" rel="noopener noreferrer"
+                  <a href={`/s/${survey.id}`} target="_blank" rel="noopener noreferrer"
                     className="flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                     data-testid={`btn-open-fill-${survey.id}`}>
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -790,7 +790,7 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <a href={`/surveys/${survey.id}/fill`} target="_blank" rel="noopener noreferrer"
+                <a href={`/s/${survey.id}`} target="_blank" rel="noopener noreferrer"
                   className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-emerald-600 transition-colors"
                   data-testid={`btn-open-fill-row-${survey.id}`}>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -834,7 +834,7 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
    Share Dialog with QR code
 ───────────────────────────────────────────── */
 function ShareDialog({ survey, onClose, onCopy }: { survey: Survey; onClose: () => void; onCopy: () => void }) {
-  const fillUrl = `${window.location.origin}/surveys/${survey.id}/fill`;
+  const fillUrl = `${window.location.origin}/s/${survey.id}`;
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {

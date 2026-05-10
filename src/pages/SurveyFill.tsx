@@ -9,7 +9,7 @@ import {
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
   Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
-  FunctionSquare, Plus, Table2, Trash2, PenLine, Info,
+  FunctionSquare, Plus, Table2, Trash2, PenLine, Info, Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -617,6 +617,9 @@ export default function SurveyFill() {
   const [respondentEmail, setRespondentEmail] = useState('');
   const [hasDraft, setHasDraft]       = useState(false);
   const startTimeRef = useState(() => Date.now())[0];
+  const [fillPasswordUnlocked, setFillPasswordUnlocked] = useState(false);
+  const [fillPasswordInput, setFillPasswordInput]       = useState('');
+  const [fillPasswordError, setFillPasswordError]       = useState(false);
   // Repeat group rows: { [groupId]: [{ [childQId]: AnswerValue }, ...] }
   const [repeatRows, setRepeatRows] = useState<Record<string, Array<Record<string, AnswerValue>>>>({});
   // Grid table rows: { [questionId]: [{ [colId]: string }, ...] }
@@ -938,6 +941,54 @@ export default function SurveyFill() {
       </div>
     </div>
   );
+
+  // Password gate — must be checked before status gate
+  const fillPassword = (surveySettings as Record<string, unknown>)?.fill_password as string | null | undefined;
+  if (fillPassword?.trim() && !fillPasswordUnlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white px-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-lg p-8 space-y-5">
+          <div className="flex flex-col items-center text-center gap-2">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+              <Lock className="w-6 h-6 text-indigo-500" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-800">Password Required</h2>
+            <p className="text-sm text-slate-500">"{survey.title}" is password-protected. Enter the password to continue.</p>
+          </div>
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={fillPasswordInput}
+              onChange={e => { setFillPasswordInput(e.target.value); setFillPasswordError(false); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  if (fillPasswordInput === fillPassword.trim()) { setFillPasswordUnlocked(true); }
+                  else { setFillPasswordError(true); setFillPasswordInput(''); }
+                }
+              }}
+              placeholder="Enter password…"
+              autoFocus
+              className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            {fillPasswordError && (
+              <p className="text-xs text-red-500 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />Incorrect password. Please try again.
+              </p>
+            )}
+            <button
+              onClick={() => {
+                if (fillPasswordInput === fillPassword.trim()) { setFillPasswordUnlocked(true); }
+                else { setFillPasswordError(true); setFillPasswordInput(''); }
+              }}
+              className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              Unlock Survey
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (survey.status !== 'active') return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">

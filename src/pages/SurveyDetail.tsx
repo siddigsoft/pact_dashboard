@@ -346,6 +346,26 @@ export default function SurveyDetail() {
   const [reviewFilter, setReviewFilter]     = useState<string>('all');
   const [reviewSaving, setReviewSaving]     = useState(false);
 
+  // Builder extras
+  const [builderSearch, setBuilderSearch]   = useState('');
+  const [importXlsOpen, setImportXlsOpen]   = useState(false);
+  const [importXlsFile, setImportXlsFile]   = useState<File | null>(null);
+  const [importXlsParsed, setImportXlsParsed] = useState<AiQuestion[]>([]);
+  const [importXlsSelected, setImportXlsSelected] = useState<Set<number>>(new Set());
+  const [importXlsLoading, setImportXlsLoading] = useState(false);
+
+  // Bulk response selection
+  const [bulkResponses, setBulkResponses]   = useState<Set<string>>(new Set());
+  const [bulkResponseSaving, setBulkResponseSaving] = useState(false);
+
+  // Analytics extras
+  const [wordCloudQId, setWordCloudQId]     = useState('');
+
+  // Map extras
+  const [mapDateFrom, setMapDateFrom]       = useState('');
+  const [mapDateTo, setMapDateTo]           = useState('');
+  const [mapView, setMapView]               = useState<'pins' | 'heat'>('pins');
+
   // Settings tab state
   const [settingsForm, setSettingsForm] = useState({
     response_limit: '',
@@ -355,6 +375,10 @@ export default function SurveyDetail() {
     show_progress: true,
     thank_you_message: '',
     thank_you_message_ar: '',
+    activate_at: '',
+    fill_password: '',
+    notify_emails: '',
+    is_template: false,
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -377,6 +401,10 @@ export default function SurveyDetail() {
         show_progress: s.show_progress !== false,
         thank_you_message: String(s.thank_you_message ?? ''),
         thank_you_message_ar: String(s.thank_you_message_ar ?? ''),
+        activate_at: s.activate_at ? String(s.activate_at).slice(0, 16) : '',
+        fill_password: String(s.fill_password ?? ''),
+        notify_emails: String(s.notify_emails ?? ''),
+        is_template: Boolean(s.is_template),
       });
       return data as Survey;
     },
@@ -447,6 +475,10 @@ export default function SurveyDetail() {
         show_progress: settingsForm.show_progress,
         thank_you_message: settingsForm.thank_you_message || null,
         thank_you_message_ar: settingsForm.thank_you_message_ar || null,
+        activate_at: settingsForm.activate_at || null,
+        fill_password: settingsForm.fill_password.trim() || null,
+        notify_emails: settingsForm.notify_emails.trim() || null,
+        is_template: settingsForm.is_template,
       };
       const { error } = await supabase.from('surveys').update({
         settings: updatedSettings,
@@ -598,7 +630,7 @@ export default function SurveyDetail() {
   });
 
   const copyFillLink = () => {
-    const url = `${window.location.origin}/surveys/${id}/fill`;
+    const url = `${window.location.origin}/s/${id}`;
     navigator.clipboard.writeText(url).then(() => {
       toast({ title: 'Link copied!', description: 'Share this link with your respondents.' });
     }).catch(() => {
@@ -1002,7 +1034,7 @@ export default function SurveyDetail() {
             <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 h-4 border', scfg.color)}>{scfg.label}</Badge>
             {survey.status === 'active' && (
               <>
-                <a href={`/surveys/${survey.id}/fill`} target="_blank" rel="noopener noreferrer"
+                <a href={`/s/${survey.id}`} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline">
                   <ExternalLink className="w-3 h-3" />Fill Link
                 </a>
@@ -1140,11 +1172,42 @@ export default function SurveyDetail() {
                 <p className="text-xs font-semibold text-violet-800">AI Question Generator</p>
                 <p className="text-[10px] text-violet-500 mt-0.5">Describe your topic and let AI generate survey questions in seconds</p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}
-                className="gap-1.5 text-xs border-violet-200 text-violet-700 hover:bg-violet-100 shrink-0"
-                data-testid="btn-ai-generate">
-                <Sparkles className="w-3.5 h-3.5" />Generate
-              </Button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}
+                  className="gap-1.5 text-xs border-violet-200 text-violet-700 hover:bg-violet-100"
+                  data-testid="btn-ai-generate">
+                  <Sparkles className="w-3.5 h-3.5" />Generate
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setImportXlsOpen(true)}
+                  className="gap-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                  data-testid="btn-import-xlsform" title="Import questions from XLSForm spreadsheet">
+                  <Upload className="w-3.5 h-3.5" />Import XLS
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => window.print()}
+                  className="gap-1.5 text-xs border-slate-200 text-slate-600 hover:bg-slate-50"
+                  title="Print form structure">
+                  <FileText className="w-3.5 h-3.5" />Print
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Builder search */}
+          {questions.length > 2 && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Input
+                value={builderSearch}
+                onChange={e => setBuilderSearch(e.target.value)}
+                placeholder="Search questions…"
+                className="pl-9 h-8 text-sm"
+                data-testid="input-builder-search"
+              />
+              {builderSearch && (
+                <button onClick={() => setBuilderSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 
@@ -1175,6 +1238,56 @@ export default function SurveyDetail() {
                 <FileText className="w-8 h-8 opacity-30" />
                 <p className="text-sm">No questions yet. Add your first question below.</p>
               </div>
+            ) : builderSearch.trim() ? (
+              (() => {
+                const term = builderSearch.toLowerCase();
+                const matches = questions.filter(q =>
+                  q.label.toLowerCase().includes(term) ||
+                  (q.label_ar ?? '').toLowerCase().includes(term) ||
+                  (q.description ?? '').toLowerCase().includes(term) ||
+                  q.type.includes(term)
+                );
+                if (matches.length === 0) return (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2 bg-white rounded-xl border border-dashed border-slate-200">
+                    <Search className="w-6 h-6 opacity-30" />
+                    <p className="text-sm">No questions match "{builderSearch}"</p>
+                  </div>
+                );
+                return (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-indigo-600 flex items-center gap-1 px-1">
+                      <Search className="w-3 h-3" />{matches.length} match{matches.length !== 1 ? 'es' : ''} for "{builderSearch}"
+                    </p>
+                    {matches.map((q, mi) => (
+                      <QuestionCard
+                        key={q.id}
+                        q={q}
+                        idx={mi}
+                        total={matches.length}
+                        questions={questions}
+                        isEditing={editQId === q.id}
+                        onEdit={() => setEditQId(editQId === q.id ? null : q.id)}
+                        onUpdate={patch => updateQuestion.mutate({ id: q.id, patch })}
+                        onDelete={() => deleteQuestion.mutate(q.id)}
+                        onDuplicate={() => duplicateQuestion.mutate(q.id)}
+                        onMoveUp={() => {}}
+                        onMoveDown={() => {}}
+                        deleting={deleteQuestion.isPending && deleteQuestion.variables === q.id}
+                        saving={updateQuestion.isPending && updateQuestion.variables?.id === q.id}
+                        canManage={canManage}
+                        isDraggedOver={false}
+                        onDragStart={() => {}}
+                        onDragOver={() => {}}
+                        onDragLeave={() => {}}
+                        onDrop={() => {}}
+                        isBulkSelected={bulkSelected.has(q.id)}
+                        onBulkToggle={v => setBulkSelected(prev => { const n = new Set(prev); v ? n.add(q.id) : n.delete(q.id); return n; })}
+                        onSaveToLibrary={() => { saveToLibrary(q); toast({ title: 'Saved to library' }); }}
+                      />
+                    ))}
+                  </div>
+                );
+              })()
             ) : (
               renderQTree(buildQTree(questions))
             )}
@@ -1294,6 +1407,17 @@ export default function SurveyDetail() {
             <div className="flex flex-wrap items-center gap-2">
               {/* Review status filter chips */}
               <div className="flex items-center gap-1 flex-wrap w-full">
+                {canManage && (
+                  <label className="flex items-center gap-1.5 cursor-pointer mr-1" title="Select all">
+                    <input type="checkbox"
+                      checked={bulkResponses.size > 0 && bulkResponses.size === responses.length}
+                      ref={el => { if (el) el.indeterminate = bulkResponses.size > 0 && bulkResponses.size < responses.length; }}
+                      onChange={e => setBulkResponses(e.target.checked ? new Set(responses.map(r => r.id)) : new Set())}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-400 select-none">All</span>
+                  </label>
+                )}
                 {[
                   { val: 'all', label: 'All', icon: ClipboardList },
                   { val: 'pending', label: 'Pending', icon: CircleDot },
@@ -1398,6 +1522,42 @@ export default function SurveyDetail() {
                   return `${filtered.length} of ${responses.length}`;
                 })()}
               </span>
+            </div>
+          )}
+
+          {/* Bulk action bar */}
+          {bulkResponses.size > 0 && canManage && (
+            <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
+              <span className="text-xs font-semibold text-indigo-700">{bulkResponses.size} selected</span>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <Button size="sm" variant="outline" disabled={bulkResponseSaving}
+                  onClick={async () => {
+                    setBulkResponseSaving(true);
+                    const ids = [...bulkResponses];
+                    await Promise.all(ids.map(rid => supabase.from('survey_responses').update({ review_status: 'approved' }).eq('id', rid)));
+                    qc.invalidateQueries({ queryKey: ['survey-responses', id] });
+                    setBulkResponses(new Set()); setBulkResponseSaving(false);
+                    toast({ title: `${ids.length} response${ids.length !== 1 ? 's' : ''} approved` });
+                  }}
+                  className="gap-1 text-xs h-7 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+                  {bulkResponseSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCheck className="w-3 h-3" />}Approve
+                </Button>
+                <Button size="sm" variant="outline" disabled={bulkResponseSaving}
+                  onClick={async () => {
+                    setBulkResponseSaving(true);
+                    const ids = [...bulkResponses];
+                    await Promise.all(ids.map(rid => supabase.from('survey_responses').update({ review_status: 'rejected' }).eq('id', rid)));
+                    qc.invalidateQueries({ queryKey: ['survey-responses', id] });
+                    setBulkResponses(new Set()); setBulkResponseSaving(false);
+                    toast({ title: `${ids.length} response${ids.length !== 1 ? 's' : ''} rejected` });
+                  }}
+                  className="gap-1 text-xs h-7 text-red-700 border-red-200 hover:bg-red-50">
+                  {bulkResponseSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <CircleX className="w-3 h-3" />}Reject
+                </Button>
+                <button onClick={() => setBulkResponses(new Set())} className="ml-1 p-1 rounded hover:bg-indigo-100 text-indigo-400">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           )}
 
@@ -1515,8 +1675,15 @@ export default function SurveyDetail() {
                 ) : filtered.map(r => {
                   const displayName = r.respondent_name ?? r.respondent_email ?? 'Anonymous';
                   return (
-                    <div key={r.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    <div key={r.id} className={cn('bg-white rounded-xl border overflow-hidden transition-colors', bulkResponses.has(r.id) ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-200')}>
                       <div className="flex items-center gap-3 p-4">
+                        {canManage && (
+                          <input type="checkbox" checked={bulkResponses.has(r.id)}
+                            onChange={e => setBulkResponses(prev => { const n = new Set(prev); e.target.checked ? n.add(r.id) : n.delete(r.id); return n; })}
+                            onClick={ev => ev.stopPropagation()}
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 shrink-0 cursor-pointer"
+                          />
+                        )}
                         <div className={cn('w-9 h-9 rounded-full flex items-center justify-center shrink-0', r.respondent_name ? 'bg-indigo-100' : 'bg-slate-100')}>
                           <span className={cn('text-xs font-bold', r.respondent_name ? 'text-indigo-700' : 'text-slate-400')}>
                             {displayName.charAt(0).toUpperCase()}
@@ -1721,8 +1888,15 @@ export default function SurveyDetail() {
       {tab === 'analytics' && (
         <div className="space-y-5">
 
+          {/* Analytics export */}
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={() => window.print()} className="gap-1.5 text-xs">
+              <Download className="w-3.5 h-3.5" />Export Analytics
+            </Button>
+          </div>
+
           {/* ── KPI Cards ──────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {/* Total responses */}
             <div className="bg-gradient-to-br from-indigo-50 via-white to-white rounded-xl border border-indigo-100 p-4 space-y-2">
               <div className="flex items-center justify-between">
@@ -1777,6 +1951,33 @@ export default function SurveyDetail() {
               <p className="text-[11px] text-slate-400">
                 {responses.length > 0 ? format(new Date(responses[0].submitted_at), 'HH:mm') : 'no responses yet'}
               </p>
+            </div>
+
+            {/* Avg completion time */}
+            <div className="bg-gradient-to-br from-sky-50 via-white to-white rounded-xl border border-sky-100 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">Avg Time</span>
+                <div className="w-7 h-7 rounded-lg bg-sky-100 flex items-center justify-center">
+                  <Timer className="w-3.5 h-3.5 text-sky-600" />
+                </div>
+              </div>
+              {(() => {
+                const timed = responses.filter(r => r.duration_seconds != null && r.duration_seconds > 0);
+                if (timed.length === 0) return (
+                  <>
+                    <p className="text-xl font-black text-slate-800 leading-none">—</p>
+                    <p className="text-[11px] text-slate-400">no timed responses</p>
+                  </>
+                );
+                const avg = Math.round(timed.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / timed.length);
+                const fmt = avg < 60 ? `${avg}s` : avg < 3600 ? `${Math.floor(avg / 60)}m ${avg % 60 ? avg % 60 + 's' : ''}`.trim() : `${Math.floor(avg / 3600)}h ${Math.floor((avg % 3600) / 60)}m`;
+                return (
+                  <>
+                    <p className="text-xl font-black text-slate-800 leading-none">{fmt}</p>
+                    <p className="text-[11px] text-slate-400">{timed.length} timed response{timed.length !== 1 ? 's' : ''}</p>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -1870,7 +2071,8 @@ export default function SurveyDetail() {
           {responses.length > 0 && (() => {
             const textQs = nonStructural.filter(q => ['text','textarea'].includes(q.type));
             if (textQs.length === 0) return null;
-            const q = textQs[0];
+            const activeQId = wordCloudQId || textQs[0].id;
+            const q = textQs.find(tq => tq.id === activeQId) ?? textQs[0];
             const words: Record<string, number> = {};
             allAnswers
               .filter(a => a.question_id === q.id && a.answer_text)
@@ -1881,28 +2083,43 @@ export default function SurveyDetail() {
                 });
               });
             const entries = Object.entries(words).sort((a, b) => b[1] - a[1]).slice(0, 40);
-            if (entries.length < 3) return null;
-            const maxCount = entries[0][1];
+            if (entries.length < 3 && textQs.length <= 1) return null;
+            const maxCount = entries[0]?.[1] ?? 1;
             return (
               <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <MessageSquare className="w-4 h-4 text-indigo-400" />
                   <h3 className="text-sm font-semibold text-slate-800">Word Cloud</h3>
-                  <span className="text-[11px] text-slate-400 ml-auto">"{q.label}"</span>
+                  {textQs.length > 1 && (
+                    <select
+                      value={activeQId}
+                      onChange={e => setWordCloudQId(e.target.value)}
+                      className="ml-auto text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-600 bg-white max-w-[200px] truncate"
+                    >
+                      {textQs.map(tq => (
+                        <option key={tq.id} value={tq.id}>{tq.label.slice(0, 40)}</option>
+                      ))}
+                    </select>
+                  )}
+                  {textQs.length <= 1 && <span className="text-[11px] text-slate-400 ml-auto">"{q.label}"</span>}
                 </div>
-                <div className="flex flex-wrap gap-2 leading-relaxed">
-                  {entries.map(([word, count]) => {
-                    const size = 0.7 + (count / maxCount) * 1.1;
-                    const opacity = 0.4 + (count / maxCount) * 0.6;
-                    const colors = ['text-indigo-600','text-violet-600','text-sky-600','text-emerald-600','text-amber-600','text-rose-500'];
-                    const color = colors[word.charCodeAt(0) % colors.length];
-                    return (
-                      <span key={word} className={`font-medium ${color}`} style={{ fontSize: `${size}rem`, opacity }}>
-                        {word}
-                      </span>
-                    );
-                  })}
-                </div>
+                {entries.length < 3 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">Not enough text answers yet for a word cloud.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2 leading-relaxed">
+                    {entries.map(([word, count]) => {
+                      const size = 0.7 + (count / maxCount) * 1.1;
+                      const opacity = 0.4 + (count / maxCount) * 0.6;
+                      const colors = ['text-indigo-600','text-violet-600','text-sky-600','text-emerald-600','text-amber-600','text-rose-500'];
+                      const color = colors[word.charCodeAt(0) % colors.length];
+                      return (
+                        <span key={word} className={`font-medium ${color}`} style={{ fontSize: `${size}rem`, opacity }}>
+                          {word}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -2321,7 +2538,7 @@ export default function SurveyDetail() {
               {survey.status === 'active' && (
                 <div className="flex items-center gap-2">
                   <a
-                    href={`/surveys/${survey.id}/fill`}
+                    href={`/s/${survey.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors"
@@ -2349,7 +2566,7 @@ export default function SurveyDetail() {
           const q = nonStructural.find(q => q.id === a.question_id);
           return q?.type === 'gps' && a.answer_text;
         });
-        const pins = gpsAnswers.flatMap(a => {
+        const allPins = gpsAnswers.flatMap(a => {
           const parts = (a.answer_text ?? '').split(',');
           if (parts.length < 2) return [];
           const lat = parseFloat(parts[0]);
@@ -2360,17 +2577,87 @@ export default function SurveyDetail() {
           const question = nonStructural.find(q => q.id === a.question_id);
           return [{ lat, lng, accuracy, response, question, answerId: a.id }];
         });
+        // Apply date filter
+        const pins = allPins.filter(p => {
+          if (!p.response) return true;
+          const d = new Date(p.response.submitted_at);
+          if (mapDateFrom && d < new Date(mapDateFrom)) return false;
+          if (mapDateTo && d > new Date(mapDateTo + 'T23:59:59')) return false;
+          return true;
+        });
         const center: [number, number] = pins.length > 0
           ? [pins.reduce((s, p) => s + p.lat, 0) / pins.length, pins.reduce((s, p) => s + p.lng, 0) / pins.length]
           : [15.5, 32.5]; // default: Sudan
 
+        // Heatmap clusters
+        const cellSize = 0.05;
+        const heatCells = new Map<string, { lat: number; lng: number; count: number }>();
+        pins.forEach(p => {
+          const ck = `${Math.floor(p.lat / cellSize)},${Math.floor(p.lng / cellSize)}`;
+          if (!heatCells.has(ck)) heatCells.set(ck, { lat: Math.floor(p.lat / cellSize) * cellSize + cellSize / 2, lng: Math.floor(p.lng / cellSize) * cellSize + cellSize / 2, count: 0 });
+          heatCells.get(ck)!.count++;
+        });
+        const heatMax = Math.max(...[...heatCells.values()].map(c => c.count), 1);
+
+        const exportCSV = () => {
+          const rows = [['Latitude', 'Longitude', 'Accuracy (m)', 'Respondent', 'Submitted', 'Question']];
+          pins.forEach(p => {
+            rows.push([
+              String(p.lat), String(p.lng),
+              p.accuracy != null ? String(p.accuracy.toFixed(1)) : '',
+              p.response?.respondent_name ?? p.response?.respondent_email ?? 'Anonymous',
+              p.response ? format(new Date(p.response.submitted_at), 'yyyy-MM-dd HH:mm') : '',
+              p.question?.label ?? '',
+            ]);
+          });
+          const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = `gps-export-${id}.csv`; a.click();
+          URL.revokeObjectURL(url);
+        };
+
         return (
           <div className="space-y-4">
+            {/* Map toolbar */}
+            {gpsQuestions.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-slate-200 p-3">
+                {/* Date range filter */}
+                <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <Input type="date" value={mapDateFrom} onChange={e => setMapDateFrom(e.target.value)}
+                  className="h-8 text-xs w-36 shrink-0" placeholder="From date" title="Filter from date" />
+                <span className="text-xs text-slate-400">–</span>
+                <Input type="date" value={mapDateTo} onChange={e => setMapDateTo(e.target.value)}
+                  className="h-8 text-xs w-36 shrink-0" placeholder="To date" title="Filter to date" />
+                {(mapDateFrom || mapDateTo) && (
+                  <button onClick={() => { setMapDateFrom(''); setMapDateTo(''); }}
+                    className="text-[11px] text-indigo-600 hover:underline shrink-0">Clear</button>
+                )}
+                <div className="ml-auto flex items-center gap-1.5">
+                  {/* View toggle */}
+                  <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+                    <button onClick={() => setMapView('pins')}
+                      className={cn('px-2.5 py-1 rounded-md text-xs font-medium transition-colors', mapView === 'pins' ? 'bg-white shadow text-indigo-700' : 'text-slate-500')}>
+                      Pins
+                    </button>
+                    <button onClick={() => setMapView('heat')}
+                      className={cn('px-2.5 py-1 rounded-md text-xs font-medium transition-colors', mapView === 'heat' ? 'bg-white shadow text-orange-700' : 'text-slate-500')}>
+                      Heat
+                    </button>
+                  </div>
+                  {pins.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={exportCSV} className="h-7 gap-1 text-xs">
+                      <Download className="w-3 h-3" />CSV
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             {/* Stats bar — only show when there are GPS questions */}
             {gpsQuestions.length > 0 && (
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                  <MapPin className="w-3 h-3" />{pins.length} GPS point{pins.length !== 1 ? 's' : ''}
+                  <MapPin className="w-3 h-3" />{pins.length} GPS point{pins.length !== 1 ? 's' : ''}{pins.length !== allPins.length ? ` (${allPins.length} total)` : ''}
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-500 flex-wrap">
                   from {gpsQuestions.length} GPS question{gpsQuestions.length !== 1 ? 's' : ''}:&nbsp;
@@ -2437,7 +2724,27 @@ export default function SurveyDetail() {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   />
-                  {pins.map((pin, pi) => {
+                  {mapView === 'heat' ? (
+                    [...heatCells.values()].map((cell, ci) => {
+                      const ratio = cell.count / heatMax;
+                      const r = Math.round(255 * ratio);
+                      const g = Math.round(165 * (1 - ratio));
+                      const color = `rgb(${r},${g},0)`;
+                      const size = 12 + Math.round(ratio * 24);
+                      const icon = L.divIcon({
+                        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:0.75;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;color:white;">${cell.count}</div>`,
+                        className: '',
+                        iconSize: [size, size],
+                        iconAnchor: [size / 2, size / 2],
+                      });
+                      return (
+                        <Marker key={`heat-${ci}`} position={[cell.lat, cell.lng]} icon={icon}>
+                          <Popup><p className="text-sm font-semibold">{cell.count} GPS point{cell.count !== 1 ? 's' : ''}</p><p className="text-xs text-slate-400">{cell.lat.toFixed(3)}, {cell.lng.toFixed(3)}</p></Popup>
+                        </Marker>
+                      );
+                    })
+                  ) : (
+                  pins.map((pin, pi) => {
                     const displayName = pin.response?.respondent_name ?? pin.response?.respondent_email ?? 'Anonymous';
                     return (
                       <Marker key={`${pin.answerId}-${pi}`} position={[pin.lat, pin.lng]}>
@@ -2466,7 +2773,8 @@ export default function SurveyDetail() {
                         </Popup>
                       </Marker>
                     );
-                  })}
+                  })
+                  )}
                 </MapContainer>
               </div>
             )}
@@ -2688,6 +2996,121 @@ export default function SurveyDetail() {
             </div>
           </div>
 
+          {/* Scheduled Activation */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <CalendarClock className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Scheduled Activation</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-[11px] text-slate-400">
+                Set a future date/time to automatically activate this survey. Leave blank to activate manually.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-activate-at" className="text-sm font-medium">
+                  Activate at <span className="text-slate-400 font-normal text-[10px]">(leave blank to skip)</span>
+                </Label>
+                <div className="relative max-w-[260px]">
+                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input
+                    id="setting-activate-at"
+                    type="datetime-local"
+                    className="pl-9"
+                    value={settingsForm.activate_at}
+                    onChange={e => setSettingsForm(s => ({ ...s, activate_at: e.target.value }))}
+                    data-testid="input-activate-at"
+                  />
+                </div>
+                {settingsForm.activate_at && (
+                  <p className="text-[11px] text-indigo-600">
+                    Survey will auto-activate on {new Date(settingsForm.activate_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className="relative shrink-0">
+                  <input type="checkbox" className="sr-only"
+                    checked={settingsForm.is_template}
+                    onChange={e => setSettingsForm(s => ({ ...s, is_template: e.target.checked }))}
+                    data-testid="toggle-is-template"
+                  />
+                  <div className={cn('w-10 h-6 rounded-full transition-colors', settingsForm.is_template ? 'bg-violet-600' : 'bg-slate-200')}>
+                    <div className={cn('w-4 h-4 bg-white rounded-full shadow transition-transform m-1', settingsForm.is_template ? 'translate-x-4' : 'translate-x-0')} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Mark as template</p>
+                  <p className="text-[11px] text-slate-400">Template surveys appear in the template library for quick reuse</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Password Protection */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <Lock className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Password Protection</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-[11px] text-slate-400">
+                Require respondents to enter a password or PIN before accessing the fill form. Leave blank for no protection.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-fill-password" className="text-sm font-medium">
+                  Access Password / PIN
+                </Label>
+                <div className="relative max-w-[260px]">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input
+                    id="setting-fill-password"
+                    type="text"
+                    className="pl-9 font-mono"
+                    placeholder="e.g. survey2024 or 1234"
+                    value={settingsForm.fill_password}
+                    onChange={e => setSettingsForm(s => ({ ...s, fill_password: e.target.value }))}
+                    data-testid="input-fill-password"
+                  />
+                </div>
+                {settingsForm.fill_password.trim() && (
+                  <p className="text-[11px] text-amber-600 flex items-center gap-1">
+                    <Shield className="w-3 h-3" />Respondents will be asked for this password before filling
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Email Notifications */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <Mail className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Email Notifications</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-[11px] text-slate-400">
+                Send an email notification whenever a new response is submitted. Enter one or more email addresses separated by commas.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="setting-notify-emails" className="text-sm font-medium">
+                  Notify email(s) on submission
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input
+                    id="setting-notify-emails"
+                    type="text"
+                    className="pl-9"
+                    placeholder="e.g. manager@org.org, team@org.org"
+                    value={settingsForm.notify_emails}
+                    onChange={e => setSettingsForm(s => ({ ...s, notify_emails: e.target.value }))}
+                    data-testid="input-notify-emails"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Save */}
           <div className="flex items-center gap-3">
             <Button
@@ -2702,7 +3125,7 @@ export default function SurveyDetail() {
             </Button>
             {survey.status === 'active' && (
               <a
-                href={`/surveys/${survey.id}/fill`}
+                href={`/s/${survey.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:underline"
@@ -2858,6 +3281,162 @@ export default function SurveyDetail() {
         </Dialog>
       )}
 
+      {/* ── XLSForm Import Dialog ────────────────────────────────────────── */}
+      {importXlsOpen && (
+        <Dialog open onOpenChange={v => { if (!v) { setImportXlsOpen(false); setImportXlsFile(null); setImportXlsParsed([]); setImportXlsSelected(new Set()); } }}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-indigo-500" />Import Questions from XLSForm
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-1">
+              {!importXlsFile ? (
+                <div
+                  className="flex flex-col items-center gap-3 border-2 border-dashed border-slate-200 rounded-xl p-8 bg-slate-50 cursor-pointer hover:border-indigo-300 transition-colors"
+                  onClick={() => document.getElementById('xls-upload-input')?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={async e => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files[0];
+                    if (!file) return;
+                    setImportXlsFile(file);
+                    try {
+                      const ab = await file.arrayBuffer();
+                      const wb = XLSX.read(ab, { type: 'array' });
+                      const ws = wb.Sheets[wb.SheetNames[0]];
+                      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
+                      const parsed = rows
+                        .filter(r => r.type && r.name && r.label)
+                        .map((r, ri) => ({
+                          id: `xls-${ri}`,
+                          type: r.type.replace('select_one ', 'radio').replace('select_multiple ', 'checkbox').replace('select one ', 'radio').replace('select multiple ', 'checkbox') as string,
+                          label: r.label ?? r['label::English'] ?? '',
+                          label_ar: r['label::Arabic'] ?? '',
+                          name: r.name ?? '',
+                          required: (r.required ?? '').toLowerCase() === 'yes',
+                          hint: r.hint ?? '',
+                          choices: (r.choices ?? '').split('|').map((c: string) => c.trim()).filter(Boolean),
+                        }));
+                      setImportXlsParsed(parsed);
+                      setImportXlsSelected(new Set(parsed.map(p => p.id)));
+                    } catch { toast({ title: 'Parse error', description: 'Could not read the spreadsheet. Please use a valid XLSForm .xlsx file.', variant: 'destructive' }); }
+                  }}
+                >
+                  <input id="xls-upload-input" type="file" accept=".xlsx,.xls,.ods,.csv" className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0]; if (!file) return;
+                      setImportXlsFile(file);
+                      try {
+                        const ab = await file.arrayBuffer();
+                        const wb = XLSX.read(ab, { type: 'array' });
+                        const ws = wb.Sheets[wb.SheetNames[0]];
+                        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
+                        const parsed = rows
+                          .filter(r => r.type && r.name && r.label)
+                          .map((r, ri) => ({
+                            id: `xls-${ri}`,
+                            type: r.type.replace('select_one ', 'radio').replace('select_multiple ', 'checkbox') as string,
+                            label: r.label ?? r['label::English'] ?? '',
+                            label_ar: r['label::Arabic'] ?? '',
+                            name: r.name ?? '',
+                            required: (r.required ?? '').toLowerCase() === 'yes',
+                            hint: r.hint ?? '',
+                            choices: (r.choices ?? '').split('|').map((c: string) => c.trim()).filter(Boolean),
+                          }));
+                        setImportXlsParsed(parsed);
+                        setImportXlsSelected(new Set(parsed.map(p => p.id)));
+                      } catch { toast({ title: 'Parse error', description: 'Could not read the spreadsheet.', variant: 'destructive' }); }
+                    }}
+                  />
+                  <Upload className="w-8 h-8 text-indigo-300" />
+                  <p className="text-sm font-semibold text-slate-600">Drop an XLSForm file here</p>
+                  <p className="text-xs text-slate-400">Supports .xlsx / .xls. Must have columns: type, name, label, required.</p>
+                  <Button size="sm" variant="outline" className="mt-1" onClick={e => { e.stopPropagation(); document.getElementById('xls-upload-input')?.click(); }}>Browse files</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 truncate">{importXlsFile.name}</p>
+                      <p className="text-xs text-slate-400">{importXlsParsed.length} question{importXlsParsed.length !== 1 ? 's' : ''} found</p>
+                    </div>
+                    <button onClick={() => { setImportXlsFile(null); setImportXlsParsed([]); setImportXlsSelected(new Set()); }}
+                      className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                      <X className="w-3.5 h-3.5" />Change file
+                    </button>
+                  </div>
+                  {importXlsParsed.length === 0 ? (
+                    <p className="text-sm text-amber-600 bg-amber-50 rounded-lg p-3 text-center">No valid questions found. Check that the sheet has "type", "name", and "label" columns.</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 mb-1">
+                        <input type="checkbox"
+                          checked={importXlsSelected.size === importXlsParsed.length}
+                          onChange={e => setImportXlsSelected(e.target.checked ? new Set(importXlsParsed.map(p => p.id)) : new Set())}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600"
+                        />
+                        <span className="text-xs text-slate-500">{importXlsSelected.size} of {importXlsParsed.length} selected</span>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                        {importXlsParsed.map(q => (
+                          <div key={q.id} className={cn('flex items-start gap-2 p-2.5 rounded-lg border transition-colors cursor-pointer', importXlsSelected.has(q.id) ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-100 bg-white')}
+                            onClick={() => setImportXlsSelected(prev => { const n = new Set(prev); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}>
+                            <input type="checkbox" checked={importXlsSelected.has(q.id)} readOnly className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{q.type}</span>
+                                {q.required && <span className="text-[10px] text-red-500">required</span>}
+                              </div>
+                              <p className="text-xs font-medium text-slate-700 mt-0.5 truncate">{q.label || q.name}</p>
+                              {q.label_ar && <p className="text-[11px] text-slate-400 truncate" dir="rtl">{q.label_ar}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button size="sm" variant="outline" onClick={() => { setImportXlsOpen(false); setImportXlsFile(null); setImportXlsParsed([]); setImportXlsSelected(new Set()); }}>Cancel</Button>
+                    <Button size="sm" disabled={importXlsLoading || importXlsSelected.size === 0}
+                      onClick={async () => {
+                        if (importXlsSelected.size === 0) return;
+                        setImportXlsLoading(true);
+                        const toImport = importXlsParsed.filter(q => importXlsSelected.has(q.id));
+                        const maxOrder = questions.reduce((m, q) => Math.max(m, q.order_index), 0);
+                        let ok = 0;
+                        for (let i = 0; i < toImport.length; i++) {
+                          const q = toImport[i];
+                          const validTypes = ['text','textarea','radio','checkbox','rating','scale','date','dropdown','section_header','number','integer','phone','email','time','datetime','gps','image','file','barcode','note'];
+                          const qType = validTypes.includes(q.type) ? q.type : 'text';
+                          const { error } = await supabase.from('survey_questions').insert({
+                            survey_id: id,
+                            type: qType,
+                            label: q.label || q.name,
+                            label_ar: q.label_ar || null,
+                            required: q.required,
+                            order_index: maxOrder + i + 1,
+                            settings: {},
+                          });
+                          if (!error) ok++;
+                        }
+                        qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+                        setImportXlsLoading(false);
+                        setImportXlsOpen(false); setImportXlsFile(null); setImportXlsParsed([]); setImportXlsSelected(new Set());
+                        toast({ title: `${ok} question${ok !== 1 ? 's' : ''} imported` });
+                      }}
+                      className="gap-1.5">
+                      {importXlsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      Import {importXlsSelected.size > 0 ? importXlsSelected.size : ''} Question{importXlsSelected.size !== 1 ? 's' : ''}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* ── Share Dialog ─────────────────────────────────────────────────── */}
       {shareOpen && (
         <Dialog open onOpenChange={() => setShareOpen(false)}>
@@ -2868,7 +3447,7 @@ export default function SurveyDetail() {
               </DialogTitle>
             </DialogHeader>
             {(() => {
-              const fillUrl = `${window.location.origin}/surveys/${survey.id}/fill`;
+              const fillUrl = `${window.location.origin}/s/${survey.id}`;
               const embedCode = `<iframe src="${fillUrl}" width="100%" height="600" frameborder="0" style="border-radius:12px;border:1px solid #e2e8f0;"></iframe>`;
               const waMsg = encodeURIComponent(`Please fill out this survey: ${survey.title}\n${fillUrl}`);
               const waUrl = `https://wa.me/?text=${waMsg}`;
