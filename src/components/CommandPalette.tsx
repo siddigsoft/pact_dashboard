@@ -20,6 +20,7 @@ import {
   Clock, LogOut, Handshake, Wallet, Landmark, ScanLine, Siren,
   FolderOpen, CalendarCheck, UserCog, GraduationCap, PieChart,
   ListChecks, GitBranch, FileBarChart, Layers, BookMarked,
+  Lock, ArrowLeftRight, Heart, ShieldAlert, Zap, PiggyBank, RotateCcw,
 } from 'lucide-react';
 
 interface PageEntry {
@@ -144,6 +145,25 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'GL Bridge Engine', url: '/accounting/gl-bridge', icon: GitBranch, group: 'Accounting', keywords: ['gl', 'bridge', 'engine', 'posting'] },
   { title: 'Fiscal Years & Periods', url: '/accounting/fiscal-years', icon: Calendar, group: 'Accounting', keywords: ['fiscal', 'year', 'period'] },
   { title: 'Fund Registry', url: '/accounting/funds', icon: DollarSign, group: 'Accounting', keywords: ['fund', 'registry', 'donor'] },
+  { title: 'Purchase Requisitions', url: '/accounting/purchase-requisitions', icon: ClipboardList, group: 'Accounting', keywords: ['pr', 'purchase', 'requisition', 'request'] },
+  { title: 'Goods Receipt Notes', url: '/accounting/grn', icon: Package, group: 'Accounting', keywords: ['grn', 'goods', 'receipt', 'delivery'] },
+  { title: 'AP Invoices', url: '/accounting/ap-invoices', icon: FileText, group: 'Accounting', keywords: ['ap', 'invoice', 'payable', 'bill'] },
+  { title: 'Cheque Register', url: '/accounting/cheque-register', icon: CreditCard, group: 'Accounting', keywords: ['cheque', 'check', 'register', 'payment'] },
+  { title: 'Period Close', url: '/accounting/period-close', icon: Lock, group: 'Accounting', keywords: ['period', 'close', 'fiscal', 'month end'] },
+  { title: 'Tax Management', url: '/accounting/tax', icon: Receipt, group: 'Accounting', keywords: ['tax', 'vat', 'withholding'] },
+  { title: 'Multi-Currency', url: '/accounting/multi-currency', icon: ArrowLeftRight, group: 'Accounting', keywords: ['currency', 'exchange', 'forex', 'rate'] },
+  { title: 'Budget Encumbrance', url: '/accounting/budget-encumbrance', icon: Wallet, group: 'Accounting', keywords: ['budget', 'encumbrance', 'commitment', 'reserve'] },
+  { title: 'Donor Fund Reports', url: '/accounting/donor-reports', icon: Heart, group: 'Accounting', keywords: ['donor', 'fund', 'report', 'grant'] },
+  { title: 'Segregation of Duties', url: '/accounting/sod', icon: ShieldAlert, group: 'Accounting', keywords: ['sod', 'segregation', 'duties', 'compliance'] },
+  { title: 'AML & Compliance', url: '/accounting/aml', icon: Shield, group: 'Accounting', keywords: ['aml', 'compliance', 'anti-money', 'laundering', 'risk'] },
+  { title: 'Cash Flow Forecast', url: '/accounting/cash-flow-forecast', icon: TrendingUp, group: 'Accounting', keywords: ['cash', 'flow', 'forecast', 'projection'] },
+  { title: 'Grant Tracking', url: '/accounting/grants', icon: Award, group: 'Accounting', keywords: ['grant', 'tracking', 'milestone', 'donor'] },
+  { title: 'Cost Allocation', url: '/accounting/cost-allocation', icon: Zap, group: 'Accounting', keywords: ['cost', 'allocation', 'apportionment', 'overhead'] },
+  { title: 'Depreciation Run', url: '/accounting/depreciation-run', icon: RotateCcw, group: 'Accounting', keywords: ['depreciation', 'asset', 'amortisation', 'run'] },
+  { title: 'Financial Consolidation', url: '/accounting/consolidation', icon: Building2, group: 'Accounting', keywords: ['consolidation', 'multi-entity', 'country', 'elimination'] },
+  { title: 'Budget Planning', url: '/accounting/budget-planning', icon: PiggyBank, group: 'Accounting', keywords: ['budget', 'planning', 'approval', 'annual'] },
+  { title: 'GL Bridge Audit', url: '/accounting/gl-audit', icon: Activity, group: 'Accounting', keywords: ['gl', 'bridge', 'audit', 'log', 'coverage'] },
+  { title: 'Accounting Search', url: '/accounting/search', icon: Search, group: 'Accounting', keywords: ['search', 'find', 'accounting', 'journal', 'invoice'] },
   { title: 'Accounting Settings', url: '/accounting/settings', icon: Settings, group: 'Accounting', keywords: ['accounting', 'settings', 'config'] },
 
   // ── CRM ────────────────────────────────────────────────────────────────────
