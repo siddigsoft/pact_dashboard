@@ -314,10 +314,10 @@ export default function AccountingGRN() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
             <div className="sm:col-span-2 space-y-1.5">
               <Label>Linked PO</Label>
-              <Select value={form.po_id} onValueChange={v => setForm(p => ({ ...p, po_id: v }))}>
+              <Select value={form.po_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, po_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger data-testid="select-grn-po"><SelectValue placeholder="Select PO (optional)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No PO (direct receipt)</SelectItem>
+                  <SelectItem value="__none__">No PO (direct receipt)</SelectItem>
                   {pos.map(po => <SelectItem key={po.id} value={po.id}>{po.po_number} — {po.title}</SelectItem>)}
                 </SelectContent>
               </Select>

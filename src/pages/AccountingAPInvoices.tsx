@@ -397,20 +397,20 @@ export default function AccountingAPInvoices() {
             </div>
             <div className="space-y-1.5">
               <Label>Linked PO</Label>
-              <Select value={form.po_id} onValueChange={v => setForm(p => ({ ...p, po_id: v }))}>
+              <Select value={form.po_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, po_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger data-testid="select-inv-po"><SelectValue placeholder="Select PO (optional)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No PO</SelectItem>
+                  <SelectItem value="__none__">No PO</SelectItem>
                   {pos.map(po => <SelectItem key={po.id} value={po.id}>{po.po_number} — {po.title}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Linked GRN</Label>
-              <Select value={form.grn_id} onValueChange={v => setForm(p => ({ ...p, grn_id: v }))}>
+              <Select value={form.grn_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, grn_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger data-testid="select-inv-grn"><SelectValue placeholder="Select GRN (optional)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No GRN</SelectItem>
+                  <SelectItem value="__none__">No GRN</SelectItem>
                   {grns.map(g => <SelectItem key={g.id} value={g.id}>{g.grn_number} — {g.title}</SelectItem>)}
                 </SelectContent>
               </Select>

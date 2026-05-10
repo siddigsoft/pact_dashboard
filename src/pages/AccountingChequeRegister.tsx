@@ -353,20 +353,20 @@ export default function AccountingChequeRegister() {
             </div>
             <div className="space-y-1.5">
               <Label>Vendor (optional)</Label>
-              <Select value={form.vendor_id} onValueChange={v => setForm(p => ({ ...p, vendor_id: v }))}>
+              <Select value={form.vendor_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, vendor_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger data-testid="select-cheque-vendor"><SelectValue placeholder="Link to vendor" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No vendor</SelectItem>
+                  <SelectItem value="__none__">No vendor</SelectItem>
                   {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.vendor_code ? `[${v.vendor_code}] ` : ''}{v.name_en}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Linked AP Invoice</Label>
-              <Select value={form.ap_invoice_id} onValueChange={v => setForm(p => ({ ...p, ap_invoice_id: v }))}>
+              <Select value={form.ap_invoice_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, ap_invoice_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger data-testid="select-cheque-invoice"><SelectValue placeholder="Link to invoice" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No invoice</SelectItem>
+                  <SelectItem value="__none__">No invoice</SelectItem>
                   {apInvoices.map(i => <SelectItem key={i.id} value={i.id}>{i.invoice_number} — {i.currency} {formatNumber(i.total_amount)}</SelectItem>)}
                 </SelectContent>
               </Select>

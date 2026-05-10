@@ -419,10 +419,10 @@ export default function AccountingTaxManagement() {
             </div>
             <div className="space-y-1.5">
               <Label>Country</Label>
-              <Select value={form.country_id} onValueChange={v => setForm(p => ({ ...p, country_id: v }))}>
+              <Select value={form.country_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, country_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger data-testid="select-tax-country"><SelectValue placeholder="All countries" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All countries</SelectItem>
+                  <SelectItem value="__none__">All countries</SelectItem>
                   {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}
                 </SelectContent>
               </Select>
