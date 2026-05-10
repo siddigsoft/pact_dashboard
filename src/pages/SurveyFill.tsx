@@ -674,29 +674,33 @@ export default function SurveyFill() {
   // Detect whether the URL param is a full UUID or a short_code
   const isUuidParam = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id ?? '');
 
-  const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
-    queryKey: ['survey-fill', id],
+  // Single combined query — fetches survey + questions in one round trip to
+  // eliminate the sequential waterfall that caused visible loading delay.
+  const { data: surveyWithQuestions, isLoading: surveyLoading } = useQuery<{ survey: Survey; questions: Question[] }>({
+    queryKey: ['survey-fill-combined', id],
     enabled: !!id,
     queryFn: async () => {
-      const base = supabase.from('surveys').select('*');
-      const { data, error } = await (isUuidParam ? base.eq('id', id!) : base.eq('short_code', id!)).single();
+      const col = isUuidParam ? 'id' : 'short_code';
+      const { data, error } = await supabase
+        .from('surveys')
+        .select('*, survey_questions(*)')
+        .eq(col, id!)
+        .single();
       if (error) throw error;
-      return data as Survey;
+      const { survey_questions: qs, ...rest } = data as any;
+      const sortedQs: Question[] = (Array.isArray(qs) ? qs : []).sort(
+        (a: Question, b: Question) => (a.order_index ?? 0) - (b.order_index ?? 0)
+      );
+      return { survey: rest as Survey, questions: sortedQs };
     },
   });
+
+  const survey    = surveyWithQuestions?.survey;
+  const questions = surveyWithQuestions?.questions ?? [];
+  const qLoading  = surveyLoading;
 
   // The real UUID — used for all child table queries
   const surveyId = survey?.id;
-
-  const { data: questions = [], isLoading: qLoading } = useQuery<Question[]>({
-    queryKey: ['survey-fill-questions', surveyId],
-    enabled: !!surveyId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('survey_questions').select('*').eq('survey_id', surveyId!).order('order_index');
-      if (error) throw error;
-      return (data ?? []) as Question[];
-    },
-  });
 
   // Sync calculate fields: recompute all formula questions whenever answers or
   // questions change.  MUST appear after the questions declaration to avoid a
