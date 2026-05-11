@@ -126,12 +126,18 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             <OnlineOfflineToggle variant="floating" />
 
             {/* ── Floating "Manage Access" button — Super Admin only ─────── */}
-            {isSuperAdmin && currentPageDef && (
+            {isSuperAdmin && (
               <>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      onClick={() => setAccessModalOpen(true)}
+                      onClick={() => {
+                        if (currentPageDef) {
+                          setAccessModalOpen(true);
+                        } else {
+                          navigate('/page-access');
+                        }
+                      }}
                       data-testid="btn-page-access-float"
                       className="fixed bottom-20 right-4 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0F2041] text-white text-xs font-semibold shadow-lg hover:bg-[#1D3461] transition-colors"
                     >
@@ -140,15 +146,19 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="left" className="text-xs">
-                    Control who can access: <strong>{currentPageDef.label}</strong>
+                    {currentPageDef
+                      ? <>Control who can access: <strong>{currentPageDef.label}</strong></>
+                      : 'Open Page Access Control'}
                   </TooltipContent>
                 </Tooltip>
 
-                <PageAccessModal
-                  open={accessModalOpen}
-                  onClose={() => setAccessModalOpen(false)}
-                  pageSlug={currentSlug!}
-                />
+                {currentPageDef && (
+                  <PageAccessModal
+                    open={accessModalOpen}
+                    onClose={() => setAccessModalOpen(false)}
+                    pageSlug={currentSlug!}
+                  />
+                )}
               </>
             )}
           </SidebarInset>
