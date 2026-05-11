@@ -346,6 +346,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         requester_role: request.requesterRole,
         hub_id: hubId,
         hub_name: hubName,
+        country_id: currentUser?.countryId ?? null,
         total_transportation_budget: request.totalTransportationBudget,
         requested_amount: request.requestedAmount,
         payment_type: request.paymentType,
