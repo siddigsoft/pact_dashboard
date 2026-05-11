@@ -618,6 +618,8 @@ export default function SurveyFill() {
   const [respondentName, setRespondentName]   = useState('');
   const [respondentEmail, setRespondentEmail] = useState('');
   const [hasDraft, setHasDraft]       = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [autoSaveFlash, setAutoSaveFlash] = useState(false);
   const startTimeRef = useState(() => Date.now())[0];
   const [fillPasswordUnlocked, setFillPasswordUnlocked] = useState(false);
   const [fillPasswordInput, setFillPasswordInput]       = useState('');
@@ -638,24 +640,51 @@ export default function SurveyFill() {
     if (emailParam) setRespondentEmail(emailParam);
   }, []);
 
-  // Restore saved draft on mount
+  // Draft expiry: discard drafts older than 30 days
+  const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+  // Restore saved draft on mount — detect any saved content
   useEffect(() => {
     if (!draftKey) return;
     try {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
-      if (draft?.answers && Object.keys(draft.answers).length > 0) setHasDraft(true);
+      // Discard drafts older than 30 days
+      if (draft?.savedAt && Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(draftKey);
+        return;
+      }
+      const hasAnswers    = draft?.answers       && Object.keys(draft.answers).length > 0;
+      const hasGridRows   = draft?.gridTableRows && Object.keys(draft.gridTableRows).length > 0;
+      const hasRepeatRows = draft?.repeatRows    && Object.keys(draft.repeatRows).length > 0;
+      if (hasAnswers || hasGridRows || hasRepeatRows) {
+        setHasDraft(true);
+        setDraftSavedAt(draft.savedAt ?? null);
+      }
     } catch { /* ignore */ }
   }, [draftKey]);
 
-  // Auto-save draft every time answers change
+  // Auto-save draft whenever any answer state changes (answers, table rows, repeat rows)
   useEffect(() => {
-    if (!draftKey || Object.keys(answers).length === 0) return;
+    const hasContent =
+      Object.keys(answers).length > 0 ||
+      Object.keys(gridTableRows).length > 0 ||
+      Object.keys(repeatRows).length > 0;
+    if (!draftKey || !hasContent) return;
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ answers, savedAt: Date.now() }));
+      const now = Date.now();
+      localStorage.setItem(draftKey, JSON.stringify({
+        answers,
+        gridTableRows,
+        repeatRows,
+        savedAt: now,
+      }));
+      setDraftSavedAt(now);
+      setAutoSaveFlash(true);
+      setTimeout(() => setAutoSaveFlash(false), 1500);
     } catch { /* ignore quota errors */ }
-  }, [answers, draftKey]);
+  }, [answers, gridTableRows, repeatRows, draftKey]);
 
   const loadDraft = () => {
     if (!draftKey) return;
@@ -663,7 +692,10 @@ export default function SurveyFill() {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
-      if (draft?.answers) { setAnswers(draft.answers); setHasDraft(false); }
+      if (draft?.answers)       setAnswers(draft.answers);
+      if (draft?.gridTableRows) setGridTableRows(draft.gridTableRows);
+      if (draft?.repeatRows)    setRepeatRows(draft.repeatRows);
+      setHasDraft(false);
     } catch { /* ignore */ }
   };
 
@@ -1909,7 +1941,21 @@ export default function SurveyFill() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-amber-800">You have a saved draft</p>
-              <p className="text-[11px] text-amber-600">You started filling this survey before — restore your progress?</p>
+              <p className="text-[11px] text-amber-600">
+                You started filling this survey before — restore your progress?
+                {draftSavedAt && (
+                  <span className="ml-1 opacity-70">
+                    · Saved {(() => {
+                      const mins = Math.round((Date.now() - draftSavedAt) / 60000);
+                      if (mins < 1) return 'just now';
+                      if (mins < 60) return `${mins}m ago`;
+                      const hrs = Math.round(mins / 60);
+                      if (hrs < 24) return `${hrs}h ago`;
+                      return `${Math.round(hrs / 24)}d ago`;
+                    })()}
+                  </span>
+                )}
+              </p>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button onClick={loadDraft} className="text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
@@ -1919,6 +1965,14 @@ export default function SurveyFill() {
                 Discard
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Auto-save flash — shown while filling, fades after save */}
+        {!hasDraft && draftSavedAt && (
+          <div className={`flex items-center gap-2 transition-opacity duration-700 ${autoSaveFlash ? 'opacity-100' : 'opacity-0'}`}>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <p className="text-[11px] text-emerald-600 font-medium">Progress saved automatically</p>
           </div>
         )}
 
