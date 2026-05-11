@@ -52,7 +52,9 @@ import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, materialiseDailyTasks,
   parseAttachments,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type TaskAttachment,
+  type Dependency, type DependencyType, type CreatePersonalTask, type AssignedProjectTask,
 } from '@/hooks/usePersonalTasks';
+import type { AppRole } from '@/types/roles';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
 import { RewardDeductionsEditor, RewardBreakdownDisplay } from '@/components/tasks/RewardDeductionsEditor';
@@ -72,6 +74,15 @@ const PRIORITY_CFG = {
   medium:   { label: 'Medium',   color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-200 hover:border-blue-400',   pill: 'bg-blue-500',   group: 'normal' },
   low:      { label: 'Low',      color: 'text-slate-600',  bg: 'bg-slate-50',  border: 'border-slate-200 hover:border-slate-300', pill: 'bg-slate-400',  group: 'normal' },
 };
+
+/** Owner may delete per RLS; exclude project-linked rows from the personal-task list UX. */
+function canDeleteOwnedPersonalTask(task: PersonalTask, currentUserId: string | undefined | null): boolean {
+  if (!currentUserId || task.userId !== currentUserId) return false;
+  if (task.taskType === 'project-task') return false;
+  const cat = (task.category ?? '').toLowerCase();
+  if (cat === 'project' || cat === 'project-task') return false;
+  return true;
+}
 
 const STATUS_CFG: Record<PersonalTaskStatus, { label: string }> = {
   todo:        { label: 'To Do' },
@@ -196,6 +207,13 @@ function initials(name?: string | null) {
 
 // ── Quick Add Dialog ─────────────────────────────────────────────────────────
 
+type StructuredDep = Dependency & { requiresAck?: boolean; id?: string; taskId?: string };
+
+/** Task-to-task deps use `type: 'task'` + taskId (see usePersonalTasks); wider than DependencyType. */
+function personalTaskDepFromPicker(t: { id: string; title: string }): StructuredDep {
+  return { type: 'task', label: t.title, requiresAck: false, id: t.id, taskId: t.id } as unknown as StructuredDep;
+}
+
 interface QuickAddDialogProps {
   open: boolean;
   onClose: () => void;
@@ -215,7 +233,7 @@ interface QuickAddDialogProps {
     coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
     rewardDeductions?: RewardDeduction[] | null;
-    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean; id?: string }>;
+    structuredDeps?: StructuredDep[];
     planningQuadrant?: QuadrantKey | null;
     recurrence?: string;
     recurrenceDays?: number[];
@@ -239,6 +257,7 @@ type DepTab = 'custom' | 'date' | 'user' | 'department';
 type AssignTab = 'myself' | 'someone' | 'dept';
 
 function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreating, currentUserFullName, currentUserId, currentUserRole, initialTaskTypeKey = 'general' }: QuickAddDialogProps) {
+  const { toast } = useToast();
   // T17 — Reward field is admin-only. Non-admins should not be able to set
   // a wallet reward when creating a task for someone else.
   const _normRole = (currentUserRole ?? '').toLowerCase().replace(/[\s_-]/g, '');
@@ -393,7 +412,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
   );
 
   // Structured deps (with type + requiresAck)
-  const [structuredDeps, setStructuredDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean; id?: string }>>([]);
+  const [structuredDeps, setStructuredDeps] = useState<StructuredDep[]>([]);
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
   // Recurrence state
@@ -429,7 +448,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
     setHoursPerDayQA('');
   };
 
-  const addDep = (label: string, type: string = 'custom', requiresAck = false, id?: string) => {
+  const addDep = (label: string, type: DependencyType = 'custom', requiresAck = false, id?: string) => {
     const v = label.trim();
     if (!v || structuredDeps.some(d => d.label === v)) return;
     setStructuredDeps(prev => [...prev, { type, label: v, requiresAck, id }]);
@@ -1424,10 +1443,12 @@ interface EditDialogProps {
   onSave: (id: string, data: Partial<PersonalTask>) => void;
   onDelete: (id: string) => void;
   isUpdating: boolean;
+  isDeleting?: boolean;
   currentUserId?: string | null;
   currentUserRole?: string | null;
 }
-function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId, currentUserRole }: EditDialogProps) {
+function EditDialog({ task, onClose, onSave, onDelete, isUpdating, isDeleting, currentUserId, currentUserRole }: EditDialogProps) {
+  const { toast } = useToast();
   const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
   const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>('general');
@@ -1449,7 +1470,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [editActualHours,    setEditActualHours]    = useState('');
 
   // Dependencies (EditDialog)
-  const [editDeps, setEditDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean; id?: string }>>([]);
+  const [editDeps, setEditDeps] = useState<StructuredDep[]>([]);
   const [editDepInput, setEditDepInput] = useState('');
   const [editTaskSearch, setEditTaskSearch] = useState('');
   const [editTaskSearchResults, setEditTaskSearchResults] = useState<Array<{ id: string; title: string }>>([]);
@@ -1591,7 +1612,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       setExistingAttachments(task.attachments ?? []);
       setNewFiles([]);
       // Dependencies
-      setEditDeps((task.dependencies ?? []) as Array<{ type: string; label: string; requiresAck: boolean; id?: string }>);
+      setEditDeps((task.dependencies ?? []) as StructuredDep[]);
       setEditDepInput('');
       setEditTaskSearch('');
       setEditTaskSearchResults([]);
@@ -1695,7 +1716,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       estimatedHours: editEstimatedHours ? parseFloat(editEstimatedHours) : null,
       ...(canEditActualHours && { actualHours: editActualHours ? parseFloat(editActualHours) : null }),
       attachments: mergedAttachments,
-      dependencies: editDeps,
+      dependencies: editDeps as Dependency[],
     });
     onClose();
   };
@@ -2230,7 +2251,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                           disabled={editDeps.some(d => d.id === t.id)}
                           onClick={() => {
                             if (!editDeps.some(d => d.id === t.id)) {
-                              setEditDeps(prev => [...prev, { type: 'task', label: t.title, requiresAck: false, id: t.id }]);
+                              setEditDeps(prev => [...prev, personalTaskDepFromPicker(t)]);
                               setEditTaskSearch('');
                               setEditTaskSearchResults([]);
                             }
@@ -2353,20 +2374,23 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
 
         {/* Footer */}
         <div className="flex items-center gap-2 px-5 py-4 border-t border-slate-100 bg-white shrink-0">
-          <button
-            onClick={() => {
-              const ok = window.confirm(
-                `Delete "${task.title}"?\n\nThis cannot be undone. All comments, activity, attachments, and elements will be removed.`,
-              );
-              if (!ok) return;
-              onDelete(task.id);
-              onClose();
-            }}
-            data-testid="edit-button-delete"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" /> Delete
-          </button>
+          {task && canDeleteOwnedPersonalTask(task, currentUserId) && (
+            <button
+              onClick={() => {
+                const ok = window.confirm(
+                  `Delete "${task.title}"?\n\nThis cannot be undone. All comments, activity, attachments, and elements will be removed.`,
+                );
+                if (!ok) return;
+                onDelete(task.id);
+                onClose();
+              }}
+              data-testid="edit-button-delete"
+              disabled={isDeleting}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+          )}
           <div className="flex-1" />
           <button onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors">
             Cancel
@@ -2392,10 +2416,13 @@ interface TaskCardProps {
   task: PersonalTask;
   onToggleDone: () => void;
   onEdit: () => void;
+  onDeletePersonal?: () => void;
+  currentUserId?: string | null;
+  isDeleting?: boolean;
   onStatusChange?: (next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
 }
-function TaskCard({ task, onToggleDone, onEdit, onStatusChange, isUpdating }: TaskCardProps) {
+function TaskCard({ task, onToggleDone, onEdit, onDeletePersonal, currentUserId, isDeleting, onStatusChange, isUpdating }: TaskCardProps) {
   const cfg = PRIORITY_CFG[task.priority];
   const isDone = task.status === 'done';
   const navigate = useNavigate();
@@ -2449,6 +2476,19 @@ function TaskCard({ task, onToggleDone, onEdit, onStatusChange, isUpdating }: Ta
                 <DropdownMenuItem onClick={e => { e.stopPropagation(); onToggleDone(); }}>
                   <Check className="w-3.5 h-3.5 mr-2" />{isDone ? 'Mark as Todo' : 'Mark as Done'}
                 </DropdownMenuItem>
+                {onDeletePersonal && canDeleteOwnedPersonalTask(task, currentUserId) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={e => { e.stopPropagation(); onDeletePersonal(); }}
+                      disabled={isDeleting}
+                      className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                      data-testid={`menu-delete-${task.id}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -2744,11 +2784,16 @@ interface EnhancedTaskCardProps {
   subtasks: PersonalTask[];
   onToggleDone: () => void;
   onEdit: () => void;
+  onRequestDeletePersonal?: () => void;
+  currentUserId?: string | null;
+  isDeleting?: boolean;
   onStatusChange?: (next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
 }
 
-function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, onStatusChange, isUpdating }: EnhancedTaskCardProps) {
+function EnhancedTaskCard({
+  task, subtasks, onToggleDone, onEdit, onRequestDeletePersonal, currentUserId, isDeleting, onStatusChange, isUpdating,
+}: EnhancedTaskCardProps) {
   const navigate = useNavigate();
   const cfg = PRIORITY_CFG[task.priority];
   const isDone = task.status === 'done';
@@ -2828,6 +2873,19 @@ function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, onStatusChange
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); onToggleDone(); }}>
                     <Check className="w-3.5 h-3.5 mr-2" />{isDone ? 'Mark as Todo' : 'Mark as Done'}
                   </DropdownMenuItem>
+                  {onRequestDeletePersonal && canDeleteOwnedPersonalTask(task, currentUserId) && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={e => { e.stopPropagation(); onRequestDeletePersonal(); }}
+                        disabled={isDeleting}
+                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                        data-testid={`menu-delete-card-${task.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -3076,8 +3134,11 @@ interface KanbanBoardViewProps {
   subtaskMap: Map<string, PersonalTask[]>;
   isLoading: boolean;
   isUpdating: boolean;
+  isDeleting?: boolean;
+  currentUserId?: string | null;
   onEdit: (task: PersonalTask) => void;
   onToggleDone: (task: PersonalTask) => void;
+  onRequestDeletePersonal?: (task: PersonalTask) => void;
   onStatusChange?: (taskId: string, next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   onAddTask: () => void;
 }
@@ -3123,7 +3184,7 @@ const KANBAN_COLUMNS: { key: string; label: string; dot: string; filter: (t: Per
 ];
 
 function KanbanTaskCard({
-  task, subtasks, onEdit, onToggleDone, onStatusChange, isUpdating,
+  task, subtasks, onEdit, onToggleDone, onStatusChange, isUpdating, onRequestDeletePersonal, currentUserId, isDeleting,
 }: {
   task: PersonalTask;
   subtasks: PersonalTask[];
@@ -3131,6 +3192,9 @@ function KanbanTaskCard({
   onToggleDone: (t: PersonalTask) => void;
   onStatusChange?: (taskId: string, next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
+  onRequestDeletePersonal?: (t: PersonalTask) => void;
+  currentUserId?: string | null;
+  isDeleting?: boolean;
 }) {
   const navigate = useNavigate();
   const p = KANBAN_PRIORITY_CFG[task.priority] ?? KANBAN_PRIORITY_CFG.medium;
@@ -3161,13 +3225,43 @@ function KanbanTaskCard({
             {done && <CheckCircle2 className="inline w-3.5 h-3.5 text-emerald-500 mr-1 shrink-0" />}
             {task.title}
           </p>
-          <button
-            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-            onClick={e => { e.stopPropagation(); onEdit(task); }}
-            data-testid={`kanban-menu-${task.id}`}
-          >
-            <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                onClick={e => e.stopPropagation()}
+                data-testid={`kanban-menu-${task.id}`}
+              >
+                <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44" onClick={e => e.stopPropagation()}>
+              <DropdownMenuItem asChild>
+                <Link to={`/tasks/${task.id}`} onClick={e => e.stopPropagation()} data-testid={`kanban-open-${task.id}`}>
+                  <ArrowRight className="w-3.5 h-3.5 mr-2" />Open detail
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEdit(task)}>
+                <Edit2 className="w-3.5 h-3.5 mr-2" />Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onToggleDone(task)}>
+                <Check className="w-3.5 h-3.5 mr-2" />{done ? 'Mark as Todo' : 'Mark as Done'}
+              </DropdownMenuItem>
+              {onRequestDeletePersonal && canDeleteOwnedPersonalTask(task, currentUserId) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onRequestDeletePersonal(task)}
+                    disabled={isDeleting}
+                    className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                    data-testid={`kanban-delete-${task.id}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" />Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Tags */}
@@ -3235,7 +3329,10 @@ function KanbanTaskCard({
   );
 }
 
-function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onToggleDone, onStatusChange, onAddTask }: KanbanBoardViewProps) {
+function KanbanBoardView({
+  tasks, subtaskMap, isLoading, isUpdating, isDeleting, currentUserId,
+  onEdit, onToggleDone, onRequestDeletePersonal, onStatusChange, onAddTask,
+}: KanbanBoardViewProps) {
   const todoCount      = tasks.filter(KANBAN_COLUMNS[0].filter).length;
   const inProgressCount= tasks.filter(KANBAN_COLUMNS[1].filter).length;
   const overdueCount   = tasks.filter(KANBAN_COLUMNS[2].filter).length;
@@ -3287,6 +3384,9 @@ function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onT
                       onToggleDone={onToggleDone}
                       onStatusChange={onStatusChange}
                       isUpdating={isUpdating}
+                      currentUserId={currentUserId}
+                      isDeleting={isDeleting}
+                      onRequestDeletePersonal={onRequestDeletePersonal}
                     />
                   ))
                 )}
@@ -3524,7 +3624,7 @@ function GuidelinesCard() {
 
 interface PlanningCompanionProps {
   tasks: PersonalTask[];
-  projectTasks: { id: string | number; title: string | null; priority: string | null; dueDate: string | null; status: string | null; projectName: string | null; category: string | null }[];
+  projectTasks: AssignedProjectTask[];
   isLoading: boolean;
   onMarkPersonalDone: (id: string, status: PersonalTaskStatus) => Promise<void>;
   onMarkProjectDone: (id: string) => Promise<void>;
@@ -3580,17 +3680,22 @@ function PlanningCompanion({
         quadrant: classify(t.dueDate, t.priority, t.status, t.planningQuadrant),
       }));
     const project = projectTasks
-      .filter(t => t.status !== 'done' && t.status !== 'cancelled')
-      .map(t => ({
-        id: String(t.id),
-        title: String(t.title ?? 'Project task'),
-        project: t.projectName ?? 'Project',
-        priority: t.priority ?? 'medium',
-        dueDate: t.dueDate ?? null,
-        type: 'project' as const,
-        status: t.status ?? 'todo',
-        quadrant: classify(t.dueDate, t.priority ?? 'medium', t.status ?? 'todo'),
-      }));
+      .filter(t => String(t.status) !== 'done' && String(t.status) !== 'cancelled')
+      .map(t => {
+        const dueDateStr = t.dueDate != null && String(t.dueDate) !== '' ? String(t.dueDate) : null;
+        const priorityStr = t.priority != null && String(t.priority) !== '' ? String(t.priority) : 'medium';
+        const statusStr = t.status != null && String(t.status) !== '' ? String(t.status) : 'todo';
+        return {
+          id: String(t.id),
+          title: String(t.title ?? 'Project task'),
+          project: t.projectName ?? 'Project',
+          priority: priorityStr,
+          dueDate: dueDateStr,
+          type: 'project' as const,
+          status: statusStr,
+          quadrant: classify(dueDateStr, priorityStr, statusStr),
+        };
+      });
     return [...personal, ...project];
   }, [tasks, projectTasks]);
 
@@ -3929,10 +4034,12 @@ interface InboxViewProps {
   tasks: PersonalTask[];
   isLoading: boolean;
   isUpdating: boolean;
+  isDeleting?: boolean;
   onEdit: (task: PersonalTask) => void;
   onToggleDone: (task: PersonalTask) => void;
   onSave: (id: string, data: Partial<PersonalTask>) => Promise<void>;
   onAddTask: () => void;
+  onRequestDeletePersonal?: (task: PersonalTask) => void;
   currentUserId?: string | null;
 }
 
@@ -4278,7 +4385,7 @@ function InboxTaskDetailExtras({
   const { toast } = useToast();
   const { currentUser, hasRole } = useUser();
   const currentUserId = currentUser?.id ?? null;
-  const isAdmin = hasRole('admin') || hasRole('super_admin');
+  const isAdmin = hasRole('Admin' as AppRole) || hasRole('SuperAdmin' as AppRole);
   const { data: history = [] } = useTaskStatusHistory(taskId);
   const { data: elements = [] } = useTaskElements(taskId);
   const { data: activity = [] } = useTaskActivity(taskId);
@@ -4667,7 +4774,7 @@ function InboxTaskDetailExtras({
   );
 }
 
-function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave, onAddTask, currentUserId }: InboxViewProps) {
+function InboxView({ tasks, isLoading, isUpdating, isDeleting, onEdit, onToggleDone, onSave, onAddTask, onRequestDeletePersonal, currentUserId }: InboxViewProps) {
   const [activeFolder, setActiveFolder] = useState<InboxFolder>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [noteText, setNoteText]   = useState('');
@@ -4912,6 +5019,17 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
             >
               <Edit2 className="w-4 h-4" /> Edit
             </button>
+            {onRequestDeletePersonal && canDeleteOwnedPersonalTask(selected, currentUserId) && (
+              <button
+                type="button"
+                onClick={() => onRequestDeletePersonal(selected)}
+                disabled={isDeleting}
+                data-testid="inbox-delete-task"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-[12px] hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+            )}
             {/* Deep-link to full task page — gives users access to the editing
                 surfaces (status menu, dependency picker, work-session timer,
                 attachments uploader) that don't fit in the inline panel. */}
@@ -5148,14 +5266,15 @@ function TaskTypePickerDialog({ open, onClose, currentUserId, currentUserFullNam
 
 export default function MyTasksV2() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { currentUser, hasRole } = useUser();
-  const isAdmin = hasRole('admin') || hasRole('super_admin');
+  const isAdmin = hasRole('Admin' as AppRole) || hasRole('SuperAdmin' as AppRole);
   const userId = currentUser?.id;
   const qc = useQueryClient();
   const { notify, notifySelf } = useTaskNotifications();
 
   const {
-    tasks: allTasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating,
+    tasks: allTasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating, isDeleting,
   } = usePersonalTasks(userId);
 
   // Exclude subtasks from top level
@@ -5307,7 +5426,7 @@ export default function MyTasksV2() {
     coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
     rewardDeductions?: RewardDeduction[] | null;
-    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean; id?: string }>;
+    structuredDeps?: StructuredDep[];
     planningQuadrant?: QuadrantKey | null;
     recurrence?: string;
     recurrenceDays?: number[];
@@ -5340,7 +5459,7 @@ export default function MyTasksV2() {
               requiresAck: d.requiresAck,
               ...(d.type === 'user' && d.id ? { userId: d.id } : {}),
               ...(d.type === 'department' && d.id ? { deptId: d.id } : {}),
-            }))
+            }) as Dependency)
           : undefined,
         planningQuadrant: data.planningQuadrant ?? null,
         recurrence: data.recurrence ?? 'none',
@@ -5467,15 +5586,16 @@ export default function MyTasksV2() {
     // Snapshot prev co-assignees so we can notify newly added ones after save.
     const prevTask = allTasks.find(x => x.id === id);
     const prevCoMap = new Map((prevTask?.coAssignees ?? []).map(c => [c.id, c]));
-    const nextCo = (payload as { coAssignees?: Array<{ id: string; name: string; hours?: number | null }> }).coAssignees;
+    const nextCo = (payload as unknown as { coAssignees?: Array<{ id: string; name: string; hours?: number | null }> }).coAssignees;
     // Merge new co-assignee entries with prior records so per-user
     // acknowledgment timestamps survive edits (the dialog only tracks id/name/hours).
     if (Array.isArray(nextCo)) {
-      (payload as { coAssignees: Array<Record<string, unknown>> }).coAssignees = nextCo.map(c => {
+      type CoPayload = NonNullable<CreatePersonalTask['coAssignees']>;
+      (payload as unknown as { coAssignees: CoPayload }).coAssignees = nextCo.map(c => {
         const prior = prevCoMap.get(c.id);
-        return prior
+        return (prior
           ? { ...prior, id: c.id, name: c.name, hours: c.hours ?? prior.hours ?? null }
-          : { id: c.id, name: c.name, hours: c.hours ?? null };
+          : { id: c.id, name: c.name, hours: c.hours ?? null }) as CoPayload[number];
       });
     }
     const newlyAddedCo: Array<{ id: string; name: string }> = Array.isArray(nextCo)
@@ -5553,10 +5673,20 @@ export default function MyTasksV2() {
   const handleDelete = async (id: string) => {
     try {
       await deleteTask(id);
+      setEditingTask(prev => (prev?.id === id ? null : prev));
       toast({ title: 'Task deleted' });
     } catch {
       toast({ title: 'Failed to delete task', variant: 'destructive' });
     }
+  };
+
+  const confirmDeletePersonalTask = (task: PersonalTask) => {
+    if (!canDeleteOwnedPersonalTask(task, userId)) return;
+    const ok = window.confirm(
+      `Delete "${task.title}"?\n\nThis cannot be undone. All comments, activity, attachments, and elements will be removed.`,
+    );
+    if (!ok) return;
+    void handleDelete(task.id);
   };
 
   const handleMarkPersonalDone = async (id: string, prevStatus: PersonalTaskStatus) => {
@@ -5587,7 +5717,7 @@ export default function MyTasksV2() {
   };
 
   const handleMarkProjectDone = async (id: string) => {
-    await updateProjectTaskStatus.mutateAsync({ taskId: id, status: 'done' });
+    await updateProjectTaskStatus.mutateAsync({ id, status: 'done' });
   };
 
   const userInitials = currentUser?.fullName ? initials(currentUser.fullName) : 'ME';
@@ -5802,6 +5932,9 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
+                                onRequestDeletePersonal={() => confirmDeletePersonalTask(task)}
+                                currentUserId={userId}
+                                isDeleting={isDeleting}
                                 onStatusChange={(next, reason) => handleSave(task.id, { status: next }, reason)}
                                 isUpdating={isUpdating}
                               />
@@ -5820,6 +5953,9 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
+                                onRequestDeletePersonal={() => confirmDeletePersonalTask(task)}
+                                currentUserId={userId}
+                                isDeleting={isDeleting}
                                 onStatusChange={(next, reason) => handleSave(task.id, { status: next }, reason)}
                                 isUpdating={isUpdating}
                               />
@@ -5838,6 +5974,9 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
+                                onRequestDeletePersonal={() => confirmDeletePersonalTask(task)}
+                                currentUserId={userId}
+                                isDeleting={isDeleting}
                                 onStatusChange={(next, reason) => handleSave(task.id, { status: next }, reason)}
                                 isUpdating={isUpdating}
                               />
@@ -5894,8 +6033,11 @@ export default function MyTasksV2() {
                 subtaskMap={subtaskMap}
                 isLoading={isLoading}
                 isUpdating={isUpdating}
+                isDeleting={isDeleting}
+                currentUserId={userId}
                 onEdit={setEditingTask}
                 onToggleDone={handleToggleDone}
+                onRequestDeletePersonal={confirmDeletePersonalTask}
                 onStatusChange={(taskId, next, reason) => handleSave(taskId, { status: next }, reason)}
                 onAddTask={openTypePicker}
               />
@@ -5907,10 +6049,12 @@ export default function MyTasksV2() {
                 tasks={categoryFiltered}
                 isLoading={isLoading}
                 isUpdating={isUpdating}
+                isDeleting={isDeleting}
                 onEdit={setEditingTask}
                 onToggleDone={handleToggleDone}
                 onSave={handleSave}
                 onAddTask={openTypePicker}
+                onRequestDeletePersonal={confirmDeletePersonalTask}
                 currentUserId={currentUser?.id ?? null}
               />
             )}
@@ -5948,7 +6092,10 @@ export default function MyTasksV2() {
         open={showAdd}
         onClose={() => setShowAdd(false)}
         onCreate={handleCreate}
-        onPatchAttachments={(taskId, atts) => updateTask(taskId, { attachments: atts as any })}
+        onPatchAttachments={async (taskId, atts) => {
+          await updateTask(taskId, { attachments: atts as TaskAttachment[] });
+          return;
+        }}
         isCreating={isCreating}
         currentUserFullName={currentUser?.fullName}
         currentUserId={currentUser?.id}
@@ -5961,6 +6108,7 @@ export default function MyTasksV2() {
         onSave={handleSave}
         onDelete={handleDelete}
         isUpdating={isUpdating}
+        isDeleting={isDeleting}
         currentUserId={currentUser?.id}
         currentUserRole={currentUser?.role}
       />
