@@ -101,7 +101,7 @@ BEGIN
   IF NEW.country_id IS NULL THEN
     SELECT country_id INTO NEW.country_id
       FROM public.profiles
-     WHERE id = COALESCE(NEW.employee_id, NEW.finance_id)
+     WHERE id = NEW.user_id
      LIMIT 1;
   END IF;
   RETURN NEW;
@@ -340,7 +340,7 @@ BEGIN
     IF v_country_id IS NULL THEN
       SELECT country_id INTO v_country_id
         FROM public.profiles
-       WHERE id = COALESCE(new.employee_id, new.finance_id)
+       WHERE id = new.user_id
        LIMIT 1;
     END IF;
 
@@ -498,7 +498,7 @@ DO $$ BEGIN
       UPDATE public.hr_salary_advances sa
          SET country_id = p.country_id
         FROM public.profiles p
-       WHERE p.id = COALESCE(sa.employee_id, sa.finance_id)
+       WHERE p.id = sa.user_id
          AND sa.country_id IS NULL
          AND p.country_id IS NOT NULL
     $q$;
@@ -507,7 +507,7 @@ DO $$ BEGIN
       UPDATE public.salary_advances sa
          SET country_id = p.country_id
         FROM public.profiles p
-       WHERE p.id = COALESCE(sa.employee_id, sa.finance_id)
+       WHERE p.id = COALESCE(sa.user_id, sa.employee_id)
          AND sa.country_id IS NULL
          AND p.country_id IS NOT NULL
     $q$;
