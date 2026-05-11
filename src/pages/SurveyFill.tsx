@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import pactLogo from '@/assets/logo.png';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -607,6 +607,7 @@ function SignaturePad({ value, onChange }: { value: string | null; onChange: (v:
 // ── Main fill page ─────────────────────────────────────────────────────────────
 export default function SurveyFill() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { currentUser } = useUser();
   const { toast } = useToast();
 
@@ -643,7 +644,7 @@ export default function SurveyFill() {
   // Draft expiry: discard drafts older than 30 days
   const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
-  // Restore saved draft on mount — detect any saved content
+  // Auto-restore saved draft on mount — load answers immediately, no click required
   useEffect(() => {
     if (!draftKey) return;
     try {
@@ -659,6 +660,10 @@ export default function SurveyFill() {
       const hasGridRows   = draft?.gridTableRows && Object.keys(draft.gridTableRows).length > 0;
       const hasRepeatRows = draft?.repeatRows    && Object.keys(draft.repeatRows).length > 0;
       if (hasAnswers || hasGridRows || hasRepeatRows) {
+        // Auto-load all draft data immediately — no user action needed
+        if (draft?.answers)       setAnswers(draft.answers);
+        if (draft?.gridTableRows) setGridTableRows(draft.gridTableRows);
+        if (draft?.repeatRows)    setRepeatRows(draft.repeatRows);
         setHasDraft(true);
         setDraftSavedAt(draft.savedAt ?? null);
       }
@@ -686,17 +691,13 @@ export default function SurveyFill() {
     } catch { /* ignore quota errors */ }
   }, [answers, gridTableRows, repeatRows, draftKey]);
 
-  const loadDraft = () => {
-    if (!draftKey) return;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (draft?.answers)       setAnswers(draft.answers);
-      if (draft?.gridTableRows) setGridTableRows(draft.gridTableRows);
-      if (draft?.repeatRows)    setRepeatRows(draft.repeatRows);
-      setHasDraft(false);
-    } catch { /* ignore */ }
+  const discardDraft = () => {
+    if (draftKey) try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    setAnswers({});
+    setGridTableRows({});
+    setRepeatRows({});
+    setHasDraft(false);
+    setDraftSavedAt(null);
   };
 
   const clearDraft = () => {
@@ -721,7 +722,11 @@ export default function SurveyFill() {
         .single();
       if (error) throw error;
       const { survey_questions: qs, ...rest } = data as any;
-      const sortedQs: Question[] = (Array.isArray(qs) ? qs : []).sort(
+      // Deduplicate by id in case the DB returns a question more than once
+      const uniqueQs = [...new Map(
+        (Array.isArray(qs) ? qs : []).map((q: Question) => [q.id, q])
+      ).values()];
+      const sortedQs: Question[] = uniqueQs.sort(
         (a: Question, b: Question) => (a.order_index ?? 0) - (b.order_index ?? 0)
       );
       return { survey: rest as Survey, questions: sortedQs };
@@ -1861,6 +1866,16 @@ export default function SurveyFill() {
       {/* Top bar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          {/* Back / Close button */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+            title="Go back"
+            data-testid="btn-survey-back"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
           <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
             <ClipboardList className="w-3.5 h-3.5 text-white" />
           </div>
@@ -1933,16 +1948,16 @@ export default function SurveyFill() {
           </div>
         )}
 
-        {/* Draft restore banner */}
+        {/* Draft restored banner — answers were auto-loaded, offer discard option */}
         {hasDraft && (
-          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-              <Save className="w-4 h-4 text-amber-600" />
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-amber-800">You have a saved draft</p>
-              <p className="text-[11px] text-amber-600">
-                You started filling this survey before — restore your progress?
+              <p className="text-xs font-semibold text-emerald-800">Progress restored</p>
+              <p className="text-[11px] text-emerald-600">
+                Your previous answers have been automatically loaded.
                 {draftSavedAt && (
                   <span className="ml-1 opacity-70">
                     · Saved {(() => {
@@ -1957,14 +1972,12 @@ export default function SurveyFill() {
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button onClick={loadDraft} className="text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
-                Restore
-              </button>
-              <button onClick={clearDraft} className="text-xs text-amber-500 hover:text-amber-700 px-2 py-1.5 rounded-lg transition-colors">
-                Discard
-              </button>
-            </div>
+            <button
+              onClick={discardDraft}
+              className="text-xs text-emerald-600 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+            >
+              Start fresh
+            </button>
           </div>
         )}
 
