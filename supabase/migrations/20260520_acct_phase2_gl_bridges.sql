@@ -518,9 +518,12 @@ begin
 end $$;
 
 -- =============================================================================
--- PART H: TRIGGER FUNCTION — operational_cost_submissions
+-- PART H: TRIGGER FUNCTION — operational_cost_submissions  [COUNTRY-AWARE]
 -- Fires on: status → 'paid'
 -- Entry: DR category-mapped expense account / CR 1200 Cash at Bank
+-- NOTE: Uses 9-param acct_bridge_post_journal; passes new.country_id so every
+--       journal entry is stamped to the correct country COA.
+--       Kept in sync with 20260511_acct_country_coa_partitioning.sql Step 7.
 -- =============================================================================
 create or replace function public.acct_trig_operational_cost_submissions()
 returns trigger
@@ -568,7 +571,8 @@ begin
             'function',     'none'
           )
         ),
-        new.tier2_approved_by
+        new.tier2_approved_by,
+        new.country_id          -- ← country from source record (9th param)
       );
 
       insert into public.acct_gl_bridge_log
@@ -588,9 +592,12 @@ begin
 end $$;
 
 -- =============================================================================
--- PART I: TRIGGER FUNCTION — down_payment_requests
+-- PART I: TRIGGER FUNCTION — down_payment_requests  [COUNTRY-AWARE]
 -- Fires on: status → 'fully_paid'
 -- Entry: DR 1510 Travel Advances / CR 1200 Cash at Bank
+-- NOTE: Uses 9-param acct_bridge_post_journal; passes new.country_id so every
+--       journal entry is stamped to the correct country COA.
+--       Kept in sync with 20260511_acct_country_coa_partitioning.sql Step 8.
 -- =============================================================================
 create or replace function public.acct_trig_down_payment_requests()
 returns trigger
@@ -635,7 +642,8 @@ begin
             'function',     'none'
           )
         ),
-        new.admin_processed_by
+        new.admin_processed_by,
+        new.country_id          -- ← country from source record (9th param)
       );
 
       insert into public.acct_gl_bridge_log
