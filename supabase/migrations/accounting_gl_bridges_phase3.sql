@@ -238,29 +238,31 @@ COMMENT ON COLUMN public.profiles.hire_date IS
 -- PART B: New Chart of Accounts for Phase 3 bridges
 -- =============================================================================
 insert into public.acct_accounts
-  (code, name_en, name_ar, account_type, subtype, parent_id, is_postable)
+  (code, name_en, name_ar, account_type, subtype, parent_id, is_postable, country_id)
 values
   -- 1520: Salary Advance Receivable (asset — employees owe this back)
   ('1520','Salary Advances Receivable','ذمم السلف المستحقة من الموظفين',
    'asset','current_asset',
-   (select id from public.acct_accounts where code='1000' limit 1), true),
+   (select id from public.acct_accounts where code='1000' and country_id is null limit 1), true, null),
 
   -- 2350: EOSB Provision Liability (long-term — accrued gratuity payable)
   ('2350','EOSB Provision Liability','مخصص مكافأة نهاية الخدمة',
    'liability','non_current_liability',
-   (select id from public.acct_accounts where code='2000' limit 1), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
 
   -- 5600: Grant Programme Expense
   ('5600','Grant Programme Expense','مصروفات برامج المنح',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000' limit 1), true),
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null),
 
   -- 6200: EOSB Expense (management expense — monthly provision charge)
   ('6200','EOSB Expense — Staff Gratuity','مصروف مكافأة نهاية الخدمة',
    'expense','mng_expense',
-   (select id from public.acct_accounts where code='6000' limit 1), true)
+   (select id from public.acct_accounts where code='6000' and country_id is null limit 1), true, null)
 
-on conflict (code) do nothing;
+-- Targets acct_accounts_code_global_uq partial index (code WHERE country_id IS NULL).
+-- The old UNIQUE(code) was dropped in 20260511_acct_country_coa_partitioning.sql.
+on conflict (code) where country_id is null do nothing;
 
 -- =============================================================================
 -- PART C: Feature flags for Phase 3 GL bridges

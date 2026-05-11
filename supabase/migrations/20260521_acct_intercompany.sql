@@ -65,7 +65,9 @@ VALUES
     true,
     NULL   -- global: used by ALL countries
   )
-ON CONFLICT DO NOTHING;
+ON CONFLICT (code) WHERE country_id IS NULL DO NOTHING;
+-- ↑ Must target the partial index explicitly (acct_accounts_code_global_uq).
+--   The old UNIQUE(code) was dropped in 20260511; only partial indexes remain.
 
 -- =============================================================================
 -- STEP 2 — Feature flag

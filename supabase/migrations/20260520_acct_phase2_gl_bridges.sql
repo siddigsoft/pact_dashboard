@@ -38,26 +38,28 @@ set lock_timeout = '5s';
 -- =============================================================================
 -- PART A: Additional COA accounts for Phase 2 bridges
 -- =============================================================================
-insert into public.acct_accounts (code, name_en, name_ar, account_type, subtype, parent_id, is_postable) values
+insert into public.acct_accounts (code, name_en, name_ar, account_type, subtype, parent_id, is_postable, country_id) values
   ('2600','Staff Electronic Wallet Payable','ذمم المحافظ الإلكترونية للموظفين',
    'liability','current_liability',
-   (select id from public.acct_accounts where code='2000'), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
   ('2610','Site Visit Incentives Payable','مستحقات حوافز الزيارات الميدانية',
    'liability','current_liability',
-   (select id from public.acct_accounts where code='2000'), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
   ('2620','Task Rewards Payable','مستحقات مكافآت المهام',
    'liability','current_liability',
-   (select id from public.acct_accounts where code='2000'), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
   ('5050','Operational Field Costs','التكاليف التشغيلية الميدانية',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000'), true),
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null),
   ('5060','Staff Retainer Payments','مدفوعات الاتعاب الدورية للموظفين',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000'), true),
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null),
   ('5070','Data Collector Incentives','حوافز جامعي البيانات',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000'), true)
-on conflict (code) do nothing;
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null)
+-- Target the partial unique index (acct_accounts_code_global_uq) created in 20260511.
+-- The old UNIQUE(code) constraint was dropped; ON CONFLICT needs the WHERE clause.
+on conflict (code) where country_id is null do nothing;
 
 -- =============================================================================
 -- PART B: Feature flags for Phase 2 GL bridges
