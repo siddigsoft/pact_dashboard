@@ -37,6 +37,7 @@ interface Entry {
   created_at: string;
   created_by: string;
   reversed_by_entry_id: string | null;
+  country_id: string | null;
 }
 interface Line {
   id: string;
@@ -89,9 +90,10 @@ export default function AccountingJournals() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [periodFilter, setPeriodFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [periodFilter, setPeriodFilter]   = useState<string>('all');
+  const [statusFilter, setStatusFilter]   = useState<string>('all');
+  const [sourceFilter, setSourceFilter]   = useState<string>('all');
+  const [countryFilter, setCountryFilter] = useState<string>(() => defaultCountryId);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
 
@@ -229,7 +231,7 @@ export default function AccountingJournals() {
     const [yres, pres, eres, ares, fres, cres] = await Promise.all([
       supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
       supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
-      supabase.from('acct_journal_entries').select('id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id').order('posting_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
+      supabase.from('acct_journal_entries').select('id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id, country_id').order('posting_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
       supabase.from('acct_accounts').select('id, code, name_en, name_ar, country_id, is_postable').order('code'),
       supabase.from('acct_funds').select('id, code, name_en'),
       supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
@@ -263,6 +265,7 @@ export default function AccountingJournals() {
       if (periodFilter !== 'all' && e.period_id !== periodFilter) return false;
       if (statusFilter !== 'all' && e.status !== statusFilter) return false;
       if (sourceFilter !== 'all' && e.source_type !== sourceFilter) return false;
+      if (countryFilter !== 'all' && e.country_id !== countryFilter) return false;
       if (q) {
         return String(e.entry_no).includes(q)
           || e.description_en.toLowerCase().includes(q)
@@ -272,12 +275,12 @@ export default function AccountingJournals() {
       }
       return true;
     });
-  }, [entries, periodFilter, statusFilter, sourceFilter, search]);
+  }, [entries, periodFilter, statusFilter, sourceFilter, countryFilter, search]);
 
   const paged = useMemo(() => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [filtered, page]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
-  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, search]);
+  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, countryFilter, search]);
 
   const counts = useMemo(() => {
     const c = { total: entries.length, posted: 0, draft: 0, reversed: 0 };
@@ -376,7 +379,7 @@ export default function AccountingJournals() {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Entries</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
             <div className="relative">
               <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search #, desc, key…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8" data-testid="input-search" />
@@ -387,6 +390,15 @@ export default function AccountingJournals() {
                 <SelectItem value="all">All periods</SelectItem>
                 {periods.map(p => (
                   <SelectItem key={p.id} value={p.id}>{periodLabel(p.id)} · {p.status}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={countryFilter} onValueChange={setCountryFilter}>
+              <SelectTrigger data-testid="select-country"><SelectValue placeholder="Country" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">🌐 All countries</SelectItem>
+                {countries.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
