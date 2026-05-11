@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import AppSidebar from "@/components/AppSidebar";
+import AppSidebar from "@/components/AppSidebarIconFirst";
 import Navbar from "@/components/Navbar";
 import MobileAppHeader from "@/components/MobileAppHeader";
 import TabletNavigation from '@/components/TabletNavigation';
