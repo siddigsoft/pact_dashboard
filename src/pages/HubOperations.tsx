@@ -230,6 +230,10 @@ export default function HubOperations() {
   const [hasMoreSites, setHasMoreSites] = useState(true);
   const [loadingMoreSites, setLoadingMoreSites] = useState(false);
   const [totalSitesCount, setTotalSitesCount] = useState(0);
+  const [totalActiveSitesCount, setTotalActiveSitesCount] = useState(0);
+  const [totalRegistrySitesCount, setTotalRegistrySitesCount] = useState(0);
+  const [totalMmpSitesCount, setTotalMmpSitesCount] = useState(0);
+  const [totalGpsSitesCount, setTotalGpsSitesCount] = useState(0);
   const [syncingMmp, setSyncingMmp] = useState(false);
   
   const [hubDialogOpen, setHubDialogOpen] = useState(false);
@@ -422,6 +426,20 @@ export default function HubOperations() {
       // Update total count and pagination state
       setTotalSitesCount(totalCount || 0);
       setHasMoreSites((registrySites?.length || 0) === SITES_PAGE_SIZE);
+
+      // Fetch breakdown counts from DB (only on first page load to avoid extra queries every page)
+      if (page === 0) {
+        const [activeRes, registryRes, mmpRes, gpsRes] = await Promise.all([
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).in('status', ['active', 'registered']),
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).eq('source', 'registry'),
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).eq('source', 'mmp'),
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).not('gps_latitude', 'is', null),
+        ]);
+        setTotalActiveSitesCount(activeRes.count || 0);
+        setTotalRegistrySitesCount(registryRes.count || 0);
+        setTotalMmpSitesCount(mmpRes.count || 0);
+        setTotalGpsSitesCount(gpsRes.count || 0);
+      }
 
       // Build MMP lookup (only on first page)
       let mmpSites: MMPSiteEntry[] = page === 0 
@@ -734,6 +752,7 @@ export default function HubOperations() {
             hub_id: hub?.id || null,
             hub_name: hub?.name || m.hub_office || '',
             status: 'active',
+            source: 'mmp',
             activity_type: 'TPM',
             mmp_count: 1,
             created_at: m.created_at || new Date().toISOString(),
@@ -1207,9 +1226,9 @@ export default function HubOperations() {
     totalLocalities: getTotalLocalityCount(),
     // Use the exact DB count for the registry (not the in-memory page slice)
     totalSites: totalSitesCount || sites.length,
-    // Count sites whose status is 'active' or 'registered' (both mean "live")
-    activeSites: sites.filter(s => s.status === 'active' || s.status === 'registered').length,
-  }), [hubs, sites, totalSitesCount]);
+    // Use DB-level active count so it's never capped at 500
+    activeSites: totalActiveSitesCount || sites.filter(s => s.status === 'active' || s.status === 'registered').length,
+  }), [hubs, sites, totalSitesCount, totalActiveSitesCount]);
 
   const getHubForState = (stateId: string) => {
     return hubs.find(h => h.states.includes(stateId));
@@ -2018,7 +2037,7 @@ export default function HubOperations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Registry</p>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'registry').length}</p>
+                  <p className="text-2xl font-bold">{totalRegistrySitesCount.toLocaleString()}</p>
                 </div>
               </div>
             </Card>
@@ -2033,7 +2052,7 @@ export default function HubOperations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">From MMP</p>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'mmp').length}</p>
+                  <p className="text-2xl font-bold">{totalMmpSitesCount.toLocaleString()}</p>
                 </div>
               </div>
             </Card>
@@ -2048,7 +2067,7 @@ export default function HubOperations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">With GPS</p>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.gps_latitude && s.gps_longitude).length}</p>
+                  <p className="text-2xl font-bold">{totalGpsSitesCount.toLocaleString()}</p>
                 </div>
               </div>
             </Card>
