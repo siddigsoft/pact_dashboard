@@ -1581,28 +1581,36 @@ const QuestionnaireAnalytics = () => {
     const stateLocalActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
     filteredData.forEach(row => {
       const actKey = row.monitoringType || row.activity;
-      if (!actKey || !row.hub || !row.state) return;
+      if (!actKey || !row.hub) return;
+      const stateKey = row.state || '—';
       if (!hubStateActMatrix[row.hub]) hubStateActMatrix[row.hub] = {};
       if (!hubStateActMatrix[row.hub][actKey]) hubStateActMatrix[row.hub][actKey] = {};
-      if (!hubStateActMatrix[row.hub][actKey][row.state]) hubStateActMatrix[row.hub][actKey][row.state] = { q: 0, sites: new Set(), collectors: new Set() };
-      hubStateActMatrix[row.hub][actKey][row.state].q++;
-      if (row.activitySite) hubStateActMatrix[row.hub][actKey][row.state].sites.add(row.activitySite);
-      if (row.dataCollector) hubStateActMatrix[row.hub][actKey][row.state].collectors.add(row.dataCollector);
+      if (!hubStateActMatrix[row.hub][actKey][stateKey]) hubStateActMatrix[row.hub][actKey][stateKey] = { q: 0, sites: new Set(), collectors: new Set() };
+      hubStateActMatrix[row.hub][actKey][stateKey].q++;
+      if (row.activitySite) hubStateActMatrix[row.hub][actKey][stateKey].sites.add(row.activitySite);
+      if (row.dataCollector) hubStateActMatrix[row.hub][actKey][stateKey].collectors.add(row.dataCollector);
     });
-    // Build stateLocalActMatrix independently — only requires activity + state + locality (hub not needed)
+    // Build stateLocalActMatrix independently — requires activity + state; locality falls back to '—' if missing
     filteredData.forEach(row => {
       const actKey = row.monitoringType || row.activity;
-      if (!actKey || !row.state || !row.locality) return;
+      if (!actKey || !row.state) return;
+      const locKey = row.locality || '—';
       if (!stateLocalActMatrix[row.state]) stateLocalActMatrix[row.state] = {};
       if (!stateLocalActMatrix[row.state][actKey]) stateLocalActMatrix[row.state][actKey] = {};
-      if (!stateLocalActMatrix[row.state][actKey][row.locality]) stateLocalActMatrix[row.state][actKey][row.locality] = { q: 0, sites: new Set(), collectors: new Set() };
-      stateLocalActMatrix[row.state][actKey][row.locality].q++;
-      if (row.activitySite) stateLocalActMatrix[row.state][actKey][row.locality].sites.add(row.activitySite);
-      if (row.dataCollector) stateLocalActMatrix[row.state][actKey][row.locality].collectors.add(row.dataCollector);
+      if (!stateLocalActMatrix[row.state][actKey][locKey]) stateLocalActMatrix[row.state][actKey][locKey] = { q: 0, sites: new Set(), collectors: new Set() };
+      stateLocalActMatrix[row.state][actKey][locKey].q++;
+      if (row.activitySite) stateLocalActMatrix[row.state][actKey][locKey].sites.add(row.activitySite);
+      if (row.dataCollector) stateLocalActMatrix[row.state][actKey][locKey].collectors.add(row.dataCollector);
     });
 
     const hubTrackers = hubs.map(hub => {
-      const hubStates = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.state))].filter(Boolean).sort();
+      // Include rows without state under '—' so grandQ matches grandSites/grandCollectors
+      const hubStatesFull = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.state || '—'))].filter(Boolean).sort();
+      const hubStatesDisplay = hubStatesFull.filter(s => s !== '—');
+      // Only show '—' column if it contains data
+      const hasBlankState = hubStatesFull.includes('—') && filteredData.some(r => r.hub === hub && !r.state);
+      const hubStates = hasBlankState ? [...hubStatesDisplay, '—'] : hubStatesDisplay;
+
       const hubActivities = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.monitoringType || r.activity))].filter(Boolean).sort();
       const mRows = hubActivities.map(act => {
         const cells = hubStates.map(st => ({
@@ -1621,17 +1629,23 @@ const QuestionnaireAnalytics = () => {
       });
       const colTotals = hubStates.map((st, si) => ({
         questionnaires: mRows.reduce((a, r) => a + r.cells[si].questionnaires, 0),
-        sites: new Set(filteredData.filter(r => r.hub === hub && r.state === st && r.activitySite).map(r => r.activitySite)).size,
-        collectors: new Set(filteredData.filter(r => r.hub === hub && r.state === st && r.dataCollector).map(r => r.dataCollector)).size,
+        sites: new Set(filteredData.filter(r => r.hub === hub && (r.state || '—') === st && r.activitySite).map(r => r.activitySite)).size,
+        collectors: new Set(filteredData.filter(r => r.hub === hub && (r.state || '—') === st && r.dataCollector).map(r => r.dataCollector)).size,
       }));
-      const gQ = mRows.reduce((a, r) => a + r.totalQ, 0);
+      // Grand totals: count ALL rows for this hub (same population as grandSites/grandCollectors)
+      const gQ = filteredData.filter(r => r.hub === hub).length;
       const gS = new Set(filteredData.filter(r => r.hub === hub && r.activitySite).map(r => r.activitySite)).size;
       const gC = new Set(filteredData.filter(r => r.hub === hub && r.dataCollector).map(r => r.dataCollector)).size;
       return { hub, states: hubStates, activities: hubActivities, matrix: mRows, colTotals, grandQ: gQ, grandSites: gS, grandCollectors: gC };
     }).filter(h => h.grandQ > 0);
 
     const stateTrackers = states.map(state => {
-      const stLocalities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.locality))].filter(Boolean).sort();
+      // Mirror hubTrackers: include rows without locality under '—' so grandQ matches grandSites/grandCollectors
+      const stLocalitiesFull = [...new Set(filteredData.filter(r => r.state === state).map(r => r.locality || '—'))].filter(Boolean).sort();
+      const stLocalitiesDisplay = stLocalitiesFull.filter(l => l !== '—');
+      const hasBlankLocality = filteredData.some(r => r.state === state && !r.locality);
+      const stLocalities = hasBlankLocality ? [...stLocalitiesDisplay, '—'] : stLocalitiesDisplay;
+
       const stActivities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.monitoringType || r.activity))].filter(Boolean).sort();
       const mRows = stActivities.map(act => {
         const cells = stLocalities.map(loc => ({
@@ -1650,10 +1664,11 @@ const QuestionnaireAnalytics = () => {
       });
       const colTotals = stLocalities.map((loc, li) => ({
         questionnaires: mRows.reduce((a, r) => a + r.cells[li].questionnaires, 0),
-        sites: new Set(filteredData.filter(r => r.state === state && r.locality === loc && r.activitySite).map(r => r.activitySite)).size,
-        collectors: new Set(filteredData.filter(r => r.state === state && r.locality === loc && r.dataCollector).map(r => r.dataCollector)).size,
+        sites: new Set(filteredData.filter(r => r.state === state && (r.locality || '—') === loc && r.activitySite).map(r => r.activitySite)).size,
+        collectors: new Set(filteredData.filter(r => r.state === state && (r.locality || '—') === loc && r.dataCollector).map(r => r.dataCollector)).size,
       }));
-      const gQ = mRows.reduce((a, r) => a + r.totalQ, 0);
+      // Grand totals: count ALL rows for this state (same population as grandSites/grandCollectors)
+      const gQ = filteredData.filter(r => r.state === state).length;
       const gS = new Set(filteredData.filter(r => r.state === state && r.activitySite).map(r => r.activitySite)).size;
       const gC = new Set(filteredData.filter(r => r.state === state && r.dataCollector).map(r => r.dataCollector)).size;
       return { state, localities: stLocalities, activities: stActivities, matrix: mRows, colTotals, grandQ: gQ, grandSites: gS, grandCollectors: gC };
