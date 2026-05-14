@@ -28,6 +28,7 @@ import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { usePageManageOverride } from "@/hooks/usePageManageOverride";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
@@ -1287,7 +1288,9 @@ export default function Employees() {
   }, []);
 
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
-  const canEdit = isSuperAdmin() || hasAnyRole(['admin', 'countryDirector', 'fom', 'financialAdmin', 'hrManager', 'hr']);
+  const roleCanEdit = isSuperAdmin() || hasAnyRole(['admin', 'countryDirector', 'fom', 'financialAdmin', 'hrManager', 'hr']);
+  const overrideCanEdit = usePageManageOverride('employees', roleCanEdit);
+  const canEdit = roleCanEdit || overrideCanEdit;
 
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [dbHubs, setDbHubs]     = useState<{ id: string; name: string }[]>([]);

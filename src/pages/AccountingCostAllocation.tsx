@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -66,7 +67,11 @@ const MIGRATION_NOTICE = (
 export default function AccountingCostAllocation() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canEdit  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+
+  const overrideCanEdit = usePageManageOverride('acct-cost-allocation', roleCanEdit);
+
+  const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
   const [rules, setRules]               = useState<AllocationRule[]>([]);

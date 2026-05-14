@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
@@ -107,24 +108,8 @@ export default function SurveysPage() {
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
   const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
 
-  // Check if this user has been explicitly granted 'manage' level on the surveys page
-  const { data: surveyManageOverride } = useQuery({
-    queryKey: ['survey-manage-override', currentUser?.id],
-    queryFn: async () => {
-      if (!currentUser?.id) return null;
-      const { data } = await supabase
-        .from('page_access_overrides')
-        .select('level, is_blocked')
-        .eq('page_slug', 'surveys')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!currentUser?.id && !roleCanManage,
-    staleTime: 30_000,
-  });
-
-  const canManage = roleCanManage || (surveyManageOverride?.is_blocked === false && surveyManageOverride?.level === 'manage');
+  const overrideCanManage = usePageManageOverride('surveys', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SurveyStatus>('all');

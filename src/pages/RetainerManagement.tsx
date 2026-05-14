@@ -55,6 +55,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -142,7 +143,9 @@ const RetainerManagement = () => {
   const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
   const isAdmin = hasAnyRole(['admin', 'Admin']);
   const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
-  const canManage = isSuperAdmin || isAdmin || isFinancialAdmin;
+  const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
+  const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
 
   const getCurrentPeriod = () => {
     const now = new Date();

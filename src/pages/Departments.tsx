@@ -5,6 +5,7 @@ import { ConnectedPagesBar } from "@/components/ui/connected-pages-bar";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/context/user/UserContext";
+import { usePageManageOverride } from "@/hooks/usePageManageOverride";
 import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2563,7 +2564,9 @@ export default function Departments() {
 
   // super_admin (all variants) can create/edit/delete departments AND move employees
   const roleNorm = (currentUser?.role ?? "").toLowerCase().replace(/[_\s]/g, "");
-  const canManage = isSuperAdmin || roleNorm === "superadmin";
+  const roleCanManage = isSuperAdmin || roleNorm === "superadmin";
+  const overrideCanManage = usePageManageOverride('departments', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
   // admin (and super_admin) can move employees between departments
   const canMoveEmployees = canManage;
 

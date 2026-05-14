@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { format } from 'date-fns';
@@ -140,7 +141,12 @@ export default function CRMPartners() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 
-  const canManage = isSuperAdmin || checkPermission('crm', 'create');
+
+  const roleCanManage = isSuperAdmin || checkPermission('crm', 'create');
+
+  const overrideCanManage = usePageManageOverride('crm', roleCanManage);
+
+  const canManage = roleCanManage || overrideCanManage;
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [partners, setPartners] = useState<CRMPartner[]>([]);

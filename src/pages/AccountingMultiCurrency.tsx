@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,7 +36,11 @@ const BLANK = {
 export default function AccountingMultiCurrency() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canEdit  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+
+  const overrideCanEdit = usePageManageOverride('acct-multi-currency', roleCanEdit);
+
+  const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
   const [rates, setRates]         = useState<ExchangeRate[]>([]);

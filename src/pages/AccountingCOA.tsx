@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -72,7 +73,11 @@ type FormState = typeof BLANK_FORM;
 export default function AccountingCOA() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canManage = hasAnyRole(['super_admin', 'admin']);
+  const roleCanManage = hasAnyRole(['super_admin', 'admin']);
+
+  const overrideCanManage = usePageManageOverride('acct-coa', roleCanManage);
+
+  const canManage = roleCanManage || overrideCanManage;
   const { toast } = useToast();
   const { countryId: defaultCountryId, loading: acctCountryLoading } = useAccountingCountry();
 
