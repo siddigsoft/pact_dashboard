@@ -419,6 +419,7 @@ export interface PageOverride {
   page_slug: string;
   user_id: string;
   is_blocked: boolean;
+  level: 'view' | 'manage';
   notes: string | null;
   created_at: string;
 }
@@ -513,12 +514,13 @@ export function UserAccessRow({
   override?: PageOverride;
   isSaving: boolean;
   pageLabel: string;
-  onGrant: () => void;
+  onGrant: (level: 'view' | 'manage') => void;
   onBlock: () => void;
   onReset: () => void;
 }) {
   const ui = STATUS_UI[status];
   const Icon = ui.icon;
+  const grantedLevel = override && !override.is_blocked ? (override.level ?? 'view') : null;
   return (
     <div className={cn(
       'flex items-center gap-3 p-3 rounded-xl border transition-colors group',
@@ -541,24 +543,64 @@ export function UserAccessRow({
           {roleLabel(profile.role)}
         </span>
       </div>
-      <span className={cn('text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 shrink-0 whitespace-nowrap', ui.cls)}>
-        <Icon className="h-3 w-3" />{ui.label}
-      </span>
-      <div className="flex items-center gap-1 shrink-0 min-w-[120px] justify-end">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className={cn('text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap', ui.cls)}>
+          <Icon className="h-3 w-3" />{ui.label}
+        </span>
+        {grantedLevel && (
+          <span className={cn(
+            'text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap',
+            grantedLevel === 'manage'
+              ? 'bg-purple-100 text-purple-700'
+              : 'bg-sky-100 text-sky-700'
+          )}>
+            {grantedLevel === 'manage' ? 'Manage' : 'View Only'}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0 min-w-[150px] justify-end">
         {isSaving ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : (
           <>
             {(status === 'denied' || status === 'blocked') && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="ghost"
+                      className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-opacity"
+                      onClick={() => onGrant('view')}>
+                      <Unlock className="h-3 w-3 mr-1" />View
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Grant view-only access to {pageLabel}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="ghost"
+                      className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-opacity"
+                      onClick={() => onGrant('manage')}>
+                      <Shield className="h-3 w-3 mr-1" />Manage
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Grant full manage (edit/create/delete) access to {pageLabel}</TooltipContent>
+                </Tooltip>
+              </>
+            )}
+            {status === 'granted' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" variant="ghost"
-                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-opacity"
-                    onClick={onGrant}>
-                    <Unlock className="h-3 w-3 mr-1" />Grant
+                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs transition-opacity"
+                    onClick={() => onGrant(grantedLevel === 'manage' ? 'view' : 'manage')}>
+                    {grantedLevel === 'manage'
+                      ? <><Unlock className="h-3 w-3 mr-1 text-sky-500" />→ View</>
+                      : <><Shield className="h-3 w-3 mr-1 text-purple-500" />→ Manage</>}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs">Give this user access to {pageLabel}</TooltipContent>
+                <TooltipContent className="text-xs">
+                  Switch to {grantedLevel === 'manage' ? 'View Only' : 'Manage'} access
+                </TooltipContent>
               </Tooltip>
             )}
             {(status === 'role' || status === 'granted') && (
@@ -650,16 +692,17 @@ export default function PageAccessControl() {
     );
   }
 
-  async function applyOverride(userId: string, isBlocked: boolean, existingId?: string) {
+  async function applyOverride(userId: string, isBlocked: boolean, level: 'view' | 'manage' = 'view', existingId?: string) {
     setSavingId(userId);
     try {
       if (existingId) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, granted_by: currentUser?.id }).eq('id', existingId);
+        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, granted_by: currentUser?.id }).eq('id', existingId);
       } else {
-        await supabase.from('page_access_overrides').insert({ page_slug: selectedPage.slug, user_id: userId, is_blocked: isBlocked, granted_by: currentUser?.id });
+        await supabase.from('page_access_overrides').insert({ page_slug: selectedPage.slug, user_id: userId, is_blocked: isBlocked, level, granted_by: currentUser?.id });
       }
       const name = profiles.find(p => p.id === userId)?.full_name ?? 'User';
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${name} → ${selectedPage.label}` });
+      const desc = isBlocked ? `${name} → ${selectedPage.label}` : `${name} → ${selectedPage.label} (${level === 'manage' ? 'Manage' : 'View Only'})`;
+      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: desc });
       refetch();
       qc.invalidateQueries({ queryKey: ['pac-overrides'] });
     } catch (e: any) {
@@ -828,8 +871,8 @@ export default function PageAccessControl() {
                     override={ov}
                     isSaving={savingId === profile.id}
                     pageLabel={selectedPage.label}
-                    onGrant={() => applyOverride(profile.id, false, ov?.id)}
-                    onBlock={() => applyOverride(profile.id, true, ov?.id)}
+                    onGrant={(level) => applyOverride(profile.id, false, level, ov?.id)}
+                    onBlock={() => applyOverride(profile.id, true, 'view', ov?.id)}
                     onReset={() => removeOverride(ov!.id, profile.id)}
                   />
                 );

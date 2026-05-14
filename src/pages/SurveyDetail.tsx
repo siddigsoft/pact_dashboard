@@ -290,7 +290,26 @@ export default function SurveyDetail() {
   const { toast } = useToast();
 
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
-  const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+  const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+
+  // Check if this user has been explicitly granted 'manage' level on the surveys page
+  const { data: surveyManageOverride } = useQuery({
+    queryKey: ['survey-manage-override', currentUser?.id],
+    queryFn: async () => {
+      if (!currentUser?.id) return null;
+      const { data } = await supabase
+        .from('page_access_overrides')
+        .select('level, is_blocked')
+        .eq('page_slug', 'surveys')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!currentUser?.id && !roleCanManage,
+    staleTime: 30_000,
+  });
+
+  const canManage = roleCanManage || (surveyManageOverride?.is_blocked === false && surveyManageOverride?.level === 'manage');
 
   const [tab, setTab] = useState<'builder' | 'responses' | 'analytics' | 'map' | 'settings'>('builder');
   const [editTitle, setEditTitle]     = useState('');
