@@ -4190,6 +4190,9 @@ function GroupPanel({
   const prevQuestions = allQuestions.filter(pq =>
     pq.order_index < group.order_index && !['section_header','begin_group'].includes(pq.type)
   );
+  const grpSectionMap = new Map<string, string>();
+  { let _s = ''; for (const aq of [...allQuestions].sort((a,b)=>a.order_index-b.order_index)) { if (aq.type==='section_header') _s=aq.label; else grpSectionMap.set(aq.id,_s); } }
+  const grpQNumMap = new Map([...allQuestions].filter(aq=>!['section_header','begin_group','begin_repeat','grid_table','note'].includes(aq.type)).sort((a,b)=>a.order_index-b.order_index).map((aq,i)=>[aq.id,i+1]));
   const valueNeeded = !['answered','not_answered'].includes(skipOp);
   const hasSkip = !!existingSkip?.condition_question_id;
 
@@ -4299,8 +4302,16 @@ function GroupPanel({
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select a question…" /></SelectTrigger>
                       <SelectContent>
                         {prevQuestions.map(pq => (
-                          <SelectItem key={pq.id} value={pq.id} className="text-xs">
-                            {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
+                          <SelectItem key={pq.id} value={pq.id} className="text-xs py-1.5">
+                            <div className="flex flex-col gap-0.5 leading-tight">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[10px] font-bold text-indigo-400 shrink-0">#{grpQNumMap.get(pq.id) ?? '?'}</span>
+                                <span className="text-slate-700">{pq.label}</span>
+                              </div>
+                              {grpSectionMap.get(pq.id) && (
+                                <span className="text-[10px] text-slate-400 pl-5">{grpSectionMap.get(pq.id)}</span>
+                              )}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -4435,6 +4446,9 @@ function QuestionCard({
   const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(typeDraft);
 
   const prevQuestions = allQuestions.filter((pq) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
+  const skipSectionMap = new Map<string, string>();
+  { let _s = ''; for (const aq of [...allQuestions].sort((a,b)=>a.order_index-b.order_index)) { if (aq.type==='section_header') _s=aq.label; else skipSectionMap.set(aq.id,_s); } }
+  const skipQNumMap = new Map([...allQuestions].filter(aq=>!['section_header','begin_group','begin_repeat','grid_table','note'].includes(aq.type)).sort((a,b)=>a.order_index-b.order_index).map((aq,i)=>[aq.id,i+1]));
 
   const addSkipCond = () => setSkipConditions(prev => [...prev, { question_id: '', operator: 'equals', value: '' }]);
   const removeSkipCond = (i: number) => setSkipConditions(prev => prev.filter((_, j) => j !== i));
@@ -5191,7 +5205,21 @@ function QuestionCard({
                   <span className="text-[10px] text-slate-400 shrink-0">shows when</span>
                   <Select value={rule.depends_on} onValueChange={v => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, depends_on: v } : r))}>
                     <SelectTrigger className="h-7 text-xs w-36 shrink-0"><SelectValue placeholder="Question…" /></SelectTrigger>
-                    <SelectContent>{prevQuestions.map(pq => <SelectItem key={pq.id} value={pq.id}>{pq.label.slice(0, 30)}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {prevQuestions.map(pq => (
+                        <SelectItem key={pq.id} value={pq.id} className="text-xs py-1.5">
+                          <div className="flex flex-col gap-0.5 leading-tight">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] font-bold text-indigo-400 shrink-0">#{skipQNumMap.get(pq.id) ?? '?'}</span>
+                              <span className="text-slate-700">{pq.label}</span>
+                            </div>
+                            {skipSectionMap.get(pq.id) && (
+                              <span className="text-[10px] text-slate-400 pl-5">{skipSectionMap.get(pq.id)}</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                   <span className="text-[10px] text-slate-400 shrink-0">=</span>
                   <Input value={rule.depends_value} onChange={e => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, depends_value: e.target.value } : r))} className="h-7 text-xs w-24 shrink-0" placeholder="value…" />
@@ -5237,7 +5265,19 @@ function QuestionCard({
                         <Select value={cond.question_id} onValueChange={v => updateSkipCond(ci, { question_id: v })}>
                           <SelectTrigger className="h-7 text-xs flex-1 min-w-[120px]"><SelectValue placeholder="Question…" /></SelectTrigger>
                           <SelectContent>
-                            {prevQuestions.map(pq => <SelectItem key={pq.id} value={pq.id} className="text-xs">{pq.label.slice(0, 40)}</SelectItem>)}
+                            {prevQuestions.map(pq => (
+                              <SelectItem key={pq.id} value={pq.id} className="text-xs py-1.5">
+                                <div className="flex flex-col gap-0.5 leading-tight">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-[10px] font-bold text-indigo-400 shrink-0">#{skipQNumMap.get(pq.id) ?? '?'}</span>
+                                    <span className="text-slate-700">{pq.label}</span>
+                                  </div>
+                                  {skipSectionMap.get(pq.id) && (
+                                    <span className="text-[10px] text-slate-400 pl-5">{skipSectionMap.get(pq.id)}</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <Select value={cond.operator} onValueChange={v => updateSkipCond(ci, { operator: v as SkipCondition['operator'] })}>
