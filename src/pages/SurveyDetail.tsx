@@ -666,6 +666,67 @@ export default function SurveyDetail() {
     setDraggedQId(null);
   };
 
+  // ── Move a single question to a target section (append at end of that block) ─
+  const moveQuestionToSection = async (questionId: string, targetSectionId: string | 'top') => {
+    const allTopLevel = [...questions]
+      .filter(x => (x.group_id ?? null) === null)
+      .sort((a, b) => a.order_index - b.order_index);
+    const movedQ = allTopLevel.find(x => x.id === questionId);
+    if (!movedQ) return;
+    const withoutQ = allTopLevel.filter(x => x.id !== questionId);
+    const blocks = buildSectionBlocks(questions);
+    let insertIdx: number;
+    if (targetSectionId === 'top') {
+      // Insert before the first section header (or at position 0)
+      const firstSectionIdx = withoutQ.findIndex(x => x.type === 'section_header');
+      insertIdx = firstSectionIdx === -1 ? 0 : firstSectionIdx;
+    } else {
+      const block = blocks.find(b => b.header?.id === targetSectionId);
+      if (!block) return;
+      const lastItem = block.items.at(-1) ?? block.header;
+      insertIdx = lastItem ? withoutQ.findIndex(x => x.id === lastItem!.id) + 1 : withoutQ.length;
+    }
+    withoutQ.splice(insertIdx, 0, movedQ);
+    const updates = withoutQ
+      .map((q, i) => ({ id: q.id, newIndex: i }))
+      .filter(({ id, newIndex }) => (questions.find(q => q.id === id)?.order_index ?? newIndex) !== newIndex);
+    if (updates.length > 0) {
+      await Promise.all(updates.map(({ id, newIndex }) =>
+        supabase.from('survey_questions').update({ order_index: newIndex }).eq('id', id)
+      ));
+      qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+    }
+  };
+
+  // ── Duplicate an entire section (header + all its questions) ─────────────────
+  const duplicateSectionBlock = async (sectionId: string) => {
+    const blocks = buildSectionBlocks(questions);
+    const block = blocks.find(b => b.header?.id === sectionId);
+    if (!block?.header) return;
+    const maxOrder = questions.length > 0 ? Math.max(...questions.map(q => q.order_index)) : -1;
+    const { data: newHdr, error: hdrErr } = await supabase.from('survey_questions').insert({
+      survey_id: id, type: 'section_header',
+      label: `${block.header.label} (Copy)`, label_ar: block.header.label_ar,
+      description: block.header.description, description_ar: block.header.description_ar,
+      required: false, order_index: maxOrder + 1, settings: {},
+    }).select().single();
+    if (hdrErr || !newHdr) { toast({ title: 'Error duplicating section', variant: 'destructive' }); return; }
+    for (let i = 0; i < block.items.length; i++) {
+      const q = block.items[i];
+      await supabase.from('survey_questions').insert({
+        survey_id: id, type: q.type,
+        label: q.label, label_ar: q.label_ar,
+        description: q.description, description_ar: q.description_ar,
+        required: q.required, options: q.options, options_ar: q.options_ar,
+        order_index: maxOrder + 2 + i,
+        settings: { ...q.settings, skip_logic: undefined },
+        group_id: null,
+      });
+    }
+    qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+    toast({ title: `Section duplicated`, description: `Copied "${block.header.label}" with ${block.items.length} question${block.items.length !== 1 ? 's' : ''}` });
+  };
+
   const duplicateQuestion = useMutation({
     mutationFn: async (q: Question) => {
       const siblings = questions.filter(x => (x.group_id ?? null) === (q.group_id ?? null));
@@ -1057,12 +1118,23 @@ export default function SurveyDetail() {
             if (!draggedQId || draggedQId === node.q.id) { setDraggedQId(null); return; }
             const dragged = questions.find(x => x.id === draggedQId);
             if (!dragged) { setDraggedQId(null); return; }
-            const tmp = dragged.order_index;
-            await Promise.all([
-              supabase.from('survey_questions').update({ order_index: node.q.order_index }).eq('id', dragged.id),
-              supabase.from('survey_questions').update({ order_index: tmp }).eq('id', node.q.id),
-            ]);
-            qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+            // Insert-before: move dragged item to just before the target item
+            const sameLevel = [...questions]
+              .filter(x => (x.group_id ?? null) === (node.q.group_id ?? null))
+              .sort((a, b) => a.order_index - b.order_index);
+            const withoutDragged = sameLevel.filter(x => x.id !== draggedQId);
+            const targetIdx = withoutDragged.findIndex(x => x.id === node.q.id);
+            if (targetIdx === -1) { setDraggedQId(null); return; }
+            withoutDragged.splice(targetIdx, 0, dragged);
+            const updates = withoutDragged
+              .map((q, i) => ({ id: q.id, newIndex: i }))
+              .filter(({ id, newIndex }) => (questions.find(q => q.id === id)?.order_index ?? newIndex) !== newIndex);
+            if (updates.length > 0) {
+              await Promise.all(updates.map(({ id, newIndex }) =>
+                supabase.from('survey_questions').update({ order_index: newIndex }).eq('id', id)
+              ));
+              qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+            }
             setDraggedQId(null);
           }}
           isBulkSelected={bulkSelected.has(node.q.id)}
@@ -1072,6 +1144,8 @@ export default function SurveyDetail() {
             setBulkSelected(next);
           }}
           onSaveToLibrary={() => saveToLibrary(node.q)}
+          sectionHeaders={questions.filter(q => q.type === 'section_header')}
+          onMoveToSection={async (sid) => moveQuestionToSection(node.q.id, sid)}
         />
       );
     });
@@ -1116,7 +1190,7 @@ export default function SurveyDetail() {
             onEdit={() => setEditQId(editQId === hdr.id ? null : hdr.id)}
             onUpdate={(patch) => updateQuestion.mutate({ id: hdr.id, ...patch })}
             onDelete={() => deleteQuestion.mutate(hdr.id)}
-            onDuplicate={() => duplicateQuestion.mutate(hdr)}
+            onDuplicate={() => duplicateSectionBlock(hdr.id)}
             onMoveUp={() => moveSectionBlock(hdr.id, 'up')}
             onMoveDown={() => moveSectionBlock(hdr.id, 'down')}
             saving={updateQuestion.isPending}
@@ -2163,6 +2237,67 @@ export default function SurveyDetail() {
                     <Area dataKey="count" stroke="#6366f1" strokeWidth={2.5} fill="url(#responseGrad)" dot={{ fill: '#6366f1', r: 3.5, strokeWidth: 0 }} activeDot={{ r: 5.5, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </div>
+            );
+          })()}
+
+          {/* ── Per-Section Completion Rate ─────────────────────────────────── */}
+          {responses.length > 0 && (() => {
+            const sectionBlocks = buildSectionBlocks(questions);
+            const sectioned = sectionBlocks.filter(b =>
+              b.header !== null &&
+              b.items.filter(q => !['begin_group','begin_repeat','grid_table'].includes(q.type)).length > 0
+            );
+            if (sectioned.length === 0) return null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <LayoutList className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Section Completion</h3>
+                  <span className="text-[11px] text-slate-400 ml-auto">{sectioned.length} section{sectioned.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="space-y-3.5">
+                  {sectioned.map(block => {
+                    const sectionQIds = block.items
+                      .filter(q => !['begin_group','begin_repeat','grid_table'].includes(q.type))
+                      .map(q => q.id);
+                    const answered = responses.filter(resp => {
+                      const ids = new Set(allAnswers.filter(a => a.response_id === resp.id).map(a => a.question_id));
+                      return sectionQIds.some(qid => ids.has(qid));
+                    }).length;
+                    const fullyAnswered = responses.filter(resp => {
+                      const ids = new Set(allAnswers.filter(a => a.response_id === resp.id).map(a => a.question_id));
+                      return sectionQIds.every(qid => ids.has(qid));
+                    }).length;
+                    const pct = responses.length > 0 ? Math.round((fullyAnswered / responses.length) * 100) : 0;
+                    const pctPartial = responses.length > 0 ? Math.round((answered / responses.length) * 100) : 0;
+                    return (
+                      <div key={block.header!.id} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700 truncate">{block.header!.label}</span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-[11px] text-slate-400">{sectionQIds.length}Q</span>
+                            <span className="text-xs font-bold text-emerald-600 tabular-nums w-10 text-right">{pct}%</span>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full flex">
+                            <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-emerald-200 transition-all duration-300" style={{ width: `${Math.max(0, pctPartial - pct)}%` }} />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          {fullyAnswered} fully · {answered - fullyAnswered} partially · {responses.length - answered} skipped
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-4 pt-1 border-t border-slate-100">
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /><span className="text-[10px] text-slate-500">Fully answered</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-200 shrink-0" /><span className="text-[10px] text-slate-500">Partially answered</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-100 border border-slate-200 shrink-0" /><span className="text-[10px] text-slate-500">Skipped</span></div>
+                </div>
               </div>
             );
           })()}
@@ -4217,7 +4352,7 @@ const SKIP_OPERATORS: { value: SkipLogic['operator']; label: string }[] = [
 function QuestionCard({
   q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, saving, deleting,
   isDraggedOver, onDragStart, onDragOver, onDragLeave, onDrop, isBulkSelected, onBulkToggle, onSaveToLibrary,
-  isCollapsed, onToggleCollapse, questionCount,
+  isCollapsed, onToggleCollapse, questionCount, sectionHeaders, onMoveToSection,
 }: {
   q: Question; idx: number; total: number; allQuestions: Question[]; canManage: boolean;
   isEditing: boolean; onEdit: () => void;
@@ -4235,6 +4370,8 @@ function QuestionCard({
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   questionCount?: number;
+  sectionHeaders?: Question[];
+  onMoveToSection?: (sectionId: string) => Promise<void>;
 }) {
   const [typeDraft, setTypeDraft]       = useState<QuestionType>(q.type);
   const [labelDraft, setLabelDraft]     = useState(q.label);
@@ -4386,6 +4523,7 @@ function QuestionCard({
             <div className="flex items-center gap-0.5 ml-auto">
               <button onClick={() => onMoveUp()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move section up"><ChevronUp className="w-3 h-3" /></button>
               <button onClick={() => onMoveDown()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move section down"><ChevronDown className="w-3 h-3" /></button>
+              <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-indigo-600" title="Duplicate entire section"><Copy className="w-3 h-3" /></button>
               <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Edit section"><Edit3 className="w-3 h-3" /></button>
               <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete section"><Trash2 className="w-3 h-3" /></button>
             </div>
@@ -4553,6 +4691,25 @@ function QuestionCard({
               <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
               <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
               <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600" title="Duplicate question"><Copy className="w-3.5 h-3.5" /></button>
+              {sectionHeaders && sectionHeaders.length > 0 && (
+                <select
+                  onChange={async e => {
+                    const val = e.currentTarget.value;
+                    if (!val) return;
+                    e.currentTarget.value = '';
+                    await onMoveToSection?.(val);
+                  }}
+                  className="text-[10px] border border-slate-200 rounded px-1 py-0.5 text-slate-400 hover:border-indigo-300 hover:text-indigo-600 cursor-pointer bg-white h-[22px]"
+                  title="Move to section"
+                  defaultValue=""
+                >
+                  <option value="" disabled>→ Section</option>
+                  <option value="top">No section (top)</option>
+                  {sectionHeaders.map(s => (
+                    <option key={s.id} value={s.id}>{s.label.length > 22 ? s.label.slice(0, 20) + '…' : s.label}</option>
+                  ))}
+                </select>
+              )}
               <button onClick={() => onSaveToLibrary?.()} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-violet-600" title="Save to library"><BookOpen className="w-3.5 h-3.5" /></button>
               <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')} title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
               <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>

@@ -932,19 +932,20 @@ export default function SurveyFill() {
 
   // Multi-page computation: split at section_headers
   const pages = useMemo(() => {
-    if (!multiPage) return [{ title: null as string | null, titleAr: null as string | null, questions: topLevelItems }];
-    const result: { title: string | null; titleAr: string | null; questions: Question[] }[] = [];
-    let current: { title: string | null; titleAr: string | null; questions: Question[] } = { title: null, titleAr: null, questions: [] };
+    type Page = { title: string | null; titleAr: string | null; description: string | null; descriptionAr: string | null; questions: Question[] };
+    if (!multiPage) return [{ title: null as string | null, titleAr: null as string | null, description: null as string | null, descriptionAr: null as string | null, questions: topLevelItems }];
+    const result: Page[] = [];
+    let current: Page = { title: null, titleAr: null, description: null, descriptionAr: null, questions: [] };
     for (const q of topLevelItems) {
       if (q.type === 'section_header') {
         if (current.questions.length > 0 || current.title) result.push(current);
-        current = { title: q.label, titleAr: q.label_ar, questions: [] };
+        current = { title: q.label, titleAr: q.label_ar, description: q.description, descriptionAr: q.description_ar, questions: [] };
       } else {
         current.questions.push(q);
       }
     }
     if (current.questions.length > 0 || current.title) result.push(current);
-    return result.length > 0 ? result : [{ title: null, titleAr: null, questions: topLevelItems }];
+    return result.length > 0 ? result : [{ title: null, titleAr: null, description: null, descriptionAr: null, questions: topLevelItems }];
   }, [topLevelItems, multiPage]);
 
   const safeCurrentPage = Math.min(currentPage, pages.length - 1);
@@ -1922,17 +1923,30 @@ export default function SurveyFill() {
 
         {/* Page title header (multi-page) */}
         {multiPage && pages.length > 1 && pages[safeCurrentPage].title && (
-          <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+          <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-sm font-bold text-indigo-600">{safeCurrentPage + 1}</span>
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="font-bold text-slate-800">
                 {lang === 'ar' && pages[safeCurrentPage].titleAr
                   ? pages[safeCurrentPage].titleAr
                   : pages[safeCurrentPage].title}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">
+              {(pages[safeCurrentPage].description || pages[safeCurrentPage].descriptionAr) && (
+                <div className="mt-1 space-y-0.5">
+                  {lang !== 'ar' && pages[safeCurrentPage].description && (
+                    <p className="text-sm text-slate-500 leading-relaxed">{pages[safeCurrentPage].description}</p>
+                  )}
+                  {pages[safeCurrentPage].descriptionAr && (
+                    <p className="text-sm text-slate-500 leading-relaxed" dir="rtl">{pages[safeCurrentPage].descriptionAr}</p>
+                  )}
+                  {lang === 'ar' && !pages[safeCurrentPage].descriptionAr && pages[safeCurrentPage].description && (
+                    <p className="text-sm text-slate-500 leading-relaxed">{pages[safeCurrentPage].description}</p>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-slate-400 mt-1">
                 {lang === 'ar' ? `صفحة ${safeCurrentPage + 1} من ${pages.length}` : `Page ${safeCurrentPage + 1} of ${pages.length}`}
               </p>
             </div>
