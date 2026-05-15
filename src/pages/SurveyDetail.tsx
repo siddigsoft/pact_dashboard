@@ -4105,7 +4105,7 @@ function QuestionCard({
   const [gpsCaptureAlt, setGpsCaptureAlt]     = useState(q.settings?.capture_altitude !== false);
   const [gpsAllowManual, setGpsAllowManual]   = useState(q.settings?.allow_manual !== false);
 
-  type GridCol = { id: string; label: string; type: 'text' | 'number' | 'date' | 'dropdown'; options?: string[] };
+  type GridCol = { id: string; label: string; label_ar?: string; type: 'text' | 'number' | 'date' | 'dropdown'; options?: string[] };
   const [gridCols, setGridCols] = useState<GridCol[]>(
     (q.settings?.grid_columns as GridCol[] | undefined) ??
     [{ id: 'col_1', label: 'Column 1', type: 'text' }]
@@ -4113,6 +4113,7 @@ function QuestionCard({
   const [gridMinRows, setGridMinRows] = useState(Number(q.settings?.min_rows ?? 1));
   const [gridMaxRows, setGridMaxRows] = useState(Number(q.settings?.max_rows ?? 10));
   const [newColLabel, setNewColLabel] = useState('');
+  const [newColLabelAr, setNewColLabelAr] = useState('');
 
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [varNameDraft, setVarNameDraft] = useState<string>(String(q.settings?.variable_name ?? ''));
@@ -4195,20 +4196,61 @@ function QuestionCard({
 
   if (isSection) {
     return (
-      <div className="flex items-center gap-2 py-2 px-4 bg-slate-50 rounded-xl border border-slate-200">
-        <Minus className="w-4 h-4 text-slate-400 shrink-0" />
-        {isEditing ? (
-          <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} className="h-7 text-sm font-semibold" />
-        ) : (
-          <p className="text-sm font-bold text-slate-600 uppercase tracking-wide flex-1">{q.label}</p>
-        )}
-        {canManage && (
-          <div className="flex items-center gap-1 ml-auto">
-            {isEditing
-              ? <Button size="sm" onClick={save} className="h-6 px-2 text-xs">Save</Button>
-              : <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 className="w-3 h-3" /></button>
-            }
-            <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+      <div
+        className={cn('bg-slate-50 rounded-xl border transition-colors', isDraggedOver ? 'border-indigo-400 bg-indigo-50/10' : 'border-slate-200')}
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={e => { e.preventDefault(); onDragOver?.(); }}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        <div className="flex items-center gap-2 py-2 px-4">
+          <GripVertical className="w-4 h-4 text-slate-300 shrink-0 cursor-grab" />
+          <input
+            type="checkbox"
+            checked={!!isBulkSelected}
+            onChange={e => onBulkToggle?.(e.target.checked)}
+            className="rounded shrink-0 accent-indigo-600"
+            title="Select for bulk actions"
+          />
+          <Minus className="w-4 h-4 text-slate-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-600 uppercase tracking-wide truncate">{q.label}</p>
+            {q.label_ar && <p className="text-[11px] text-slate-400 truncate" dir="rtl">{q.label_ar}</p>}
+          </div>
+          {canManage && (
+            <div className="flex items-center gap-0.5 ml-auto">
+              <button onClick={() => onMoveUp()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move up"><ChevronUp className="w-3 h-3" /></button>
+              <button onClick={() => onMoveDown()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move down"><ChevronDown className="w-3 h-3" /></button>
+              <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 className="w-3 h-3" /></button>
+              <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+            </div>
+          )}
+        </div>
+        {isEditing && canManage && (
+          <div className="border-t border-slate-200 p-4 bg-white space-y-3 rounded-b-xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Section Title (English)</Label>
+                <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} placeholder="Section heading…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">عنوان القسم (Arabic)</Label>
+                <Input dir="rtl" lang="ar" value={labelArDraft} onChange={e => setLabelArDraft(e.target.value)} placeholder="عنوان القسم بالعربية…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Description (English, optional)</Label>
+                <Textarea value={descDraft} onChange={e => setDescDraft(e.target.value)} rows={2} placeholder="Optional subtitle or instructions…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">الوصف (Arabic — اختياري)</Label>
+                <Textarea dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} rows={2} placeholder="وصف القسم بالعربية…" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" size="sm" onClick={onEdit} className="h-7 px-3 text-xs">Cancel</Button>
+              <Button size="sm" onClick={save} className="h-7 px-3 text-xs">Save</Button>
+            </div>
           </div>
         )}
       </div>
@@ -4611,35 +4653,47 @@ function QuestionCard({
               {/* Column list */}
               <div className="space-y-2">
                 {gridCols.map((col, ci) => (
-                  <div key={col.id} className="flex items-center gap-1.5 bg-white border border-teal-100 rounded-lg p-2">
-                    <span className="text-[10px] font-mono text-teal-400 w-5 shrink-0">{ci + 1}</span>
-                    <Input
-                      value={col.label}
-                      onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label: e.target.value } : c))}
-                      placeholder="Column header…"
-                      className="h-7 text-xs flex-1"
-                    />
-                    <Select
-                      value={col.type}
-                      onValueChange={v => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, type: v as GridCol['type'] } : c))}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-28 shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text">Text</SelectItem>
-                        <SelectItem value="number">Number</SelectItem>
-                        <SelectItem value="date">Date</SelectItem>
-                        <SelectItem value="dropdown">Dropdown</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <button
-                      onClick={() => setGridCols(prev => prev.filter((_, i) => i !== ci))}
-                      disabled={gridCols.length <= 1}
-                      className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                  <div key={col.id} className="bg-white border border-teal-100 rounded-lg p-2 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-teal-400 w-5 shrink-0">{ci + 1}</span>
+                      <Input
+                        value={col.label}
+                        onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label: e.target.value } : c))}
+                        placeholder="Column header (English)…"
+                        className="h-7 text-xs flex-1"
+                      />
+                      <Select
+                        value={col.type}
+                        onValueChange={v => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, type: v as GridCol['type'] } : c))}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-28 shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="date">Date</SelectItem>
+                          <SelectItem value="dropdown">Dropdown</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => setGridCols(prev => prev.filter((_, i) => i !== ci))}
+                        disabled={gridCols.length <= 1}
+                        className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5 pl-5">
+                      <Input
+                        dir="rtl"
+                        lang="ar"
+                        value={col.label_ar ?? ''}
+                        onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label_ar: e.target.value } : c))}
+                        placeholder="اسم العمود بالعربية…"
+                        className="h-7 text-xs flex-1"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4674,29 +4728,39 @@ function QuestionCard({
               ))}
 
               {/* Add column */}
-              <div className="flex items-center gap-1.5">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={newColLabel}
+                    onChange={e => setNewColLabel(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newColLabel.trim()) {
+                        setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), label_ar: newColLabelAr.trim() || undefined, type: 'text' }]);
+                        setNewColLabel(''); setNewColLabelAr('');
+                      }
+                    }}
+                    placeholder="New column name (English)…"
+                    className="h-7 text-xs flex-1"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newColLabel.trim()) return;
+                      setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), label_ar: newColLabelAr.trim() || undefined, type: 'text' }]);
+                      setNewColLabel(''); setNewColLabelAr('');
+                    }}
+                    className="p-1.5 text-teal-600 hover:bg-teal-100 rounded"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <Input
-                  value={newColLabel}
-                  onChange={e => setNewColLabel(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && newColLabel.trim()) {
-                      setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), type: 'text' }]);
-                      setNewColLabel('');
-                    }
-                  }}
-                  placeholder="New column name…"
-                  className="h-7 text-xs flex-1"
+                  dir="rtl"
+                  lang="ar"
+                  value={newColLabelAr}
+                  onChange={e => setNewColLabelAr(e.target.value)}
+                  placeholder="اسم العمود الجديد بالعربية (اختياري)…"
+                  className="h-7 text-xs"
                 />
-                <button
-                  onClick={() => {
-                    if (!newColLabel.trim()) return;
-                    setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), type: 'text' }]);
-                    setNewColLabel('');
-                  }}
-                  className="p-1.5 text-teal-600 hover:bg-teal-100 rounded"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
               </div>
 
               {/* Row limits */}
