@@ -204,6 +204,25 @@ function buildQTree(questions: Question[], parentId: string | null = null): QTre
     }));
 }
 
+interface SectionBlock { header: Question | null; items: Question[] }
+function buildSectionBlocks(questions: Question[]): SectionBlock[] {
+  const topLevel = [...questions]
+    .filter(q => (q.group_id ?? null) === null)
+    .sort((a, b) => a.order_index - b.order_index);
+  const blocks: SectionBlock[] = [];
+  let cur: SectionBlock = { header: null, items: [] };
+  for (const q of topLevel) {
+    if (q.type === 'section_header') {
+      if (cur.header !== null || cur.items.length > 0) blocks.push(cur);
+      cur = { header: q, items: [] };
+    } else {
+      cur.items.push(q);
+    }
+  }
+  if (cur.header !== null || cur.items.length > 0) blocks.push(cur);
+  return blocks;
+}
+
 const STATUS_CFG: Record<SurveyStatus, { label: string; color: string }> = {
   draft:  { label: 'Draft',  color: 'bg-slate-100 text-slate-600 border-slate-200'   },
   active: { label: 'Active', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -321,6 +340,7 @@ export default function SurveyDetail() {
   const [dragOverQId, setDragOverQId] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [librarySaveTarget, setLibrarySaveTarget] = useState<Question | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   // Cross-tabulation state
   const [crossTabRow, setCrossTabRow] = useState<string>('');
@@ -597,6 +617,53 @@ export default function SurveyDetail() {
       supabase.from('survey_questions').update({ order_index: a.order_index }).eq('id', b.id),
     ]);
     qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+  };
+
+  // ── Section-block move: swaps entire section (header + its questions) ────────
+  const applySectionBlockOrder = async (newBlocks: SectionBlock[]) => {
+    const flatNew = newBlocks.flatMap(b => [...(b.header ? [b.header] : []), ...b.items]);
+    const updates = flatNew
+      .map((q, i) => ({ id: q.id, newIndex: i }))
+      .filter(({ id, newIndex }) => (questions.find(q => q.id === id)?.order_index ?? newIndex) !== newIndex);
+    if (updates.length === 0) return;
+    await Promise.all(updates.map(({ id, newIndex }) =>
+      supabase.from('survey_questions').update({ order_index: newIndex }).eq('id', id)
+    ));
+    qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+  };
+
+  const moveSectionBlock = async (sectionId: string, direction: 'up' | 'down') => {
+    const blocks = buildSectionBlocks(questions);
+    const sectionBlocks = blocks.filter(b => b.header !== null);
+    const sectionPos = sectionBlocks.findIndex(b => b.header!.id === sectionId);
+    if (sectionPos === -1) return;
+    if (direction === 'up' && sectionPos === 0) return;
+    if (direction === 'down' && sectionPos === sectionBlocks.length - 1) return;
+    const swapPos = direction === 'up' ? sectionPos - 1 : sectionPos + 1;
+    const newSectionBlocks = [...sectionBlocks];
+    [newSectionBlocks[sectionPos], newSectionBlocks[swapPos]] = [newSectionBlocks[swapPos], newSectionBlocks[sectionPos]];
+    // Rebuild full blocks array preserving any unsectioned block at the front
+    const unsectioned = blocks.find(b => b.header === null);
+    const newBlocks: SectionBlock[] = [
+      ...(unsectioned ? [unsectioned] : []),
+      ...newSectionBlocks,
+    ];
+    await applySectionBlockOrder(newBlocks);
+  };
+
+  const dropSectionOnSection = async (targetSectionId: string) => {
+    if (!draggedQId || draggedQId === targetSectionId) { setDraggedQId(null); return; }
+    const dragged = questions.find(x => x.id === draggedQId);
+    if (!dragged || dragged.type !== 'section_header') { setDraggedQId(null); return; }
+    const blocks = buildSectionBlocks(questions);
+    const fromIdx = blocks.findIndex(b => b.header?.id === draggedQId);
+    const toIdx = blocks.findIndex(b => b.header?.id === targetSectionId);
+    if (fromIdx === -1 || toIdx === -1) { setDraggedQId(null); return; }
+    const newBlocks = [...blocks];
+    const [removed] = newBlocks.splice(fromIdx, 1);
+    newBlocks.splice(toIdx, 0, removed);
+    await applySectionBlockOrder(newBlocks);
+    setDraggedQId(null);
   };
 
   const duplicateQuestion = useMutation({
@@ -1010,6 +1077,81 @@ export default function SurveyDetail() {
     });
   };
 
+  // ── Section-block renderer ────────────────────────────────────────────────
+  const renderSectionBlocks = (): React.ReactNode => {
+    const blocks = buildSectionBlocks(questions);
+    const hasSections = blocks.some(b => b.header !== null);
+    if (!hasSections) return renderQTree(buildQTree(questions));
+
+    const sectionBlocks = blocks.filter(b => b.header !== null);
+    const allTopLevelNodes = buildQTree(questions, null);
+
+    return blocks.map((block) => {
+      if (block.header === null) {
+        if (block.items.length === 0) return null;
+        const blockIds = new Set(block.items.map(q => q.id));
+        return (
+          <div key="__unsectioned" className="space-y-2">
+            {renderQTree(allTopLevelNodes.filter(n => blockIds.has(n.q.id)))}
+          </div>
+        );
+      }
+
+      const hdr = block.header;
+      const sectionIdx = sectionBlocks.findIndex(b => b.header!.id === hdr.id);
+      const isCollapsed = collapsedSections.has(hdr.id);
+      const blockIds = new Set(block.items.map(q => q.id));
+      const blockNodes = allTopLevelNodes.filter(n => blockIds.has(n.q.id));
+
+      return (
+        <div key={hdr.id} className="rounded-xl border border-slate-200 overflow-hidden">
+          {/* Section header — draggable, moves the entire block */}
+          <QuestionCard
+            q={hdr}
+            idx={sectionIdx}
+            total={sectionBlocks.length}
+            allQuestions={questions}
+            canManage={canManage}
+            isEditing={editQId === hdr.id}
+            onEdit={() => setEditQId(editQId === hdr.id ? null : hdr.id)}
+            onUpdate={(patch) => updateQuestion.mutate({ id: hdr.id, ...patch })}
+            onDelete={() => deleteQuestion.mutate(hdr.id)}
+            onDuplicate={() => duplicateQuestion.mutate(hdr)}
+            onMoveUp={() => moveSectionBlock(hdr.id, 'up')}
+            onMoveDown={() => moveSectionBlock(hdr.id, 'down')}
+            saving={updateQuestion.isPending}
+            deleting={deleteQuestion.isPending}
+            isDraggedOver={dragOverQId === hdr.id}
+            onDragStart={() => setDraggedQId(hdr.id)}
+            onDragOver={() => setDragOverQId(hdr.id)}
+            onDragLeave={() => setDragOverQId(null)}
+            onDrop={async () => { setDragOverQId(null); await dropSectionOnSection(hdr.id); }}
+            isBulkSelected={bulkSelected.has(hdr.id)}
+            onBulkToggle={(v) => { const n = new Set(bulkSelected); v ? n.add(hdr.id) : n.delete(hdr.id); setBulkSelected(n); }}
+            onSaveToLibrary={() => saveToLibrary(hdr)}
+            isCollapsed={isCollapsed}
+            onToggleCollapse={() => setCollapsedSections(prev => { const n = new Set(prev); n.has(hdr.id) ? n.delete(hdr.id) : n.add(hdr.id); return n; })}
+            questionCount={block.items.length}
+          />
+          {/* Questions inside this section */}
+          {!isCollapsed && (
+            <div className="bg-white border-t border-slate-100">
+              {block.items.length === 0 ? (
+                <div className="flex items-center justify-center py-4 m-3 rounded-lg border border-dashed border-slate-200 text-slate-400 text-xs gap-1.5">
+                  <Plus className="w-3 h-3" />No questions in this section yet — add one below
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {renderQTree(blockNodes)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
   if (surveyLoading) return (
     <div className="flex items-center justify-center h-64 text-slate-400">
       <Loader2 className="w-6 h-6 animate-spin mr-2" />Loading survey…
@@ -1296,7 +1438,7 @@ export default function SurveyDetail() {
                 );
               })()
             ) : (
-              renderQTree(buildQTree(questions))
+              renderSectionBlocks()
             )}
           </div>
 
@@ -4075,6 +4217,7 @@ const SKIP_OPERATORS: { value: SkipLogic['operator']; label: string }[] = [
 function QuestionCard({
   q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, saving, deleting,
   isDraggedOver, onDragStart, onDragOver, onDragLeave, onDrop, isBulkSelected, onBulkToggle, onSaveToLibrary,
+  isCollapsed, onToggleCollapse, questionCount,
 }: {
   q: Question; idx: number; total: number; allQuestions: Question[]; canManage: boolean;
   isEditing: boolean; onEdit: () => void;
@@ -4089,6 +4232,9 @@ function QuestionCard({
   isBulkSelected?: boolean;
   onBulkToggle?: (v: boolean) => void;
   onSaveToLibrary?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  questionCount?: number;
 }) {
   const [typeDraft, setTypeDraft]       = useState<QuestionType>(q.type);
   const [labelDraft, setLabelDraft]     = useState(q.label);
@@ -4197,15 +4343,15 @@ function QuestionCard({
   if (isSection) {
     return (
       <div
-        className={cn('bg-slate-50 rounded-xl border transition-colors', isDraggedOver ? 'border-indigo-400 bg-indigo-50/10' : 'border-slate-200')}
+        className={cn('bg-slate-100 transition-colors', isDraggedOver ? 'ring-2 ring-inset ring-indigo-400 bg-indigo-50/20' : '')}
         draggable
         onDragStart={onDragStart}
         onDragOver={e => { e.preventDefault(); onDragOver?.(); }}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <div className="flex items-center gap-2 py-2 px-4">
-          <GripVertical className="w-4 h-4 text-slate-300 shrink-0 cursor-grab" />
+        <div className="flex items-center gap-2 py-2.5 px-3">
+          <GripVertical className="w-4 h-4 text-slate-400 shrink-0 cursor-grab" />
           <input
             type="checkbox"
             checked={!!isBulkSelected}
@@ -4213,17 +4359,35 @@ function QuestionCard({
             className="rounded shrink-0 accent-indigo-600"
             title="Select for bulk actions"
           />
-          <Minus className="w-4 h-4 text-slate-400 shrink-0" />
+          {/* Collapse toggle */}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-0.5 rounded hover:bg-slate-200 text-slate-500 shrink-0"
+              title={isCollapsed ? 'Expand section' : 'Collapse section'}
+            >
+              {isCollapsed
+                ? <ChevronDown className="w-3.5 h-3.5" />
+                : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-slate-600 uppercase tracking-wide truncate">{q.label}</p>
-            {q.label_ar && <p className="text-[11px] text-slate-400 truncate" dir="rtl">{q.label_ar}</p>}
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-bold text-slate-700 uppercase tracking-wide truncate">{q.label}</p>
+              {typeof questionCount === 'number' && (
+                <span className="text-[10px] font-medium text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-full shrink-0">
+                  {questionCount} Q
+                </span>
+              )}
+            </div>
+            {q.label_ar && <p className="text-[11px] text-slate-500 truncate" dir="rtl">{q.label_ar}</p>}
           </div>
           {canManage && (
             <div className="flex items-center gap-0.5 ml-auto">
-              <button onClick={() => onMoveUp()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move up"><ChevronUp className="w-3 h-3" /></button>
-              <button onClick={() => onMoveDown()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move down"><ChevronDown className="w-3 h-3" /></button>
-              <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 className="w-3 h-3" /></button>
-              <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+              <button onClick={() => onMoveUp()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move section up"><ChevronUp className="w-3 h-3" /></button>
+              <button onClick={() => onMoveDown()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move section down"><ChevronDown className="w-3 h-3" /></button>
+              <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Edit section"><Edit3 className="w-3 h-3" /></button>
+              <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete section"><Trash2 className="w-3 h-3" /></button>
             </div>
           )}
         </div>
