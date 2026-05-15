@@ -4652,7 +4652,10 @@ function QuestionCard({
           <QIcon className="w-3.5 h-3.5 text-indigo-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
+          <p className="text-sm font-medium text-slate-800 leading-snug">{q.label}</p>
+          {q.label_ar && (
+            <p className="text-[12px] text-slate-500 leading-snug mt-0.5" dir="rtl">{q.label_ar}</p>
+          )}
           {(q.description || q.description_ar) && (
             <p className="text-[10px] text-slate-400 italic truncate mt-0.5 leading-relaxed">
               {q.description}{q.description && q.description_ar ? '  ·  ' : ''}{q.description_ar ?? ''}
@@ -4699,11 +4702,12 @@ function QuestionCard({
                     e.currentTarget.value = '';
                     await onMoveToSection?.(val);
                   }}
-                  className="text-[10px] border border-slate-200 rounded px-1 py-0.5 text-slate-400 hover:border-indigo-300 hover:text-indigo-600 cursor-pointer bg-white h-[22px]"
+                  className="text-[9px] border border-slate-200 rounded text-slate-400 hover:border-indigo-300 hover:text-indigo-600 cursor-pointer bg-white h-[20px] w-[20px] px-0 appearance-none text-center"
                   title="Move to section"
                   defaultValue=""
+                  style={{ backgroundImage: 'none' }}
                 >
-                  <option value="" disabled>→ Section</option>
+                  <option value="" disabled>⇒</option>
                   <option value="top">No section (top)</option>
                   {sectionHeaders.map(s => (
                     <option key={s.id} value={s.id}>{s.label.length > 22 ? s.label.slice(0, 20) + '…' : s.label}</option>
