@@ -612,6 +612,7 @@ export default function SurveyFill() {
   const { toast } = useToast();
 
   const [answers, setAnswers]         = useState<Record<string, AnswerValue>>({});
+  const [otherTexts, setOtherTexts]   = useState<Record<string, string>>({});
   const [submitted, setSubmitted]     = useState(false);
   const [errors, setErrors]           = useState<Record<string, string>>({});
   const [lang, setLang]               = useState<'en' | 'ar'>('en');
@@ -839,7 +840,6 @@ export default function SurveyFill() {
         respondent_name: currentUser?.fullName ?? (respondentName.trim() || null),
         respondent_email: currentUser?.email ?? (respondentEmail.trim() || null),
         duration_seconds: durationSeconds > 0 ? durationSeconds : null,
-        form_version: survey?.form_version ?? 1,
       });
       if (rErr) throw rErr;
 
@@ -878,7 +878,14 @@ export default function SurveyFill() {
       const answerRows = questions
         .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat','grid_table','note'].includes(q.type))
         .map(q => {
-          const val = answers[q.id] ?? null;
+          let val: AnswerValue = answers[q.id] ?? null;
+          // Merge "Other" free-text into the stored answer
+          if (q.type === 'radio' && val === 'Other' && otherTexts[q.id]) {
+            val = `Other: ${otherTexts[q.id]}`;
+          }
+          if (q.type === 'checkbox' && Array.isArray(val) && val.includes('Other') && otherTexts[q.id]) {
+            val = val.map(v => v === 'Other' ? `Other: ${otherTexts[q.id]}` : v);
+          }
           const jsonTypes2 = [...jsonTypes, 'likert', 'signature'];
           const isJson = jsonTypes2.includes(q.type);
           return {
@@ -969,10 +976,12 @@ export default function SurveyFill() {
   // Count stats for progress bar
   const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type));
   const requiredVisible = visibleNonStructural.filter(q => q.required);
-  const answeredRequired = requiredVisible.filter(q => {
+  const isAnswered = (q: Question) => {
     const v = answers[q.id];
     return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
-  });
+  };
+  const answeredRequired = requiredVisible.filter(isAnswered);
+  const answeredAll      = visibleNonStructural.filter(isAnswered);
   const progress = requiredVisible.length > 0
     ? Math.round((answeredRequired.length / requiredVisible.length) * 100)
     : 100;
@@ -1707,6 +1716,16 @@ export default function SurveyFill() {
                 </label>
               );
             })}
+            {answers[q.id] === 'Other' && (
+              <input
+                type="text"
+                value={otherTexts[q.id] ?? ''}
+                onChange={e => setOtherTexts(prev => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={lang === 'ar' ? 'يرجى التحديد…' : 'Please specify…'}
+                className="w-full px-3 py-2 text-sm border-2 border-indigo-300 rounded-xl bg-indigo-50 focus:outline-none focus:border-indigo-500"
+                data-testid={`radio-other-text-${q.id}`}
+              />
+            )}
           </div>
         )}
 
@@ -1732,6 +1751,16 @@ export default function SurveyFill() {
                 </label>
               );
             })}
+            {((answers[q.id] as string[]) ?? []).includes('Other') && (
+              <input
+                type="text"
+                value={otherTexts[q.id] ?? ''}
+                onChange={e => setOtherTexts(prev => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={lang === 'ar' ? 'يرجى التحديد…' : 'Please specify…'}
+                className="w-full px-3 py-2 text-sm border-2 border-indigo-300 rounded-xl bg-indigo-50 focus:outline-none focus:border-indigo-500"
+                data-testid={`checkbox-other-text-${q.id}`}
+              />
+            )}
           </div>
         )}
 
@@ -2117,7 +2146,7 @@ export default function SurveyFill() {
 
           {visibleNonStructural.length > 0 && (
             <p className="text-center text-[11px] text-slate-400">
-              {answeredRequired.length} of {visibleNonStructural.length} question{visibleNonStructural.length !== 1 ? 's' : ''} answered
+              {answeredAll.length} of {visibleNonStructural.length} question{visibleNonStructural.length !== 1 ? 's' : ''} answered
             </p>
           )}
         </div>
