@@ -973,8 +973,9 @@ export default function SurveyFill() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Count stats for progress bar
-  const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type));
+  // Count stats for progress bar — use exactly the same type exclusions as the submit validator
+  const NON_ANSWERABLE = ['section_header', 'begin_group', 'note', 'begin_repeat', 'grid_table'];
+  const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !NON_ANSWERABLE.includes(q.type));
   const requiredVisible = visibleNonStructural.filter(q => q.required);
   const isAnswered = (q: Question) => {
     const v = answers[q.id];
