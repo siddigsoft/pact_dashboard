@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { getMapViewport, type MapViewportId } from '@/data/mapViewports';
 import HubHighlight from './HubHighlight';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,44 +60,151 @@ interface LeafletMapContainerProps {
   defaultCenter?: [number, number];
   defaultZoom?: number;
   showHubs?: boolean;
+  viewportId?: MapViewportId;
+  /** Increment to re-trigger fitting markers into view */
+  fitLocationsRevision?: number;
+  /** Fit all markers once on first render (field team map) */
+  initialFitToMarkers?: boolean;
 }
 
-// This component will adjust the map bounds to fit all locations or fall back to provided center/zoom
-const MapBoundsHandler = ({ 
-  locations, 
-  defaultCenter, 
-  defaultZoom 
-}: { 
+const MapResizeHandler = () => {
+  const map = useMap();
+
+  useEffect(() => {
+    const invalidate = () => {
+      try {
+        map.invalidateSize();
+      } catch {
+        // ignore
+      }
+    };
+
+    const timeout = window.setTimeout(invalidate, 100);
+    const container = map.getContainer()?.parentElement;
+    const observer = container
+      ? new ResizeObserver(() => invalidate())
+      : null;
+    observer?.observe(container!);
+
+    return () => {
+      window.clearTimeout(timeout);
+      observer?.disconnect();
+    };
+  }, [map]);
+
+  return null;
+};
+
+const MapViewportHandler = ({
+  locations,
+  viewportId,
+  fitLocationsRevision = 0,
+  initialFitToMarkers = false,
+  defaultCenter,
+  defaultZoom,
+}: {
   locations: LeafletMapContainerProps['locations'];
+  viewportId?: MapViewportId;
+  fitLocationsRevision?: number;
+  initialFitToMarkers?: boolean;
   defaultCenter: [number, number];
   defaultZoom: number;
 }) => {
   const map = useMap();
-  
+  const locationsRef = useRef(locations);
+  const didInitialFit = useRef(false);
+  const lastFitRevision = useRef(fitLocationsRevision);
+  const lastViewportId = useRef(viewportId);
+
   useEffect(() => {
-    if (!locations || locations.length === 0) {
+    locationsRef.current = locations;
+  }, [locations]);
+
+  useEffect(() => {
+    const flyOptions = { duration: 0.75, easeLinearity: 0.25 };
+
+    const fitToLocations = () => {
+      const points = (locationsRef.current ?? [])
+        .filter((loc) => loc.latitude && loc.longitude)
+        .map((loc) => [loc.latitude, loc.longitude] as [number, number]);
+
+      if (points.length === 0) return false;
+
       try {
-        map.setView(defaultCenter, defaultZoom);
+        const bounds = L.latLngBounds(points);
+        map.flyToBounds(bounds, {
+          padding: [48, 48],
+          maxZoom: 14,
+          ...flyOptions,
+        });
+        return true;
       } catch (error) {
-        // ignore
+        console.error('Error fitting map to locations:', error);
+        return false;
+      }
+    };
+
+    const applyViewport = (id: MapViewportId) => {
+      const viewport = getMapViewport(id);
+      if (!viewport) return;
+
+      try {
+        if (viewport.bounds) {
+          const bounds = L.latLngBounds(viewport.bounds);
+          map.flyToBounds(bounds, {
+            padding: [40, 40],
+            maxZoom: viewport.maxZoom ?? 12,
+            ...flyOptions,
+          });
+        } else if (viewport.center && viewport.zoom != null) {
+          map.flyTo(viewport.center, viewport.zoom, flyOptions);
+        }
+      } catch (error) {
+        console.error('Error applying map viewport:', error);
+      }
+    };
+
+    // One-time fit for field team / default map load
+    if (initialFitToMarkers && !didInitialFit.current) {
+      if (fitToLocations()) {
+        didInitialFit.current = true;
       }
       return;
     }
-    
-    const allPoints = locations
-      .filter(loc => loc.latitude && loc.longitude)
-      .map(loc => [loc.latitude, loc.longitude]);
-      
-    if (allPoints.length > 0) {
-      try {
-        const bounds = L.latLngBounds(allPoints as [number, number][]);
-        map.fitBounds(bounds, { padding: [50, 50] });
-      } catch (error) {
-        console.error("Error setting map bounds:", error);
+
+    // Explicit "fit markers" button
+    if (fitLocationsRevision !== lastFitRevision.current) {
+      lastFitRevision.current = fitLocationsRevision;
+      if (viewportId === 'fit-locations') {
+        if (!fitToLocations()) {
+          try {
+            map.flyTo(defaultCenter, defaultZoom, flyOptions);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return;
+    }
+
+    // Region/country selection — only when viewport actually changes
+    if (viewportId && viewportId !== lastViewportId.current) {
+      lastViewportId.current = viewportId;
+      if (viewportId === 'fit-locations') {
+        fitToLocations();
+      } else {
+        applyViewport(viewportId);
       }
     }
-  }, [map, locations, defaultCenter, defaultZoom]);
-  
+  }, [
+    map,
+    viewportId,
+    fitLocationsRevision,
+    initialFitToMarkers,
+    defaultCenter,
+    defaultZoom,
+  ]);
+
   return null;
 };
 
@@ -325,9 +433,12 @@ const LeafletMapContainer: React.FC<LeafletMapContainerProps> = ({
   height = '500px',
   onLocationClick,
   mapType = 'standard',
-  defaultCenter = [20, 0],
-  defaultZoom = 3,
-  showHubs = false
+  defaultCenter = [15.5, 32.5],
+  defaultZoom = 6,
+  showHubs = false,
+  viewportId,
+  fitLocationsRevision = 0,
+  initialFitToMarkers = false,
 }) => {
   const formatLastActive = (lastActive?: string) => {
     if (!lastActive) return 'Never';
@@ -426,7 +537,15 @@ const LeafletMapContainer: React.FC<LeafletMapContainerProps> = ({
           </Marker>
         ))}
         
-        <MapBoundsHandler locations={locations} defaultCenter={defaultCenter} defaultZoom={defaultZoom} />
+        <MapResizeHandler />
+        <MapViewportHandler
+          locations={locations}
+          viewportId={viewportId}
+          fitLocationsRevision={fitLocationsRevision}
+          initialFitToMarkers={initialFitToMarkers}
+          defaultCenter={defaultCenter}
+          defaultZoom={defaultZoom}
+        />
       </MapContainer>
     </div>
   );

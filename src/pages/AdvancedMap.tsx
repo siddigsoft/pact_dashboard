@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, Suspense, lazy } from 'react';
+import { useMemo, useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { 
@@ -17,8 +17,26 @@ import {
   Building2,
   Calendar,
   Activity,
-  ChevronRight
+  ChevronRight,
+  Globe,
+  Crosshair,
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  DEFAULT_MAP_VIEWPORT_ID,
+  MAP_VIEWPORT_PRESETS,
+  SUDAN_STATE_VIEWPORTS,
+  type MapViewportId,
+} from '@/data/mapViewports';
+import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { getUserStatus } from '@/utils/userStatusUtils';
@@ -100,9 +118,29 @@ const AdvancedMap = () => {
   const [mapView, setMapView] = useState<'standard' | 'satellite' | 'terrain'>('standard');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'online' | 'offline' | 'busy'>('all');
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
+  const [viewportId, setViewportId] = useState<MapViewportId>(DEFAULT_MAP_VIEWPORT_ID);
+  const [fitLocationsRevision, setFitLocationsRevision] = useState(0);
 
   useEffect(() => {
     setHasError(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isFullScreen) return;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullScreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isFullScreen]);
+
+  const handleFitAllMarkers = useCallback(() => {
+    setViewportId('fit-locations');
+    setFitLocationsRevision((r) => r + 1);
   }, []);
 
   const filteredMapLocations = useMemo(() => {
@@ -232,8 +270,13 @@ const AdvancedMap = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-between gap-2',
+          isFullScreen && 'absolute top-3 left-3 right-3 z-[1002] pointer-events-none'
+        )}
+      >
+        <div className={cn('flex items-center gap-2', isFullScreen && 'hidden')}>
           <Button 
             variant="outline" 
             className="gap-2" 
@@ -290,7 +333,67 @@ const AdvancedMap = () => {
             </Link>
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2',
+            isFullScreen &&
+              'pointer-events-auto ml-auto rounded-lg border bg-background/95 backdrop-blur-md shadow-lg p-2'
+          )}
+        >
+          <Select
+            value={viewportId}
+            onValueChange={(value) => setViewportId(value as MapViewportId)}
+          >
+            <SelectTrigger className="w-[200px] h-9" data-testid="select-map-region">
+              <Globe className="h-4 w-4 mr-2 shrink-0 text-muted-foreground" />
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[min(24rem,70vh)]">
+              <SelectGroup>
+                <SelectLabel>Overview</SelectLabel>
+                {MAP_VIEWPORT_PRESETS.filter((p) => p.group === 'overview').map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Countries</SelectLabel>
+                {MAP_VIEWPORT_PRESETS.filter((p) => p.group === 'country').map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Sudan states</SelectLabel>
+                {SUDAN_STATE_VIEWPORTS.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleFitAllMarkers}
+                  data-testid="button-fit-markers"
+                >
+                  <Crosshair className="h-4 w-4" />
+                  Fit markers
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Zoom to show all visible markers</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -389,26 +492,57 @@ const AdvancedMap = () => {
         </div>
       </div>
       
-      <div className={`flex gap-4 transition-all duration-300 ${isFullScreen ? 'fixed inset-0 z-50 bg-background p-4' : ''}`}>
-        <div className={`flex-1 ${selectedLocation ? 'w-2/3' : 'w-full'} h-[calc(100vh-200px)] transition-all`}>
+      <div
+        className={cn(
+          'relative transition-all duration-300',
+          isFullScreen
+            ? 'fixed inset-0 z-50 flex flex-col bg-background'
+            : 'h-[calc(100vh-200px)] min-h-[480px]'
+        )}
+      >
+        <div className={cn('relative flex-1 min-h-0', !isFullScreen && 'rounded-lg border overflow-hidden')}>
           {hasError ? (
             <MapErrorFallback height="100%" />
           ) : (
             <Suspense fallback={<MapLoading height="100%" />}>
               <ErrorBoundary fallback={<MapErrorFallback height="100%" />}>
-                <DynamicMap 
+                <DynamicMap
                   locations={filteredMapLocations}
-                  height="100%"
+                  height={isFullScreen ? 'calc(100vh - 80px)' : 'calc(100vh - 220px)'}
+                  fillContainer
+                  viewportId={viewportId}
+                  fitLocationsRevision={fitLocationsRevision}
                   onLocationClick={handleLocationClick}
                   mapType={mapView}
                 />
               </ErrorBoundary>
             </Suspense>
           )}
+
+          <div className="absolute bottom-3 left-3 z-[1000] flex flex-wrap gap-2 pointer-events-none">
+            <Badge variant="secondary" className="pointer-events-auto bg-background/90 backdrop-blur-sm shadow-sm" data-testid="badge-total-locations">
+              {filteredMapLocations.length} locations
+            </Badge>
+            <Badge variant="secondary" className="pointer-events-auto bg-background/90 backdrop-blur-sm shadow-sm" data-testid="badge-users">
+              <User className="h-3 w-3 mr-1" />
+              {stats.userCount} users · {stats.onlineUsers} online
+            </Badge>
+            <Badge variant="secondary" className="pointer-events-auto bg-background/90 backdrop-blur-sm shadow-sm" data-testid="badge-sites">
+              <MapPin className="h-3 w-3 mr-1" />
+              {stats.siteCount} sites
+            </Badge>
+          </div>
         </div>
 
         {selectedLocation && (
-          <Card className="w-80 h-[calc(100vh-200px)] flex flex-col">
+          <Card
+            className={cn(
+              'flex flex-col shadow-xl border',
+              isFullScreen
+                ? 'absolute top-16 right-4 bottom-4 w-[min(100%,22rem)] z-[1001] bg-background/98 backdrop-blur-sm'
+                : 'absolute top-3 right-3 bottom-3 w-80 z-[1001] bg-background/98 backdrop-blur-sm'
+            )}
+          >
             <CardHeader className="pb-2 flex-shrink-0">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -623,7 +757,7 @@ const AdvancedMap = () => {
         )}
       </div>
 
-      <div className="flex flex-wrap justify-between items-center gap-2">
+      <div className={cn('flex flex-wrap justify-between items-center gap-2', isFullScreen && 'hidden')}>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" data-testid="badge-total-locations">
             Total Locations: {filteredMapLocations.length}
@@ -649,3 +783,6 @@ const AdvancedMap = () => {
 };
 
 export default AdvancedMap;
+
+
+
