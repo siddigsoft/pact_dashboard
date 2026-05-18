@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, Suspense } from 'react';
+import { useMemo, useState, useEffect, Suspense, lazy } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { 
@@ -44,7 +44,7 @@ import { Separator } from '@/components/ui/separator';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { format, formatDistanceToNow } from 'date-fns';
 
-const DynamicMap = React.lazy(() => import('@/components/map/ReactLeafletMap'));
+const DynamicMap = lazy(() => import('@/components/map/ReactLeafletMap'));
 
 const MapErrorFallback = ({ height = '500px' }) => (
   <Card className="w-full">
