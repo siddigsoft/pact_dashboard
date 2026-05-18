@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs } from '@/data/sudanStates';
 import { 
@@ -85,7 +86,9 @@ export default function HubManagement() {
   });
 
   const userRole = currentUser?.role?.toLowerCase() || '';
-  const canManage = isSuperAdmin || userRole === 'admin';
+  const roleCanManage = isSuperAdmin || userRole === 'admin';
+  const overrideCanManage = usePageManageOverride('hub-management', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
 
   useEffect(() => {
     loadData();

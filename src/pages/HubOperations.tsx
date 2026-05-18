@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
 import { 
@@ -230,6 +231,11 @@ export default function HubOperations() {
   const [hasMoreSites, setHasMoreSites] = useState(true);
   const [loadingMoreSites, setLoadingMoreSites] = useState(false);
   const [totalSitesCount, setTotalSitesCount] = useState(0);
+  const [totalActiveSitesCount, setTotalActiveSitesCount] = useState(0);
+  const [totalRegistrySitesCount, setTotalRegistrySitesCount] = useState(0);
+  const [totalMmpSitesCount, setTotalMmpSitesCount] = useState(0);
+  const [totalGpsSitesCount, setTotalGpsSitesCount] = useState(0);
+  const [syncingMmp, setSyncingMmp] = useState(false);
   
   const [hubDialogOpen, setHubDialogOpen] = useState(false);
   const [siteDialogOpen, setSiteDialogOpen] = useState(false);
@@ -270,7 +276,9 @@ export default function HubOperations() {
   });
 
   const userRole = currentUser?.role?.toLowerCase() || '';
-  const canManage = isSuperAdmin || userRole === 'admin';
+  const roleCanManage = isSuperAdmin || userRole === 'admin';
+  const overrideCanManage = usePageManageOverride('hub-operations', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
 
   useEffect(() => {
     loadData();
@@ -421,6 +429,20 @@ export default function HubOperations() {
       // Update total count and pagination state
       setTotalSitesCount(totalCount || 0);
       setHasMoreSites((registrySites?.length || 0) === SITES_PAGE_SIZE);
+
+      // Fetch breakdown counts from DB (only on first page load to avoid extra queries every page)
+      if (page === 0) {
+        const [activeRes, registryRes, mmpRes, gpsRes] = await Promise.all([
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).in('status', ['active', 'registered']),
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).eq('source', 'registry'),
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).eq('source', 'mmp'),
+          supabase.from('sites_registry').select('id', { count: 'exact', head: true }).not('gps_latitude', 'is', null),
+        ]);
+        setTotalActiveSitesCount(activeRes.count || 0);
+        setTotalRegistrySitesCount(registryRes.count || 0);
+        setTotalMmpSitesCount(mmpRes.count || 0);
+        setTotalGpsSitesCount(gpsRes.count || 0);
+      }
 
       // Build MMP lookup (only on first page)
       let mmpSites: MMPSiteEntry[] = page === 0 
@@ -686,6 +708,88 @@ export default function HubOperations() {
       await loadSites(sitesPage + 1, true);
     } finally {
       setLoadingMoreSites(false);
+    }
+  };
+
+  // Sync all MMP site entries into sites_registry (upsert by site_code)
+  const syncMmpToRegistry = async () => {
+    setSyncingMmp(true);
+    try {
+      // Fetch ALL MMP entries (no limit)
+      const { data: mmpEntries, error: mmpErr } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_code, site_name, state, locality, hub_office, status, created_at')
+        .order('created_at', { ascending: false });
+
+      if (mmpErr) throw mmpErr;
+      if (!mmpEntries?.length) {
+        toast({ title: 'No MMP sites', description: 'No MMP site entries found to sync.' });
+        return;
+      }
+
+      // Fetch all existing site codes from the registry
+      const { data: existingRows } = await supabase
+        .from('sites_registry')
+        .select('site_code');
+      const existingCodes = new Set(
+        (existingRows || []).map(r => normalizeSiteCode(r.site_code || ''))
+      );
+
+      // Build rows for sites not yet in the registry
+      const toInsert = mmpEntries
+        .filter(m => {
+          const code = normalizeSiteCode(m.site_code || '');
+          return !code || !existingCodes.has(code); // include sites with no code OR new code
+        })
+        .map(m => {
+          const stateId = normalizeStateIdUtil(m.state || '') || null;
+          const localityId = stateId ? normalizeLocalityIdUtil(m.locality || '', stateId) : null;
+          const hub = stateId ? defaultHubs.find(h => h.states.includes(stateId)) : undefined;
+          return {
+            site_code: m.site_code || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
+            site_name: m.site_name || '',
+            state_id: stateId,
+            state_name: m.state || '',
+            locality_id: localityId,
+            locality_name: m.locality || '',
+            hub_id: hub?.id || null,
+            hub_name: hub?.name || m.hub_office || '',
+            status: 'active',
+            source: 'mmp',
+            activity_type: 'TPM',
+            mmp_count: 1,
+            created_at: m.created_at || new Date().toISOString(),
+            created_by: currentUser?.id || 'system',
+          };
+        });
+
+      if (toInsert.length === 0) {
+        toast({ title: 'All synced', description: 'All MMP sites are already in the registry.' });
+        return;
+      }
+
+      // Insert in batches of 100
+      const BATCH = 100;
+      let inserted = 0;
+      for (let i = 0; i < toInsert.length; i += BATCH) {
+        const chunk = toInsert.slice(i, i + BATCH);
+        const { error } = await supabase.from('sites_registry').insert(chunk);
+        if (!error) inserted += chunk.length;
+      }
+
+      toast({
+        title: 'Sync complete',
+        description: `${inserted} of ${toInsert.length} MMP sites added to the registry.`,
+      });
+      // Reload sites to reflect new registry entries
+      setSitesPage(0);
+      setHasMoreSites(true);
+      await loadSites(0, false);
+    } catch (err: any) {
+      console.error('[syncMmpToRegistry] error:', err);
+      toast({ title: 'Sync failed', description: err?.message || 'Could not sync MMP sites.', variant: 'destructive' });
+    } finally {
+      setSyncingMmp(false);
     }
   };
 
@@ -1123,9 +1227,11 @@ export default function HubOperations() {
     totalHubs: hubs.length,
     totalStates: sudanStates.length,
     totalLocalities: getTotalLocalityCount(),
-    totalSites: sites.length,
-    activeSites: sites.filter(s => s.status === 'active').length,
-  }), [hubs, sites]);
+    // Use the exact DB count for the registry (not the in-memory page slice)
+    totalSites: totalSitesCount || sites.length,
+    // Use DB-level active count so it's never capped at 500
+    activeSites: totalActiveSitesCount || sites.filter(s => s.status === 'active' || s.status === 'registered').length,
+  }), [hubs, sites, totalSitesCount, totalActiveSitesCount]);
 
   const getHubForState = (stateId: string) => {
     return hubs.find(h => h.states.includes(stateId));
@@ -1539,8 +1645,8 @@ export default function HubOperations() {
             <TabsTrigger value="sites" data-testid="tab-sites">
               <Navigation className="h-4 w-4 mr-2" />
               Sites
-              {sites.length > 0 && (
-                <Badge variant="secondary" className="ml-2">{sites.length}</Badge>
+              {totalSitesCount > 0 && (
+                <Badge variant="secondary" className="ml-2">{totalSitesCount.toLocaleString()}</Badge>
               )}
             </TabsTrigger>
           </TabsList>
@@ -1579,6 +1685,22 @@ export default function HubOperations() {
                 >
                   <X className="h-4 w-4 mr-1" />
                   Clear
+                </Button>
+              )}
+              {/* Sync MMP sites into registry */}
+              {canManage && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={syncMmpToRegistry}
+                  disabled={syncingMmp}
+                  data-testid="button-sync-mmp-registry"
+                  title="Register all MMP-uploaded sites that are not yet in the registry"
+                >
+                  {syncingMmp
+                    ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Syncing…</>
+                    : <><Upload className="h-4 w-4 mr-2" />Sync MMP → Registry</>
+                  }
                 </Button>
               )}
               <div className="flex border rounded-md">
@@ -1918,7 +2040,7 @@ export default function HubOperations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Registry</p>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'registry').length}</p>
+                  <p className="text-2xl font-bold">{totalRegistrySitesCount.toLocaleString()}</p>
                 </div>
               </div>
             </Card>
@@ -1933,7 +2055,7 @@ export default function HubOperations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">From MMP</p>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'mmp').length}</p>
+                  <p className="text-2xl font-bold">{totalMmpSitesCount.toLocaleString()}</p>
                 </div>
               </div>
             </Card>
@@ -1948,7 +2070,7 @@ export default function HubOperations() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">With GPS</p>
-                  <p className="text-2xl font-bold">{sites.filter(s => s.gps_latitude && s.gps_longitude).length}</p>
+                  <p className="text-2xl font-bold">{totalGpsSitesCount.toLocaleString()}</p>
                 </div>
               </div>
             </Card>

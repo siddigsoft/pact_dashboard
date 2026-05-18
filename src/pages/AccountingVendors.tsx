@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,11 @@ const BLANK_VENDOR: Partial<Vendor> = { name_en: '', name_ar: '', vendor_type: '
 export default function AccountingVendors() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+
+  const overrideCanEdit = usePageManageOverride('acct-vendors', roleCanEdit);
+
+  const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
   const [vendors, setVendors] = useState<Vendor[]>([]);

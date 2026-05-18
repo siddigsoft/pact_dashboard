@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import pactLogo from '@/assets/logo.png';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -607,10 +607,12 @@ function SignaturePad({ value, onChange }: { value: string | null; onChange: (v:
 // ── Main fill page ─────────────────────────────────────────────────────────────
 export default function SurveyFill() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { currentUser } = useUser();
   const { toast } = useToast();
 
   const [answers, setAnswers]         = useState<Record<string, AnswerValue>>({});
+  const [otherTexts, setOtherTexts]   = useState<Record<string, string>>({});
   const [submitted, setSubmitted]     = useState(false);
   const [errors, setErrors]           = useState<Record<string, string>>({});
   const [lang, setLang]               = useState<'en' | 'ar'>('en');
@@ -618,6 +620,8 @@ export default function SurveyFill() {
   const [respondentName, setRespondentName]   = useState('');
   const [respondentEmail, setRespondentEmail] = useState('');
   const [hasDraft, setHasDraft]       = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [autoSaveFlash, setAutoSaveFlash] = useState(false);
   const startTimeRef = useState(() => Date.now())[0];
   const [fillPasswordUnlocked, setFillPasswordUnlocked] = useState(false);
   const [fillPasswordInput, setFillPasswordInput]       = useState('');
@@ -638,33 +642,63 @@ export default function SurveyFill() {
     if (emailParam) setRespondentEmail(emailParam);
   }, []);
 
-  // Restore saved draft on mount
+  // Draft expiry: discard drafts older than 30 days
+  const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+  // Auto-restore saved draft on mount — load answers immediately, no click required
   useEffect(() => {
     if (!draftKey) return;
     try {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
-      if (draft?.answers && Object.keys(draft.answers).length > 0) setHasDraft(true);
+      // Discard drafts older than 30 days
+      if (draft?.savedAt && Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(draftKey);
+        return;
+      }
+      const hasAnswers    = draft?.answers       && Object.keys(draft.answers).length > 0;
+      const hasGridRows   = draft?.gridTableRows && Object.keys(draft.gridTableRows).length > 0;
+      const hasRepeatRows = draft?.repeatRows    && Object.keys(draft.repeatRows).length > 0;
+      if (hasAnswers || hasGridRows || hasRepeatRows) {
+        // Auto-load all draft data immediately — no user action needed
+        if (draft?.answers)       setAnswers(draft.answers);
+        if (draft?.gridTableRows) setGridTableRows(draft.gridTableRows);
+        if (draft?.repeatRows)    setRepeatRows(draft.repeatRows);
+        setHasDraft(true);
+        setDraftSavedAt(draft.savedAt ?? null);
+      }
     } catch { /* ignore */ }
   }, [draftKey]);
 
-  // Auto-save draft every time answers change
+  // Auto-save draft whenever any answer state changes (answers, table rows, repeat rows)
   useEffect(() => {
-    if (!draftKey || Object.keys(answers).length === 0) return;
+    const hasContent =
+      Object.keys(answers).length > 0 ||
+      Object.keys(gridTableRows).length > 0 ||
+      Object.keys(repeatRows).length > 0;
+    if (!draftKey || !hasContent) return;
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ answers, savedAt: Date.now() }));
+      const now = Date.now();
+      localStorage.setItem(draftKey, JSON.stringify({
+        answers,
+        gridTableRows,
+        repeatRows,
+        savedAt: now,
+      }));
+      setDraftSavedAt(now);
+      setAutoSaveFlash(true);
+      setTimeout(() => setAutoSaveFlash(false), 1500);
     } catch { /* ignore quota errors */ }
-  }, [answers, draftKey]);
+  }, [answers, gridTableRows, repeatRows, draftKey]);
 
-  const loadDraft = () => {
-    if (!draftKey) return;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (draft?.answers) { setAnswers(draft.answers); setHasDraft(false); }
-    } catch { /* ignore */ }
+  const discardDraft = () => {
+    if (draftKey) try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    setAnswers({});
+    setGridTableRows({});
+    setRepeatRows({});
+    setHasDraft(false);
+    setDraftSavedAt(null);
   };
 
   const clearDraft = () => {
@@ -689,7 +723,11 @@ export default function SurveyFill() {
         .single();
       if (error) throw error;
       const { survey_questions: qs, ...rest } = data as any;
-      const sortedQs: Question[] = (Array.isArray(qs) ? qs : []).sort(
+      // Deduplicate by id in case the DB returns a question more than once
+      const uniqueQs = [...new Map(
+        (Array.isArray(qs) ? qs : []).map((q: Question) => [q.id, q])
+      ).values()];
+      const sortedQs: Question[] = uniqueQs.sort(
         (a: Question, b: Question) => (a.order_index ?? 0) - (b.order_index ?? 0)
       );
       return { survey: rest as Survey, questions: sortedQs };
@@ -802,7 +840,6 @@ export default function SurveyFill() {
         respondent_name: currentUser?.fullName ?? (respondentName.trim() || null),
         respondent_email: currentUser?.email ?? (respondentEmail.trim() || null),
         duration_seconds: durationSeconds > 0 ? durationSeconds : null,
-        form_version: survey?.form_version ?? 1,
       });
       if (rErr) throw rErr;
 
@@ -841,7 +878,14 @@ export default function SurveyFill() {
       const answerRows = questions
         .filter(q => visibleIds.has(q.id) && !['section_header','begin_group','begin_repeat','grid_table','note'].includes(q.type))
         .map(q => {
-          const val = answers[q.id] ?? null;
+          let val: AnswerValue = answers[q.id] ?? null;
+          // Merge "Other" free-text into the stored answer
+          if (q.type === 'radio' && val === 'Other' && otherTexts[q.id]) {
+            val = `Other: ${otherTexts[q.id]}`;
+          }
+          if (q.type === 'checkbox' && Array.isArray(val) && val.includes('Other') && otherTexts[q.id]) {
+            val = val.map(v => v === 'Other' ? `Other: ${otherTexts[q.id]}` : v);
+          }
           const jsonTypes2 = [...jsonTypes, 'likert', 'signature'];
           const isJson = jsonTypes2.includes(q.type);
           return {
@@ -895,19 +939,20 @@ export default function SurveyFill() {
 
   // Multi-page computation: split at section_headers
   const pages = useMemo(() => {
-    if (!multiPage) return [{ title: null as string | null, titleAr: null as string | null, questions: topLevelItems }];
-    const result: { title: string | null; titleAr: string | null; questions: Question[] }[] = [];
-    let current: { title: string | null; titleAr: string | null; questions: Question[] } = { title: null, titleAr: null, questions: [] };
+    type Page = { title: string | null; titleAr: string | null; description: string | null; descriptionAr: string | null; questions: Question[] };
+    if (!multiPage) return [{ title: null as string | null, titleAr: null as string | null, description: null as string | null, descriptionAr: null as string | null, questions: topLevelItems }];
+    const result: Page[] = [];
+    let current: Page = { title: null, titleAr: null, description: null, descriptionAr: null, questions: [] };
     for (const q of topLevelItems) {
       if (q.type === 'section_header') {
         if (current.questions.length > 0 || current.title) result.push(current);
-        current = { title: q.label, titleAr: q.label_ar, questions: [] };
+        current = { title: q.label, titleAr: q.label_ar, description: q.description, descriptionAr: q.description_ar, questions: [] };
       } else {
         current.questions.push(q);
       }
     }
     if (current.questions.length > 0 || current.title) result.push(current);
-    return result.length > 0 ? result : [{ title: null, titleAr: null, questions: topLevelItems }];
+    return result.length > 0 ? result : [{ title: null, titleAr: null, description: null, descriptionAr: null, questions: topLevelItems }];
   }, [topLevelItems, multiPage]);
 
   const safeCurrentPage = Math.min(currentPage, pages.length - 1);
@@ -928,13 +973,16 @@ export default function SurveyFill() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Count stats for progress bar
-  const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type));
+  // Count stats for progress bar — use exactly the same type exclusions as the submit validator
+  const NON_ANSWERABLE = ['section_header', 'begin_group', 'note', 'begin_repeat', 'grid_table'];
+  const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !NON_ANSWERABLE.includes(q.type));
   const requiredVisible = visibleNonStructural.filter(q => q.required);
-  const answeredRequired = requiredVisible.filter(q => {
+  const isAnswered = (q: Question) => {
     const v = answers[q.id];
     return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
-  });
+  };
+  const answeredRequired = requiredVisible.filter(isAnswered);
+  const answeredAll      = visibleNonStructural.filter(isAnswered);
   const progress = requiredVisible.length > 0
     ? Math.round((answeredRequired.length / requiredVisible.length) * 100)
     : 100;
@@ -1669,6 +1717,16 @@ export default function SurveyFill() {
                 </label>
               );
             })}
+            {answers[q.id] === 'Other' && (
+              <input
+                type="text"
+                value={otherTexts[q.id] ?? ''}
+                onChange={e => setOtherTexts(prev => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={lang === 'ar' ? 'يرجى التحديد…' : 'Please specify…'}
+                className="w-full px-3 py-2 text-sm border-2 border-indigo-300 rounded-xl bg-indigo-50 focus:outline-none focus:border-indigo-500"
+                data-testid={`radio-other-text-${q.id}`}
+              />
+            )}
           </div>
         )}
 
@@ -1694,6 +1752,16 @@ export default function SurveyFill() {
                 </label>
               );
             })}
+            {((answers[q.id] as string[]) ?? []).includes('Other') && (
+              <input
+                type="text"
+                value={otherTexts[q.id] ?? ''}
+                onChange={e => setOtherTexts(prev => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={lang === 'ar' ? 'يرجى التحديد…' : 'Please specify…'}
+                className="w-full px-3 py-2 text-sm border-2 border-indigo-300 rounded-xl bg-indigo-50 focus:outline-none focus:border-indigo-500"
+                data-testid={`checkbox-other-text-${q.id}`}
+              />
+            )}
           </div>
         )}
 
@@ -1829,6 +1897,16 @@ export default function SurveyFill() {
       {/* Top bar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          {/* Back / Close button */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+            title="Go back"
+            data-testid="btn-survey-back"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
           <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
             <ClipboardList className="w-3.5 h-3.5 text-white" />
           </div>
@@ -1875,17 +1953,30 @@ export default function SurveyFill() {
 
         {/* Page title header (multi-page) */}
         {multiPage && pages.length > 1 && pages[safeCurrentPage].title && (
-          <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+          <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-sm font-bold text-indigo-600">{safeCurrentPage + 1}</span>
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="font-bold text-slate-800">
                 {lang === 'ar' && pages[safeCurrentPage].titleAr
                   ? pages[safeCurrentPage].titleAr
                   : pages[safeCurrentPage].title}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">
+              {(pages[safeCurrentPage].description || pages[safeCurrentPage].descriptionAr) && (
+                <div className="mt-1 space-y-0.5">
+                  {lang !== 'ar' && pages[safeCurrentPage].description && (
+                    <p className="text-sm text-slate-500 leading-relaxed">{pages[safeCurrentPage].description}</p>
+                  )}
+                  {pages[safeCurrentPage].descriptionAr && (
+                    <p className="text-sm text-slate-500 leading-relaxed" dir="rtl">{pages[safeCurrentPage].descriptionAr}</p>
+                  )}
+                  {lang === 'ar' && !pages[safeCurrentPage].descriptionAr && pages[safeCurrentPage].description && (
+                    <p className="text-sm text-slate-500 leading-relaxed">{pages[safeCurrentPage].description}</p>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-slate-400 mt-1">
                 {lang === 'ar' ? `صفحة ${safeCurrentPage + 1} من ${pages.length}` : `Page ${safeCurrentPage + 1} of ${pages.length}`}
               </p>
             </div>
@@ -1901,24 +1992,44 @@ export default function SurveyFill() {
           </div>
         )}
 
-        {/* Draft restore banner */}
+        {/* Draft restored banner — answers were auto-loaded, offer discard option */}
         {hasDraft && (
-          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-              <Save className="w-4 h-4 text-amber-600" />
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-amber-800">You have a saved draft</p>
-              <p className="text-[11px] text-amber-600">You started filling this survey before — restore your progress?</p>
+              <p className="text-xs font-semibold text-emerald-800">Progress restored</p>
+              <p className="text-[11px] text-emerald-600">
+                Your previous answers have been automatically loaded.
+                {draftSavedAt && (
+                  <span className="ml-1 opacity-70">
+                    · Saved {(() => {
+                      const mins = Math.round((Date.now() - draftSavedAt) / 60000);
+                      if (mins < 1) return 'just now';
+                      if (mins < 60) return `${mins}m ago`;
+                      const hrs = Math.round(mins / 60);
+                      if (hrs < 24) return `${hrs}h ago`;
+                      return `${Math.round(hrs / 24)}d ago`;
+                    })()}
+                  </span>
+                )}
+              </p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button onClick={loadDraft} className="text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
-                Restore
-              </button>
-              <button onClick={clearDraft} className="text-xs text-amber-500 hover:text-amber-700 px-2 py-1.5 rounded-lg transition-colors">
-                Discard
-              </button>
-            </div>
+            <button
+              onClick={discardDraft}
+              className="text-xs text-emerald-600 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+            >
+              Start fresh
+            </button>
+          </div>
+        )}
+
+        {/* Auto-save flash — shown while filling, fades after save */}
+        {!hasDraft && draftSavedAt && (
+          <div className={`flex items-center gap-2 transition-opacity duration-700 ${autoSaveFlash ? 'opacity-100' : 'opacity-0'}`}>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <p className="text-[11px] text-emerald-600 font-medium">Progress saved automatically</p>
           </div>
         )}
 
@@ -2036,7 +2147,7 @@ export default function SurveyFill() {
 
           {visibleNonStructural.length > 0 && (
             <p className="text-center text-[11px] text-slate-400">
-              {answeredRequired.length} of {visibleNonStructural.length} question{visibleNonStructural.length !== 1 ? 's' : ''} answered
+              {answeredAll.length} of {visibleNonStructural.length} question{visibleNonStructural.length !== 1 ? 's' : ''} answered
             </p>
           )}
         </div>

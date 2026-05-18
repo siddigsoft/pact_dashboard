@@ -231,6 +231,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             contractEndDate: profile.contract_end_date ?? null,
             reportsTo: profile.reports_to ?? null,
             bankAccount: (profile as any).bank_account ?? existingUser.bankAccount ?? undefined,
+            countryId: (profile as any).country_id ?? existingUser.countryId ?? null,
           } as User;
         });
         

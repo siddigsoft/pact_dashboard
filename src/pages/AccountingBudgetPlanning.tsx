@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,7 +43,11 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
 export default function AccountingBudgetPlanning() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canEdit  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+
+  const overrideCanEdit = usePageManageOverride('acct-budget-planning', roleCanEdit);
+
+  const canEdit = roleCanEdit || overrideCanEdit;
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const { toast } = useToast();
 

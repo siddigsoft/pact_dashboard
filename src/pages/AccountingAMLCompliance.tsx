@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -115,7 +116,11 @@ function scoreEntry(e: JournalEntry): { type: RiskType; score: number } | null {
 export default function AccountingAMLCompliance() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
-  const canEdit  = hasAnyRole(['super_admin', 'admin']);
+  const roleCanEdit = hasAnyRole(['super_admin', 'admin']);
+
+  const overrideCanEdit = usePageManageOverride('acct-aml', roleCanEdit);
+
+  const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
   /* ── state ── */

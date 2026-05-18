@@ -139,6 +139,13 @@ export interface User {
    */
   emergencyContact?: string | null;
   bio?: string | null;
+
+  /**
+   * Country assignment — drives which country's COA accounts are hit
+   * when this user's cost submissions / down payments post to the GL.
+   * Set by admin in user profile settings.
+   */
+  countryId?: string | null;
 }
 
 export interface UserLogin {

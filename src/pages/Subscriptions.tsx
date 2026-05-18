@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -112,7 +113,9 @@ export default function SubscriptionsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const canManage = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin']);
+  const roleCanManage = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin']);
+  const overrideCanManage = usePageManageOverride('subscriptions', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
   const isAuthorized = canManage || hasAnyRole(['countryDirector', 'country_director', 'CountryDirector']);
 
   // Route-level authorization — redirect users without finance/admin/auditor access

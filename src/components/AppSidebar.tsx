@@ -116,8 +116,10 @@
   import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
   import { ChevronDown } from "lucide-react";
   import { useState, useMemo, useCallback, useEffect } from "react";
+  import { useQuery } from "@tanstack/react-query";
   import { useNavBadgeCountsContext } from "@/context/NavBadgeCountsContext";
   import { getChangelogUnreadCount } from "@/lib/changelog-utils";
+  import { PAGE_DEFS } from "@/pages/PageAccessControl";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -165,6 +167,24 @@
     CheckSquare,
     FolderOpen,
     Compass
+  };
+
+  /** Maps PAGE_DEFS group label → AppSidebar MenuGroup id */
+  const PAGEDEF_GROUP_TO_SIDEBAR: Record<string, string> = {
+    'My Workspace':          'workspace',
+    'Communication':         'communication',
+    'Programme Management':  'programme-management',
+    'Field Operations':      'field-ops',
+    'Coordination':          'coordination',
+    'Finance':               'finance-parent',
+    'HR & People':           'hr-people',
+    'Surveys':               'surveys',
+    'Analytics & Reports':   'analytics',
+    'Accounting':            'accounting',
+    'Administration':        'admin',
+    'Super Admin':           'super-admin',
+    'Audit & Security':      'admin',
+    'CRM':                   'crm',
   };
 
   interface FavoriteItem {
@@ -513,6 +533,7 @@
       if (!isHidden('/accounting/donor-reports')) acctItems.push({ id: 'accounting-donor-reports', title: 'Donor Fund Reports', url: '/accounting/donor-reports', icon: Heart, priority: 5.9, isPinned: isPinned('/accounting/donor-reports') });
       if (!isHidden('/accounting/sod')) acctItems.push({ id: 'accounting-sod', title: 'Segregation of Duties', url: '/accounting/sod', icon: ShieldAlert, priority: 5.95, isPinned: isPinned('/accounting/sod') });
       if (!isHidden('/accounting/aml')) acctItems.push({ id: 'accounting-aml', title: 'AML & Compliance', url: '/accounting/aml', icon: Shield, priority: 5.97, isPinned: isPinned('/accounting/aml') });
+      if (!isHidden('/accounting/intercompany')) acctItems.push({ id: 'accounting-intercompany', title: 'Intercompany Transfers', url: '/accounting/intercompany', icon: ArrowLeftRight, priority: 5.98, isPinned: isPinned('/accounting/intercompany') });
       if (!isHidden('/accounting/funds')) acctItems.push({ id: 'accounting-funds', title: 'Funds', url: '/accounting/funds', icon: Landmark, priority: 6, isPinned: isPinned('/accounting/funds') });
       if (!isHidden('/accounting/cash-flow-forecast')) acctItems.push({ id: 'accounting-cash-flow-forecast', title: 'Cash Flow Forecast', url: '/accounting/cash-flow-forecast', icon: TrendingUp, priority: 6.1, isPinned: isPinned('/accounting/cash-flow-forecast') });
       if (!isHidden('/accounting/grants')) acctItems.push({ id: 'accounting-grants', title: 'Grant Tracking', url: '/accounting/grants', icon: Award, priority: 6.2, isPinned: isPinned('/accounting/grants') });
@@ -798,6 +819,29 @@
           if (!error) setHasMonitoringAccess(!!data);
         });
     }, [isSuperAdmin, currentUser?.id]);
+
+    // Fetch this user's page_access_overrides so that manually granted pages
+    // appear in the sidebar even when the role-based check would deny them.
+    const { data: myPageOverrides = [] } = useQuery({
+      queryKey: ['sidebar-page-overrides', currentUser?.id],
+      queryFn: async () => {
+        if (!currentUser?.id) return [];
+        const { data } = await supabase
+          .from('page_access_overrides')
+          .select('page_slug, is_blocked')
+          .eq('user_id', currentUser.id);
+        return (data ?? []) as { page_slug: string; is_blocked: boolean }[];
+      },
+      enabled: !!currentUser?.id && !isSuperAdmin,
+      staleTime: 30_000,
+    });
+
+    // slug → is_blocked  (false = granted, true = blocked)
+    const pageOverrideMap = useMemo(() => {
+      const m: Record<string, boolean> = {};
+      myPageOverrides.forEach(o => { m[o.page_slug] = o.is_blocked; });
+      return m;
+    }, [myPageOverrides]);
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
@@ -962,7 +1006,53 @@
       financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
     };
 
-    const menuGroups = currentUser ? getWorkflowMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess) : [];
+    const rawMenuGroups = currentUser ? getWorkflowMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess) : [];
+
+    // Apply page_access_overrides: granted overrides add items even if the role
+    // check denied them; blocked overrides remove items even if the role check
+    // would have shown them.
+    const menuGroups = useMemo(() => {
+      if (Object.keys(pageOverrideMap).length === 0) return rawMenuGroups;
+
+      // Deep-clone the groups array so we don't mutate the cached result.
+      const groups: typeof rawMenuGroups = rawMenuGroups.map(g => ({ ...g, items: [...g.items] }));
+
+      // Helper: find or create a group by id
+      const getOrCreateGroup = (groupId: string, label: string, order: number) => {
+        let g = groups.find(x => x.id === groupId);
+        if (!g) { g = { id: groupId, label, order, items: [] }; groups.push(g); }
+        return g;
+      };
+
+      for (const [slug, isBlocked] of Object.entries(pageOverrideMap)) {
+        const pageDef = PAGE_DEFS.find(p => p.slug === slug);
+        if (!pageDef) continue;
+
+        if (isBlocked) {
+          // Remove this item from whichever group contains it
+          groups.forEach(g => { g.items = g.items.filter(item => item.url !== pageDef.path); });
+        } else {
+          // Ensure this item exists in its group (add if missing)
+          const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
+          const alreadyExists = groups.some(g => g.items.some(item => item.url === pageDef.path));
+          if (!alreadyExists) {
+            const group = getOrCreateGroup(sidebarGroupId, pageDef.group, 99);
+            group.items.push({
+              id: pageDef.slug,
+              title: pageDef.label,
+              url: pageDef.path,
+              icon: pageDef.icon,
+              priority: 99,
+            });
+          }
+        }
+      }
+
+      // Re-sort groups and items by order/priority
+      groups.sort((a, b) => a.order - b.order);
+      groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
+      return groups.filter(g => g.items.length > 0);
+    }, [rawMenuGroups, pageOverrideMap]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {

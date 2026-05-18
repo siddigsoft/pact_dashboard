@@ -38,26 +38,28 @@ set lock_timeout = '5s';
 -- =============================================================================
 -- PART A: Additional COA accounts for Phase 2 bridges
 -- =============================================================================
-insert into public.acct_accounts (code, name_en, name_ar, account_type, subtype, parent_id, is_postable) values
+insert into public.acct_accounts (code, name_en, name_ar, account_type, subtype, parent_id, is_postable, country_id) values
   ('2600','Staff Electronic Wallet Payable','ذمم المحافظ الإلكترونية للموظفين',
    'liability','current_liability',
-   (select id from public.acct_accounts where code='2000'), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
   ('2610','Site Visit Incentives Payable','مستحقات حوافز الزيارات الميدانية',
    'liability','current_liability',
-   (select id from public.acct_accounts where code='2000'), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
   ('2620','Task Rewards Payable','مستحقات مكافآت المهام',
    'liability','current_liability',
-   (select id from public.acct_accounts where code='2000'), true),
+   (select id from public.acct_accounts where code='2000' and country_id is null limit 1), true, null),
   ('5050','Operational Field Costs','التكاليف التشغيلية الميدانية',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000'), true),
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null),
   ('5060','Staff Retainer Payments','مدفوعات الاتعاب الدورية للموظفين',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000'), true),
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null),
   ('5070','Data Collector Incentives','حوافز جامعي البيانات',
    'expense','program_expense',
-   (select id from public.acct_accounts where code='5000'), true)
-on conflict (code) do nothing;
+   (select id from public.acct_accounts where code='5000' and country_id is null limit 1), true, null)
+-- Target the partial unique index (acct_accounts_code_global_uq) created in 20260511.
+-- The old UNIQUE(code) constraint was dropped; ON CONFLICT needs the WHERE clause.
+on conflict (code) where country_id is null do nothing;
 
 -- =============================================================================
 -- PART B: Feature flags for Phase 2 GL bridges
@@ -518,9 +520,12 @@ begin
 end $$;
 
 -- =============================================================================
--- PART H: TRIGGER FUNCTION — operational_cost_submissions
+-- PART H: TRIGGER FUNCTION — operational_cost_submissions  [COUNTRY-AWARE]
 -- Fires on: status → 'paid'
 -- Entry: DR category-mapped expense account / CR 1200 Cash at Bank
+-- NOTE: Uses 9-param acct_bridge_post_journal; passes new.country_id so every
+--       journal entry is stamped to the correct country COA.
+--       Kept in sync with 20260511_acct_country_coa_partitioning.sql Step 7.
 -- =============================================================================
 create or replace function public.acct_trig_operational_cost_submissions()
 returns trigger
@@ -568,7 +573,8 @@ begin
             'function',     'none'
           )
         ),
-        new.tier2_approved_by
+        new.tier2_approved_by,
+        new.country_id          -- ← country from source record (9th param)
       );
 
       insert into public.acct_gl_bridge_log
@@ -588,9 +594,12 @@ begin
 end $$;
 
 -- =============================================================================
--- PART I: TRIGGER FUNCTION — down_payment_requests
+-- PART I: TRIGGER FUNCTION — down_payment_requests  [COUNTRY-AWARE]
 -- Fires on: status → 'fully_paid'
 -- Entry: DR 1510 Travel Advances / CR 1200 Cash at Bank
+-- NOTE: Uses 9-param acct_bridge_post_journal; passes new.country_id so every
+--       journal entry is stamped to the correct country COA.
+--       Kept in sync with 20260511_acct_country_coa_partitioning.sql Step 8.
 -- =============================================================================
 create or replace function public.acct_trig_down_payment_requests()
 returns trigger
@@ -635,7 +644,8 @@ begin
             'function',     'none'
           )
         ),
-        new.admin_processed_by
+        new.admin_processed_by,
+        new.country_id          -- ← country from source record (9th param)
       );
 
       insert into public.acct_gl_bridge_log

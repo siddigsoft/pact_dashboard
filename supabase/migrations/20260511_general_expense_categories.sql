@@ -56,15 +56,17 @@ ALTER TABLE public.operational_cost_submissions
 -- PART C: New GL account — 6150 Staff Medical & Health
 -- -----------------------------------------------------------------------------
 INSERT INTO public.acct_accounts
-  (code, name_en, name_ar, account_type, subtype, parent_id, is_postable)
+  (code, name_en, name_ar, account_type, subtype, parent_id, is_postable, country_id)
 VALUES
   ('6150',
    'Staff Medical & Health',
    'الرعاية الطبية والصحية للموظفين',
    'expense', 'mng_expense',
-   (SELECT id FROM public.acct_accounts WHERE code = '6000' LIMIT 1),
-   true)
-ON CONFLICT (code) DO NOTHING;
+   (SELECT id FROM public.acct_accounts WHERE code = '6000' AND country_id IS NULL LIMIT 1),
+   true, null)
+-- Targets acct_accounts_code_global_uq partial index (code WHERE country_id IS NULL).
+-- The old UNIQUE(code) was dropped in 20260511_acct_country_coa_partitioning.sql.
+ON CONFLICT (code) WHERE country_id IS NULL DO NOTHING;
 
 -- -----------------------------------------------------------------------------
 -- PART D: Update acct_bridge_ops_cost_account() — full category → GL mapping

@@ -43,29 +43,31 @@ on conflict (key) do nothing;
 -- =============================================================================
 
 insert into public.acct_accounts
-  (code, name_en, name_ar, account_type, subtype, is_postable, is_active)
+  (code, name_en, name_ar, account_type, subtype, is_postable, is_active, country_id)
 values
   -- 1600: Accumulated Depreciation (contra-asset — reduces PPE book value)
   ('1600', 'Accumulated Depreciation',
    'مجمع الاستهلاك',
-   'asset', 'non_current_asset', true, true),
+   'asset', 'non_current_asset', true, true, null),
 
   -- 2105: PO Encumbrance Reserve (credit side of budget encumbrance entry)
   ('2105', 'PO Encumbrance Reserve',
    'احتياطي الالتزامات',
-   'liability', 'current_liability', true, true),
+   'liability', 'current_liability', true, true, null),
 
   -- 2240: Leave Payable (accrued leave liability)
   ('2240', 'Leave Payable',
    'إجازات مستحقة الدفع',
-   'liability', 'current_liability', true, true),
+   'liability', 'current_liability', true, true, null),
 
   -- 6400: Depreciation Expense (P&L charge)
   ('6400', 'Depreciation Expense',
    'مصروف الاستهلاك',
-   'expense', 'mng_expense', true, true)
+   'expense', 'mng_expense', true, true, null)
 
-on conflict (code) do nothing;
+-- Targets acct_accounts_code_global_uq partial index (code WHERE country_id IS NULL).
+-- The old UNIQUE(code) was dropped in 20260511_acct_country_coa_partitioning.sql.
+on conflict (code) where country_id is null do nothing;
 
 -- =============================================================================
 -- PART B: Feature flags for Phase 4 bridges

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
@@ -105,7 +106,10 @@ export default function SurveysPage() {
   const { toast } = useToast();
 
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
-  const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+  const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+
+  const overrideCanManage = usePageManageOverride('surveys', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SurveyStatus>('all');

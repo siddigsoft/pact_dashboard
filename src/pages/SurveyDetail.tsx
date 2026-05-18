@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -203,6 +204,25 @@ function buildQTree(questions: Question[], parentId: string | null = null): QTre
     }));
 }
 
+interface SectionBlock { header: Question | null; items: Question[] }
+function buildSectionBlocks(questions: Question[]): SectionBlock[] {
+  const topLevel = [...questions]
+    .filter(q => (q.group_id ?? null) === null)
+    .sort((a, b) => a.order_index - b.order_index);
+  const blocks: SectionBlock[] = [];
+  let cur: SectionBlock = { header: null, items: [] };
+  for (const q of topLevel) {
+    if (q.type === 'section_header') {
+      if (cur.header !== null || cur.items.length > 0) blocks.push(cur);
+      cur = { header: q, items: [] };
+    } else {
+      cur.items.push(q);
+    }
+  }
+  if (cur.header !== null || cur.items.length > 0) blocks.push(cur);
+  return blocks;
+}
+
 const STATUS_CFG: Record<SurveyStatus, { label: string; color: string }> = {
   draft:  { label: 'Draft',  color: 'bg-slate-100 text-slate-600 border-slate-200'   },
   active: { label: 'Active', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -290,7 +310,10 @@ export default function SurveyDetail() {
   const { toast } = useToast();
 
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
-  const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+  const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+
+  const overrideCanManage = usePageManageOverride('surveys', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
 
   const [tab, setTab] = useState<'builder' | 'responses' | 'analytics' | 'map' | 'settings'>('builder');
   const [editTitle, setEditTitle]     = useState('');
@@ -317,6 +340,7 @@ export default function SurveyDetail() {
   const [dragOverQId, setDragOverQId] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [librarySaveTarget, setLibrarySaveTarget] = useState<Question | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   // Cross-tabulation state
   const [crossTabRow, setCrossTabRow] = useState<string>('');
@@ -593,6 +617,114 @@ export default function SurveyDetail() {
       supabase.from('survey_questions').update({ order_index: a.order_index }).eq('id', b.id),
     ]);
     qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+  };
+
+  // ── Section-block move: swaps entire section (header + its questions) ────────
+  const applySectionBlockOrder = async (newBlocks: SectionBlock[]) => {
+    const flatNew = newBlocks.flatMap(b => [...(b.header ? [b.header] : []), ...b.items]);
+    const updates = flatNew
+      .map((q, i) => ({ id: q.id, newIndex: i }))
+      .filter(({ id, newIndex }) => (questions.find(q => q.id === id)?.order_index ?? newIndex) !== newIndex);
+    if (updates.length === 0) return;
+    await Promise.all(updates.map(({ id, newIndex }) =>
+      supabase.from('survey_questions').update({ order_index: newIndex }).eq('id', id)
+    ));
+    qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+  };
+
+  const moveSectionBlock = async (sectionId: string, direction: 'up' | 'down') => {
+    const blocks = buildSectionBlocks(questions);
+    const sectionBlocks = blocks.filter(b => b.header !== null);
+    const sectionPos = sectionBlocks.findIndex(b => b.header!.id === sectionId);
+    if (sectionPos === -1) return;
+    if (direction === 'up' && sectionPos === 0) return;
+    if (direction === 'down' && sectionPos === sectionBlocks.length - 1) return;
+    const swapPos = direction === 'up' ? sectionPos - 1 : sectionPos + 1;
+    const newSectionBlocks = [...sectionBlocks];
+    [newSectionBlocks[sectionPos], newSectionBlocks[swapPos]] = [newSectionBlocks[swapPos], newSectionBlocks[sectionPos]];
+    // Rebuild full blocks array preserving any unsectioned block at the front
+    const unsectioned = blocks.find(b => b.header === null);
+    const newBlocks: SectionBlock[] = [
+      ...(unsectioned ? [unsectioned] : []),
+      ...newSectionBlocks,
+    ];
+    await applySectionBlockOrder(newBlocks);
+  };
+
+  const dropSectionOnSection = async (targetSectionId: string) => {
+    if (!draggedQId || draggedQId === targetSectionId) { setDraggedQId(null); return; }
+    const dragged = questions.find(x => x.id === draggedQId);
+    if (!dragged || dragged.type !== 'section_header') { setDraggedQId(null); return; }
+    const blocks = buildSectionBlocks(questions);
+    const fromIdx = blocks.findIndex(b => b.header?.id === draggedQId);
+    const toIdx = blocks.findIndex(b => b.header?.id === targetSectionId);
+    if (fromIdx === -1 || toIdx === -1) { setDraggedQId(null); return; }
+    const newBlocks = [...blocks];
+    const [removed] = newBlocks.splice(fromIdx, 1);
+    newBlocks.splice(toIdx, 0, removed);
+    await applySectionBlockOrder(newBlocks);
+    setDraggedQId(null);
+  };
+
+  // ── Move a single question to a target section (append at end of that block) ─
+  const moveQuestionToSection = async (questionId: string, targetSectionId: string | 'top') => {
+    const allTopLevel = [...questions]
+      .filter(x => (x.group_id ?? null) === null)
+      .sort((a, b) => a.order_index - b.order_index);
+    const movedQ = allTopLevel.find(x => x.id === questionId);
+    if (!movedQ) return;
+    const withoutQ = allTopLevel.filter(x => x.id !== questionId);
+    const blocks = buildSectionBlocks(questions);
+    let insertIdx: number;
+    if (targetSectionId === 'top') {
+      // Insert before the first section header (or at position 0)
+      const firstSectionIdx = withoutQ.findIndex(x => x.type === 'section_header');
+      insertIdx = firstSectionIdx === -1 ? 0 : firstSectionIdx;
+    } else {
+      const block = blocks.find(b => b.header?.id === targetSectionId);
+      if (!block) return;
+      const lastItem = block.items.at(-1) ?? block.header;
+      insertIdx = lastItem ? withoutQ.findIndex(x => x.id === lastItem!.id) + 1 : withoutQ.length;
+    }
+    withoutQ.splice(insertIdx, 0, movedQ);
+    const updates = withoutQ
+      .map((q, i) => ({ id: q.id, newIndex: i }))
+      .filter(({ id, newIndex }) => (questions.find(q => q.id === id)?.order_index ?? newIndex) !== newIndex);
+    if (updates.length > 0) {
+      await Promise.all(updates.map(({ id, newIndex }) =>
+        supabase.from('survey_questions').update({ order_index: newIndex }).eq('id', id)
+      ));
+      qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+    }
+  };
+
+  // ── Duplicate an entire section (header + all its questions) ─────────────────
+  const duplicateSectionBlock = async (sectionId: string) => {
+    const blocks = buildSectionBlocks(questions);
+    const block = blocks.find(b => b.header?.id === sectionId);
+    if (!block?.header) return;
+    const maxOrder = questions.length > 0 ? Math.max(...questions.map(q => q.order_index)) : -1;
+    const { data: newHdr, error: hdrErr } = await supabase.from('survey_questions').insert({
+      survey_id: id, type: 'section_header',
+      label: `${block.header.label} (Copy)`, label_ar: block.header.label_ar,
+      description: block.header.description, description_ar: block.header.description_ar,
+      required: false, order_index: maxOrder + 1, settings: {},
+    }).select().single();
+    if (hdrErr || !newHdr) { toast({ title: 'Error duplicating section', variant: 'destructive' }); return; }
+    for (let i = 0; i < block.items.length; i++) {
+      const q = block.items[i];
+      await supabase.from('survey_questions').insert({
+        survey_id: id, type: q.type,
+        label: q.label, label_ar: q.label_ar,
+        description: q.description, description_ar: q.description_ar,
+        required: q.required, options: q.options, options_ar: q.options_ar,
+        order_index: maxOrder + 2 + i,
+        settings: { ...q.settings, skip_logic: undefined },
+        group_id: null,
+      });
+    }
+    qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+    toast({ title: `Section duplicated`, description: `Copied "${block.header.label}" with ${block.items.length} question${block.items.length !== 1 ? 's' : ''}` });
   };
 
   const duplicateQuestion = useMutation({
@@ -986,12 +1118,23 @@ export default function SurveyDetail() {
             if (!draggedQId || draggedQId === node.q.id) { setDraggedQId(null); return; }
             const dragged = questions.find(x => x.id === draggedQId);
             if (!dragged) { setDraggedQId(null); return; }
-            const tmp = dragged.order_index;
-            await Promise.all([
-              supabase.from('survey_questions').update({ order_index: node.q.order_index }).eq('id', dragged.id),
-              supabase.from('survey_questions').update({ order_index: tmp }).eq('id', node.q.id),
-            ]);
-            qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+            // Insert-before: move dragged item to just before the target item
+            const sameLevel = [...questions]
+              .filter(x => (x.group_id ?? null) === (node.q.group_id ?? null))
+              .sort((a, b) => a.order_index - b.order_index);
+            const withoutDragged = sameLevel.filter(x => x.id !== draggedQId);
+            const targetIdx = withoutDragged.findIndex(x => x.id === node.q.id);
+            if (targetIdx === -1) { setDraggedQId(null); return; }
+            withoutDragged.splice(targetIdx, 0, dragged);
+            const updates = withoutDragged
+              .map((q, i) => ({ id: q.id, newIndex: i }))
+              .filter(({ id, newIndex }) => (questions.find(q => q.id === id)?.order_index ?? newIndex) !== newIndex);
+            if (updates.length > 0) {
+              await Promise.all(updates.map(({ id, newIndex }) =>
+                supabase.from('survey_questions').update({ order_index: newIndex }).eq('id', id)
+              ));
+              qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+            }
             setDraggedQId(null);
           }}
           isBulkSelected={bulkSelected.has(node.q.id)}
@@ -1001,7 +1144,84 @@ export default function SurveyDetail() {
             setBulkSelected(next);
           }}
           onSaveToLibrary={() => saveToLibrary(node.q)}
+          sectionHeaders={questions.filter(q => q.type === 'section_header')}
+          onMoveToSection={async (sid) => moveQuestionToSection(node.q.id, sid)}
         />
+      );
+    });
+  };
+
+  // ── Section-block renderer ────────────────────────────────────────────────
+  const renderSectionBlocks = (): React.ReactNode => {
+    const blocks = buildSectionBlocks(questions);
+    const hasSections = blocks.some(b => b.header !== null);
+    if (!hasSections) return renderQTree(buildQTree(questions));
+
+    const sectionBlocks = blocks.filter(b => b.header !== null);
+    const allTopLevelNodes = buildQTree(questions, null);
+
+    return blocks.map((block) => {
+      if (block.header === null) {
+        if (block.items.length === 0) return null;
+        const blockIds = new Set(block.items.map(q => q.id));
+        return (
+          <div key="__unsectioned" className="space-y-2">
+            {renderQTree(allTopLevelNodes.filter(n => blockIds.has(n.q.id)))}
+          </div>
+        );
+      }
+
+      const hdr = block.header;
+      const sectionIdx = sectionBlocks.findIndex(b => b.header!.id === hdr.id);
+      const isCollapsed = collapsedSections.has(hdr.id);
+      const blockIds = new Set(block.items.map(q => q.id));
+      const blockNodes = allTopLevelNodes.filter(n => blockIds.has(n.q.id));
+
+      return (
+        <div key={hdr.id} className="rounded-xl border border-slate-200 overflow-hidden">
+          {/* Section header — draggable, moves the entire block */}
+          <QuestionCard
+            q={hdr}
+            idx={sectionIdx}
+            total={sectionBlocks.length}
+            allQuestions={questions}
+            canManage={canManage}
+            isEditing={editQId === hdr.id}
+            onEdit={() => setEditQId(editQId === hdr.id ? null : hdr.id)}
+            onUpdate={(patch) => updateQuestion.mutate({ id: hdr.id, ...patch })}
+            onDelete={() => deleteQuestion.mutate(hdr.id)}
+            onDuplicate={() => duplicateSectionBlock(hdr.id)}
+            onMoveUp={() => moveSectionBlock(hdr.id, 'up')}
+            onMoveDown={() => moveSectionBlock(hdr.id, 'down')}
+            saving={updateQuestion.isPending}
+            deleting={deleteQuestion.isPending}
+            isDraggedOver={dragOverQId === hdr.id}
+            onDragStart={() => setDraggedQId(hdr.id)}
+            onDragOver={() => setDragOverQId(hdr.id)}
+            onDragLeave={() => setDragOverQId(null)}
+            onDrop={async () => { setDragOverQId(null); await dropSectionOnSection(hdr.id); }}
+            isBulkSelected={bulkSelected.has(hdr.id)}
+            onBulkToggle={(v) => { const n = new Set(bulkSelected); v ? n.add(hdr.id) : n.delete(hdr.id); setBulkSelected(n); }}
+            onSaveToLibrary={() => saveToLibrary(hdr)}
+            isCollapsed={isCollapsed}
+            onToggleCollapse={() => setCollapsedSections(prev => { const n = new Set(prev); n.has(hdr.id) ? n.delete(hdr.id) : n.add(hdr.id); return n; })}
+            questionCount={block.items.length}
+          />
+          {/* Questions inside this section */}
+          {!isCollapsed && (
+            <div className="bg-white border-t border-slate-100">
+              {block.items.length === 0 ? (
+                <div className="flex items-center justify-center py-4 m-3 rounded-lg border border-dashed border-slate-200 text-slate-400 text-xs gap-1.5">
+                  <Plus className="w-3 h-3" />No questions in this section yet — add one below
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {renderQTree(blockNodes)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       );
     });
   };
@@ -1292,7 +1512,7 @@ export default function SurveyDetail() {
                 );
               })()
             ) : (
-              renderQTree(buildQTree(questions))
+              renderSectionBlocks()
             )}
           </div>
 
@@ -2017,6 +2237,67 @@ export default function SurveyDetail() {
                     <Area dataKey="count" stroke="#6366f1" strokeWidth={2.5} fill="url(#responseGrad)" dot={{ fill: '#6366f1', r: 3.5, strokeWidth: 0 }} activeDot={{ r: 5.5, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </div>
+            );
+          })()}
+
+          {/* ── Per-Section Completion Rate ─────────────────────────────────── */}
+          {responses.length > 0 && (() => {
+            const sectionBlocks = buildSectionBlocks(questions);
+            const sectioned = sectionBlocks.filter(b =>
+              b.header !== null &&
+              b.items.filter(q => !['begin_group','begin_repeat','grid_table'].includes(q.type)).length > 0
+            );
+            if (sectioned.length === 0) return null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <LayoutList className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Section Completion</h3>
+                  <span className="text-[11px] text-slate-400 ml-auto">{sectioned.length} section{sectioned.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="space-y-3.5">
+                  {sectioned.map(block => {
+                    const sectionQIds = block.items
+                      .filter(q => !['begin_group','begin_repeat','grid_table'].includes(q.type))
+                      .map(q => q.id);
+                    const answered = responses.filter(resp => {
+                      const ids = new Set(allAnswers.filter(a => a.response_id === resp.id).map(a => a.question_id));
+                      return sectionQIds.some(qid => ids.has(qid));
+                    }).length;
+                    const fullyAnswered = responses.filter(resp => {
+                      const ids = new Set(allAnswers.filter(a => a.response_id === resp.id).map(a => a.question_id));
+                      return sectionQIds.every(qid => ids.has(qid));
+                    }).length;
+                    const pct = responses.length > 0 ? Math.round((fullyAnswered / responses.length) * 100) : 0;
+                    const pctPartial = responses.length > 0 ? Math.round((answered / responses.length) * 100) : 0;
+                    return (
+                      <div key={block.header!.id} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700 truncate">{block.header!.label}</span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-[11px] text-slate-400">{sectionQIds.length}Q</span>
+                            <span className="text-xs font-bold text-emerald-600 tabular-nums w-10 text-right">{pct}%</span>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full flex">
+                            <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-emerald-200 transition-all duration-300" style={{ width: `${Math.max(0, pctPartial - pct)}%` }} />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          {fullyAnswered} fully · {answered - fullyAnswered} partially · {responses.length - answered} skipped
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-4 pt-1 border-t border-slate-100">
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /><span className="text-[10px] text-slate-500">Fully answered</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-200 shrink-0" /><span className="text-[10px] text-slate-500">Partially answered</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-100 border border-slate-200 shrink-0" /><span className="text-[10px] text-slate-500">Skipped</span></div>
+                </div>
               </div>
             );
           })()}
@@ -3909,6 +4190,9 @@ function GroupPanel({
   const prevQuestions = allQuestions.filter(pq =>
     pq.order_index < group.order_index && !['section_header','begin_group'].includes(pq.type)
   );
+  const grpSectionMap = new Map<string, string>();
+  { let _s = ''; for (const aq of [...allQuestions].sort((a,b)=>a.order_index-b.order_index)) { if (aq.type==='section_header') _s=aq.label; else grpSectionMap.set(aq.id,_s); } }
+  const grpQNumMap = new Map([...allQuestions].filter(aq=>!['section_header','begin_group','begin_repeat','grid_table','note'].includes(aq.type)).sort((a,b)=>a.order_index-b.order_index).map((aq,i)=>[aq.id,i+1]));
   const valueNeeded = !['answered','not_answered'].includes(skipOp);
   const hasSkip = !!existingSkip?.condition_question_id;
 
@@ -4018,8 +4302,16 @@ function GroupPanel({
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select a question…" /></SelectTrigger>
                       <SelectContent>
                         {prevQuestions.map(pq => (
-                          <SelectItem key={pq.id} value={pq.id} className="text-xs">
-                            {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
+                          <SelectItem key={pq.id} value={pq.id} className="text-xs py-1.5">
+                            <div className="flex flex-col gap-0.5 leading-tight">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[10px] font-bold text-indigo-400 shrink-0">#{grpQNumMap.get(pq.id) ?? '?'}</span>
+                                <span className="text-slate-700">{pq.label}</span>
+                              </div>
+                              {grpSectionMap.get(pq.id) && (
+                                <span className="text-[10px] text-slate-400 pl-5">{grpSectionMap.get(pq.id)}</span>
+                              )}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -4071,6 +4363,7 @@ const SKIP_OPERATORS: { value: SkipLogic['operator']; label: string }[] = [
 function QuestionCard({
   q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, saving, deleting,
   isDraggedOver, onDragStart, onDragOver, onDragLeave, onDrop, isBulkSelected, onBulkToggle, onSaveToLibrary,
+  isCollapsed, onToggleCollapse, questionCount, sectionHeaders, onMoveToSection,
 }: {
   q: Question; idx: number; total: number; allQuestions: Question[]; canManage: boolean;
   isEditing: boolean; onEdit: () => void;
@@ -4085,6 +4378,11 @@ function QuestionCard({
   isBulkSelected?: boolean;
   onBulkToggle?: (v: boolean) => void;
   onSaveToLibrary?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  questionCount?: number;
+  sectionHeaders?: Question[];
+  onMoveToSection?: (sectionId: string) => Promise<void>;
 }) {
   const [typeDraft, setTypeDraft]       = useState<QuestionType>(q.type);
   const [labelDraft, setLabelDraft]     = useState(q.label);
@@ -4101,7 +4399,7 @@ function QuestionCard({
   const [gpsCaptureAlt, setGpsCaptureAlt]     = useState(q.settings?.capture_altitude !== false);
   const [gpsAllowManual, setGpsAllowManual]   = useState(q.settings?.allow_manual !== false);
 
-  type GridCol = { id: string; label: string; type: 'text' | 'number' | 'date' | 'dropdown'; options?: string[] };
+  type GridCol = { id: string; label: string; label_ar?: string; type: 'text' | 'number' | 'date' | 'dropdown'; options?: string[] };
   const [gridCols, setGridCols] = useState<GridCol[]>(
     (q.settings?.grid_columns as GridCol[] | undefined) ??
     [{ id: 'col_1', label: 'Column 1', type: 'text' }]
@@ -4109,6 +4407,7 @@ function QuestionCard({
   const [gridMinRows, setGridMinRows] = useState(Number(q.settings?.min_rows ?? 1));
   const [gridMaxRows, setGridMaxRows] = useState(Number(q.settings?.max_rows ?? 10));
   const [newColLabel, setNewColLabel] = useState('');
+  const [newColLabelAr, setNewColLabelAr] = useState('');
 
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [varNameDraft, setVarNameDraft] = useState<string>(String(q.settings?.variable_name ?? ''));
@@ -4147,6 +4446,9 @@ function QuestionCard({
   const hasValidation = ['text','textarea','number','integer','phone','email','barcode'].includes(typeDraft);
 
   const prevQuestions = allQuestions.filter((pq) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
+  const skipSectionMap = new Map<string, string>();
+  { let _s = ''; for (const aq of [...allQuestions].sort((a,b)=>a.order_index-b.order_index)) { if (aq.type==='section_header') _s=aq.label; else skipSectionMap.set(aq.id,_s); } }
+  const skipQNumMap = new Map([...allQuestions].filter(aq=>!['section_header','begin_group','begin_repeat','grid_table','note'].includes(aq.type)).sort((a,b)=>a.order_index-b.order_index).map((aq,i)=>[aq.id,i+1]));
 
   const addSkipCond = () => setSkipConditions(prev => [...prev, { question_id: '', operator: 'equals', value: '' }]);
   const removeSkipCond = (i: number) => setSkipConditions(prev => prev.filter((_, j) => j !== i));
@@ -4191,20 +4493,80 @@ function QuestionCard({
 
   if (isSection) {
     return (
-      <div className="flex items-center gap-2 py-2 px-4 bg-slate-50 rounded-xl border border-slate-200">
-        <Minus className="w-4 h-4 text-slate-400 shrink-0" />
-        {isEditing ? (
-          <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} className="h-7 text-sm font-semibold" />
-        ) : (
-          <p className="text-sm font-bold text-slate-600 uppercase tracking-wide flex-1">{q.label}</p>
-        )}
-        {canManage && (
-          <div className="flex items-center gap-1 ml-auto">
-            {isEditing
-              ? <Button size="sm" onClick={save} className="h-6 px-2 text-xs">Save</Button>
-              : <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 className="w-3 h-3" /></button>
-            }
-            <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+      <div
+        className={cn('bg-slate-100 transition-colors', isDraggedOver ? 'ring-2 ring-inset ring-indigo-400 bg-indigo-50/20' : '')}
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={e => { e.preventDefault(); onDragOver?.(); }}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        <div className="flex items-center gap-2 py-2.5 px-3">
+          <GripVertical className="w-4 h-4 text-slate-400 shrink-0 cursor-grab" />
+          <input
+            type="checkbox"
+            checked={!!isBulkSelected}
+            onChange={e => onBulkToggle?.(e.target.checked)}
+            className="rounded shrink-0 accent-indigo-600"
+            title="Select for bulk actions"
+          />
+          {/* Collapse toggle */}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-0.5 rounded hover:bg-slate-200 text-slate-500 shrink-0"
+              title={isCollapsed ? 'Expand section' : 'Collapse section'}
+            >
+              {isCollapsed
+                ? <ChevronDown className="w-3.5 h-3.5" />
+                : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-bold text-slate-700 uppercase tracking-wide truncate">{q.label}</p>
+              {typeof questionCount === 'number' && (
+                <span className="text-[10px] font-medium text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-full shrink-0">
+                  {questionCount} Q
+                </span>
+              )}
+            </div>
+            {q.label_ar && <p className="text-[11px] text-slate-500 truncate" dir="rtl">{q.label_ar}</p>}
+          </div>
+          {canManage && (
+            <div className="flex items-center gap-0.5 ml-auto">
+              <button onClick={() => onMoveUp()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move section up"><ChevronUp className="w-3 h-3" /></button>
+              <button onClick={() => onMoveDown()} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Move section down"><ChevronDown className="w-3 h-3" /></button>
+              <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-indigo-600" title="Duplicate entire section"><Copy className="w-3 h-3" /></button>
+              <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="Edit section"><Edit3 className="w-3 h-3" /></button>
+              <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete section"><Trash2 className="w-3 h-3" /></button>
+            </div>
+          )}
+        </div>
+        {isEditing && canManage && (
+          <div className="border-t border-slate-200 p-4 bg-white space-y-3 rounded-b-xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Section Title (English)</Label>
+                <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} placeholder="Section heading…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">عنوان القسم (Arabic)</Label>
+                <Input dir="rtl" lang="ar" value={labelArDraft} onChange={e => setLabelArDraft(e.target.value)} placeholder="عنوان القسم بالعربية…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Description (English, optional)</Label>
+                <Textarea value={descDraft} onChange={e => setDescDraft(e.target.value)} rows={2} placeholder="Optional subtitle or instructions…" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">الوصف (Arabic — اختياري)</Label>
+                <Textarea dir="rtl" lang="ar" value={descArDraft} onChange={e => setDescArDraft(e.target.value)} rows={2} placeholder="وصف القسم بالعربية…" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" size="sm" onClick={onEdit} className="h-7 px-3 text-xs">Cancel</Button>
+              <Button size="sm" onClick={save} className="h-7 px-3 text-xs">Save</Button>
+            </div>
           </div>
         )}
       </div>
@@ -4304,7 +4666,10 @@ function QuestionCard({
           <QIcon className="w-3.5 h-3.5 text-indigo-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
+          <p className="text-sm font-medium text-slate-800 leading-snug">{q.label}</p>
+          {q.label_ar && (
+            <p className="text-[12px] text-slate-500 leading-snug mt-0.5" dir="rtl">{q.label_ar}</p>
+          )}
           {(q.description || q.description_ar) && (
             <p className="text-[10px] text-slate-400 italic truncate mt-0.5 leading-relaxed">
               {q.description}{q.description && q.description_ar ? '  ·  ' : ''}{q.description_ar ?? ''}
@@ -4343,6 +4708,26 @@ function QuestionCard({
               <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
               <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
               <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600" title="Duplicate question"><Copy className="w-3.5 h-3.5" /></button>
+              {sectionHeaders && sectionHeaders.length > 0 && (
+                <select
+                  onChange={async e => {
+                    const val = e.currentTarget.value;
+                    if (!val) return;
+                    e.currentTarget.value = '';
+                    await onMoveToSection?.(val);
+                  }}
+                  className="text-[9px] border border-slate-200 rounded text-slate-400 hover:border-indigo-300 hover:text-indigo-600 cursor-pointer bg-white h-[20px] w-[20px] px-0 appearance-none text-center"
+                  title="Move to section"
+                  defaultValue=""
+                  style={{ backgroundImage: 'none' }}
+                >
+                  <option value="" disabled>⇒</option>
+                  <option value="top">No section (top)</option>
+                  {sectionHeaders.map(s => (
+                    <option key={s.id} value={s.id}>{s.label.length > 22 ? s.label.slice(0, 20) + '…' : s.label}</option>
+                  ))}
+                </select>
+              )}
               <button onClick={() => onSaveToLibrary?.()} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-violet-600" title="Save to library"><BookOpen className="w-3.5 h-3.5" /></button>
               <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')} title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
               <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -4607,35 +4992,47 @@ function QuestionCard({
               {/* Column list */}
               <div className="space-y-2">
                 {gridCols.map((col, ci) => (
-                  <div key={col.id} className="flex items-center gap-1.5 bg-white border border-teal-100 rounded-lg p-2">
-                    <span className="text-[10px] font-mono text-teal-400 w-5 shrink-0">{ci + 1}</span>
-                    <Input
-                      value={col.label}
-                      onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label: e.target.value } : c))}
-                      placeholder="Column header…"
-                      className="h-7 text-xs flex-1"
-                    />
-                    <Select
-                      value={col.type}
-                      onValueChange={v => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, type: v as GridCol['type'] } : c))}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-28 shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text">Text</SelectItem>
-                        <SelectItem value="number">Number</SelectItem>
-                        <SelectItem value="date">Date</SelectItem>
-                        <SelectItem value="dropdown">Dropdown</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <button
-                      onClick={() => setGridCols(prev => prev.filter((_, i) => i !== ci))}
-                      disabled={gridCols.length <= 1}
-                      className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                  <div key={col.id} className="bg-white border border-teal-100 rounded-lg p-2 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-teal-400 w-5 shrink-0">{ci + 1}</span>
+                      <Input
+                        value={col.label}
+                        onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label: e.target.value } : c))}
+                        placeholder="Column header (English)…"
+                        className="h-7 text-xs flex-1"
+                      />
+                      <Select
+                        value={col.type}
+                        onValueChange={v => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, type: v as GridCol['type'] } : c))}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-28 shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="date">Date</SelectItem>
+                          <SelectItem value="dropdown">Dropdown</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => setGridCols(prev => prev.filter((_, i) => i !== ci))}
+                        disabled={gridCols.length <= 1}
+                        className="p-1 text-slate-300 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5 pl-5">
+                      <Input
+                        dir="rtl"
+                        lang="ar"
+                        value={col.label_ar ?? ''}
+                        onChange={e => setGridCols(prev => prev.map((c, i) => i === ci ? { ...c, label_ar: e.target.value } : c))}
+                        placeholder="اسم العمود بالعربية…"
+                        className="h-7 text-xs flex-1"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4670,29 +5067,39 @@ function QuestionCard({
               ))}
 
               {/* Add column */}
-              <div className="flex items-center gap-1.5">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={newColLabel}
+                    onChange={e => setNewColLabel(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newColLabel.trim()) {
+                        setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), label_ar: newColLabelAr.trim() || undefined, type: 'text' }]);
+                        setNewColLabel(''); setNewColLabelAr('');
+                      }
+                    }}
+                    placeholder="New column name (English)…"
+                    className="h-7 text-xs flex-1"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newColLabel.trim()) return;
+                      setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), label_ar: newColLabelAr.trim() || undefined, type: 'text' }]);
+                      setNewColLabel(''); setNewColLabelAr('');
+                    }}
+                    className="p-1.5 text-teal-600 hover:bg-teal-100 rounded"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <Input
-                  value={newColLabel}
-                  onChange={e => setNewColLabel(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && newColLabel.trim()) {
-                      setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), type: 'text' }]);
-                      setNewColLabel('');
-                    }
-                  }}
-                  placeholder="New column name…"
-                  className="h-7 text-xs flex-1"
+                  dir="rtl"
+                  lang="ar"
+                  value={newColLabelAr}
+                  onChange={e => setNewColLabelAr(e.target.value)}
+                  placeholder="اسم العمود الجديد بالعربية (اختياري)…"
+                  className="h-7 text-xs"
                 />
-                <button
-                  onClick={() => {
-                    if (!newColLabel.trim()) return;
-                    setGridCols(prev => [...prev, { id: `col_${Date.now()}`, label: newColLabel.trim(), type: 'text' }]);
-                    setNewColLabel('');
-                  }}
-                  className="p-1.5 text-teal-600 hover:bg-teal-100 rounded"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
               </div>
 
               {/* Row limits */}
@@ -4798,7 +5205,21 @@ function QuestionCard({
                   <span className="text-[10px] text-slate-400 shrink-0">shows when</span>
                   <Select value={rule.depends_on} onValueChange={v => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, depends_on: v } : r))}>
                     <SelectTrigger className="h-7 text-xs w-36 shrink-0"><SelectValue placeholder="Question…" /></SelectTrigger>
-                    <SelectContent>{prevQuestions.map(pq => <SelectItem key={pq.id} value={pq.id}>{pq.label.slice(0, 30)}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {prevQuestions.map(pq => (
+                        <SelectItem key={pq.id} value={pq.id} className="text-xs py-1.5">
+                          <div className="flex flex-col gap-0.5 leading-tight">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] font-bold text-indigo-400 shrink-0">#{skipQNumMap.get(pq.id) ?? '?'}</span>
+                              <span className="text-slate-700">{pq.label}</span>
+                            </div>
+                            {skipSectionMap.get(pq.id) && (
+                              <span className="text-[10px] text-slate-400 pl-5">{skipSectionMap.get(pq.id)}</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                   <span className="text-[10px] text-slate-400 shrink-0">=</span>
                   <Input value={rule.depends_value} onChange={e => setCondOptRules(prev => prev.map((r, i) => i === ri ? { ...r, depends_value: e.target.value } : r))} className="h-7 text-xs w-24 shrink-0" placeholder="value…" />
@@ -4844,7 +5265,19 @@ function QuestionCard({
                         <Select value={cond.question_id} onValueChange={v => updateSkipCond(ci, { question_id: v })}>
                           <SelectTrigger className="h-7 text-xs flex-1 min-w-[120px]"><SelectValue placeholder="Question…" /></SelectTrigger>
                           <SelectContent>
-                            {prevQuestions.map(pq => <SelectItem key={pq.id} value={pq.id} className="text-xs">{pq.label.slice(0, 40)}</SelectItem>)}
+                            {prevQuestions.map(pq => (
+                              <SelectItem key={pq.id} value={pq.id} className="text-xs py-1.5">
+                                <div className="flex flex-col gap-0.5 leading-tight">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-[10px] font-bold text-indigo-400 shrink-0">#{skipQNumMap.get(pq.id) ?? '?'}</span>
+                                    <span className="text-slate-700">{pq.label}</span>
+                                  </div>
+                                  {skipSectionMap.get(pq.id) && (
+                                    <span className="text-[10px] text-slate-400 pl-5">{skipSectionMap.get(pq.id)}</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <Select value={cond.operator} onValueChange={v => updateSkipCond(ci, { operator: v as SkipCondition['operator'] })}>

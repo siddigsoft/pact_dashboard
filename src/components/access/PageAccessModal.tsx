@@ -79,16 +79,17 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
     return m;
   }, [overrides, pageSlug]);
 
-  async function applyOverride(userId: string, isBlocked: boolean, existingId?: string) {
+  async function applyOverride(userId: string, isBlocked: boolean, level: 'view' | 'manage' = 'view', existingId?: string) {
     setSavingId(userId);
     try {
       if (existingId) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, granted_by: currentUser?.id }).eq('id', existingId);
+        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, granted_by: currentUser?.id }).eq('id', existingId);
       } else {
-        await supabase.from('page_access_overrides').insert({ page_slug: pageSlug, user_id: userId, is_blocked: isBlocked, granted_by: currentUser?.id });
+        await supabase.from('page_access_overrides').insert({ page_slug: pageSlug, user_id: userId, is_blocked: isBlocked, level, granted_by: currentUser?.id });
       }
       const name = profiles.find(p => p.id === userId)?.full_name ?? 'User';
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${name} → ${page.label}` });
+      const desc = isBlocked ? `${name} → ${page.label}` : `${name} → ${page.label} (${level === 'manage' ? 'Manage' : 'View Only'})`;
+      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: desc });
       refetch();
       qc.invalidateQueries({ queryKey: ['pac-overrides'] });
     } catch (e: any) {
@@ -193,8 +194,8 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
                     override={ov}
                     isSaving={savingId === profile.id}
                     pageLabel={page.label}
-                    onGrant={() => applyOverride(profile.id, false, ov?.id)}
-                    onBlock={() => applyOverride(profile.id, true, ov?.id)}
+                    onGrant={(level) => applyOverride(profile.id, false, level, ov?.id)}
+                    onBlock={() => applyOverride(profile.id, true, 'view', ov?.id)}
                     onReset={() => removeOverride(ov!.id, profile.id)}
                   />
                 );

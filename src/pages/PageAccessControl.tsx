@@ -15,6 +15,12 @@ import {
   FileText, Archive, Map, ClipboardList, Database, ClipboardCheck,
   TrendingUp, Receipt, DollarSign, Siren, AlertTriangle, Package,
   ScrollText, Award,
+  // Additional icons for extended page coverage
+  Phone, Mail, Calculator, Landmark, Briefcase, GraduationCap,
+  CalendarCheck, PieChart, LineChart, Target, Globe, RefreshCcw,
+  Coins, ListChecks, Plug, History, HeartHandshake, Zap, Smartphone,
+  BookOpen, Building, UserCog, Layers, GitBranch, BarChart2,
+  ScanLine, Eye, Key, PlugZap, Megaphone, ClipboardEdit,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -152,6 +158,252 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin'] },
   { slug:'settings',            label:'Settings',               path:'/settings',               icon:BarChart3, group:'Administration',
     roles:['superAdmin','admin'], note:'Admin excludes Data Collector. Also via custom "settings" permission' },
+  { slug:'hub-management',      label:'Hub Management',         path:'/hub-management',         icon:Building, group:'Administration',
+    roles:['superAdmin','admin'] },
+  { slug:'integrations',        label:'Integrations',           path:'/integrations',           icon:PlugZap, group:'Administration',
+    roles:['superAdmin','admin','ict'] },
+  { slug:'permissions-management', label:'Permissions Management', path:'/permissions-management', icon:Key, group:'Administration',
+    roles:['superAdmin'] },
+  { slug:'role-perspective',    label:'Role Perspective',       path:'/role-perspective',       icon:Eye, group:'Administration',
+    roles:['superAdmin','admin'] },
+  { slug:'super-admin-data',    label:'Super Admin Data',       path:'/super-admin-data',       icon:Database, group:'Administration',
+    roles:['superAdmin'] },
+  { slug:'super-admin-management', label:'Super Admin Management', path:'/super-admin-management', icon:Shield, group:'Administration',
+    roles:['superAdmin'] },
+  { slug:'subscriptions',       label:'Subscriptions',          path:'/subscriptions',          icon:CreditCard, group:'Administration',
+    roles:['superAdmin'] },
+  { slug:'changelog',           label:'Changelog',              path:'/changelog',              icon:History, group:'Administration',
+    roles:['superAdmin','admin','ict'] },
+  { slug:'page-access',         label:'Page Access Control',    path:'/page-access',            icon:Lock, group:'Administration',
+    roles:['superAdmin'] },
+  { slug:'search',              label:'Global Search',          path:'/search',                 icon:Search, group:'Administration',
+    roles:['all'] },
+
+  // ── Super Admin Pages ─────────────────────────────────────────────────────
+  { slug:'cycle-health',        label:'Cycle Health Dashboard', path:'/admin/cycle-health',     icon:Activity, group:'Super Admin',
+    roles:['superAdmin','admin'] },
+  { slug:'admin-monitoring',    label:'System Monitoring',      path:'/admin/monitoring',       icon:BarChart3, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'project-flow-stages', label:'Project Flow Stages',    path:'/admin/project-flow-stages', icon:GitBranch, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'transaction-scanner', label:'Transaction Scanner',    path:'/admin/transaction-scanner', icon:ScanLine, group:'Super Admin',
+    roles:['superAdmin','admin','financialAdmin'] },
+
+  // ── Audit & Security ──────────────────────────────────────────────────────
+  { slug:'hierarchy-audit',     label:'Hierarchy Audit',        path:'/hierarchy-audit',        icon:History, group:'Audit & Security',
+    roles:['superAdmin','admin'] },
+  { slug:'audit-compliance',    label:'Audit & Compliance',     path:'/audit-compliance',       icon:ClipboardCheck, group:'Audit & Security',
+    roles:['superAdmin','admin','auditor'] },
+  { slug:'audit-logs',          label:'System Audit Logs',      path:'/audit-logs',             icon:ScrollText, group:'Audit & Security',
+    roles:['superAdmin','admin','auditor'] },
+  { slug:'login-analytics',     label:'Login Analytics',        path:'/login-analytics',        icon:BarChart2, group:'Audit & Security',
+    roles:['superAdmin','admin'] },
+
+  // ── Surveys ───────────────────────────────────────────────────────────────
+  { slug:'surveys',             label:'Surveys',                path:'/surveys',                icon:ClipboardEdit, group:'Surveys',
+    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataCollector','dataTeam'] },
+  { slug:'questionnaire-analytics', label:'Questionnaire Analytics', path:'/questionnaire-analytics', icon:PieChart, group:'Surveys',
+    roles:['superAdmin','admin','fom','dataTeam'] },
+
+  // ── Daily Work & Team Tasks ────────────────────────────────────────────────
+  { slug:'daily-work',          label:'Daily Work',             path:'/daily-work',             icon:ListChecks, group:'HR & People',
+    roles:['all'] },
+  { slug:'team-tasks',          label:'Team Task Monitor',      path:'/team-tasks',             icon:CheckSquare, group:'HR & People',
+    roles:['superAdmin','admin','fom','supervisor'] },
+  { slug:'my-team',             label:'My Team',                path:'/my-team',                icon:Users, group:'HR & People',
+    roles:['all'] },
+  { slug:'my-advances',         label:'My Advances',            path:'/my-advances',            icon:Receipt, group:'HR & People',
+    roles:['all'] },
+  { slug:'my-expenses',         label:'My Expenses',            path:'/my-expenses',            icon:Receipt, group:'HR & People',
+    roles:['all'] },
+  { slug:'employees',           label:'Employees',              path:'/employees',              icon:Briefcase, group:'HR & People',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'attendance',          label:'Attendance',             path:'/attendance',             icon:CalendarCheck, group:'HR & People',
+    roles:['superAdmin','admin','supervisor','fom'] },
+  { slug:'offboarding',         label:'Offboarding',            path:'/offboarding',            icon:UserX, group:'HR & People',
+    roles:['superAdmin','admin'] },
+  { slug:'staff-onboarding',    label:'Staff Onboarding',       path:'/staff-onboarding',       icon:UserCheck, group:'HR & People',
+    roles:['superAdmin','admin'] },
+  { slug:'performance-reviews', label:'Performance Reviews',    path:'/performance-reviews',    icon:UserCog, group:'HR & People',
+    roles:['superAdmin','admin','supervisor','fom'] },
+  { slug:'salary-increments',   label:'Salary Increments',      path:'/salary-increments',      icon:TrendingUp, group:'HR & People',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'training-certifications', label:'Training & Certifications', path:'/training-certifications', icon:GraduationCap, group:'HR & People',
+    roles:['superAdmin','admin','supervisor','fom'] },
+  { slug:'retainer-management', label:'Retainer Management',    path:'/retainer-management',    icon:ScrollText, group:'HR & People',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'payroll',             label:'Payroll',                path:'/payroll',                icon:Banknote, group:'HR & People',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'positions',           label:'Positions & Vacancies',  path:'/positions',              icon:Briefcase, group:'HR & People',
+    roles:['superAdmin','admin'] },
+  { slug:'salary-retainer-report', label:'Salary & Retainer Report', path:'/salary-retainer-report', icon:BarChart3, group:'HR & People',
+    roles:['superAdmin','admin','financialAdmin'] },
+
+  // ── Field Operations additions ─────────────────────────────────────────────
+  { slug:'coordinator-dashboard', label:'Coordinator Dashboard', path:'/coordinator-dashboard', icon:LayoutDashboard, group:'Field Operations',
+    roles:['superAdmin','admin','fom','coordinator','supervisor'] },
+  { slug:'sites-for-verification', label:'Sites for Verification', path:'/coordinator/sites-for-verification', icon:ClipboardCheck, group:'Field Operations',
+    roles:['superAdmin','admin','coordinator','supervisor'] },
+  { slug:'supervisor-sites',    label:'Supervisor Sites',       path:'/supervisor/sites',       icon:Map, group:'Field Operations',
+    roles:['superAdmin','admin','supervisor','fom'] },
+  { slug:'monitoring-plan',     label:'Monitoring Plan',        path:'/monitoring-plan',        icon:ClipboardList, group:'Field Operations',
+    roles:['superAdmin','admin','fom','coordinator','supervisor'] },
+  { slug:'tracker-preparation', label:'Tracker Preparation Plan', path:'/tracker-preparation-plan', icon:Target, group:'Field Operations',
+    roles:['superAdmin','admin','fom','coordinator'] },
+  { slug:'advanced-map',        label:'Advanced Map',           path:'/advanced-map',           icon:Map, group:'Field Operations',
+    roles:['superAdmin','admin','fom'] },
+  { slug:'mmp-management',      label:'MMP Management Admin',   path:'/mmp-management',         icon:Database, group:'Field Operations',
+    roles:['superAdmin','admin','ict'] },
+
+  // ── Finance & Approvals additions ─────────────────────────────────────────
+  { slug:'finance-dashboard',   label:'Finance Dashboard',      path:'/finance',                icon:TrendingUp, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'finance-audit-trail', label:'Finance Audit Trail',    path:'/finance/audit-trail',    icon:ScrollText, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'approval-dashboard',  label:'Approval Dashboard',     path:'/approval-dashboard',     icon:ClipboardCheck, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','supervisor','fom'] },
+  { slug:'approvals',           label:'Approvals',              path:'/approvals',              icon:ListChecks, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','supervisor','fom'] },
+  { slug:'reconciliation-dashboard', label:'Reconciliation Dashboard', path:'/reconciliation-dashboard', icon:RefreshCcw, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'advance-requests-report', label:'Advance Requests Report', path:'/advance-requests-report', icon:BarChart3, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'down-payment-advance-report', label:'Down Payment Report', path:'/down-payment-advance-report', icon:Receipt, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'down-payment-approval', label:'Down Payment Approval', path:'/down-payment-approval', icon:ClipboardCheck, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'cost-approval',       label:'Cost Approval',          path:'/cost-approval',          icon:ClipboardCheck, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'cost-predictions',    label:'Cost Predictions',       path:'/cost-predictions',       icon:LineChart, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'cost-submission-reports', label:'Cost Submission Reports', path:'/cost-submission/reports', icon:BarChart3, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'enumerator-fees-report', label:'Enumerator Fees Report', path:'/enumerator-fees-report', icon:Receipt, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'month-end-summary',   label:'Month-End Summary',      path:'/month-end-summary',      icon:BarChart3, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'wallet-reports',      label:'Wallet Reports',         path:'/wallet-reports',         icon:CreditCard, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin','auditor'] },
+  { slug:'exchange-rates',      label:'Exchange Rates',         path:'/exchange-rates',         icon:Coins, group:'Finance',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'pdm-report',          label:'PDM Report',             path:'/pdm-report',             icon:BarChart3, group:'Finance',
+    roles:['superAdmin','admin','fom','dataTeam'] },
+
+  // ── Accounting Module ──────────────────────────────────────────────────────
+  { slug:'acct-dashboard',      label:'Accounting Dashboard',   path:'/accounting/finance-dashboard', icon:Landmark, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-coa',            label:'Chart of Accounts',      path:'/accounting/coa',         icon:Layers, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-journals',       label:'Journal Entries',        path:'/accounting/journals',    icon:BookOpen, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-ledger',         label:'General Ledger',         path:'/accounting/ledger',      icon:ScrollText, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-trial-balance',  label:'Trial Balance',          path:'/accounting/trial-balance', icon:BarChart2, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-reports',        label:'Financial Statements',   path:'/accounting/reports',     icon:FileText, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-bank-recon',     label:'Bank Reconciliation',    path:'/accounting/bank-recon',  icon:RefreshCcw, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-budget-planning',label:'Budget Planning',        path:'/accounting/budget-planning', icon:Calculator, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-budget-variance',label:'Budget Variance',        path:'/accounting/budget-variance', icon:TrendingUp, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-budget-enc',     label:'Budget Encumbrance',     path:'/accounting/budget-encumbrance', icon:DollarSign, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-fixed-assets',   label:'Fixed Assets',          path:'/accounting/fixed-assets', icon:Building2, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-depreciation',   label:'Depreciation Run',       path:'/accounting/depreciation-run', icon:TrendingUp, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-pr',             label:'Purchase Requisitions',  path:'/accounting/purchase-requisitions', icon:ClipboardList, group:'Accounting',
+    roles:['superAdmin','admin','financialAdmin','auditor','fom'] },
+  { slug:'acct-po',             label:'Purchase Orders',        path:'/accounting/purchase-orders', icon:Package, group:'Accounting',
+    roles:['superAdmin','admin','financialAdmin','auditor','fom'] },
+  { slug:'acct-grn',            label:'Goods Receipt Notes',    path:'/accounting/grn',         icon:Package, group:'Accounting',
+    roles:['superAdmin','admin','financialAdmin','auditor','fom'] },
+  { slug:'acct-ap-invoices',    label:'AP Invoices',            path:'/accounting/ap-invoices', icon:Receipt, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-ap-aging',       label:'AP Aging Report',        path:'/accounting/ap-aging',    icon:BarChart3, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-cheque',         label:'Cheque Register',        path:'/accounting/cheque-register', icon:ScrollText, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-vendors',        label:'Vendors',                path:'/accounting/vendors',     icon:Briefcase, group:'Accounting',
+    roles:['superAdmin','admin','financialAdmin','auditor','fom'] },
+  { slug:'acct-funds',          label:'Fund Registry',          path:'/accounting/funds',       icon:Landmark, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-gl-bridge',      label:'GL Bridge Engine',       path:'/accounting/gl-bridge',   icon:Zap, group:'Accounting',
+    roles:['superAdmin','financialAdmin'] },
+  { slug:'acct-period-close',   label:'Period Close',           path:'/accounting/period-close', icon:Lock, group:'Accounting',
+    roles:['superAdmin','financialAdmin'] },
+  { slug:'acct-tax',            label:'Tax Management',         path:'/accounting/tax',         icon:Calculator, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-multi-currency', label:'Multi-Currency',         path:'/accounting/multi-currency', icon:Globe, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-cost-allocation',label:'Cost Allocation',        path:'/accounting/cost-allocation', icon:Layers, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-donor-reports',  label:'Donor Reports',          path:'/accounting/donor-reports', icon:BarChart3, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-grants',         label:'Grant Tracking',         path:'/accounting/grants',      icon:Award, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-consolidation',  label:'Financial Consolidation', path:'/accounting/consolidation', icon:Layers, group:'Accounting',
+    roles:['superAdmin','financialAdmin'] },
+  { slug:'acct-intercompany',   label:'Intercompany',           path:'/accounting/intercompany', icon:GitBranch, group:'Accounting',
+    roles:['superAdmin','financialAdmin'] },
+  { slug:'acct-sod',            label:'Segregation of Duties',  path:'/accounting/sod',         icon:Shield, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-cash-flow',      label:'Cash Flow',              path:'/accounting/cash-flow',   icon:TrendingUp, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-cash-forecast',  label:'Cash Flow Forecast',     path:'/accounting/cash-flow-forecast', icon:LineChart, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-gl-audit',       label:'GL Audit',               path:'/accounting/gl-audit',    icon:ScrollText, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-aml',            label:'AML',                    path:'/accounting/aml',         icon:AlertTriangle, group:'Accounting',
+    roles:['superAdmin','financialAdmin','auditor'] },
+  { slug:'acct-fiscal-years',   label:'Fiscal Years & Periods', path:'/accounting/fiscal-years', icon:Calendar, group:'Accounting',
+    roles:['superAdmin','financialAdmin'] },
+  { slug:'acct-settings',       label:'Accounting Settings',    path:'/accounting/settings',    icon:BarChart3, group:'Accounting',
+    roles:['superAdmin','financialAdmin'] },
+
+  // ── Communication additions ────────────────────────────────────────────────
+  { slug:'email-management',    label:'Email Management',       path:'/email-management',       icon:Mail, group:'Communication',
+    roles:['superAdmin','admin'] },
+  { slug:'email-tracking',      label:'Email Tracking',         path:'/email-tracking',         icon:Mail, group:'Communication',
+    roles:['superAdmin','admin'] },
+  { slug:'email-preview',       label:'Email Preview',          path:'/email-preview',          icon:Mail, group:'Communication',
+    roles:['superAdmin','admin'] },
+  { slug:'helpline',            label:'Helpline',               path:'/helpline',               icon:HeartHandshake, group:'Communication',
+    roles:['superAdmin','admin','ict','fom','coordinator','supervisor'] },
+  { slug:'calls',               label:'Calls',                  path:'/calls',                  icon:Phone, group:'Communication',
+    roles:['superAdmin','admin','fom','coordinator','supervisor'] },
+  { slug:'call-analytics',      label:'Call Analytics',         path:'/call-analytics',         icon:PieChart, group:'Communication',
+    roles:['superAdmin','admin','fom'] },
+  { slug:'support-contacts',    label:'Support Contacts',       path:'/support-contacts',       icon:Phone, group:'Communication',
+    roles:['all'] },
+  { slug:'mobile-support',      label:'Mobile Support Tickets', path:'/mobile-support-tickets', icon:Smartphone, group:'Communication',
+    roles:['superAdmin','admin','ict'] },
+  { slug:'notification-analytics', label:'Notification Analytics', path:'/notification-analytics', icon:Bell, group:'Communication',
+    roles:['superAdmin','admin'] },
+  { slug:'notification-history',label:'Notification History',   path:'/notification-history',   icon:Bell, group:'Communication',
+    roles:['superAdmin','admin'] },
+  { slug:'notification-preferences', label:'Notification Preferences', path:'/notification-preferences', icon:Bell, group:'Communication',
+    roles:['all'] },
+
+  // ── Analytics & Projects additions ────────────────────────────────────────
+  { slug:'project-analytics',   label:'Project Analytics',      path:'/projects/analytics',     icon:BarChart3, group:'Analytics',
+    roles:['superAdmin','admin','fom','projectManager','countryDirector'] },
+  { slug:'documentation',       label:'Documentation',          path:'/documentation',          icon:BookOpen, group:'Analytics',
+    roles:['all'] },
+
+  // ── Mobile Pages ─────────────────────────────────────────────────────────
+  { slug:'mobile-cost-submission', label:'Mobile Cost Submission', path:'/mobile-cost-submission', icon:Smartphone, group:'Mobile',
+    roles:['superAdmin','admin','dataCollector','coordinator','supervisor'] },
+  { slug:'mobile-signatures',   label:'Mobile Signatures',      path:'/mobile-signatures',      icon:Smartphone, group:'Mobile',
+    roles:['superAdmin','admin','dataCollector','coordinator','supervisor'] },
+  { slug:'mobile-documentation',label:'Mobile Documentation',   path:'/mobile-documentation',   icon:Smartphone, group:'Mobile',
+    roles:['all'] },
+  { slug:'mobile-help-articles',label:'Mobile Help Articles',   path:'/mobile-help-articles',   icon:Smartphone, group:'Mobile',
+    roles:['all'] },
+  { slug:'mobile-call-scheduling', label:'Mobile Call Scheduling', path:'/mobile-call-scheduling', icon:Smartphone, group:'Mobile',
+    roles:['superAdmin','admin','fom','coordinator','supervisor'] },
 ];
 
 const PAGE_GROUPS = Array.from(new Set(PAGE_DEFS.map(p => p.group)));
@@ -167,6 +419,7 @@ export interface PageOverride {
   page_slug: string;
   user_id: string;
   is_blocked: boolean;
+  level: 'view' | 'manage';
   notes: string | null;
   created_at: string;
 }
@@ -261,12 +514,13 @@ export function UserAccessRow({
   override?: PageOverride;
   isSaving: boolean;
   pageLabel: string;
-  onGrant: () => void;
+  onGrant: (level: 'view' | 'manage') => void;
   onBlock: () => void;
   onReset: () => void;
 }) {
   const ui = STATUS_UI[status];
   const Icon = ui.icon;
+  const grantedLevel = override && !override.is_blocked ? (override.level ?? 'view') : null;
   return (
     <div className={cn(
       'flex items-center gap-3 p-3 rounded-xl border transition-colors group',
@@ -289,24 +543,64 @@ export function UserAccessRow({
           {roleLabel(profile.role)}
         </span>
       </div>
-      <span className={cn('text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 shrink-0 whitespace-nowrap', ui.cls)}>
-        <Icon className="h-3 w-3" />{ui.label}
-      </span>
-      <div className="flex items-center gap-1 shrink-0 min-w-[120px] justify-end">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className={cn('text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap', ui.cls)}>
+          <Icon className="h-3 w-3" />{ui.label}
+        </span>
+        {grantedLevel && (
+          <span className={cn(
+            'text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap',
+            grantedLevel === 'manage'
+              ? 'bg-purple-100 text-purple-700'
+              : 'bg-sky-100 text-sky-700'
+          )}>
+            {grantedLevel === 'manage' ? 'Manage' : 'View Only'}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0 min-w-[150px] justify-end">
         {isSaving ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : (
           <>
             {(status === 'denied' || status === 'blocked') && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="ghost"
+                      className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-opacity"
+                      onClick={() => onGrant('view')}>
+                      <Unlock className="h-3 w-3 mr-1" />View
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Grant view-only access to {pageLabel}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="ghost"
+                      className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-opacity"
+                      onClick={() => onGrant('manage')}>
+                      <Shield className="h-3 w-3 mr-1" />Manage
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Grant full manage (edit/create/delete) access to {pageLabel}</TooltipContent>
+                </Tooltip>
+              </>
+            )}
+            {status === 'granted' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" variant="ghost"
-                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-opacity"
-                    onClick={onGrant}>
-                    <Unlock className="h-3 w-3 mr-1" />Grant
+                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs transition-opacity"
+                    onClick={() => onGrant(grantedLevel === 'manage' ? 'view' : 'manage')}>
+                    {grantedLevel === 'manage'
+                      ? <><Unlock className="h-3 w-3 mr-1 text-sky-500" />→ View</>
+                      : <><Shield className="h-3 w-3 mr-1 text-purple-500" />→ Manage</>}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs">Give this user access to {pageLabel}</TooltipContent>
+                <TooltipContent className="text-xs">
+                  Switch to {grantedLevel === 'manage' ? 'View Only' : 'Manage'} access
+                </TooltipContent>
               </Tooltip>
             )}
             {(status === 'role' || status === 'granted') && (
@@ -398,16 +692,17 @@ export default function PageAccessControl() {
     );
   }
 
-  async function applyOverride(userId: string, isBlocked: boolean, existingId?: string) {
+  async function applyOverride(userId: string, isBlocked: boolean, level: 'view' | 'manage' = 'view', existingId?: string) {
     setSavingId(userId);
     try {
       if (existingId) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, granted_by: currentUser?.id }).eq('id', existingId);
+        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, granted_by: currentUser?.id }).eq('id', existingId);
       } else {
-        await supabase.from('page_access_overrides').insert({ page_slug: selectedPage.slug, user_id: userId, is_blocked: isBlocked, granted_by: currentUser?.id });
+        await supabase.from('page_access_overrides').insert({ page_slug: selectedPage.slug, user_id: userId, is_blocked: isBlocked, level, granted_by: currentUser?.id });
       }
       const name = profiles.find(p => p.id === userId)?.full_name ?? 'User';
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${name} → ${selectedPage.label}` });
+      const desc = isBlocked ? `${name} → ${selectedPage.label}` : `${name} → ${selectedPage.label} (${level === 'manage' ? 'Manage' : 'View Only'})`;
+      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: desc });
       refetch();
       qc.invalidateQueries({ queryKey: ['pac-overrides'] });
     } catch (e: any) {
@@ -576,8 +871,8 @@ export default function PageAccessControl() {
                     override={ov}
                     isSaving={savingId === profile.id}
                     pageLabel={selectedPage.label}
-                    onGrant={() => applyOverride(profile.id, false, ov?.id)}
-                    onBlock={() => applyOverride(profile.id, true, ov?.id)}
+                    onGrant={(level) => applyOverride(profile.id, false, level, ov?.id)}
+                    onBlock={() => applyOverride(profile.id, true, 'view', ov?.id)}
                     onReset={() => removeOverride(ov!.id, profile.id)}
                   />
                 );

@@ -59,12 +59,12 @@ export default function AdminCycleHealth() {
     setLoading(true);
     try {
       // Fetch all non-closed MMPs
+      // NOTE: mmp_files has no 'year' column — derive it from uploaded_at
       const { data: mmps, error: mmpErr } = await supabase
         .from('mmp_files')
-        .select('id, name, month, year, hub, cycle_status')
+        .select('id, name, month, hub, cycle_status, uploaded_at, created_at')
         .in('cycle_status', ['active', 'closing', 'pending_approval'])
-        .order('year', { ascending: false })
-        .order('month', { ascending: false });
+        .order('uploaded_at', { ascending: false });
 
       if (mmpErr) throw mmpErr;
       if (!mmps || mmps.length === 0) { setCycles([]); return; }
@@ -111,6 +111,10 @@ export default function AdminCycleHealth() {
       ]);
 
       const rows: CycleHealthRow[] = mmps.map(mmp => {
+        // Derive year from uploaded_at or created_at since there's no year column
+        const dateStr = (mmp as any).uploaded_at || (mmp as any).created_at;
+        const derivedYear: number | null = dateStr ? new Date(dateStr).getFullYear() : null;
+
         const mmpSites = (sites || []).filter(s => s.mmp_file_id === mmp.id);
         const total         = mmpSites.length;
         const submitted     = mmpSites.filter(s => (s.status ?? '').toLowerCase() === 'submitted').length;
@@ -146,7 +150,7 @@ export default function AdminCycleHealth() {
           id: mmp.id,
           name: mmp.name || 'Unnamed MMP',
           month: mmp.month,
-          year: mmp.year,
+          year: derivedYear,
           hub: mmp.hub,
           cycle_status: mmp.cycle_status || 'active',
           total,

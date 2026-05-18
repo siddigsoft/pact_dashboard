@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -46,7 +47,11 @@ const SOURCE_LABEL: Record<string, string> = {
 export default function AccountingBudgetEncumbrance() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const canEdit  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+
+  const overrideCanEdit = usePageManageOverride('acct-budget-enc', roleCanEdit);
+
+  const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
   const [encumbrances, setEncumbrances] = useState<Encumbrance[]>([]);
