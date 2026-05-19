@@ -324,8 +324,7 @@ export function SuperAdminDataManagement() {
         .from('mmp_site_entries')
         .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality')
         .in('status', ['completed', 'verified'])
-        .order('visit_completed_at', { ascending: false })
-        .limit(200);
+        .order('visit_completed_at', { ascending: false });
 
       if (error) throw error;
 
@@ -389,8 +388,7 @@ export function SuperAdminDataManagement() {
       const { data, error } = await supabase
         .from('wallet_transactions')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(300);
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -519,8 +517,7 @@ export function SuperAdminDataManagement() {
         .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
         .in('status', ['Dispatched', 'dispatched'])
         .is('accepted_by', null)
-        .order('dispatched_at', { ascending: false })
-        .limit(500);
+        .order('dispatched_at', { ascending: false });
 
       if (error) throw error;
 
@@ -554,8 +551,7 @@ export function SuperAdminDataManagement() {
           created_at,
           projects(name)
         `)
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
