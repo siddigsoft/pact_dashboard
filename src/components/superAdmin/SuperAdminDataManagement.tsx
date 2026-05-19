@@ -460,14 +460,25 @@ export function SuperAdminDataManagement() {
     setLoadingClaimed(true);
     try {
       // "Claimed" = any site that has moved past the dispatch stage.
-      // Include ALL statuses after dispatched: accepted, ongoing, completed,
-      // submitted, wfp_confirmed, not_covered, verified, rejected, etc.
-      // Exclude only pre-claim statuses: new, pending, approved, dispatched.
+      // Use explicit IN list of all post-dispatch statuses (more reliable than NOT IN).
+      const POST_DISPATCH_STATUSES = [
+        'accepted', 'Accepted',
+        'assigned', 'Assigned',
+        'inprogress', 'in_progress', 'ongoing', 'Ongoing', 'inProgress',
+        'completed', 'Completed',
+        'submitted', 'Submitted',
+        'wfp_confirmed', 'WFP_Confirmed',
+        'not_covered', 'Not_Covered',
+        'verified', 'Verified',
+        'rejected', 'Rejected', 'declined',
+        'costed', 'approved and costed',
+        'returned_to_fom', 'recalled', 'forwarded_to_coordinator',
+      ];
       const { data, error } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id, additional_data')
-        .not('status', 'in', '(new,New,pending,Pending,approved,Approved,dispatched,Dispatched)')
-        .order('accepted_at', { ascending: false, nullsFirst: false });
+        .in('status', POST_DISPATCH_STATUSES)
+        .order('accepted_at', { ascending: false });
 
       if (error) {
         console.error('Claimed sites query error:', error);
