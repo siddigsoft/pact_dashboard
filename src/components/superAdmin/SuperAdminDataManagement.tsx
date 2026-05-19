@@ -569,22 +569,35 @@ export function SuperAdminDataManagement() {
   const loadMMPs = async () => {
     setLoadingMMPs(true);
     try {
+      // Primary: select with native project_name column (no FK join needed)
       let data: any[] | null = null;
-      {
-        const { data: d1, error: e1 } = await supabase
-          .from('mmp_files')
-          .select('id, name, month, year, status, project_id, created_at, project:projects(name)')
-          .order('created_at', { ascending: false });
-        if (!e1) {
-          data = d1;
+      const { data: d1, error: e1 } = await supabase
+        .from('mmp_files')
+        .select('id, name, month, year, status, project_id, project_name, created_at')
+        .order('created_at', { ascending: false });
+      if (!e1 && d1 && d1.length > 0) {
+        data = d1;
+      } else {
+        // Fallback: derive MMP list from mmp_file_ids in mmp_site_entries (always accessible)
+        console.warn('[MMPs] Direct query empty/failed (e1=', e1?.message, '), deriving from site entries');
+        const { data: idRows } = await supabase
+          .from('mmp_site_entries')
+          .select('mmp_file_id')
+          .not('mmp_file_id', 'is', null);
+        const uniqueIds = [...new Set((idRows || []).map((r: any) => r.mmp_file_id).filter(Boolean))] as string[];
+        if (uniqueIds.length > 0) {
+          const BATCH = 100;
+          const allMmpFiles: any[] = [];
+          for (let i = 0; i < uniqueIds.length; i += BATCH) {
+            const { data: batchData } = await supabase
+              .from('mmp_files')
+              .select('id, name, month, year, status, project_id, project_name, created_at')
+              .in('id', uniqueIds.slice(i, i + BATCH));
+            allMmpFiles.push(...(batchData || []));
+          }
+          data = allMmpFiles;
         } else {
-          // Fallback without join if projects FK not resolvable
-          const { data: d2, error: e2 } = await supabase
-            .from('mmp_files')
-            .select('id, name, month, year, status, project_id, created_at')
-            .order('created_at', { ascending: false });
-          if (e2) throw e2;
-          data = d2;
+          data = [];
         }
       }
 
@@ -618,7 +631,7 @@ export function SuperAdminDataManagement() {
         month: m.month,
         year: m.year,
         status: m.status,
-        project_name: (m.project as any)?.name || (m.projects as any)?.name || 'Unknown',
+        project_name: m.project_name || 'Unknown',
         total_sites: mmpStats[m.id]?.total || 0,
         dispatched_sites: mmpStats[m.id]?.dispatched || 0,
         completed_sites: mmpStats[m.id]?.completed || 0,
