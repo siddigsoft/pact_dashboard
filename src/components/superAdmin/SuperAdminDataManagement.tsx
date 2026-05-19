@@ -625,9 +625,15 @@ export function SuperAdminDataManagement() {
         if (s.status === 'completed' || s.status === 'verified') mmpStats[key].completed++;
       });
 
-      const enriched = (data || []).map((m: any) => ({
+      // If mmp_files returned 0 rows (RLS blocks super_admin — apply fix_mmp_files_superadmin_access.sql),
+      // synthesize MMP entries from the mmp_site_entries data we already have
+      const mmpSource = (data && data.length > 0)
+        ? data
+        : Object.keys(mmpStats).map(id => ({ id, name: null, month: null, year: null, status: null, project_name: null, created_at: null }));
+
+      const enriched = mmpSource.map((m: any) => ({
         id: m.id,
-        name: m.name,
+        name: m.name || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
         month: m.month,
         year: m.year,
         status: m.status,
