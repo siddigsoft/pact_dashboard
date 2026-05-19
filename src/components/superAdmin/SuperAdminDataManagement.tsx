@@ -500,26 +500,8 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Build MMP name map — batched to avoid URL length issues
-      const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
-      const mmpNameMap: Record<string, string> = {};
-      if (uniqueMmpIds.length > 0) {
-        const BATCH = 50;
-        for (let i = 0; i < uniqueMmpIds.length; i += BATCH) {
-          const batch = uniqueMmpIds.slice(i, i + BATCH);
-          const { data: mmpFiles, error: mmpErr } = await supabase
-            .from('mmp_files')
-            .select('id, name, month, year')
-            .in('id', batch);
-          if (mmpErr) console.warn('[Claimed] MMP name lookup failed:', mmpErr);
-          (mmpFiles || []).forEach((m: any) => {
-            mmpNameMap[m.id] = m.name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
-          });
-        }
-      }
-
+      // MMP names are resolved at render time from the mmps state (mmpById memo)
       const enriched = allData.map((site: any) => {
-        // Resolve claimer: accepted_by → additional_data.claimed_by → additional_data.assigned_to
         const claimerUid = site.accepted_by
           || site.additional_data?.claimed_by
           || site.additional_data?.assigned_to;
@@ -531,8 +513,8 @@ export function SuperAdminDataManagement() {
           claimed_by_name: resolvedName,
           accepted_by_name: resolvedName,
           main_activity: site.main_activity || site.activity_at_site || null,
-          mmp_name: site.mmp_file_id ? (mmpNameMap[site.mmp_file_id] || null) : null,
           mmp_id: site.mmp_file_id,
+          mmp_name: undefined, // resolved at render via mmpById
         };
       });
 
@@ -587,21 +569,24 @@ export function SuperAdminDataManagement() {
   const loadMMPs = async () => {
     setLoadingMMPs(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_files')
-        .select(`
-          id,
-          name,
-          month,
-          year,
-          status,
-          project_id,
-          created_at,
-          projects(name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      let data: any[] | null = null;
+      {
+        const { data: d1, error: e1 } = await supabase
+          .from('mmp_files')
+          .select('id, name, month, year, status, project_id, created_at, project:projects(name)')
+          .order('created_at', { ascending: false });
+        if (!e1) {
+          data = d1;
+        } else {
+          // Fallback without join if projects FK not resolvable
+          const { data: d2, error: e2 } = await supabase
+            .from('mmp_files')
+            .select('id, name, month, year, status, project_id, created_at')
+            .order('created_at', { ascending: false });
+          if (e2) throw e2;
+          data = d2;
+        }
+      }
 
       // Paginated site-count fetch — mmp_site_entries can exceed 1000 rows
       const SC_PAGE = 1000;
@@ -633,7 +618,7 @@ export function SuperAdminDataManagement() {
         month: m.month,
         year: m.year,
         status: m.status,
-        project_name: m.projects?.name || 'Unknown',
+        project_name: (m.project as any)?.name || (m.projects as any)?.name || 'Unknown',
         total_sites: mmpStats[m.id]?.total || 0,
         dispatched_sites: mmpStats[m.id]?.dispatched || 0,
         completed_sites: mmpStats[m.id]?.completed || 0,
@@ -1082,6 +1067,13 @@ export function SuperAdminDataManagement() {
       activeMMPs,
     };
   }, [siteVisits, wallets, transactions, claimedSites, dispatchedSites, mmps]);
+
+  // Fast id→MMP lookup used in claimed sites table and filter options
+  const mmpById = useMemo(() => {
+    const map: Record<string, { id: string; name: string; month?: number; year?: number }> = {};
+    mmps.forEach(m => { if (m.id) map[m.id] = m; });
+    return map;
+  }, [mmps]);
 
   const filteredSiteVisits = useMemo(() => {
     return siteVisits.filter(sv => {
@@ -2201,17 +2193,27 @@ export function SuperAdminDataManagement() {
                           <TableCell>
                             <div>
                               <p className="font-medium">{site.site_name}</p>
-                              <p className="text-sm text-muted-foreground">{site.site_code}</p>
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {site.site_code && site.site_code.length > 12
+                                  ? site.site_code.slice(0, 8) + '…'
+                                  : (site.site_code || '—')}
+                              </p>
                             </div>
                           </TableCell>
                           <TableCell>
-                            {site.mmp_name ? (
-                              <Badge variant="secondary" className="whitespace-nowrap text-xs">
-                                {site.mmp_name}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">—</span>
-                            )}
+                            {(() => {
+                              const mmp = site.mmp_id ? mmpById[site.mmp_id] : null;
+                              const label = mmp
+                                ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`)
+                                : null;
+                              return label ? (
+                                <Badge variant="secondary" className="whitespace-nowrap text-xs max-w-[140px] truncate block">
+                                  {label}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="whitespace-nowrap">
@@ -2233,18 +2235,25 @@ export function SuperAdminDataManagement() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {site.accepted_at ? format(new Date(site.accepted_at), 'MMM d, yyyy HH:mm') : '—'}
+                            {(() => {
+                              const ts = site.accepted_at || site.dispatched_at || (site as any).created_at;
+                              return ts ? format(new Date(ts), 'MMM d, yyyy') : '—';
+                            })()}
                           </TableCell>
                           <TableCell>{getStatusBadge(site.status)}</TableCell>
                           <TableCell>
                             <div className="text-sm space-y-1">
                               <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Enum:</span>
-                                <span className="font-medium">{site.enumerator_fee?.toLocaleString() || '—'} SDG</span>
+                                <span className="font-medium">
+                                  {site.enumerator_fee != null ? site.enumerator_fee.toLocaleString() : '—'} SDG
+                                </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Trans:</span>
-                                <span className="font-medium">{site.transport_fee?.toLocaleString() || '—'} SDG</span>
+                                <span className="font-medium">
+                                  {site.transport_fee != null ? site.transport_fee.toLocaleString() : '—'} SDG
+                                </span>
                               </div>
                             </div>
                           </TableCell>
