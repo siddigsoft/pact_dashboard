@@ -1535,7 +1535,7 @@ export function SuperAdminDataManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredSiteVisits.slice(0, 50).map((sv) => (
+                      {filteredSiteVisits.map((sv) => (
                         <TableRow key={sv.id} className="hover:bg-muted/30">
                           <TableCell>
                             <div>
@@ -1581,9 +1581,8 @@ export function SuperAdminDataManagement() {
                       ))}
                     </TableBody>
                   </Table>
-                  {filteredSiteVisits.length > 50 && (
+                  {false && (
                     <div className="text-center py-4 text-sm text-muted-foreground border-t">
-                      Showing 50 of {filteredSiteVisits.length} results. Use search to find specific records.
                     </div>
                   )}
                 </div>
@@ -1914,7 +1913,7 @@ export function SuperAdminDataManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredTransactions.slice(0, 50).map((t) => (
+                      {filteredTransactions.map((t) => (
                         <TableRow key={t.id} className="hover:bg-muted/30">
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -1965,9 +1964,8 @@ export function SuperAdminDataManagement() {
                       ))}
                     </TableBody>
                   </Table>
-                  {filteredTransactions.length > 50 && (
+                  {false && (
                     <div className="text-center py-4 text-sm text-muted-foreground border-t">
-                      Showing 50 of {filteredTransactions.length} results. Use search to find specific records.
                     </div>
                   )}
                 </div>
@@ -2018,7 +2016,7 @@ export function SuperAdminDataManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All MMPs</SelectItem>
-                      {claimedSitesFilterOptions.mmpOptions.map(m => (
+                      {mmps.map(m => (
                         <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -2318,7 +2316,7 @@ export function SuperAdminDataManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredDispatchedSites.slice(0, 50).map((site) => (
+                      {filteredDispatchedSites.map((site) => (
                         <TableRow key={site.id} className="hover:bg-muted/30" data-testid={`row-dispatched-site-${site.id}`}>
                           <TableCell>
                             <div>
@@ -2377,9 +2375,8 @@ export function SuperAdminDataManagement() {
                       ))}
                     </TableBody>
                   </Table>
-                  {filteredDispatchedSites.length > 50 && (
+                  {false && (
                     <div className="text-center py-4 text-sm text-muted-foreground border-t">
-                      Showing 50 of {filteredDispatchedSites.length} results. Use search to find specific records.
                     </div>
                   )}
                 </div>
