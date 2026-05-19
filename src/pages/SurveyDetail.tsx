@@ -426,7 +426,7 @@ export default function SurveyDetail() {
       const s = (data.settings ?? {}) as Record<string, unknown>;
       setSettingsForm({
         response_limit: s.response_limit != null ? String(s.response_limit) : '',
-        expires_at: s.expires_at ? String(s.expires_at).slice(0, 10) : '',
+        expires_at: s.expires_at ? String(s.expires_at).slice(0, 16) : '',
         allow_multiple: Boolean(s.allow_multiple),
         multi_page: Boolean(s.multi_page),
         show_progress: s.show_progress !== false,
@@ -3190,24 +3190,37 @@ export default function SurveyDetail() {
                 <p className="text-[11px] text-slate-400">Survey will automatically stop accepting responses when this limit is reached.</p>
               </div>
 
-              {/* Expiry date */}
+              {/* Deadline (auto-close) */}
               <div className="space-y-1.5">
                 <Label htmlFor="setting-expiry" className="text-sm font-medium">
-                  Expiry Date
-                  <span className="ml-2 text-[11px] text-slate-400 font-normal">Leave blank for no expiry</span>
+                  Deadline (Auto-Close)
+                  <span className="ml-2 text-[11px] text-slate-400 font-normal">Leave blank for no deadline</span>
                 </Label>
-                <div className="relative max-w-[220px]">
+                <div className="relative max-w-[240px]">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                   <Input
                     id="setting-expiry"
-                    type="date"
+                    type="datetime-local"
                     className="pl-9"
                     value={settingsForm.expires_at}
                     onChange={e => setSettingsForm(s => ({ ...s, expires_at: e.target.value }))}
                     data-testid="input-expires-at"
                   />
                 </div>
-                <p className="text-[11px] text-slate-400">Survey will close automatically after this date.</p>
+                {settingsForm.expires_at ? (() => {
+                  const dl = new Date(settingsForm.expires_at);
+                  const diffMs = dl.getTime() - Date.now();
+                  if (diffMs < 0) return (
+                    <p className="text-[11px] text-red-500 font-medium">⚠ Deadline has passed — survey will auto-close immediately on save.</p>
+                  );
+                  const diffH = Math.floor(diffMs / 3_600_000);
+                  const diffD = Math.floor(diffMs / 86_400_000);
+                  const label = diffH < 24 ? `${diffH}h remaining` : `${diffD} day${diffD !== 1 ? 's' : ''} remaining`;
+                  const cls = diffH < 24 ? 'text-red-500' : diffD <= 3 ? 'text-orange-500' : 'text-emerald-600';
+                  return <p className={`text-[11px] font-medium ${cls}`}>⏱ {label} — survey auto-closes at this date &amp; time.</p>;
+                })() : (
+                  <p className="text-[11px] text-slate-400">Survey will auto-close and stop accepting responses at this exact date &amp; time.</p>
+                )}
               </div>
 
               {/* Allow multiple submissions */}

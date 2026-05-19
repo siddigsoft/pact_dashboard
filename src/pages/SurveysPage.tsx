@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,7 +13,7 @@ import {
   Trash2, ExternalLink, Edit3, Copy, Loader2, Search, Archive,
   PlayCircle, FileText, Link2, LayoutGrid, List, TrendingUp,
   Sparkles, ChevronRight, AlertCircle, ArrowUpDown,
-  Share2, QrCode, CheckCircle2, XCircle, Send,
+  Share2, QrCode, CheckCircle2, XCircle, Send, AlarmClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,22 @@ interface Survey {
   settings: Record<string, unknown>;
   _q_count?: number;
   _r_count?: number;
+}
+
+/* ── Deadline helper ────────────────────────────────────────────────────── */
+function getDeadlineInfo(survey: Survey) {
+  const raw = survey.settings?.expires_at;
+  if (!raw) return null;
+  const dl = new Date(String(raw));
+  if (isNaN(dl.getTime())) return null;
+  const diffMs = dl.getTime() - Date.now();
+  if (diffMs < 0) return { label: 'Deadline passed', badgeCls: 'bg-red-100 text-red-700 border-red-200', passed: true };
+  const diffH = Math.floor(diffMs / 3_600_000);
+  const diffD = Math.floor(diffMs / 86_400_000);
+  if (diffH < 24) return { label: `Closes in ${diffH}h`, badgeCls: 'bg-red-100 text-red-700 border-red-200', passed: false };
+  if (diffD <= 2) return { label: `Closes in ${diffD}d`, badgeCls: 'bg-orange-100 text-orange-700 border-orange-200', passed: false };
+  if (diffD <= 7) return { label: `Closes in ${diffD}d`, badgeCls: 'bg-amber-100 text-amber-700 border-amber-200', passed: false };
+  return { label: `Closes ${format(dl, 'dd MMM')}`, badgeCls: 'bg-slate-100 text-slate-500 border-slate-200', passed: false };
 }
 
 const STATUS_CFG: Record<SurveyStatus, {
@@ -138,9 +154,25 @@ export default function SurveysPage() {
         survey_responses: undefined,
       })) as Survey[];
     },
-    staleTime: 2 * 60 * 1000,   // 2 min — instant on revisit
-    gcTime:    10 * 60 * 1000,   // keep in memory 10 min
+    staleTime: 2 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
+
+  // Auto-close any active survey whose deadline has passed
+  useEffect(() => {
+    if (!surveys.length) return;
+    const now = new Date();
+    const expired = surveys.filter(s => {
+      if (s.status !== 'active') return false;
+      const raw = s.settings?.expires_at;
+      if (!raw) return false;
+      return new Date(String(raw)) < now;
+    });
+    if (!expired.length) return;
+    Promise.all(
+      expired.map(s => supabase.from('surveys').update({ status: 'closed' }).eq('id', s.id))
+    ).then(() => qc.invalidateQueries({ queryKey: ['surveys'] }));
+  }, [surveys]);
 
   const createSurvey = useMutation({
     mutationFn: async () => {
@@ -748,6 +780,18 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
         <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
       </div>
 
+      {/* Deadline badge */}
+      {(() => {
+        const dl = getDeadlineInfo(survey);
+        if (!dl) return null;
+        return (
+          <div className={cn('flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border w-fit mb-2', dl.badgeCls)}>
+            <AlarmClock className="w-3 h-3" />
+            {dl.label}
+          </div>
+        );
+      })()}
+
       {/* Title + desc */}
       <h3 className="font-semibold text-slate-800 text-[15px] leading-snug line-clamp-2 mb-1">{survey.title}</h3>
       {survey.description && (
@@ -963,6 +1007,16 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
               Draft saved · Continue
             </a>
           )}
+          {(() => {
+            const dl = getDeadlineInfo(survey);
+            if (!dl) return null;
+            return (
+              <span className={cn('flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', dl.badgeCls)}>
+                <AlarmClock className="w-3 h-3" />
+                {dl.label}
+              </span>
+            );
+          })()}
         </div>
       </div>
 
