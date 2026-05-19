@@ -84,9 +84,11 @@ interface ClaimedSiteData {
   state: string;
   locality: string;
   status: string;
-  accepted_by: string;
+  claimed_by?: string;
+  accepted_by?: string;
+  claimed_by_name?: string;
   accepted_by_name?: string;
-  accepted_at?: string;
+  dispatched_at?: string;
   enumerator_fee?: number;
   transport_fee?: number;
   main_activity?: string;
@@ -455,16 +457,18 @@ export function SuperAdminDataManagement() {
   const loadClaimedSites = async () => {
     setLoading(true);
     try {
-      // Fetch all claimed sites (no limit) — user explicitly wants all records visible
+      // "Claimed" = enumerator has taken ownership of a dispatched site.
+      // Status values used across the system: claimed, assigned, accepted, ongoing, in_progress.
+      // We filter by status (not by accepted_by IS NOT NULL, which is the verification step).
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id')
-        .not('accepted_by', 'is', null)
-        .order('accepted_at', { ascending: false });
+        .select('id, site_name, site_code, state, locality, status, claimed_by, accepted_by, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id')
+        .in('status', ['claimed', 'Claimed', 'assigned', 'Assigned', 'accepted', 'Accepted', 'ongoing', 'Ongoing', 'in_progress', 'In_Progress', 'in progress'])
+        .order('dispatched_at', { ascending: false });
 
       if (error) throw error;
 
-      // Build MMP name map from mmp_files
+      // Build MMP name map in parallel with the main query already done
       const mmpIds = [...new Set((data || []).map((s: any) => s.mmp_id).filter(Boolean))] as string[];
       let mmpNameMap: Record<string, string> = {};
       if (mmpIds.length > 0) {
@@ -477,12 +481,17 @@ export function SuperAdminDataManagement() {
         });
       }
 
-      const enriched = (data || []).map((site: any) => ({
-        ...site,
-        accepted_by_name: userMap.get(site.accepted_by)?.name || 'Unknown',
-        main_activity: site.main_activity || site.activity_at_site || null,
-        mmp_name: site.mmp_id ? (mmpNameMap[site.mmp_id] || site.mmp_id) : undefined,
-      }));
+      const enriched = (data || []).map((site: any) => {
+        // claimed_by is who took the site; fall back to accepted_by for older records
+        const claimerUid = site.claimed_by || site.accepted_by;
+        return {
+          ...site,
+          claimed_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',
+          accepted_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',
+          main_activity: site.main_activity || site.activity_at_site || null,
+          mmp_name: site.mmp_id ? (mmpNameMap[site.mmp_id] || site.mmp_id) : undefined,
+        };
+      });
 
       setClaimedSites(enriched);
       loadedTabsRef.current.add('claimed-sites');
@@ -588,17 +597,33 @@ export function SuperAdminDataManagement() {
     else if (activeTab === 'mmps') loadMMPs();
   }, [activeTab, userMap]);
 
+  // Preload ALL tabs in parallel the moment we have user data — so every tab is instant on switch
+  const hasPreloadedRef = useRef(false);
   useEffect(() => {
-    if (isSuperAdmin && userMap.size > 0) {
-      // Only load if tab hasn't been loaded yet (use cache)
-      if (!loadedTabsRef.current.has(activeTab)) {
-        if (activeTab === 'site-visits') loadSiteVisits();
-        else if (activeTab === 'wallets') loadWallets();
-        else if (activeTab === 'transactions') loadTransactions();
-        else if (activeTab === 'claimed-sites') loadClaimedSites();
-        else if (activeTab === 'dispatched-sites') loadDispatchedSites();
-        else if (activeTab === 'mmps') loadMMPs();
-      }
+    if (!isSuperAdmin || userMap.size === 0 || hasPreloadedRef.current) return;
+    hasPreloadedRef.current = true;
+    loadSiteVisits();
+    loadClaimedSites();
+    loadDispatchedSites();
+    loadMMPs();
+    // Wallets & transactions are heavier — start them 400 ms later to avoid overwhelming
+    const t = setTimeout(() => {
+      loadWallets();
+      loadTransactions();
+    }, 400);
+    return () => clearTimeout(t);
+  }, [isSuperAdmin, userMap]);
+
+  // Fallback: load a tab on-demand if it was somehow missed
+  useEffect(() => {
+    if (!isSuperAdmin || userMap.size === 0) return;
+    if (!loadedTabsRef.current.has(activeTab)) {
+      if (activeTab === 'site-visits') loadSiteVisits();
+      else if (activeTab === 'wallets') loadWallets();
+      else if (activeTab === 'transactions') loadTransactions();
+      else if (activeTab === 'claimed-sites') loadClaimedSites();
+      else if (activeTab === 'dispatched-sites') loadDispatchedSites();
+      else if (activeTab === 'mmps') loadMMPs();
     }
   }, [activeTab, isSuperAdmin, userMap]);
 
