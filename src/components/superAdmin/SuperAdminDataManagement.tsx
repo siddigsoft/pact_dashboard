@@ -601,21 +601,23 @@ export function SuperAdminDataManagement() {
         }
       }
 
-      // Paginated site-count fetch — mmp_site_entries can exceed 1000 rows
+      // Paginated site-count fetch — also grab created_at for synthetic MMP name derivation
       const SC_PAGE = 1000;
       let allSiteCounts: any[] = [];
       let scFrom = 0;
       while (true) {
         const { data: scPage } = await supabase
           .from('mmp_site_entries')
-          .select('mmp_file_id, status')
+          .select('mmp_file_id, status, created_at')
           .range(scFrom, scFrom + SC_PAGE - 1);
         allSiteCounts = [...allSiteCounts, ...(scPage || [])];
         if ((scPage || []).length < SC_PAGE) break;
         scFrom += SC_PAGE;
       }
 
+      const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
       const mmpStats: Record<string, { total: number; dispatched: number; completed: number }> = {};
+      const mmpEarliestDate: Record<string, Date> = {};
       allSiteCounts.forEach((s: any) => {
         const key = s.mmp_file_id;
         if (!key) return;
@@ -623,13 +625,28 @@ export function SuperAdminDataManagement() {
         mmpStats[key].total++;
         if (s.status === 'dispatched' || s.status === 'assigned') mmpStats[key].dispatched++;
         if (s.status === 'completed' || s.status === 'verified') mmpStats[key].completed++;
+        if (s.created_at) {
+          const d = new Date(s.created_at);
+          if (!mmpEarliestDate[key] || d < mmpEarliestDate[key]) mmpEarliestDate[key] = d;
+        }
       });
 
       // If mmp_files returned 0 rows (RLS blocks super_admin — apply fix_mmp_files_superadmin_access.sql),
-      // synthesize MMP entries from the mmp_site_entries data we already have
+      // synthesize MMP entries using month/year derived from the earliest site entry date
       const mmpSource = (data && data.length > 0)
         ? data
-        : Object.keys(mmpStats).map(id => ({ id, name: null, month: null, year: null, status: null, project_name: null, created_at: null }));
+        : Object.keys(mmpStats).map(id => {
+            const d = mmpEarliestDate[id];
+            return {
+              id,
+              name: d ? `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()} MMP` : null,
+              month: d ? d.getMonth() + 1 : null,
+              year: d ? d.getFullYear() : null,
+              status: null,
+              project_name: null,
+              created_at: d ? d.toISOString() : null,
+            };
+          });
 
       const enriched = mmpSource.map((m: any) => ({
         id: m.id,
