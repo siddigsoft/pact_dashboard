@@ -136,9 +136,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   const isLikelyAdminRole = normalizedUserRole === 'admin' || normalizedUserRole === 'ict';
 
   const checkSuperAdminStatus = useCallback(async (userId: string): Promise<boolean> => {
-    // Avoid unnecessary / fragile table reads for non-super-admin roles.
-    if (!isLikelySuperAdminRole) return false;
-
+    // Always check the super_admins table — profiles.role may differ from actual
+    // super-admin status (e.g. user's profiles.role = 'dataCollector' but they
+    // are in the super_admins table with is_active = true).
     try {
       const { data, error } = await supabase
         .from('super_admins')
@@ -163,11 +163,12 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       }
       return false;
     }
-  }, [isLikelySuperAdminRole]);
+  }, []);
 
   const refreshSuperAdmins = useCallback(async () => {
-    // Only admins should fetch super-admin data
-    if (!currentUser || (!isLikelyAdminRole && !isLikelySuperAdminRole)) {
+    // Only admins / super-admins should fetch super-admin data
+    // isSuperAdmin may be true even when profiles.role != 'superadmin'
+    if (!currentUser || (!isLikelyAdminRole && !isLikelySuperAdminRole && !isSuperAdmin)) {
       setSuperAdmins([]);
       setStats(null);
       setLoading(false);
@@ -222,7 +223,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isLikelyAdminRole, isLikelySuperAdminRole]);
+  }, [currentUser, isLikelyAdminRole, isLikelySuperAdminRole, isSuperAdmin]);
 
   const refreshDeletionLogs = useCallback(async () => {
     try {
@@ -304,11 +305,11 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, [currentUser, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
 
   useRealtimeTable('super_admins', refreshSuperAdmins, {
-    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole),
+    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
   });
 
   useRealtimeTable('deletion_audit_log', refreshDeletionLogs, {
-    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole),
+    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
   });
 
   const createSuperAdmin = async (data: CreateSuperAdmin): Promise<boolean> => {
