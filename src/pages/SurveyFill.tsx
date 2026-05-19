@@ -642,8 +642,8 @@ export default function SurveyFill() {
     if (emailParam) setRespondentEmail(emailParam);
   }, []);
 
-  // Draft expiry: discard drafts older than 30 days
-  const DRAFT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+  // Draft expiry: discard drafts older than 90 days
+  const DRAFT_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
   // Auto-restore saved draft on mount — load answers immediately, no click required
   useEffect(() => {
@@ -671,7 +671,22 @@ export default function SurveyFill() {
     } catch { /* ignore */ }
   }, [draftKey]);
 
-  // Auto-save draft whenever any answer state changes (answers, table rows, repeat rows)
+  // Helper: write draft to localStorage
+  const persistDraft = () => {
+    if (!draftKey) return;
+    const hasContent =
+      Object.keys(answers).length > 0 ||
+      Object.keys(gridTableRows).length > 0 ||
+      Object.keys(repeatRows).length > 0;
+    if (!hasContent) return;
+    try {
+      const now = Date.now();
+      localStorage.setItem(draftKey, JSON.stringify({ answers, gridTableRows, repeatRows, savedAt: now }));
+      setDraftSavedAt(now);
+    } catch { /* ignore quota errors */ }
+  };
+
+  // Auto-save on every answer/row change
   useEffect(() => {
     const hasContent =
       Object.keys(answers).length > 0 ||
@@ -680,16 +695,28 @@ export default function SurveyFill() {
     if (!draftKey || !hasContent) return;
     try {
       const now = Date.now();
-      localStorage.setItem(draftKey, JSON.stringify({
-        answers,
-        gridTableRows,
-        repeatRows,
-        savedAt: now,
-      }));
+      localStorage.setItem(draftKey, JSON.stringify({ answers, gridTableRows, repeatRows, savedAt: now }));
       setDraftSavedAt(now);
       setAutoSaveFlash(true);
       setTimeout(() => setAutoSaveFlash(false), 1500);
     } catch { /* ignore quota errors */ }
+  }, [answers, gridTableRows, repeatRows, draftKey]);
+
+  // Heartbeat auto-save every 15 seconds — catches anything the reactive save missed
+  useEffect(() => {
+    if (!draftKey) return;
+    const timer = setInterval(persistDraft, 15_000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, gridTableRows, repeatRows, draftKey]);
+
+  // Also save immediately on page-hide (tab close / navigation)
+  useEffect(() => {
+    const onHide = () => persistDraft();
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') persistDraft(); });
+    return () => window.removeEventListener('pagehide', onHide);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers, gridTableRows, repeatRows, draftKey]);
 
   const discardDraft = () => {
@@ -714,6 +741,8 @@ export default function SurveyFill() {
   const { data: surveyWithQuestions, isLoading: surveyLoading } = useQuery<{ survey: Survey; questions: Question[] }>({
     queryKey: ['survey-fill-combined', id],
     enabled: !!id,
+    staleTime: 5 * 60 * 1000,   // serve cached data for 5 min — instant revisit
+    gcTime:    30 * 60 * 1000,   // keep in memory for 30 min
     queryFn: async () => {
       const col = isUuidParam ? 'id' : 'short_code';
       const { data, error } = await supabase
@@ -778,8 +807,11 @@ export default function SurveyFill() {
   });
 
   // All questions visible to this respondent (skip logic + group visibility)
-  const visibleIds = new Set(
-    questions.filter(q => isVisible(q, questions, answers)).map(q => q.id)
+  // Memoized: only recomputes when questions list or answers actually change
+  const visibleIds = useMemo(
+    () => new Set(questions.filter(q => isVisible(q, questions, answers)).map(q => q.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questions, answers]
   );
 
   const submitMutation = useMutation({
