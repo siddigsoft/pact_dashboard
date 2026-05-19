@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -314,6 +314,11 @@ export default function SurveyDetail() {
 
   const overrideCanManage = usePageManageOverride('surveys', roleCanManage);
   const canManage = roleCanManage || overrideCanManage;
+
+  // Non-managers have no business on the detail page — redirect straight to the fill form
+  useEffect(() => {
+    if (!canManage && id) navigate(`/s/${id}`, { replace: true });
+  }, [canManage, id, navigate]);
 
   const [tab, setTab] = useState<'builder' | 'responses' | 'analytics' | 'map' | 'settings'>('builder');
   const [editTitle, setEditTitle]     = useState('');
