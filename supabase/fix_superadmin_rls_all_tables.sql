@@ -2,22 +2,17 @@
 -- COMPREHENSIVE FIX: Grant super_admin full SELECT access to ALL tables
 --
 -- WHY NEEDED:
---   Dozens of tables have RLS policies listing specific roles (admin, ict,
---   financialAdmin, supervisor...) but never include super_admin / superAdmin.
---   This causes Super Admin users to see only their own rows (or nothing) on
---   almost every page in the app.
+--   The app determines super-admin status via the `super_admins` table
+--   (user_id + is_active), NOT via profiles.role.  Many RLS policies use
+--   profiles.role checks that exclude the super-admin user.
 --
--- WHAT THIS DOES:
---   Loops over every RLS-enabled table in the public schema and adds one
---   permissive SELECT policy for super_admin / superAdmin roles.
---   Existing policies are NOT modified — this simply adds an additional
---   permissive policy alongside them.
+--   This script adds a permissive SELECT policy to every RLS-enabled table,
+--   keyed on the super_admins table — exactly how the app itself checks.
 --
 -- HOW TO APPLY:
---   1. Open your Supabase project → SQL Editor (left sidebar)
+--   1. Open your Supabase project → SQL Editor
 --   2. Paste this entire file and click RUN
---   3. Hard-refresh the app (Ctrl+Shift+R)
---      → All pages will show complete data immediately
+--   3. Hard-refresh the app (Ctrl+Shift+R) — all pages show full data
 -- =============================================================================
 
 DO $$
@@ -32,34 +27,27 @@ BEGIN
     JOIN pg_class pc ON pc.relname = pt.tablename
     JOIN pg_namespace pn ON pn.oid = pc.relnamespace
     WHERE pt.schemaname = 'public'
-      AND pc.relrowsecurity = true   -- RLS is enabled on this table
+      AND pc.relrowsecurity = true
     ORDER BY pt.tablename
   LOOP
     policy_name := 'superadmin_select_all_' || r.tablename;
 
     BEGIN
-      -- Drop existing version of this policy if present (idempotent)
       EXECUTE format(
         'DROP POLICY IF EXISTS %I ON public.%I',
         policy_name, r.tablename
       );
 
-      -- Add new permissive SELECT policy for super_admin roles
+      -- Check via super_admins table (same logic the app uses for isSuperAdmin)
       EXECUTE format(
         $policy$
           CREATE POLICY %I ON public.%I
           FOR SELECT
           USING (
             EXISTS (
-              SELECT 1 FROM public.profiles
-              WHERE profiles.id = (SELECT auth.uid())
-                AND profiles.role IN (
-                  'super_admin', 'superAdmin',
-                  'admin',
-                  'financialAdmin',
-                  'fom', 'hub_supervisor',
-                  'ict', 'ictSupport'
-                )
+              SELECT 1 FROM public.super_admins
+              WHERE super_admins.user_id = (SELECT auth.uid())
+                AND super_admins.is_active = true
             )
           )
         $policy$,
@@ -67,7 +55,6 @@ BEGIN
       );
 
     EXCEPTION WHEN OTHERS THEN
-      -- Some system/view tables may reject policy creation — skip silently
       RAISE NOTICE 'Skipped table %: %', r.tablename, SQLERRM;
     END;
 
