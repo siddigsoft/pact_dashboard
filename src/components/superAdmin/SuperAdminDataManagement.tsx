@@ -424,13 +424,13 @@ export function SuperAdminDataManagement() {
         try {
           const { data: entries } = await supabase
             .from('mmp_site_entries')
-            .select('id, state, locality, hub_office, mmp_id')
+            .select('id, state, locality, hub_office, mmp_file_id')
             .in('id', siteVisitIds);
 
           const entryMap: Record<string, any> = {};
           (entries || []).forEach((e: any) => { entryMap[e.id] = e; });
 
-          const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))] as string[];
+          const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_file_id).filter(Boolean))] as string[];
           const mmpNameMap: Record<string, string> = {};
           if (mmpIds.length > 0) {
             const { data: mmpFiles } = await supabase
@@ -442,7 +442,7 @@ export function SuperAdminDataManagement() {
             const raw = rawData[idx];
             const entryId = raw?.site_visit_id || raw?.related_site_visit_id;
             const e = entryId ? entryMap[entryId] : undefined;
-            return { ...t, hub_office: e?.hub_office, state: e?.state, locality: e?.locality, mmp_id: e?.mmp_id, mmp_name: e?.mmp_id ? mmpNameMap[e.mmp_id] : undefined };
+            return { ...t, hub_office: e?.hub_office, state: e?.state, locality: e?.locality, mmp_id: e?.mmp_file_id, mmp_name: e?.mmp_file_id ? mmpNameMap[e.mmp_file_id] : undefined };
           }));
         } catch (enrichErr) {
           console.warn('[Transactions] Enrichment failed, showing base data:', enrichErr);
@@ -476,7 +476,7 @@ export function SuperAdminDataManagement() {
       ];
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id, additional_data')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_file_id, additional_data')
         .in('status', POST_DISPATCH_STATUSES)
         .order('accepted_at', { ascending: false });
 
@@ -486,7 +486,7 @@ export function SuperAdminDataManagement() {
       }
 
       // Build MMP name map
-      const mmpIds = [...new Set((data || []).map((s: any) => s.mmp_id).filter(Boolean))] as string[];
+      const mmpIds = [...new Set((data || []).map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       let mmpNameMap: Record<string, string> = {};
       if (mmpIds.length > 0) {
         const { data: mmpFiles } = await supabase
@@ -506,7 +506,8 @@ export function SuperAdminDataManagement() {
           claimed_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',
           accepted_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',
           main_activity: site.main_activity || site.activity_at_site || null,
-          mmp_name: site.mmp_id ? (mmpNameMap[site.mmp_id] || site.mmp_id) : undefined,
+          mmp_name: site.mmp_file_id ? (mmpNameMap[site.mmp_file_id] || site.mmp_file_id) : undefined,
+          mmp_id: site.mmp_file_id,
         };
       });
 
@@ -571,16 +572,16 @@ export function SuperAdminDataManagement() {
 
       const { data: siteCounts } = await supabase
         .from('mmp_site_entries')
-        .select('mmp_id, status');
+        .select('mmp_file_id, status');
 
       const mmpStats: Record<string, { total: number; dispatched: number; completed: number }> = {};
       (siteCounts || []).forEach((s: any) => {
-        if (!mmpStats[s.mmp_id]) {
-          mmpStats[s.mmp_id] = { total: 0, dispatched: 0, completed: 0 };
-        }
-        mmpStats[s.mmp_id].total++;
-        if (s.status === 'dispatched' || s.status === 'assigned') mmpStats[s.mmp_id].dispatched++;
-        if (s.status === 'completed' || s.status === 'verified') mmpStats[s.mmp_id].completed++;
+        const key = s.mmp_file_id;
+        if (!key) return;
+        if (!mmpStats[key]) mmpStats[key] = { total: 0, dispatched: 0, completed: 0 };
+        mmpStats[key].total++;
+        if (s.status === 'dispatched' || s.status === 'assigned') mmpStats[key].dispatched++;
+        if (s.status === 'completed' || s.status === 'verified') mmpStats[key].completed++;
       });
 
       const enriched = (data || []).map((m: any) => ({
