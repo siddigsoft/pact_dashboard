@@ -6353,6 +6353,12 @@ const MMP = () => {
                         onUpdateSites={async (sites) => {
                           try {
                             for (const site of sites) {
+                              const isCostApproved =
+                                site.cost_acknowledged === true ||
+                                site.cost_acknowledged === 'true' ||
+                                site.additionalData?.cost_acknowledged === true ||
+                                site.additional_data?.cost_acknowledged === true;
+                              if (isCostApproved) continue;
                               const enumFee = site.enumerator_fee ?? site.enumeratorFee;
                               const transFee = site.transport_fee ?? site.transportFee;
                               let calculatedCost: number | undefined;
@@ -6434,6 +6440,12 @@ const MMP = () => {
                         onUpdateSites={async (sites) => {
                           try {
                             for (const site of sites) {
+                              const isCostApproved =
+                                site.cost_acknowledged === true ||
+                                site.cost_acknowledged === 'true' ||
+                                site.additionalData?.cost_acknowledged === true ||
+                                site.additional_data?.cost_acknowledged === true;
+                              if (isCostApproved) continue;
                               const enumFee = site.enumerator_fee ?? site.enumeratorFee;
                               const transFee = site.transport_fee ?? site.transportFee;
                               let calculatedCost: number | undefined;

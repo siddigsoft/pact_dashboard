@@ -504,17 +504,31 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                   Review the complete site information and cost breakdown
                 </DialogDescription>
               </div>
-              {editable && !isEditing && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-2"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit
-                </Button>
-              )}
+              {editable && !isEditing && (() => {
+                const costApproved =
+                  site?.cost_acknowledged === true ||
+                  site?.cost_acknowledged === 'true' ||
+                  site?.additionalData?.cost_acknowledged === true ||
+                  site?.additional_data?.cost_acknowledged === true;
+                return costApproved ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-md">
+                    <svg className="h-3.5 w-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span className="text-xs font-medium text-amber-700">Cost Approved — Locked</span>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditing(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </Button>
+                );
+              })()}
             </div>
           </DialogHeader>
 
