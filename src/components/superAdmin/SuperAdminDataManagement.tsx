@@ -522,11 +522,15 @@ export function SuperAdminDataManagement() {
   const loadDispatchedSites = async () => {
     setLoadingDispatched(true);
     try {
+      const DISPATCHED_STATUSES = [
+        'dispatched', 'Dispatched',
+        'forwarded_to_coordinator',
+        'smart_assigned', 'Smart_Assigned',
+      ];
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
-        .in('status', ['Dispatched', 'dispatched'])
-        .is('accepted_by', null)
+        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office, accepted_by')
+        .in('status', DISPATCHED_STATUSES)
         .order('dispatched_at', { ascending: false });
 
       if (error) throw error;
