@@ -2302,6 +2302,65 @@ export default function SurveyDetail() {
             );
           })()}
 
+          {/* ── Per-Question Response Rate ──────────────────────────────────── */}
+          {responses.length > 0 && nonStructural.length > 0 && (() => {
+            const answerable = nonStructural.filter(q =>
+              !['section_header','begin_group','begin_repeat','note','grid_table'].includes(q.type)
+            );
+            if (answerable.length === 0) return null;
+            const stats = answerable.map(q => {
+              const count = new Set(allAnswers.filter(a => a.question_id === q.id).map(a => a.response_id)).size;
+              const pct = Math.round((count / responses.length) * 100);
+              return { q, count, pct };
+            }).sort((a, b) => a.pct - b.pct);
+            const worstPct = stats[0]?.pct ?? 100;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-rose-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Per-Question Response Rate</h3>
+                  <span className="text-[11px] text-slate-400 ml-auto">{answerable.length} question{answerable.length !== 1 ? 's' : ''}</span>
+                </div>
+                {worstPct < 100 && (
+                  <div className="flex items-center gap-2 text-[11px] text-rose-600 bg-rose-50 rounded-lg px-2.5 py-1.5 border border-rose-100">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    Highest drop-off: <span className="font-semibold ml-1 truncate">&ldquo;{stats[0]?.q.label}&rdquo;</span>
+                    <span className="shrink-0 ml-auto">skipped by {100 - worstPct}%</span>
+                  </div>
+                )}
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                  {stats.map(({ q, count, pct }) => (
+                    <div key={q.id} className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-700 truncate">{q.label}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] text-slate-400 tabular-nums">{count}/{responses.length}</span>
+                          <span className={cn(
+                            'text-xs font-bold tabular-nums w-9 text-right',
+                            pct >= 80 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-rose-600'
+                          )}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={cn('h-full rounded-full transition-all duration-300',
+                            pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'
+                          )}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-4 pt-1 border-t border-slate-100">
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /><span className="text-[10px] text-slate-500">≥80%</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" /><span className="text-[10px] text-slate-500">50–79%</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0" /><span className="text-[10px] text-slate-500">&lt;50% high drop-off</span></div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── Response Time Analytics ────────────────────────────────────── */}
           {responses.length > 0 && (() => {
             const stats = getDurationStats();

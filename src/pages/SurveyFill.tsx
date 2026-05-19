@@ -10,7 +10,7 @@ import {
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
   Hash, Clock, CalendarClock, GitBranch, Folder,
   Crosshair, RefreshCw, Check, Copy, ExternalLink, Edit3, Keyboard, X, Save,
-  FunctionSquare, Plus, Table2, Trash2, PenLine, Info, Lock,
+  FunctionSquare, Plus, Table2, Trash2, PenLine, Info, Lock, WifiOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -633,6 +633,26 @@ export default function SurveyFill() {
 
   const draftKey = id ? `survey_draft_${id}` : null;
 
+  // Online / offline detection
+  const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  useEffect(() => {
+    const goOnline  = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online',  goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
+  // Scroll to the first question that failed validation
+  const scrollToFirstError = (errs: Record<string, string>) => {
+    const firstId = Object.keys(errs)[0];
+    if (!firstId) return;
+    setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="question-${firstId}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+  };
+
   // URL prefill — ?name=Ahmed&email=ahmed@example.com
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -878,6 +898,7 @@ export default function SurveyFill() {
       }
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
+        scrollToFirstError(newErrors);
         throw new Error('Please answer all required questions');
       }
       setErrors({});
@@ -1033,7 +1054,7 @@ export default function SurveyFill() {
         newErrors[q.id] = 'This question is required';
       }
     }
-    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); scrollToFirstError(newErrors); return; }
     setErrors({});
     setCurrentPage(p => p + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2175,6 +2196,14 @@ export default function SurveyFill() {
 
         {/* Navigation / Submit */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+          {!isOnline && (
+            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              <WifiOff className="w-4 h-4 shrink-0" />
+              {lang === 'ar'
+                ? 'أنت غير متصل — إجاباتك محفوظة ومحمية وستُرسل فور عودتك للإنترنت.'
+                : "You're offline — your answers are saved locally and will submit when you reconnect."}
+            </div>
+          )}
           {Object.keys(errors).length > 0 && (
             <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -2194,7 +2223,7 @@ export default function SurveyFill() {
                   {lang === 'ar' ? 'التالي' : 'Next'}<ChevronRight className="w-4 h-4" />
                 </Button>
               ) : (
-                <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
+                <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending || !isOnline}
                   className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700" data-testid="btn-submit-survey">
                   {submitMutation.isPending
                     ? <><Loader2 className="w-4 h-4 animate-spin" />{lang === 'ar' ? 'جارٍ الإرسال…' : 'Submitting…'}</>
@@ -2203,7 +2232,7 @@ export default function SurveyFill() {
               )}
             </div>
           ) : (
-            <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
+            <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending || !isOnline}
               className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700" data-testid="btn-submit-survey">
               {submitMutation.isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" />{lang === 'ar' ? 'جارٍ الإرسال…' : 'Submitting…'}</>
