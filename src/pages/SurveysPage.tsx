@@ -553,6 +553,21 @@ export default function SurveysPage() {
 }
 
 /* ─────────────────────────────────────────────
+   Local-draft detector (reads localStorage)
+───────────────────────────────────────────── */
+function getLocalDraft(surveyId: string): { hasDraft: boolean; savedAt: number | null; answeredCount: number } {
+  try {
+    const raw = localStorage.getItem(`survey_draft_${surveyId}`);
+    if (!raw) return { hasDraft: false, savedAt: null, answeredCount: 0 };
+    const d = JSON.parse(raw);
+    const age = d?.savedAt ? Date.now() - d.savedAt : Infinity;
+    if (age > 90 * 24 * 60 * 60 * 1000) return { hasDraft: false, savedAt: null, answeredCount: 0 };
+    const answered = d?.answers ? Object.keys(d.answers).length : 0;
+    return { hasDraft: true, savedAt: d?.savedAt ?? null, answeredCount: answered };
+  } catch { return { hasDraft: false, savedAt: null, answeredCount: 0 }; }
+}
+
+/* ─────────────────────────────────────────────
    Shared card/row props
 ───────────────────────────────────────────── */
 interface CardProps {
@@ -575,6 +590,7 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
   const cfg = STATUS_CFG[survey.status];
   const StatusIcon = cfg.icon;
   const hasResponses = (survey._r_count ?? 0) > 0;
+  const localDraft = getLocalDraft(survey.id);
 
   return (
     <div
@@ -609,6 +625,34 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
       <h3 className="font-semibold text-slate-800 text-[15px] leading-snug line-clamp-2 mb-1">{survey.title}</h3>
       {survey.description && (
         <p className="text-xs text-slate-500 line-clamp-2 mb-2">{survey.description}</p>
+      )}
+
+      {/* Draft-in-progress banner */}
+      {localDraft.hasDraft && (
+        <div
+          className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+            <span className="text-[11px] text-amber-800 font-medium truncate">
+              Draft saved
+              {localDraft.savedAt && (
+                <span className="font-normal text-amber-600"> · {formatDistanceToNow(localDraft.savedAt, { addSuffix: true })}</span>
+              )}
+            </span>
+            {localDraft.answeredCount > 0 && (
+              <span className="text-[10px] text-amber-500 shrink-0">{localDraft.answeredCount}q answered</span>
+            )}
+          </div>
+          <a
+            href={`/s/${survey.id}`}
+            className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 shrink-0"
+            data-testid={`btn-continue-draft-${survey.id}`}
+          >
+            Continue <ChevronRight className="w-3 h-3" />
+          </a>
+        </div>
       )}
 
       {/* Meta */}
@@ -748,6 +792,7 @@ function SurveyCard({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLi
 ───────────────────────────────────────────── */
 function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLink, onShare, onChangeStatus, duplicating, statusChanging }: CardProps) {
   const cfg = STATUS_CFG[survey.status];
+  const localDraft = getLocalDraft(survey.id);
 
   return (
     <div
@@ -770,7 +815,7 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
         {survey.description && (
           <p className="text-xs text-slate-400 mt-0.5 truncate">{survey.description}</p>
         )}
-        <div className="flex items-center gap-3 mt-1.5">
+        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
           <span className="flex items-center gap-1 text-[11px] text-slate-400">
             <FileText className="w-3 h-3" />{survey._q_count ?? 0}q
           </span>
@@ -780,6 +825,17 @@ function SurveyRow({ survey, canManage, onOpen, onDuplicate, onDelete, onCopyLin
           <span className="flex items-center gap-1 text-[11px] text-slate-400">
             <Clock className="w-3 h-3" />{format(new Date(survey.created_at), 'dd MMM yyyy')}
           </span>
+          {localDraft.hasDraft && (
+            <a
+              href={`/s/${survey.id}`}
+              onClick={e => e.stopPropagation()}
+              className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800"
+              data-testid={`btn-continue-draft-row-${survey.id}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Draft saved · Continue
+            </a>
+          )}
         </div>
       </div>
 
