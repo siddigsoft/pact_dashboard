@@ -21,9 +21,16 @@ BEGIN
 END;
 $$;
 
--- 3. Schedule: run every 15 minutes
---    (if the job already exists, unschedule it first)
-SELECT cron.unschedule('close-expired-surveys');
+-- 3. Remove existing job if it exists (safe first-run)
+DO $$
+BEGIN
+  PERFORM cron.unschedule('close-expired-surveys');
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END;
+$$;
+
+-- 4. Schedule: run every 15 minutes
 SELECT cron.schedule(
   'close-expired-surveys',
   '*/15 * * * *',
@@ -34,6 +41,6 @@ SELECT cron.schedule(
 -- To verify the job is registered:
 --   SELECT jobname, schedule, command FROM cron.job;
 --
--- To remove the job:
+-- To remove the job later:
 --   SELECT cron.unschedule('close-expired-surveys');
 -- ============================================================
