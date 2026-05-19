@@ -320,15 +320,23 @@ export function SuperAdminDataManagement() {
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality')
-        .in('status', ['completed', 'verified'])
-        .order('visit_completed_at', { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allSiteVisits: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality')
+          .in('status', ['completed', 'verified'])
+          .order('visit_completed_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        allSiteVisits = [...allSiteVisits, ...(data || [])];
+        if ((data || []).length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
 
-      if (error) throw error;
-
-      const enriched = (data || []).map(sv => ({
+      const enriched = allSiteVisits.map(sv => ({
         ...sv,
         accepted_by_name: userMap.get(sv.accepted_by)?.name || 'Unknown',
         completed_by_name: sv.visit_completed_by ? userMap.get(sv.visit_completed_by)?.name || 'N/A' : 'N/A',
@@ -474,39 +482,56 @@ export function SuperAdminDataManagement() {
         'costed', 'approved and costed',
         'returned_to_fom', 'recalled', 'forwarded_to_coordinator',
       ];
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_file_id, additional_data')
-        .in('status', POST_DISPATCH_STATUSES)
-        .order('accepted_at', { ascending: false });
 
-      if (error) {
-        console.error('Claimed sites query error:', error);
-        throw error;
+      // Paginated fetch — bypasses Supabase 1000-row default cap
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_file_id, additional_data, hub_office')
+          .in('status', POST_DISPATCH_STATUSES)
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) { console.error('Claimed sites query error (page', from, '):', error); throw error; }
+        allData = [...allData, ...(data || [])];
+        if ((data || []).length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
 
-      // Build MMP name map
-      const mmpIds = [...new Set((data || []).map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
-      let mmpNameMap: Record<string, string> = {};
-      if (mmpIds.length > 0) {
-        const { data: mmpFiles } = await supabase
-          .from('mmp_files')
-          .select('id, name, month, year')
-          .in('id', mmpIds);
-        (mmpFiles || []).forEach((m: any) => {
-          mmpNameMap[m.id] = m.name || `MMP ${m.month}/${m.year}`;
-        });
+      // Build MMP name map — batched to avoid URL length issues
+      const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
+      const mmpNameMap: Record<string, string> = {};
+      if (uniqueMmpIds.length > 0) {
+        const BATCH = 50;
+        for (let i = 0; i < uniqueMmpIds.length; i += BATCH) {
+          const batch = uniqueMmpIds.slice(i, i + BATCH);
+          const { data: mmpFiles, error: mmpErr } = await supabase
+            .from('mmp_files')
+            .select('id, name, month, year')
+            .in('id', batch);
+          if (mmpErr) console.warn('[Claimed] MMP name lookup failed:', mmpErr);
+          (mmpFiles || []).forEach((m: any) => {
+            mmpNameMap[m.id] = m.name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
+          });
+        }
       }
 
-      const enriched = (data || []).map((site: any) => {
-        // claimed_by may live inside additional_data JSONB; fall back to accepted_by
-        const claimerUid = site.additional_data?.claimed_by || site.accepted_by;
+      const enriched = allData.map((site: any) => {
+        // Resolve claimer: accepted_by → additional_data.claimed_by → additional_data.assigned_to
+        const claimerUid = site.accepted_by
+          || site.additional_data?.claimed_by
+          || site.additional_data?.assigned_to;
+        const resolvedName = claimerUid
+          ? (userMap.get(claimerUid)?.name || `UID:${String(claimerUid).slice(0, 8)}`)
+          : 'Not assigned';
         return {
           ...site,
-          claimed_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',
-          accepted_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',
+          claimed_by_name: resolvedName,
+          accepted_by_name: resolvedName,
           main_activity: site.main_activity || site.activity_at_site || null,
-          mmp_name: site.mmp_file_id ? (mmpNameMap[site.mmp_file_id] || site.mmp_file_id) : undefined,
+          mmp_name: site.mmp_file_id ? (mmpNameMap[site.mmp_file_id] || null) : null,
           mmp_id: site.mmp_file_id,
         };
       });
@@ -528,15 +553,23 @@ export function SuperAdminDataManagement() {
         'forwarded_to_coordinator',
         'smart_assigned', 'Smart_Assigned',
       ];
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office, accepted_by')
-        .in('status', DISPATCHED_STATUSES)
-        .order('dispatched_at', { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allDispatched: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office, accepted_by')
+          .in('status', DISPATCHED_STATUSES)
+          .order('dispatched_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        allDispatched = [...allDispatched, ...(data || [])];
+        if ((data || []).length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
 
-      if (error) throw error;
-
-      const enriched = (data || []).map(site => ({
+      const enriched = allDispatched.map(site => ({
         ...site,
         dispatched_by_name: userMap.get(site.dispatched_by)?.name || 'Unknown',
         main_activity: site.main_activity || site.activity_at_site || null,
@@ -570,12 +603,22 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      const { data: siteCounts } = await supabase
-        .from('mmp_site_entries')
-        .select('mmp_file_id, status');
+      // Paginated site-count fetch — mmp_site_entries can exceed 1000 rows
+      const SC_PAGE = 1000;
+      let allSiteCounts: any[] = [];
+      let scFrom = 0;
+      while (true) {
+        const { data: scPage } = await supabase
+          .from('mmp_site_entries')
+          .select('mmp_file_id, status')
+          .range(scFrom, scFrom + SC_PAGE - 1);
+        allSiteCounts = [...allSiteCounts, ...(scPage || [])];
+        if ((scPage || []).length < SC_PAGE) break;
+        scFrom += SC_PAGE;
+      }
 
       const mmpStats: Record<string, { total: number; dispatched: number; completed: number }> = {};
-      (siteCounts || []).forEach((s: any) => {
+      allSiteCounts.forEach((s: any) => {
         const key = s.mmp_file_id;
         if (!key) return;
         if (!mmpStats[key]) mmpStats[key] = { total: 0, dispatched: 0, completed: 0 };
