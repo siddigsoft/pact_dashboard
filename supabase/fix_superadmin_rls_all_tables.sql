@@ -1,26 +1,61 @@
 -- =============================================================================
--- COMPREHENSIVE FIX: Grant super_admin full SELECT access to ALL tables
+-- MASTER FIX: Super Admin full data access across all tables
 --
--- WHY NEEDED:
---   The app determines super-admin status via the `super_admins` table
---   (user_id + is_active), NOT via profiles.role.  Many RLS policies use
---   profiles.role checks that exclude the super-admin user.
+-- WHY THIS IS NEEDED:
+--   The super-admin user's profiles.role = 'dataCollector' so all existing
+--   policies that check profiles.role IN ('admin','super_admin',...) deny
+--   access. This script uses the is_super_admin() SECURITY DEFINER function
+--   (which bypasses RLS and reads super_admins directly) to grant full SELECT
+--   access to the active super admin on every RLS-protected table.
 --
---   This script adds a permissive SELECT policy to every RLS-enabled table,
---   keyed on the super_admins table — exactly how the app itself checks.
+-- WHAT IT DOES:
+--   Step 1 - Recreates is_super_admin() to be sure it exists and works.
+--   Step 2 - Fixes super_admins table so the user can read their own row.
+--   Step 3 - Adds a permissive SELECT policy to every RLS-enabled table.
 --
 -- HOW TO APPLY:
---   1. Open your Supabase project → SQL Editor
---   2. Paste this entire file and click RUN
---   3. Hard-refresh the app (Ctrl+Shift+R) — all pages show full data
+--   Supabase → SQL Editor → paste entire file → Run
+--   Then hard-refresh the app (Ctrl+Shift+R) and log back in.
 -- =============================================================================
 
+-- ── STEP 1: Ensure is_super_admin() SECURITY DEFINER function exists ────────
+DROP FUNCTION IF EXISTS public.is_super_admin(UUID);
+DROP FUNCTION IF EXISTS public.is_super_admin();
+
+CREATE OR REPLACE FUNCTION public.is_super_admin(check_user_id UUID DEFAULT auth.uid())
+RETURNS BOOLEAN
+LANGUAGE SQL
+SECURITY DEFINER   -- bypasses RLS; reads super_admins directly
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.super_admins
+    WHERE user_id = check_user_id
+      AND is_active = true
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_super_admin(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_super_admin(UUID) TO anon;
+
+-- ── STEP 2: Fix super_admins table SELECT policy (self-read) ────────────────
+DROP POLICY IF EXISTS "super_admins_select"     ON public.super_admins;
+DROP POLICY IF EXISTS "super_admins_view"        ON public.super_admins;
+DROP POLICY IF EXISTS "super_admins_view_own"    ON public.super_admins;
+DROP POLICY IF EXISTS "super_admins_view_admin"  ON public.super_admins;
+
+CREATE POLICY "super_admins_select" ON public.super_admins
+  FOR SELECT USING (
+    user_id = auth.uid()        -- any user can read their OWN row
+    OR public.is_super_admin()  -- super admins can see all rows
+  );
+
+-- ── STEP 3: Add permissive SELECT policy to every RLS-protected table ───────
 DO $$
 DECLARE
   r RECORD;
   policy_name TEXT;
 BEGIN
-  -- Iterate every table that has RLS enabled in the public schema
   FOR r IN
     SELECT DISTINCT pt.tablename
     FROM pg_tables pt
@@ -30,7 +65,7 @@ BEGIN
       AND pc.relrowsecurity = true
     ORDER BY pt.tablename
   LOOP
-    policy_name := 'superadmin_select_all_' || r.tablename;
+    policy_name := 'superadmin_full_select_' || r.tablename;
 
     BEGIN
       EXECUTE format(
@@ -38,18 +73,12 @@ BEGIN
         policy_name, r.tablename
       );
 
-      -- Check via super_admins table (same logic the app uses for isSuperAdmin)
+      -- Uses is_super_admin() which is SECURITY DEFINER — no circular deps
       EXECUTE format(
         $policy$
           CREATE POLICY %I ON public.%I
           FOR SELECT
-          USING (
-            EXISTS (
-              SELECT 1 FROM public.super_admins
-              WHERE super_admins.user_id = (SELECT auth.uid())
-                AND super_admins.is_active = true
-            )
-          )
+          USING ( public.is_super_admin() )
         $policy$,
         policy_name, r.tablename
       );
@@ -60,5 +89,16 @@ BEGIN
 
   END LOOP;
 
-  RAISE NOTICE 'Done. Super-admin SELECT policies applied to all RLS tables.';
+  RAISE NOTICE 'Done — super-admin SELECT policies applied to all RLS tables.';
 END $$;
+
+-- ── DIAGNOSTIC: Show what the running super admin user looks like ────────────
+SELECT
+  sa.user_id,
+  sa.is_active,
+  p.role   AS profiles_role,
+  p.email,
+  public.is_super_admin(sa.user_id) AS fn_result
+FROM public.super_admins sa
+LEFT JOIN public.profiles p ON p.id = sa.user_id
+WHERE sa.is_active = true;
