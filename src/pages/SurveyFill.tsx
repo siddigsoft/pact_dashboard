@@ -645,14 +645,14 @@ export default function SurveyFill() {
   // Draft expiry: discard drafts older than 90 days
   const DRAFT_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
-  // Auto-restore saved draft on mount — load answers immediately, no click required
+  // Auto-restore saved draft on mount — load ALL state immediately, no click required
   useEffect(() => {
     if (!draftKey) return;
     try {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
-      // Discard drafts older than 30 days
+      // Discard drafts older than 90 days
       if (draft?.savedAt && Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) {
         localStorage.removeItem(draftKey);
         return;
@@ -660,47 +660,77 @@ export default function SurveyFill() {
       const hasAnswers    = draft?.answers       && Object.keys(draft.answers).length > 0;
       const hasGridRows   = draft?.gridTableRows && Object.keys(draft.gridTableRows).length > 0;
       const hasRepeatRows = draft?.repeatRows    && Object.keys(draft.repeatRows).length > 0;
-      if (hasAnswers || hasGridRows || hasRepeatRows) {
-        // Auto-load all draft data immediately — no user action needed
-        if (draft?.answers)       setAnswers(draft.answers);
-        if (draft?.gridTableRows) setGridTableRows(draft.gridTableRows);
-        if (draft?.repeatRows)    setRepeatRows(draft.repeatRows);
+      const hasOther      = draft?.otherTexts    && Object.keys(draft.otherTexts).length > 0;
+      const hasName       = !!draft?.respondentName;
+      const hasEmail      = !!draft?.respondentEmail;
+      if (hasAnswers || hasGridRows || hasRepeatRows || hasOther || hasName || hasEmail) {
+        if (draft?.answers)        setAnswers(draft.answers);
+        if (draft?.gridTableRows)  setGridTableRows(draft.gridTableRows);
+        if (draft?.repeatRows)     setRepeatRows(draft.repeatRows);
+        if (draft?.otherTexts)     setOtherTexts(draft.otherTexts);
+        if (draft?.respondentName) setRespondentName(draft.respondentName);
+        if (draft?.respondentEmail) setRespondentEmail(draft.respondentEmail);
+        if (typeof draft?.currentPage === 'number') setCurrentPage(draft.currentPage);
         setHasDraft(true);
         setDraftSavedAt(draft.savedAt ?? null);
       }
     } catch { /* ignore */ }
   }, [draftKey]);
 
-  // Helper: write draft to localStorage
+  // Helper: write ALL form state to localStorage
   const persistDraft = () => {
     if (!draftKey) return;
     const hasContent =
       Object.keys(answers).length > 0 ||
       Object.keys(gridTableRows).length > 0 ||
-      Object.keys(repeatRows).length > 0;
+      Object.keys(repeatRows).length > 0 ||
+      Object.keys(otherTexts).length > 0 ||
+      !!respondentName.trim() ||
+      !!respondentEmail.trim();
     if (!hasContent) return;
     try {
       const now = Date.now();
-      localStorage.setItem(draftKey, JSON.stringify({ answers, gridTableRows, repeatRows, savedAt: now }));
+      localStorage.setItem(draftKey, JSON.stringify({
+        answers,
+        gridTableRows,
+        repeatRows,
+        otherTexts,
+        respondentName,
+        respondentEmail,
+        currentPage,
+        savedAt: now,
+      }));
       setDraftSavedAt(now);
     } catch { /* ignore quota errors */ }
   };
 
-  // Auto-save on every answer/row change
+  // Auto-save on every answer/row/name/page change
   useEffect(() => {
     const hasContent =
       Object.keys(answers).length > 0 ||
       Object.keys(gridTableRows).length > 0 ||
-      Object.keys(repeatRows).length > 0;
+      Object.keys(repeatRows).length > 0 ||
+      Object.keys(otherTexts).length > 0 ||
+      !!respondentName.trim() ||
+      !!respondentEmail.trim();
     if (!draftKey || !hasContent) return;
     try {
       const now = Date.now();
-      localStorage.setItem(draftKey, JSON.stringify({ answers, gridTableRows, repeatRows, savedAt: now }));
+      localStorage.setItem(draftKey, JSON.stringify({
+        answers,
+        gridTableRows,
+        repeatRows,
+        otherTexts,
+        respondentName,
+        respondentEmail,
+        currentPage,
+        savedAt: now,
+      }));
       setDraftSavedAt(now);
       setAutoSaveFlash(true);
       setTimeout(() => setAutoSaveFlash(false), 1500);
     } catch { /* ignore quota errors */ }
-  }, [answers, gridTableRows, repeatRows, draftKey]);
+  }, [answers, gridTableRows, repeatRows, otherTexts, respondentName, respondentEmail, currentPage, draftKey]);
 
   // Heartbeat auto-save every 15 seconds — catches anything the reactive save missed
   useEffect(() => {
@@ -708,7 +738,7 @@ export default function SurveyFill() {
     const timer = setInterval(persistDraft, 15_000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answers, gridTableRows, repeatRows, draftKey]);
+  }, [answers, gridTableRows, repeatRows, otherTexts, respondentName, respondentEmail, currentPage, draftKey]);
 
   // Also save immediately on page-hide (tab close / navigation)
   useEffect(() => {
@@ -717,13 +747,17 @@ export default function SurveyFill() {
     window.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') persistDraft(); });
     return () => window.removeEventListener('pagehide', onHide);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answers, gridTableRows, repeatRows, draftKey]);
+  }, [answers, gridTableRows, repeatRows, otherTexts, respondentName, respondentEmail, currentPage, draftKey]);
 
   const discardDraft = () => {
     if (draftKey) try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
     setAnswers({});
     setGridTableRows({});
     setRepeatRows({});
+    setOtherTexts({});
+    setRespondentName('');
+    setRespondentEmail('');
+    setCurrentPage(0);
     setHasDraft(false);
     setDraftSavedAt(null);
   };
