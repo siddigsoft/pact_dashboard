@@ -6349,7 +6349,7 @@ const MMP = () => {
                       </div>
                       <MMPSiteEntriesTable 
                         siteEntries={applyGlobalFilters(acceptedSiteEntries)}
-                        editable={isAdmin || isFOM || isSupervisor || isSuperAdmin}
+                        editable={isAdmin || isSuperAdmin}
                         onUpdateSites={async (sites) => {
                           try {
                             for (const site of sites) {
@@ -6436,7 +6436,7 @@ const MMP = () => {
                       </div>
                       <MMPSiteEntriesTable 
                         siteEntries={applyGlobalFilters(ongoingSiteEntries)}
-                        editable={isAdmin || isFOM || isSupervisor || isSuperAdmin}
+                        editable={isAdmin || isSuperAdmin}
                         onUpdateSites={async (sites) => {
                           try {
                             for (const site of sites) {
