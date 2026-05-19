@@ -223,7 +223,11 @@ export function SuperAdminDataManagement() {
   const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet, reclaimSite } = useSuperAdmin();
 
   const [activeTab, setActiveTab] = useState('site-visits');
-  const [loading, setLoading] = useState(false);
+  const [loadingVisits, setLoadingVisits] = useState(false);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const [loadingClaimed, setLoadingClaimed] = useState(false);
+  const [loadingDispatched, setLoadingDispatched] = useState(false);
+  const [loadingMMPs, setLoadingMMPs] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -314,7 +318,7 @@ export function SuperAdminDataManagement() {
   const [resetTargetStatus, setResetTargetStatus] = useState<'new' | 'approved' | 'assigned' | 'dispatched'>('dispatched');
 
   const loadSiteVisits = async () => {
-    setLoading(true);
+    setLoadingVisits(true);
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
@@ -336,12 +340,12 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load site visits:', error);
     } finally {
-      setLoading(false);
+      setLoadingVisits(false);
     }
   };
 
   const loadWallets = async () => {
-    setLoading(true);
+    setLoadingWallets(true);
     try {
       const { data: walletsData, error: walletsError } = await supabase
         .from('wallets')
@@ -374,7 +378,7 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load wallets:', error);
     } finally {
-      setLoading(false);
+      setLoadingWallets(false);
     }
   };
 
@@ -455,16 +459,17 @@ export function SuperAdminDataManagement() {
   };
 
   const loadClaimedSites = async () => {
-    setLoading(true);
+    setLoadingClaimed(true);
     try {
-      // "Claimed" = enumerator has taken ownership of a dispatched site.
-      // Use a broad OR filter: either accepted_by is set, OR status indicates active work.
-      // Note: claimed_by is stored inside additional_data JSONB, not as a direct column.
+      // "Claimed" = enumerator has accepted/taken ownership of a dispatched site.
+      // The most reliable signal is accepted_by IS NOT NULL regardless of status,
+      // because the status may remain 'dispatched' after the claim action.
+      // We exclude sites that are already fully done (completed/verified).
       const { data, error } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id, additional_data')
-        .or('accepted_by.not.is.null,status.in.(accepted,Accepted,claimed,Claimed,assigned,Assigned,ongoing,Ongoing,in_progress,In_Progress)')
-        .not('status', 'in', '(completed,Completed,verified,Verified,dispatched,Dispatched,rejected,Rejected,new,New,pending,Pending)')
+        .not('accepted_by', 'is', null)
+        .not('status', 'in', '(completed,verified)')
         .order('dispatched_at', { ascending: false });
 
       if (error) {
@@ -502,12 +507,12 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load claimed sites:', error);
     } finally {
-      setLoading(false);
+      setLoadingClaimed(false);
     }
   };
 
   const loadDispatchedSites = async () => {
-    setLoading(true);
+    setLoadingDispatched(true);
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
@@ -530,12 +535,12 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load dispatched sites:', error);
     } finally {
-      setLoading(false);
+      setLoadingDispatched(false);
     }
   };
 
   const loadMMPs = async () => {
-    setLoading(true);
+    setLoadingMMPs(true);
     try {
       const { data, error } = await supabase
         .from('mmp_files')
@@ -586,7 +591,7 @@ export function SuperAdminDataManagement() {
     } catch (error) {
       console.error('Failed to load MMPs:', error);
     } finally {
-      setLoading(false);
+      setLoadingMMPs(false);
     }
   };
 
@@ -1340,10 +1345,24 @@ export function SuperAdminDataManagement() {
           <Button
             variant="outline"
             onClick={refreshCurrentTab}
-            disabled={activeTab === 'transactions' ? txLoading : loading}
+            disabled={
+              activeTab === 'transactions' ? txLoading :
+              activeTab === 'site-visits' ? loadingVisits :
+              activeTab === 'wallets' ? loadingWallets :
+              activeTab === 'claimed-sites' ? loadingClaimed :
+              activeTab === 'dispatched-sites' ? loadingDispatched :
+              activeTab === 'mmps' ? loadingMMPs : false
+            }
             data-testid="button-refresh"
           >
-            <RefreshCw className={`h-4 w-4 ${(activeTab === 'transactions' ? txLoading : loading) ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${(
+              activeTab === 'transactions' ? txLoading :
+              activeTab === 'site-visits' ? loadingVisits :
+              activeTab === 'wallets' ? loadingWallets :
+              activeTab === 'claimed-sites' ? loadingClaimed :
+              activeTab === 'dispatched-sites' ? loadingDispatched :
+              activeTab === 'mmps' ? loadingMMPs : false
+            ) ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-2">Refresh</span>
           </Button>
           <Button variant="outline" data-testid="button-export">
@@ -1496,7 +1515,7 @@ export function SuperAdminDataManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
+              {loadingVisits ? (
                 <div className="flex items-center justify-center py-16">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
@@ -1598,7 +1617,7 @@ export function SuperAdminDataManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
+              {loadingWallets ? (
                 <div className="flex items-center justify-center py-16">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
@@ -2098,7 +2117,7 @@ export function SuperAdminDataManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
+              {loadingClaimed ? (
                 <div className="flex items-center justify-center py-16">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
@@ -2280,7 +2299,7 @@ export function SuperAdminDataManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
+              {loadingDispatched ? (
                 <div className="flex items-center justify-center py-16">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
@@ -2394,7 +2413,7 @@ export function SuperAdminDataManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
+              {loadingMMPs ? (
                 <div className="flex items-center justify-center py-16">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
