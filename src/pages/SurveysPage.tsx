@@ -123,22 +123,23 @@ export default function SurveysPage() {
 
   const { data: surveys = [], isLoading } = useQuery<Survey[]>({
     queryKey: ['surveys'],
+    // Single round-trip: PostgREST embedded counts replace 3 sequential queries
     queryFn: async () => {
-      const { data, error } = await supabase.from('surveys').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('surveys')
+        .select('*, survey_questions(count), survey_responses(count)')
+        .order('created_at', { ascending: false });
       if (error) throw error;
-      const ids = (data ?? []).map(s => s.id);
-      if (!ids.length) return [];
-      const [{ data: qs }, { data: rs }] = await Promise.all([
-        supabase.from('survey_questions').select('id, survey_id').in('survey_id', ids),
-        supabase.from('survey_responses').select('id, survey_id').in('survey_id', ids),
-      ]);
-      const qMap: Record<string, number> = {};
-      const rMap: Record<string, number> = {};
-      for (const q of qs ?? []) qMap[q.survey_id] = (qMap[q.survey_id] ?? 0) + 1;
-      for (const r of rs ?? []) rMap[r.survey_id] = (rMap[r.survey_id] ?? 0) + 1;
-      return (data ?? []).map(s => ({ ...s, _q_count: qMap[s.id] ?? 0, _r_count: rMap[s.id] ?? 0 }));
+      return (data ?? []).map((s: any) => ({
+        ...s,
+        _q_count: s.survey_questions?.[0]?.count ?? 0,
+        _r_count: s.survey_responses?.[0]?.count ?? 0,
+        survey_questions: undefined,
+        survey_responses: undefined,
+      })) as Survey[];
     },
-    staleTime: 30_000,
+    staleTime: 2 * 60 * 1000,   // 2 min — instant on revisit
+    gcTime:    10 * 60 * 1000,   // keep in memory 10 min
   });
 
   const createSurvey = useMutation({
@@ -400,9 +401,39 @@ export default function SurveysPage() {
 
         {/* ── Survey Grid / List ── */}
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-            <p className="text-sm">Loading surveys…</p>
+          <div className={viewMode === 'grid'
+            ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
+            : 'space-y-2'}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={cn(
+                'rounded-2xl border border-slate-200 bg-white animate-pulse',
+                viewMode === 'grid' ? 'p-5 h-44' : 'p-4 h-20 flex items-center gap-4',
+              )}>
+                {viewMode === 'grid' ? (
+                  <>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 rounded-lg bg-slate-200" />
+                      <div className="h-3 w-16 rounded bg-slate-200" />
+                    </div>
+                    <div className="h-4 w-3/4 rounded bg-slate-200 mb-2" />
+                    <div className="h-3 w-1/2 rounded bg-slate-100 mb-4" />
+                    <div className="flex gap-3 mt-auto">
+                      <div className="h-3 w-16 rounded bg-slate-100" />
+                      <div className="h-3 w-16 rounded bg-slate-100" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-8 h-8 rounded-lg bg-slate-200 shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-1/3 rounded bg-slate-200" />
+                      <div className="h-2.5 w-1/4 rounded bg-slate-100" />
+                    </div>
+                    <div className="w-16 h-3 rounded bg-slate-100" />
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState
