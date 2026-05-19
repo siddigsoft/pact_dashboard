@@ -6348,8 +6348,61 @@ const MMP = () => {
                         <Badge variant="secondary">{applyGlobalFilters(acceptedSiteEntries).length} entries</Badge>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={applyGlobalFilters(acceptedSiteEntries)} 
-                        editable={false}
+                        siteEntries={applyGlobalFilters(acceptedSiteEntries)}
+                        editable={isAdmin || isFOM || isSupervisor || isSuperAdmin}
+                        onUpdateSites={async (sites) => {
+                          try {
+                            for (const site of sites) {
+                              const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+                              const transFee = site.transport_fee ?? site.transportFee;
+                              let calculatedCost: number | undefined;
+                              if (enumFee !== undefined && transFee !== undefined) {
+                                calculatedCost = Number(enumFee) + Number(transFee);
+                              }
+                              const updateData: any = {
+                                site_name: site.siteName || site.site_name,
+                                site_code: site.siteCode || site.site_code,
+                                hub_office: site.hubOffice || site.hub_office,
+                                state: site.state,
+                                locality: site.locality,
+                                cp_name: site.cpName || site.cp_name,
+                                activity_at_site: site.siteActivity || site.activity_at_site,
+                                monitoring_by: site.monitoringBy || site.monitoring_by,
+                                survey_tool: site.surveyTool || site.survey_tool,
+                                use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                                use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                                visit_date: site.visitDate || site.visit_date,
+                                comments: site.comments,
+                                cost: calculatedCost ?? site.cost,
+                                enumerator_fee: enumFee,
+                                transport_fee: transFee,
+                                verification_notes: site.verification_notes || site.verificationNotes,
+                              };
+                              Object.keys(updateData).forEach(k => { if (updateData[k] === undefined) delete updateData[k]; });
+                              if (site.id) {
+                                const { error } = await supabase.from('mmp_site_entries').update(updateData).eq('id', site.id);
+                                if (error) throw error;
+                              }
+                            }
+                            const acceptedStatuses = ['accepted', 'Accepted', 'claimed', 'Claimed'];
+                            const { data: refreshed } = await supabase
+                              .from('mmp_site_entries')
+                              .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, mmp_file_id, created_at')
+                              .in('status', acceptedStatuses);
+                            if (refreshed) {
+                              setAcceptedSiteEntries(refreshed.map(entry => {
+                                const ad = typeof entry.additional_data === 'string'
+                                  ? (() => { try { return JSON.parse(entry.additional_data); } catch { return {}; } })()
+                                  : (entry.additional_data || {});
+                                return { ...entry, siteName: entry.site_name, siteCode: entry.site_code, hubOffice: entry.hub_office, cpName: entry.cp_name, visitDate: entry.visit_date, additionalData: ad };
+                              }));
+                            }
+                            return true;
+                          } catch (error) {
+                            console.error('Failed to update accepted site costs:', error);
+                            return false;
+                          }
+                        }}
                       />
                     </div>
                   )}
@@ -6376,8 +6429,60 @@ const MMP = () => {
                         <Badge variant="secondary">{applyGlobalFilters(ongoingSiteEntries).length} entries</Badge>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={applyGlobalFilters(ongoingSiteEntries)} 
-                        editable={false}
+                        siteEntries={applyGlobalFilters(ongoingSiteEntries)}
+                        editable={isAdmin || isFOM || isSupervisor || isSuperAdmin}
+                        onUpdateSites={async (sites) => {
+                          try {
+                            for (const site of sites) {
+                              const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+                              const transFee = site.transport_fee ?? site.transportFee;
+                              let calculatedCost: number | undefined;
+                              if (enumFee !== undefined && transFee !== undefined) {
+                                calculatedCost = Number(enumFee) + Number(transFee);
+                              }
+                              const updateData: any = {
+                                site_name: site.siteName || site.site_name,
+                                site_code: site.siteCode || site.site_code,
+                                hub_office: site.hubOffice || site.hub_office,
+                                state: site.state,
+                                locality: site.locality,
+                                cp_name: site.cpName || site.cp_name,
+                                activity_at_site: site.siteActivity || site.activity_at_site,
+                                monitoring_by: site.monitoringBy || site.monitoring_by,
+                                survey_tool: site.surveyTool || site.survey_tool,
+                                use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                                use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                                visit_date: site.visitDate || site.visit_date,
+                                comments: site.comments,
+                                cost: calculatedCost ?? site.cost,
+                                enumerator_fee: enumFee,
+                                transport_fee: transFee,
+                                verification_notes: site.verification_notes || site.verificationNotes,
+                              };
+                              Object.keys(updateData).forEach(k => { if (updateData[k] === undefined) delete updateData[k]; });
+                              if (site.id) {
+                                const { error } = await supabase.from('mmp_site_entries').update(updateData).eq('id', site.id);
+                                if (error) throw error;
+                              }
+                            }
+                            const { data: refreshed } = await supabase
+                              .from('mmp_site_entries')
+                              .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, mmp_file_id, created_at')
+                              .in('status', ['inprogress', 'in_progress', 'ongoing', 'Ongoing', 'InProgress']);
+                            if (refreshed) {
+                              setOngoingSiteEntries(refreshed.map(entry => {
+                                const ad = typeof entry.additional_data === 'string'
+                                  ? (() => { try { return JSON.parse(entry.additional_data); } catch { return {}; } })()
+                                  : (entry.additional_data || {});
+                                return { ...entry, siteName: entry.site_name, siteCode: entry.site_code, hubOffice: entry.hub_office, cpName: entry.cp_name, visitDate: entry.visit_date, additionalData: ad };
+                              }));
+                            }
+                            return true;
+                          } catch (error) {
+                            console.error('Failed to update ongoing site costs:', error);
+                            return false;
+                          }
+                        }}
                       />
                     </div>
                   )}
