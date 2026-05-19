@@ -459,16 +459,15 @@ export function SuperAdminDataManagement() {
   const loadClaimedSites = async () => {
     setLoadingClaimed(true);
     try {
-      // "Claimed" = enumerator has accepted/taken ownership of a dispatched site.
-      // The most reliable signal is accepted_by IS NOT NULL regardless of status,
-      // because the status may remain 'dispatched' after the claim action.
-      // We exclude sites that are already fully done (completed/verified).
+      // "Claimed" = any site that has moved past the dispatch stage.
+      // Include ALL statuses after dispatched: accepted, ongoing, completed,
+      // submitted, wfp_confirmed, not_covered, verified, rejected, etc.
+      // Exclude only pre-claim statuses: new, pending, approved, dispatched.
       const { data, error } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id, additional_data')
-        .not('accepted_by', 'is', null)
-        .not('status', 'in', '(completed,verified)')
-        .order('dispatched_at', { ascending: false });
+        .not('status', 'in', '(new,New,pending,Pending,approved,Approved,dispatched,Dispatched)')
+        .order('accepted_at', { ascending: false, nullsFirst: false });
 
       if (error) {
         console.error('Claimed sites query error:', error);
@@ -994,7 +993,7 @@ export function SuperAdminDataManagement() {
     const debitTransactions = transactions.filter(t => t.amount < 0).length;
     
     const totalClaimedSites = claimedSites.length;
-    const assignedSites = claimedSites.filter(s => s.status === 'assigned').length;
+    const assignedSites = claimedSites.filter(s => s.status === 'accepted').length;
     
     const totalDispatchedSites = dispatchedSites.length;
     const dispatchedByState = dispatchedSites.reduce((acc, s) => {
@@ -1408,7 +1407,7 @@ export function SuperAdminDataManagement() {
         <StatsCard
           title="Claimed Sites"
           value={stats.totalClaimedSites}
-          subtitle={`${stats.assignedSites} assigned`}
+          subtitle={`${stats.assignedSites} accepted`}
           icon={Users}
           color="danger"
           onClick={() => setActiveTab('claimed-sites')}
@@ -2098,13 +2097,14 @@ export function SuperAdminDataManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="assigned">Assigned</SelectItem>
-                      <SelectItem value="dispatched">Dispatched</SelectItem>
+                      <SelectItem value="accepted">Accepted</SelectItem>
+                      <SelectItem value="ongoing">Ongoing</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="submitted">Submitted</SelectItem>
                       <SelectItem value="wfp_confirmed">WFP Confirmed</SelectItem>
                       <SelectItem value="not_covered">Not Covered</SelectItem>
                       <SelectItem value="verified">Verified</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
