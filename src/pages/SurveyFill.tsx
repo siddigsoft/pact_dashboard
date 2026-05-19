@@ -708,10 +708,13 @@ export default function SurveyFill() {
       !!respondentName.trim() ||
       !!respondentEmail.trim();
     if (!hasContent) return;
+    // Strip image/file answers — base64 blobs easily exceed the 5 MB localStorage quota
+    const binaryQIds = new Set(questions.filter(q => ['image','file'].includes(q.type)).map(q => q.id));
+    const draftAnswers = Object.fromEntries(Object.entries(answers).filter(([id]) => !binaryQIds.has(id)));
     try {
       const now = Date.now();
       localStorage.setItem(draftKey, JSON.stringify({
-        answers,
+        answers: draftAnswers,
         gridTableRows,
         repeatRows,
         otherTexts,
@@ -736,8 +739,10 @@ export default function SurveyFill() {
     if (!draftKey || !hasContent) return;
     try {
       const now = Date.now();
+      const binaryQIds2 = new Set(questions.filter(q => ['image','file'].includes(q.type)).map(q => q.id));
+      const draftAnswers2 = Object.fromEntries(Object.entries(answers).filter(([id]) => !binaryQIds2.has(id)));
       localStorage.setItem(draftKey, JSON.stringify({
-        answers,
+        answers: draftAnswers2,
         gridTableRows,
         repeatRows,
         otherTexts,
@@ -903,17 +908,29 @@ export default function SurveyFill() {
       }
       setErrors({});
 
-      // Duplicate response detection (same respondent + same survey in last 24h)
-      if (currentUser?.id && surveyId) {
-        const { data: dupCheck } = await supabase
-          .from('survey_responses')
-          .select('id')
-          .eq('survey_id', surveyId)
-          .eq('respondent_id', currentUser.id)
-          .gte('submitted_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-          .limit(1);
-        if (dupCheck && dupCheck.length > 0) {
-          throw new Error('You have already submitted a response to this survey in the last 24 hours.');
+      // Duplicate response detection — skip entirely when survey allows multiple responses
+      const allowMultiple = Boolean(survey?.settings?.allow_multiple);
+      if (!allowMultiple) {
+        // Logged-in users: check DB
+        if (currentUser?.id && surveyId) {
+          const { data: dupCheck } = await supabase
+            .from('survey_responses')
+            .select('id')
+            .eq('survey_id', surveyId)
+            .eq('respondent_id', currentUser.id)
+            .gte('submitted_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .limit(1);
+          if (dupCheck && dupCheck.length > 0) {
+            throw new Error('You have already submitted a response to this survey in the last 24 hours.');
+          }
+        }
+        // Anonymous users: use a localStorage timestamp as a lightweight safeguard
+        if (!currentUser?.id && surveyId) {
+          const anonKey = `survey_submitted_${surveyId}`;
+          const lastTs  = Number(localStorage.getItem(anonKey) ?? 0);
+          if (lastTs && Date.now() - lastTs < 24 * 60 * 60 * 1000) {
+            throw new Error('You have already submitted a response to this survey in the last 24 hours.');
+          }
         }
       }
 
@@ -990,7 +1007,14 @@ export default function SurveyFill() {
         if (aErr) throw aErr;
       }
     },
-    onSuccess: () => { setSubmitted(true); clearDraft(); },
+    onSuccess: () => {
+      setSubmitted(true);
+      clearDraft();
+      // Record anon submission timestamp so they can't resubmit within 24h
+      if (!currentUser?.id && surveyId && !survey?.settings?.allow_multiple) {
+        try { localStorage.setItem(`survey_submitted_${surveyId}`, String(Date.now())); } catch { /* ignore */ }
+      }
+    },
     onError: (e: Error) => {
       if (e.message !== 'Please answer all required questions') {
         toast({ title: 'Submission failed', description: e.message, variant: 'destructive' });
