@@ -458,17 +458,21 @@ export function SuperAdminDataManagement() {
     setLoading(true);
     try {
       // "Claimed" = enumerator has taken ownership of a dispatched site.
-      // Status values used across the system: claimed, assigned, accepted, ongoing, in_progress.
-      // We filter by status (not by accepted_by IS NOT NULL, which is the verification step).
+      // Use a broad OR filter: either accepted_by is set, OR status indicates active work.
+      // Note: claimed_by is stored inside additional_data JSONB, not as a direct column.
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, claimed_by, accepted_by, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id')
-        .in('status', ['claimed', 'Claimed', 'assigned', 'Assigned', 'accepted', 'Accepted', 'ongoing', 'Ongoing', 'in_progress', 'In_Progress', 'in progress'])
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id, additional_data')
+        .or('accepted_by.not.is.null,status.in.(accepted,Accepted,claimed,Claimed,assigned,Assigned,ongoing,Ongoing,in_progress,In_Progress)')
+        .not('status', 'in', '(completed,Completed,verified,Verified,dispatched,Dispatched,rejected,Rejected,new,New,pending,Pending)')
         .order('dispatched_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Claimed sites query error:', error);
+        throw error;
+      }
 
-      // Build MMP name map in parallel with the main query already done
+      // Build MMP name map
       const mmpIds = [...new Set((data || []).map((s: any) => s.mmp_id).filter(Boolean))] as string[];
       let mmpNameMap: Record<string, string> = {};
       if (mmpIds.length > 0) {
@@ -482,8 +486,8 @@ export function SuperAdminDataManagement() {
       }
 
       const enriched = (data || []).map((site: any) => {
-        // claimed_by is who took the site; fall back to accepted_by for older records
-        const claimerUid = site.claimed_by || site.accepted_by;
+        // claimed_by may live inside additional_data JSONB; fall back to accepted_by
+        const claimerUid = site.additional_data?.claimed_by || site.accepted_by;
         return {
           ...site,
           claimed_by_name: claimerUid ? (userMap.get(claimerUid)?.name || 'Unknown') : 'Unknown',

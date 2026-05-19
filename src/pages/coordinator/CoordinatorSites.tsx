@@ -5389,9 +5389,11 @@ const CoordinatorSites: FC = () => {
                     </p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium">Assigned Date</Label>
+                    <Label className="text-sm font-medium">First Completed On</Label>
                     <p className="text-sm text-muted-foreground">
-                      {selectedSiteForPreview.assigned_at ? format(new Date(selectedSiteForPreview.assigned_at), 'PPP') : 'Not set'}
+                      {selectedSiteForPreview.completed_at
+                        ? format(new Date(selectedSiteForPreview.completed_at), 'PPP')
+                        : 'Not completed'}
                     </p>
                   </div>
                   <div>

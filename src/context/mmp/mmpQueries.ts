@@ -152,6 +152,7 @@ export interface CoordinatorSiteEntryRow {
   transport_fee: number | null;
   accepted_by: string | null;
   accepted_at: string | null;
+  completed_at: string | null;
   forwarded_to_user_id: string | null;
   created_at: string;
 }
@@ -276,7 +277,7 @@ async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> 
       'comments, additional_data, status,' +
       'verified_at, verified_by, verification_notes,' +
       'cost, enumerator_fee, transport_fee,' +
-      'accepted_by, accepted_at, forwarded_to_user_id, created_at'
+      'accepted_by, accepted_at, completed_at, forwarded_to_user_id, created_at'
     )
     .order('created_at', { ascending: false });
 
@@ -314,6 +315,7 @@ async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> 
     transport_fee: row.transport_fee ?? null,
     accepted_by: row.accepted_by ?? null,
     accepted_at: row.accepted_at ?? null,
+    completed_at: row.completed_at ?? null,
     forwarded_to_user_id: row.forwarded_to_user_id ?? null,
     created_at: row.created_at,
   })) as CoordinatorSiteEntryRow[];
