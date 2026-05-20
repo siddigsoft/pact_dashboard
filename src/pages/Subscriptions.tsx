@@ -116,7 +116,7 @@ export default function SubscriptionsPage() {
   const roleCanManage = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin']);
   const overrideCanManage = usePageManageOverride('subscriptions', roleCanManage);
   const canManage = roleCanManage || overrideCanManage;
-  const isAuthorized = canManage || hasAnyRole(['countryDirector', 'country_director', 'CountryDirector']);
+  const isAuthorized = canManage;
 
   // Route-level authorization — redirect users without finance/admin/auditor access
   useEffect(() => {

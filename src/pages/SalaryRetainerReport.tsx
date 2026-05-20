@@ -85,7 +85,6 @@ export default function SalaryRetainerReport() {
   const navigate = useNavigate();
   const isAuthorized = isSuperAdmin() || hasAnyRole([
     'admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin',
-    'countryDirector', 'country_director', 'CountryDirector',
   ]);
 
   // Route-level authorization — redirect users without finance/admin/auditor access

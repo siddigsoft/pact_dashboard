@@ -75,7 +75,7 @@ export default function SalaryIncrements() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const { hasAnyRole } = useAuthorization();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hrManager', 'financialAdmin', 'countryDirector']);
+  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hrManager', 'financialAdmin']);
 
   const [increments, setIncrements] = useState<Increment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);

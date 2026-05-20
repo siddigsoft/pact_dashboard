@@ -1288,7 +1288,7 @@ export default function Employees() {
   }, []);
 
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
-  const roleCanEdit = isSuperAdmin() || hasAnyRole(['admin', 'countryDirector', 'fom', 'financialAdmin', 'hrManager', 'hr']);
+  const roleCanEdit = isSuperAdmin() || hasAnyRole(['admin', 'fom', 'financialAdmin', 'hrManager', 'hr']);
   const overrideCanEdit = usePageManageOverride('employees', roleCanEdit);
   const canEdit = roleCanEdit || overrideCanEdit;
 

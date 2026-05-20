@@ -57,7 +57,7 @@ interface Department {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const EXEC_ROLES = ['super_admin', 'superadmin', 'admin', 'ceo', 'coo', 'cto', 'country_director', 'countrydirector', 'Admin', 'SuperAdmin', 'hr_manager'];
+const EXEC_ROLES = ['super_admin', 'superadmin', 'admin', 'ceo', 'coo', 'cto', 'Admin', 'SuperAdmin', 'hr_manager'];
 function isExecRole(role: string | null): boolean {
   if (!role) return false;
   return EXEC_ROLES.some(r => r.toLowerCase() === role.toLowerCase());

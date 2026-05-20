@@ -327,7 +327,7 @@
     if (!isHidden('/my-tasks')) {
       workspaceItems.push({ id: 'my-tasks', title: "My Tasks", url: "/my-tasks", icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
     }
-    if (!isHidden('/team-tasks') && (isSuperAdmin || isAdmin || isCountryDirector || ['ceo','coo','cto','hr_manager'].includes(defaultRole.toLowerCase()))) {
+    if (!isHidden('/team-tasks') && (isSuperAdmin || isAdmin || ['ceo','coo','cto','hr_manager'].includes(defaultRole.toLowerCase()))) {
       workspaceItems.push({ id: 'team-tasks', title: "Team Monitor", url: "/team-tasks", icon: Users, priority: 3, isPinned: isPinned('/team-tasks') });
     }
     if (!isHidden('/my-team')) {
@@ -474,7 +474,7 @@
     if (!isHidden('/reconciliation-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finMgmtItems.push({ id: 'reconciliation-dashboard', title: "Reconciliation Dashboard", url: "/reconciliation-dashboard", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/reconciliation-dashboard') });
     }
-    if (!isHidden('/subscriptions') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+    if (!isHidden('/subscriptions') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       finMgmtItems.push({ id: 'subscriptions', title: "Subscriptions", url: "/subscriptions", icon: CreditCard, priority: 6, isPinned: isPinned('/subscriptions') });
     }
     if (finMgmtItems.length) groups.push({ id: 'finance-management', label: "Financial Management", order: 5.3, items: finMgmtItems, parentGroup: 'finance' } as any);
@@ -492,10 +492,10 @@
     if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finReportItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 4, isPinned: isPinned('/exchange-rates') });
     }
-    if (!isHidden('/salary-retainer-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+    if (!isHidden('/salary-retainer-report') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       finReportItems.push({ id: 'salary-retainer-report', title: "Salary & Retainer Report", url: "/salary-retainer-report", icon: Users, priority: 5, isPinned: isPinned('/salary-retainer-report') });
     }
-    if (!isHidden('/month-end-summary') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+    if (!isHidden('/month-end-summary') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       finReportItems.push({ id: 'month-end-summary', title: "Month-End Summary", url: "/month-end-summary", icon: CalendarCheck, priority: 6, isPinned: isPinned('/month-end-summary') });
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
@@ -637,7 +637,7 @@
     if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 
     // ── Surveys ───────────────────────────────────────────────────────────────
-    const hasSurveyAccess = isSuperAdmin || isAdmin || isFOM || isCountryDirector || isProjectManager;
+    const hasSurveyAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager;
     if (hasSurveyAccess && !isHidden('/surveys')) {
       groups.push({
         id: 'surveys',
@@ -666,7 +666,7 @@
     if (!isHidden('/archive') && (isSuperAdmin || isAdmin || perms.archive)) {
       analyticsItems.push({ id: 'archive', title: "Archive", url: "/archive", icon: Archive, priority: 5, isPinned: isPinned('/archive') });
     }
-    if (!isHidden('/questionnaire-analytics') && (isSuperAdmin || isAdmin || isDataTeam || isFOM || isCountryDirector)) {
+    if (!isHidden('/questionnaire-analytics') && (isSuperAdmin || isAdmin || isDataTeam || isFOM)) {
       analyticsItems.push({ id: 'questionnaire-analytics', title: "Questionnaire Analytics", url: "/questionnaire-analytics", icon: BarChart3, priority: 6, isPinned: isPinned('/questionnaire-analytics') });
     }
     if (!isHidden('/dct-pdm') && (isSuperAdmin || isAdmin || isICT)) {

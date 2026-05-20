@@ -310,7 +310,7 @@ export default function SurveyDetail() {
   const { toast } = useToast();
 
   const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
-  const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+  const roleCanManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer');
 
   const overrideCanManage = usePageManageOverride('surveys', roleCanManage);
   const canManage = roleCanManage || overrideCanManage;
