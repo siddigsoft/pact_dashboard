@@ -238,7 +238,6 @@ const MMPSiteEntriesTable = ({
     
     // Timestamps
     const createdAt = site.created_at || undefined;
-    const updatedAt = site.updated_at || site.last_modified || undefined;
 
     const acceptedByName = resolveUserName(acceptedBy) || (acceptedBy ? resolvedNames[acceptedBy] : null) || null;
     const completedByName = resolveUserName(completedBy) || (completedBy ? resolvedNames[completedBy] : null) || null;
@@ -253,7 +252,7 @@ const MMPSiteEntriesTable = ({
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, acceptedByName,
       completedBy, completedAt, completedByName, timeToCompleteMs,
       rejectionComments, rejectedBy, rejectedAt,
-      createdAt, updatedAt
+      createdAt
     };
   };
 

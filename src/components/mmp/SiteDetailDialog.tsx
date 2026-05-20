@@ -140,7 +140,6 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const rejectedAt = site.rejected_at || (ad['rejected_at'] ? new Date(ad['rejected_at']).toISOString() : undefined) || undefined;
     
     const createdAt = site.created_at || undefined;
-    const updatedAt = site.updated_at || site.last_modified || undefined;
 
     const isTerminalForCompletion =
       isTerminalCompletionAppStatus(status) ||
@@ -239,7 +238,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
-      createdAt, updatedAt, completedAt, isLegacyFallbackCompleted,
+      createdAt, completedAt, isLegacyFallbackCompleted,
       // GPS and Registry Matching
       registryGpsLatitude, registryGpsLongitude, gpsAccuracyMeters,
       registrySiteId, registrySiteCode,

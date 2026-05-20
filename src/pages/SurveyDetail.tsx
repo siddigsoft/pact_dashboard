@@ -3191,36 +3191,80 @@ export default function SurveyDetail() {
               </div>
 
               {/* Deadline (auto-close) */}
-              <div className="space-y-1.5">
-                <Label htmlFor="setting-expiry" className="text-sm font-medium">
+              <div className="space-y-2">
+                <Label htmlFor="setting-expiry" className="text-sm font-medium flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
                   Deadline (Auto-Close)
-                  <span className="ml-2 text-[11px] text-slate-400 font-normal">Leave blank for no deadline</span>
+                  <span className="text-[11px] text-slate-400 font-normal">Leave blank for no deadline</span>
                 </Label>
-                <div className="relative max-w-[240px]">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <Input
-                    id="setting-expiry"
-                    type="datetime-local"
-                    className="pl-9"
-                    value={settingsForm.expires_at}
-                    onChange={e => setSettingsForm(s => ({ ...s, expires_at: e.target.value }))}
-                    data-testid="input-expires-at"
-                  />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <Input
+                      id="setting-expiry"
+                      type="datetime-local"
+                      className="pl-9 w-[230px]"
+                      value={settingsForm.expires_at}
+                      onChange={e => setSettingsForm(s => ({ ...s, expires_at: e.target.value }))}
+                      data-testid="input-expires-at"
+                    />
+                  </div>
+                  {settingsForm.expires_at && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsForm(s => ({ ...s, expires_at: '' }))}
+                      className="text-[11px] text-slate-400 hover:text-red-500 underline underline-offset-2 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
-                {settingsForm.expires_at ? (() => {
+                <p className="text-[11px] text-slate-400">Pick a date <strong>and time</strong> — the survey stops accepting responses at that exact moment.</p>
+
+                {/* Countdown indicator card */}
+                {settingsForm.expires_at && (() => {
                   const dl = new Date(settingsForm.expires_at);
                   const diffMs = dl.getTime() - Date.now();
                   if (diffMs < 0) return (
-                    <p className="text-[11px] text-red-500 font-medium">⚠ Deadline has passed — survey will auto-close immediately on save.</p>
+                    <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-red-700">Deadline has already passed</p>
+                        <p className="text-[11px] text-red-500 mt-0.5">Survey will auto-close immediately when you save.</p>
+                      </div>
+                    </div>
                   );
                   const diffH = Math.floor(diffMs / 3_600_000);
+                  const diffM = Math.floor((diffMs % 3_600_000) / 60_000);
                   const diffD = Math.floor(diffMs / 86_400_000);
-                  const label = diffH < 24 ? `${diffH}h remaining` : `${diffD} day${diffD !== 1 ? 's' : ''} remaining`;
-                  const cls = diffH < 24 ? 'text-red-500' : diffD <= 3 ? 'text-orange-500' : 'text-emerald-600';
-                  return <p className={`text-[11px] font-medium ${cls}`}>⏱ {label} — survey auto-closes at this date &amp; time.</p>;
-                })() : (
-                  <p className="text-[11px] text-slate-400">Survey will auto-close and stop accepting responses at this exact date &amp; time.</p>
-                )}
+                  const remH = diffH % 24;
+                  const isUrgent = diffH < 24;
+                  const isWarning = !isUrgent && diffD <= 3;
+                  const bg = isUrgent ? 'bg-red-50 border-red-200' : isWarning ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50 border-emerald-200';
+                  const iconColor = isUrgent ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-emerald-600';
+                  const titleColor = isUrgent ? 'text-red-700' : isWarning ? 'text-orange-700' : 'text-emerald-700';
+                  const subColor = isUrgent ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-emerald-600';
+                  return (
+                    <div className={`flex items-start gap-2.5 border rounded-lg px-3 py-2.5 ${bg}`}>
+                      <Clock className={`w-4 h-4 shrink-0 mt-0.5 ${iconColor}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold ${titleColor}`}>
+                          {isUrgent
+                            ? `${diffH}h ${diffM}m remaining`
+                            : `${diffD} day${diffD !== 1 ? 's' : ''} ${remH}h remaining`}
+                        </p>
+                        <p className={`text-[11px] mt-0.5 ${subColor}`}>
+                          Closes {dl.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {dl.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${
+                        isUrgent ? 'bg-red-100 text-red-700' : isWarning ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {isUrgent ? 'URGENT' : isWarning ? 'SOON' : 'OK'}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Allow multiple submissions */}
@@ -3382,11 +3426,28 @@ export default function SurveyDetail() {
                     data-testid="input-activate-at"
                   />
                 </div>
-                {settingsForm.activate_at && (
-                  <p className="text-[11px] text-indigo-600">
-                    Survey will auto-activate on {new Date(settingsForm.activate_at).toLocaleString()}
-                  </p>
-                )}
+                {settingsForm.activate_at && (() => {
+                  const at = new Date(settingsForm.activate_at);
+                  const diffMs = at.getTime() - Date.now();
+                  const isPast = diffMs < 0;
+                  const diffH = Math.floor(diffMs / 3_600_000);
+                  const diffD = Math.floor(diffMs / 86_400_000);
+                  const timeStr = at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                  const dateStr = at.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                  return (
+                    <div className={`flex items-start gap-2.5 border rounded-lg px-3 py-2.5 ${isPast ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-200'}`}>
+                      <CalendarClock className={`w-4 h-4 shrink-0 mt-0.5 ${isPast ? 'text-amber-500' : 'text-indigo-500'}`} />
+                      <div className="flex-1">
+                        <p className={`text-xs font-semibold ${isPast ? 'text-amber-700' : 'text-indigo-700'}`}>
+                          {isPast ? 'Activation time has passed — activates on save' : `Activates in ${diffD > 0 ? `${diffD}d ` : ''}${diffH % 24}h`}
+                        </p>
+                        <p className={`text-[11px] mt-0.5 ${isPast ? 'text-amber-500' : 'text-indigo-500'}`}>
+                          Goes live {dateStr} at {timeStr}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <label className="flex items-center gap-3 cursor-pointer">
                 <div className="relative shrink-0">
@@ -3506,11 +3567,22 @@ export default function SurveyDetail() {
                     <Users className="w-3 h-3" />Limit: {String(survey.settings.response_limit)} responses
                   </span>
                 )}
-                {survey.settings.expires_at && (
-                  <span className="flex items-center gap-1 text-xs bg-white border border-orange-200 text-orange-700 px-2 py-1 rounded-lg">
-                    <Calendar className="w-3 h-3" />Expires: {new Date(String(survey.settings.expires_at)).toLocaleDateString()}
-                  </span>
-                )}
+                {survey.settings.expires_at && (() => {
+                  const exp = new Date(String(survey.settings.expires_at));
+                  const diffMs = exp.getTime() - Date.now();
+                  const isPast = diffMs < 0;
+                  const diffD = Math.floor(diffMs / 86_400_000);
+                  const diffH = Math.floor(diffMs / 3_600_000);
+                  const countdown = isPast ? 'Expired' : diffH < 24 ? `${diffH}h left` : `${diffD}d left`;
+                  const borderCls = isPast ? 'border-red-200 text-red-700' : diffH < 24 ? 'border-red-200 text-red-700' : diffD <= 3 ? 'border-orange-200 text-orange-700' : 'border-orange-200 text-orange-700';
+                  return (
+                    <span className={`flex items-center gap-1.5 text-xs bg-white border px-2 py-1 rounded-lg ${borderCls}`}>
+                      <Clock className="w-3 h-3" />
+                      Deadline: {exp.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} {exp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                      <span className={`font-semibold ml-0.5 ${isPast || diffH < 24 ? 'text-red-600' : diffD <= 3 ? 'text-orange-600' : 'text-orange-600'}`}>· {countdown}</span>
+                    </span>
+                  );
+                })()}
                 {survey.settings.multi_page && (
                   <span className="flex items-center gap-1 text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded-lg">
                     <FileText className="w-3 h-3" />Multi-page
