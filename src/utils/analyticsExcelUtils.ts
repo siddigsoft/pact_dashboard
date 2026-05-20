@@ -288,7 +288,7 @@ export async function exportFormattedTrackerExcel(
   autoFitColumns(ws);
 
   if (filteredRows && filteredRows.length > 0) {
-    buildSummarySheet(wb, filteredRows, 'Tracker Summary Report');
+    buildSummarySheet(wb, filteredRows, 'Tracker Summary Report', { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors });
   }
 
   const buffer = await wb.xlsx.writeBuffer();
@@ -306,7 +306,7 @@ function activityAbbrev(name: string): string {
   return name;
 }
 
-function buildSummarySheet(wb: ExcelJS.Workbook, rows: FilteredRow[], sheetTitle: string) {
+function buildSummarySheet(wb: ExcelJS.Workbook, rows: FilteredRow[], sheetTitle: string, trackerData?: TrackerSummaryData) {
   const ws = wb.addWorksheet('Summary');
   const titleR = ws.addRow([sheetTitle]);
   titleR.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
@@ -408,7 +408,104 @@ function buildSummarySheet(wb: ExcelJS.Workbook, rows: FilteredRow[], sheetTitle
         });
     });
 
-  ws.columns = [{ width: 40 }, { width: 45 }];
+  // ── Tracker cross-tab section (Activities × Hubs) ─────────────
+  if (trackerData && trackerData.hubs.length > 0 && trackerData.matrix.length > 0) {
+    const numCols = 1 + trackerData.hubs.length * 3 + 3;
+    ws.addRow([]);
+
+    // Wide section header
+    const ctHeader = ws.addRow(['TRACKER MATRIX — Activities × Hubs (Sites | Questionnaires | Collectors)', ...Array(numCols - 1).fill('')]);
+    ws.mergeCells(ctHeader.number, 1, ctHeader.number, numCols);
+    ctHeader.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    ctHeader.getCell(1).font = { bold: true, color: { argb: WHITE }, size: 11, name: 'Calibri' };
+    ctHeader.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+    ctHeader.height = 22;
+
+    // Hub span headers
+    const hubSpanCells: string[] = [''];
+    trackerData.hubs.forEach(h => { hubSpanCells.push(h, '', ''); });
+    hubSpanCells.push('Grand Total', '', '');
+    const hubSpanRow = ws.addRow(hubSpanCells);
+    for (let hi = 0; hi < trackerData.hubs.length; hi++) {
+      const sc = 2 + hi * 3;
+      ws.mergeCells(hubSpanRow.number, sc, hubSpanRow.number, sc + 2);
+    }
+    ws.mergeCells(hubSpanRow.number, 2 + trackerData.hubs.length * 3, hubSpanRow.number, numCols);
+    hubSpanRow.height = 20;
+    hubSpanRow.eachCell((cell, ci) => {
+      cell.fill = headerFill();
+      cell.font = headerFont(10);
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    // Sub-column headers: Sites | Q | DC per hub
+    const subColHeaders: string[] = ['Activity'];
+    trackerData.hubs.forEach(() => { subColHeaders.push('Sites', 'Q', 'DC'); });
+    subColHeaders.push('Sites', 'Q', 'DC');
+    const subHdrRow = ws.addRow(subColHeaders);
+    subHdrRow.height = 18;
+    subHdrRow.eachCell((cell, ci) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle' };
+      if (ci === 1) {
+        cell.font = headerFont(9);
+      } else {
+        const sub = (ci - 2) % 3;
+        if (sub === 0) cell.font = { ...headerFont(9), color: { argb: '93C5FD' } };
+        else if (sub === 1) cell.font = { ...headerFont(9), color: { argb: 'FBBF24' } };
+        else cell.font = { ...headerFont(9), color: { argb: 'C4B5FD' } };
+      }
+    });
+
+    // Activity data rows
+    trackerData.matrix.forEach((row, ri) => {
+      const cells: (string | number)[] = [row.activity];
+      row.cells.forEach((c: any) => {
+        cells.push(c.sites || '-', c.questionnaires || '-', c.collectors || '-');
+      });
+      cells.push(row.totalSites || '-', row.totalQ || '-', row.totalCollectors || '-');
+      const dataRow = ws.addRow(cells);
+      dataRow.height = 18;
+      dataRow.eachCell((cell, ci) => {
+        cell.border = thinBorder();
+        cell.alignment = { horizontal: ci > 1 ? 'center' : 'left', vertical: 'middle' };
+        cell.font = bodyFont(10);
+        if (ri % 2 === 1) cell.fill = altFill();
+        if (ci > 1) {
+          const sub = (ci - 2) % 3;
+          if (sub === 0) cell.font = bodyFont(10, BLUE_TEXT);
+          else if (sub === 1) cell.font = bodyFont(10, GREEN_TEXT);
+          else cell.font = bodyFont(10, PURPLE);
+        }
+      });
+    });
+
+    // Grand total row
+    const totCells: (string | number)[] = ['Grand Total'];
+    trackerData.hubTotals.forEach(ht => {
+      totCells.push(ht.sites, ht.questionnaires, ht.collectors);
+    });
+    totCells.push(trackerData.grandSites, trackerData.grandQ, trackerData.grandCollectors);
+    const totRow = ws.addRow(totCells);
+    totRow.height = 22;
+    totRow.eachCell((cell) => {
+      cell.fill = totalFill();
+      cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    totRow.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    totRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Column widths: col1 = 40, col2 = 14 (value in key-val pairs), rest = 12
+    ws.getColumn(1).width = 40;
+    ws.getColumn(2).width = 14;
+    for (let i = 3; i <= numCols; i++) ws.getColumn(i).width = 12;
+  } else {
+    ws.columns = [{ width: 40 }, { width: 45 }];
+  }
 }
 
 const GREEN_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF107838' } };
@@ -424,6 +521,21 @@ interface FilteredRow {
   deviceId?: string;
   supervisor?: string;
   date?: string;
+}
+
+interface TrackerSummaryData {
+  hubs: string[];
+  matrix: Array<{
+    activity: string;
+    cells: Array<{ sites: number; questionnaires: number; collectors: number }>;
+    totalSites: number;
+    totalQ: number;
+    totalCollectors: number;
+  }>;
+  hubTotals: Array<{ sites: number; questionnaires: number; collectors: number }>;
+  grandQ: number;
+  grandSites: number;
+  grandCollectors: number;
 }
 
 import { isPdmActivity } from '@/utils/pdmMdmUtils';
@@ -859,6 +971,49 @@ export interface EnumTrackerEntry {
   sites: { siteName: string; locality: string; hub: string; state: string; status: string; date: string; activity: string }[];
 }
 
+function buildTrackerSummaryFromEnumRows(rows: EnumTrackerEntry[]): TrackerSummaryData {
+  const hubSet = new Set<string>();
+  const actSet = new Set<string>();
+  rows.forEach(r => {
+    hubSet.add(r.hub || '—');
+    r.sites.forEach(s => { if (s.activity) actSet.add(s.activity); });
+  });
+  const hubs = Array.from(hubSet).sort();
+  const activities = Array.from(actSet).sort();
+
+  const matrix = activities.map(act => {
+    const cells = hubs.map(hub => {
+      const hubRows = rows.filter(r => (r.hub || '—') === hub);
+      const sites = hubRows.flatMap(r => r.sites.filter(s => (s.activity || '—') === act));
+      const collectors = new Set(
+        hubRows.filter(r => r.sites.some(s => (s.activity || '—') === act)).map(r => r.collectorName)
+      ).size;
+      return { sites: sites.length, questionnaires: sites.length, collectors };
+    });
+    const totalSites = cells.reduce((s, c) => s + c.sites, 0);
+    const totalCollectors = new Set(
+      rows.filter(r => r.sites.some(s => (s.activity || '—') === act)).map(r => r.collectorName)
+    ).size;
+    return { activity: act, cells, totalSites, totalQ: totalSites, totalCollectors };
+  });
+
+  const hubTotals = hubs.map(hub => {
+    const hubRows = rows.filter(r => (r.hub || '—') === hub);
+    const sites = hubRows.reduce((s, r) => s + r.sites.length, 0);
+    return { sites, questionnaires: sites, collectors: new Set(hubRows.map(r => r.collectorName)).size };
+  });
+
+  const grandQ = rows.reduce((s, r) => s + r.sites.length, 0);
+  return {
+    hubs,
+    matrix,
+    hubTotals,
+    grandQ,
+    grandSites: grandQ,
+    grandCollectors: new Set(rows.map(r => r.collectorName)).size,
+  };
+}
+
 function buildPaymentSheet(
   wb: ExcelJS.Workbook,
   rows: EnumTrackerEntry[],
@@ -1056,6 +1211,19 @@ export async function exportEnumeratorTrackerExcel(
   autoFitColumns(ws3);
 
   if (costPerSite > 0) buildPaymentSheet(wb, rows, costPerSite, exchangeRate);
+
+  const enumFilteredRows: FilteredRow[] = rows.flatMap(r =>
+    r.sites.map(s => ({
+      hub: s.hub || r.hub,
+      state: s.state || r.state,
+      activity: s.activity,
+      dataCollector: r.collectorName,
+      activitySite: s.siteName,
+      date: s.date,
+      locality: s.locality,
+    }))
+  );
+  buildSummarySheet(wb, enumFilteredRows, 'Enumerator Tracker Summary', buildTrackerSummaryFromEnumRows(rows));
 
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
@@ -1307,6 +1475,19 @@ export async function exportEnumeratorTrackerFormattedExcel(
   autoFitColumns(ws3);
 
   if (costPerSite > 0) buildPaymentSheet(wb, rows, costPerSite, exchangeRate);
+
+  const enumFmtFilteredRows: FilteredRow[] = rows.flatMap(r =>
+    r.sites.map(s => ({
+      hub: s.hub || r.hub,
+      state: s.state || r.state,
+      activity: s.activity,
+      dataCollector: r.collectorName,
+      activitySite: s.siteName,
+      date: s.date,
+      locality: s.locality,
+    }))
+  );
+  buildSummarySheet(wb, enumFmtFilteredRows, 'Enumerator Tracker Summary', buildTrackerSummaryFromEnumRows(rows));
 
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
