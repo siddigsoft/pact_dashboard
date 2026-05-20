@@ -666,15 +666,11 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         resetFields.accepted_by = null;
         resetFields.accepted_at = null;
         resetFields.visit_completed_at = null;
-        resetFields.completion_notes = null;
         resetFields.gps_coordinates = null;
-        resetFields.signature_data = null;
         resetFields.visit_completed_by = null;
       } else if (targetStatus === 'dispatched' || targetStatus === 'assigned') {
         resetFields.visit_completed_at = null;
-        resetFields.completion_notes = null;
         resetFields.gps_coordinates = null;
-        resetFields.signature_data = null;
         resetFields.visit_completed_by = null;
       }
 
