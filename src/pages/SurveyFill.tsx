@@ -2215,6 +2215,44 @@ export default function SurveyFill() {
           </div>
         )}
 
+        {/* Deadline countdown banner — shown to respondents while filling */}
+        {expiresAt && !isExpired && (() => {
+          const diffMs  = expiresAt.getTime() - Date.now();
+          const diffH   = Math.floor(diffMs / 3_600_000);
+          const diffM   = Math.floor((diffMs % 3_600_000) / 60_000);
+          const diffD   = Math.floor(diffMs / 86_400_000);
+          const remH    = diffH % 24;
+          const isUrgent  = diffH < 24;
+          const isWarning = !isUrgent && diffD <= 3;
+          const bg        = isUrgent  ? 'bg-red-50 border-red-200'    : isWarning ? 'bg-orange-50 border-orange-200'  : 'bg-amber-50 border-amber-200';
+          const iconColor = isUrgent  ? 'text-red-500'                : isWarning ? 'text-orange-500'                 : 'text-amber-500';
+          const textHead  = isUrgent  ? 'text-red-700'                : isWarning ? 'text-orange-700'                 : 'text-amber-700';
+          const textSub   = isUrgent  ? 'text-red-500'                : isWarning ? 'text-orange-500'                 : 'text-amber-600';
+          const badge     = isUrgent  ? 'bg-red-100 text-red-700'     : isWarning ? 'bg-orange-100 text-orange-700'   : 'bg-amber-100 text-amber-700';
+          const countdownLabel = isUrgent
+            ? `${diffH}h ${diffM}m`
+            : `${diffD}d ${remH}h`;
+          const closeLabel = expiresAt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+            + ' at '
+            + expiresAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          return (
+            <div className={`flex items-center gap-3 border rounded-xl px-4 py-2.5 ${bg}`}>
+              <Clock className={`w-4 h-4 shrink-0 ${iconColor}`} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-semibold ${textHead}`}>
+                  {lang === 'ar' ? 'ينتهي قبول الردود في' : 'Responses close'} {closeLabel}
+                </p>
+                <p className={`text-[11px] ${textSub}`}>
+                  {lang === 'ar' ? 'تبقى' : 'Time remaining:'} {countdownLabel}
+                </p>
+              </div>
+              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${badge}`}>
+                {isUrgent ? (lang === 'ar' ? 'عاجل' : 'URGENT') : isWarning ? (lang === 'ar' ? 'قريباً' : 'SOON') : (lang === 'ar' ? 'مفتوح' : 'OPEN')}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Questions for current page */}
         {currentPageQuestions.map(q => renderQuestion(q, 0))}
 
