@@ -374,7 +374,7 @@
     if (!isHidden('/portfolio') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
       planningItems.push({ id: 'portfolio', title: "Portfolio Dashboard", url: "/portfolio", icon: LayoutDashboard, priority: 3, isPinned: isPinned('/portfolio') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM)) {
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector)) {
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 4, isPinned: isPinned('/mmp') });
     }
@@ -438,13 +438,13 @@
     if (!isHidden('/wallet') && (isFinancialAdmin || isAuditor || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
       myMoneyItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 1, isPinned: isPinned('/wallet') });
     }
-    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM || isCoordinator || isDataTeam)) {
+    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM || isCoordinator || isDataTeam || isCountryDirector)) {
       myMoneyItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 2, isPinned: isPinned('/cost-submission') });
     }
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
-    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector)) {
       approvalItems.push({ id: 'approvals-hub', title: "Approvals Hub", url: "/approvals", icon: Inbox, priority: 0, isPinned: isPinned('/approvals') });
     }
     if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
@@ -453,8 +453,8 @@
     if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
       approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
     }
-    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor)) {
-      approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
+    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector)) {
+      approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Tracker", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
     if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
       approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });

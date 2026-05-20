@@ -430,6 +430,7 @@ export default function DownPaymentApproval() {
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
+  const isCountryDirector = userRole === 'countrydirector' || userRole === 'country_director';
 
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   const [viewTab, setViewTab] = useState('approval');
@@ -673,7 +674,7 @@ export default function DownPaymentApproval() {
     });
   }, [siteCoverageData, filters, covMmpFilter, covHubFilter, covStateFilter, covDcFilter, covStatusFilter]);
 
-  if (!isSupervisor && !isAdmin && !isFOM) {
+  if (!isSupervisor && !isAdmin && !isFOM && !isCountryDirector) {
     return (
       <div className="p-6">
         <Card>
@@ -706,9 +707,11 @@ export default function DownPaymentApproval() {
             Down-Payment Approval
           </h1>
           <p className="text-muted-foreground mt-1">
-            {selectedTier === 'tier1'
-              ? 'Review and approve transportation advance requests from team members'
-              : 'Process approved down-payment requests and manage payments'}
+            {isCountryDirector
+              ? 'Monitor all transportation advance requests across the programme'
+              : selectedTier === 'tier1'
+                ? 'Review and approve transportation advance requests from team members'
+                : 'Process approved down-payment requests and manage payments'}
           </p>
         </div>
         {isAdmin && (
@@ -721,10 +724,16 @@ export default function DownPaymentApproval() {
             </Button>
           </div>
         )}
-        {!isAdmin && (
+        {!isAdmin && !isCountryDirector && (
           <Badge variant="outline" className="self-start flex items-center gap-1">
             <Shield className="h-3 w-3" />
             {isSupervisor ? 'Tier 1: Supervisor Review' : 'Tier 2: Admin Processing'}
+          </Badge>
+        )}
+        {isCountryDirector && (
+          <Badge variant="secondary" className="self-start flex items-center gap-1 border border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-700">
+            <Shield className="h-3 w-3" />
+            Country Director — View Only
           </Badge>
         )}
       </div>
