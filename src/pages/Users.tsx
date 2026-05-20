@@ -187,9 +187,13 @@ const Users = () => {
     ADMIN_ROLE_VARIANTS.includes(u.role ?? '') ||
     (u.roles && Array.isArray(u.roles) && u.roles.some(r => ADMIN_ROLE_VARIANTS.includes(r as string)));
 
-  // Statistics
+  // Statistics — "pending" means awaiting review (not rejected/inactive/approved)
   const stats = useMemo(() => {
-    const pending = users.filter(u => !u.isApproved);
+    const pending = users.filter(u =>
+      !u.isApproved &&
+      u.profileStatus !== 'rejected' &&
+      u.profileStatus !== 'inactive'
+    );
     const approved = users.filter(u => u.isApproved);
     const admins = users.filter(isAdminRole);
     return {

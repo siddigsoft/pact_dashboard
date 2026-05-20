@@ -661,6 +661,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) await setUserFromAuthUser(user);
+          // Fetch full user list now that we know the session is live.
+          // refreshUsers() is also called on mount but may have raced ahead
+          // of session restoration and returned early — this guarantees it runs
+          // at least once with a valid session.
+          refreshUsers();
         } else {
           // Only clear user if we're online - preserve session when offline
           if (navigator.onLine) {
@@ -703,6 +708,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (event === 'SIGNED_IN') {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) await setUserFromAuthUser(user);
+            refreshUsers();
           } else if (event === 'SIGNED_OUT') {
             // Only clear user if we're online - preserve session when offline
             // This prevents accidental logout when network is temporarily unavailable
