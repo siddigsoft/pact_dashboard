@@ -631,7 +631,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
       const { data: siteVisit, error: fetchError } = await supabase
         .from('mmp_site_entries')
-        .select('*, accepted_by, supervisor_id, site_name, site_code, status')
+        .select('*')
         .eq('id', siteVisitId)
         .maybeSingle();
 
@@ -655,7 +655,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       }
 
       const dataCollectorId = siteVisit.accepted_by;
-      const supervisorId = siteVisit.supervisor_id;
+      const supervisorId = siteVisit.additional_data?.supervisor_id ?? null;
 
       const resetFields: Record<string, any> = {
         status: targetStatus,
@@ -1293,7 +1293,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
         if (financialNote) {
           // Notify supervisor on the site entry
-          const supervisorId = siteEntry.supervisor_id;
+          const supervisorId = siteEntry.additional_data?.supervisor_id ?? null;
           if (supervisorId && supervisorId !== reclaimedBy) {
             await sendNotificationToUser(
               supervisorId,
