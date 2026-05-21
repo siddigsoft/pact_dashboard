@@ -447,6 +447,35 @@ function CoordExpandedContent({
           </button>
         )}
       </div>
+      {/* ── Overall totals summary ── */}
+      {(() => {
+        const allVerified   = coord.siteDetails.filter(s => s.statusCategory === 'verified').length;
+        const allInProgress = coord.siteDetails.filter(s => s.statusCategory === 'in_progress').length;
+        const allPending    = coord.siteDetails.filter(s => s.statusCategory === 'pending').length;
+        const allReturned   = coord.siteDetails.filter(s => s.statusCategory === 'returned').length;
+        const allRejected   = coord.siteDetails.filter(s => s.statusCategory === 'rejected').length;
+        const total = coord.siteDetails.length;
+        const chips = [
+          allInProgress > 0 && { label: 'In Progress', count: allInProgress, dot: 'bg-blue-500',   text: 'text-blue-700 dark:text-blue-400' },
+          allPending    > 0 && { label: 'Pending',     count: allPending,    dot: 'bg-amber-400',   text: 'text-amber-700 dark:text-amber-400' },
+          allVerified   > 0 && { label: 'Verified',    count: allVerified,   dot: 'bg-green-500',   text: 'text-green-700 dark:text-green-400' },
+          allReturned   > 0 && { label: 'Returned',    count: allReturned,   dot: 'bg-orange-500',  text: 'text-orange-700 dark:text-orange-400' },
+          allRejected   > 0 && { label: 'Rejected',    count: allRejected,   dot: 'bg-red-500',     text: 'text-red-700 dark:text-red-400' },
+        ].filter(Boolean) as { label: string; count: number; dot: string; text: string }[];
+        return (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5 rounded-md bg-muted/40 border border-border/40 text-[11px]">
+            <span className="font-bold text-foreground">{total} sites total</span>
+            <span className="text-border">|</span>
+            {chips.map(chip => (
+              <span key={chip.label} className={`flex items-center gap-1 ${chip.text}`}>
+                <span className={`w-2 h-2 rounded-full inline-block ${chip.dot}`} />
+                <span className="font-semibold">{chip.count}</span>
+                <span className="text-muted-foreground">{chip.label}</span>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
       {/* ── Filtered sections ── */}
       <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
       <StatusCategorySection category="pending"     sites={pendingSites}    userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
