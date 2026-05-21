@@ -1262,13 +1262,15 @@ export function SuperAdminDataManagement() {
       const globalSearch = debouncedSearch.toLowerCase();
       const localSearch = debouncedClaimedSiteSearch.toLowerCase();
       
+      const resolvedMmpName = mmpById[site.mmp_id!]?.name || site.mmp_name || '';
+
       const matchesGlobalSearch = !globalSearch ||
         site.site_name?.toLowerCase().includes(globalSearch) ||
         site.site_code?.toLowerCase().includes(globalSearch) ||
         site.accepted_by_name?.toLowerCase().includes(globalSearch) ||
         site.state?.toLowerCase().includes(globalSearch) ||
         site.locality?.toLowerCase().includes(globalSearch) ||
-        site.mmp_name?.toLowerCase().includes(globalSearch);
+        resolvedMmpName.toLowerCase().includes(globalSearch);
       
       const matchesLocalSearch = !localSearch ||
         site.site_name?.toLowerCase().includes(localSearch) ||
@@ -1279,12 +1281,12 @@ export function SuperAdminDataManagement() {
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
-      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_name === claimedMmpFilter;
+      const matchesMmp = claimedMmpFilter === 'all' || resolvedMmpName === claimedMmpFilter;
       
       const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
       return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
     });
-  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
+  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter, mmpById]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
@@ -1309,15 +1311,19 @@ export function SuperAdminDataManagement() {
         .filter(Boolean)
     )].sort();
 
-    // Unique MMPs across all claimed sites — deduplicated by NAME so duplicate DB records collapse
+    // Unique MMPs across all claimed sites — resolve name via mmpById, deduplicate by name
     const mmpOptions = [...new Map(
       claimedSites
-        .filter(s => s.mmp_name)
-        .map(s => [s.mmp_name!, { id: s.mmp_name!, name: s.mmp_name! }])
+        .filter(s => s.mmp_id)
+        .map(s => {
+          const name = mmpById[s.mmp_id!]?.name || s.mmp_name;
+          return name ? [name, { id: name, name }] as [string, { id: string; name: string }] : null;
+        })
+        .filter((x): x is [string, { id: string; name: string }] => x !== null)
     ).values()].sort((a, b) => a.name.localeCompare(b.name));
 
     return { states, localities, activities, claimedByUsers, mmpOptions };
-  }, [claimedSites, stateFilter, localityFilter, activityFilter]);
+  }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById]);
 
   const filteredDispatchedSites = useMemo(() => {
     return dispatchedSites.filter(site => {
