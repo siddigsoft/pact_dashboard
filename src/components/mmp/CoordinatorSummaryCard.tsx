@@ -572,7 +572,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       const effectiveCoordId = coordId || '__direct__';
       const effectiveCoordName = coordId
         ? (coordName || coordinatorNames[coordId] || coordId.substring(0, 8))
-        : 'Directly Dispatched';
+        : 'Claimed Without Coordinator';
 
       const existingCoord = stateData.coordinators.find(c => c.id === effectiveCoordId);
 
