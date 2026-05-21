@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Download, MapPin, Users, User, Clock, CheckCircle2,
   XCircle, FileText, Activity, ShieldAlert, BarChart3, Loader2,
+  LockKeyhole, Unlock,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -118,6 +119,8 @@ export default function MmpStateReport({
   const [auditLogs, setAuditLogs]           = useState<any[]>([]);
   const [advancesDetail, setAdvancesDetail] = useState<any[]>([]);
   const [userMap, setUserMap]               = useState<Record<string, string>>({});
+  const [siteCollectorMap, setSiteCollectorMap] = useState<Record<string, string>>({});
+  const [cycleStatus, setCycleStatus]       = useState<string>('active');
   const [exporting, setExporting]           = useState(false);
   const [activeTab, setActiveTab]           = useState('summary');
 
@@ -129,7 +132,7 @@ export default function MmpStateReport({
     const run = async () => {
       setLoading(true);
       try {
-        const [logsRes, advRes] = await Promise.all([
+        const [logsRes, advRes, entriesRes, cycleRes] = await Promise.all([
           supabase
             .from('audit_logs')
             .select('id,entity_id,entity_name,actor_id,actor_name,action,description,changes,timestamp')
@@ -141,12 +144,39 @@ export default function MmpStateReport({
             .from('down_payment_requests')
             .select('id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,requested_by,requested_at,hub_name')
             .in('mmp_site_entry_id', siteIds),
+          // Fetch accepted_by (primary collector field) for all site entries —
+          // SiteStatusDetail only carries claimedBy (claimed_by UUID) but most
+          // sites store the collector in accepted_by (text: UUID, email or name)
+          supabase
+            .from('mmp_site_entries')
+            .select('id,accepted_by,claimed_by,visit_started_by')
+            .in('id', siteIds),
+          // Fetch cycle status for this MMP
+          mmpId
+            ? supabase.from('mmp_files').select('cycle_status').eq('id', mmpId).single()
+            : Promise.resolve({ data: null, error: null }),
         ]);
 
-        const logs = logsRes.data || [];
-        const adv  = advRes.data  || [];
+        const logs    = logsRes.data    || [];
+        const adv     = advRes.data     || [];
+        const entries = entriesRes.data || [];
         setAuditLogs(logs);
         setAdvancesDetail(adv);
+
+        // Build siteId → collectorId map from accepted_by / claimed_by
+        const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const colMap: Record<string, string> = {};
+        entries.forEach((row: any) => {
+          if (!row.id) return;
+          // Priority: accepted_by → claimed_by → visit_started_by
+          const val = row.accepted_by || row.claimed_by || row.visit_started_by || '';
+          if (val) colMap[row.id] = val;
+        });
+        setSiteCollectorMap(colMap);
+
+        if (cycleRes.data) {
+          setCycleStatus((cycleRes.data as any).cycle_status || 'active');
+        }
 
         // Collect all unique user IDs for name resolution
         const idSet = new Set<string>();
@@ -157,13 +187,21 @@ export default function MmpStateReport({
             e.forwarded_by_user_id, e.forwardedByUserId,
             e.forwarded_to_user_id, e.forwardedToUserId,
             e.accepted_by,     e.acceptedBy,
-            e.claimedBy,                             // ← SiteStatusDetail field
+            e.claimedBy,                             // ← SiteStatusDetail field (claimed_by UUID)
+            e.actionBy,                              // ← SiteStatusDetail last-actor field
             e.visit_started_by, e.visitStartedBy,
             e.visit_completed_by, e.visitCompletedBy,
             e.verified_by,     e.verifiedBy,
             e.rejected_by,     e.rejectedBy,
             ad.assigned_to,    ad.claimed_by,
-          ].forEach(v => { if (typeof v === 'string' && v.length > 10) idSet.add(v); });
+          ].forEach(v => { if (typeof v === 'string' && v.length > 10 && isUuidRe.test(v)) idSet.add(v); });
+        });
+        // Also add accepted_by UUIDs from the direct DB fetch
+        entries.forEach((row: any) => {
+          ['accepted_by', 'claimed_by', 'visit_started_by'].forEach(f => {
+            const v = row[f];
+            if (typeof v === 'string' && isUuidRe.test(v)) idSet.add(v);
+          });
         });
         logs.forEach((l: any) => { if (l.actor_id) idSet.add(l.actor_id); });
         adv.forEach((a: any)  => { if (a.requested_by) idSet.add(a.requested_by); });
@@ -196,6 +234,7 @@ export default function MmpStateReport({
 
   // ── Derived: sites ─────────────────────────────────────────────────────────
   const sites = useMemo<ReportSiteRow[]>(() => {
+    const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return rawEntries.map((e: any) => {
       const ad     = e.additional_data || e.additionalData || {};
       const status = (e.status || '').toLowerCase().trim();
@@ -203,14 +242,26 @@ export default function MmpStateReport({
       const adv    = advanceMap[e.id];
 
       const coordId = ad.assigned_to || e.forwarded_to_user_id || e.forwardedToUserId || '';
-      // claimedBy covers SiteStatusDetail objects; accepted_by / claimed_by cover raw DB rows
-      const collectorId =
-        e.claimedBy || e.accepted_by || e.acceptedBy || ad.claimed_by || e.visit_started_by || '';
+
+      // collectorRaw: accepted_by from DB (via siteCollectorMap) takes priority — it's the most
+      // reliable collector identifier. Falls back to claimedBy (SiteStatusDetail UUID) and other fields.
+      const collectorRaw =
+        siteCollectorMap[e.id] ||          // DB accepted_by / claimed_by (UUID or text)
+        e.claimedBy ||                     // SiteStatusDetail: claimed_by UUID
+        e.accepted_by || e.acceptedBy ||   // raw DB row fallbacks
+        ad.claimed_by ||
+        e.visit_started_by || '';
+
+      // Determine if the raw value is a UUID (look up in userMap) or a direct name
+      const collectorIsUuid = isUuidRe.test(collectorRaw);
+      const collectorId     = collectorIsUuid ? collectorRaw : '';
+      const collectorDirect = !collectorIsUuid && collectorRaw ? cleanName(collectorRaw) : '';
 
       const timestamps = [
         e.dispatched_at, e.dispatchedAt,
         e.forwarded_at,  e.forwardedAt,
         e.accepted_at,   e.acceptedAt,
+        e.actionAt,                        // SiteStatusDetail last-action timestamp
         e.visit_started_at, e.visit_completed_at,
         e.verified_at,   e.verifiedAt,
         e.updated_at,    e.updatedAt,
@@ -219,15 +270,16 @@ export default function MmpStateReport({
         try { return new Date(ts) > new Date(latest) ? ts : latest; } catch { return latest; }
       }, timestamps[0] || '');
 
-      // Resolve data collector name: prefer userMap (UUID→name), then field-level names
+      // Resolve data collector name: UUID → userMap → coordinatorNames → direct text → '—'
       const collectorName =
         (collectorId ? (userMap[collectorId] || coordinatorNames[collectorId]) : '') ||
+        collectorDirect ||
         cleanName(ad.collector_name || e.collectorName) ||
         '—';
 
       return {
         id: e.id || '',
-        siteName:   cleanName(e.site_name || e.siteName || 'Unknown'),
+        siteName:   cleanName(e.site_name || e.siteName || e.name || 'Unknown'),
         siteCode:   e.site_code || e.siteCode || '',
         locality:   cleanName(e.locality || e.localityName || ''),
         hub:        e.hub_office || e.hub_name || e.hubName || '',
@@ -258,7 +310,7 @@ export default function MmpStateReport({
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawEntries, coordinatorNames, userMap, advanceMap]);
+  }, [rawEntries, coordinatorNames, userMap, advanceMap, siteCollectorMap]);
 
   // ── Derived: coordinators ──────────────────────────────────────────────────
   const coordinatorRows = useMemo<ReportCoordinatorRow[]>(() => {
@@ -451,6 +503,24 @@ export default function MmpStateReport({
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {/* Cycle open / closed badge */}
+              {cycleStatus === 'closed' ? (
+                <Badge className="gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-xs px-2 py-0.5 border border-slate-300 dark:border-slate-600">
+                  <LockKeyhole className="h-3 w-3" /> Cycle Closed
+                </Badge>
+              ) : cycleStatus === 'closing' ? (
+                <Badge className="gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs px-2 py-0.5 border border-amber-300 dark:border-amber-700">
+                  <Clock className="h-3 w-3" /> Closing
+                </Badge>
+              ) : cycleStatus === 'pending_approval' ? (
+                <Badge className="gap-1 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs px-2 py-0.5 border border-purple-300 dark:border-purple-700">
+                  <Clock className="h-3 w-3" /> Pending Approval
+                </Badge>
+              ) : (
+                <Badge className="gap-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs px-2 py-0.5 border border-green-300 dark:border-green-700">
+                  <Unlock className="h-3 w-3" /> Cycle Open
+                </Badge>
+              )}
               <Button
                 onClick={handleExport}
                 disabled={loading || exporting}
