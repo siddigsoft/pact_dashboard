@@ -337,9 +337,19 @@ function CoordExpandedContent({
 }) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const filteredDetails = statusFilter === 'all'
-    ? coord.siteDetails
-    : coord.siteDetails.filter(s => s.status === statusFilter);
+  const noAdvanceCount = coord.siteDetails.filter(s => {
+    const adv = advanceMap[s.id];
+    return !adv || adv.status === 'cancelled' || adv.status === 'rejected';
+  }).length;
+
+  const filteredDetails = statusFilter === '__no_advance__'
+    ? coord.siteDetails.filter(s => {
+        const adv = advanceMap[s.id];
+        return !adv || adv.status === 'cancelled' || adv.status === 'rejected';
+      })
+    : statusFilter === 'all'
+      ? coord.siteDetails
+      : coord.siteDetails.filter(s => s.status === statusFilter);
 
   const verifiedSites   = filteredDetails.filter(s => s.statusCategory === 'verified');
   const returnedSites   = filteredDetails.filter(s => s.statusCategory === 'returned');
@@ -349,7 +359,7 @@ function CoordExpandedContent({
 
   return (
     <div className="px-2 pb-2 mt-2 space-y-3">
-      {/* ── Status filter pills ── */}
+      {/* ── Filter pills ── */}
       <div className="flex flex-wrap gap-1.5 border-b pb-2">
         <button
           onClick={() => setStatusFilter('all')}
@@ -378,6 +388,19 @@ function CoordExpandedContent({
             </button>
           );
         })}
+        {noAdvanceCount > 0 && (
+          <button
+            onClick={() => setStatusFilter(statusFilter === '__no_advance__' ? 'all' : '__no_advance__')}
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+              statusFilter === '__no_advance__'
+                ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-transparent'
+                : 'border-dashed border-orange-300 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20'
+            }`}
+          >
+            <Wallet className="h-2.5 w-2.5" />
+            No Advance ({noAdvanceCount})
+          </button>
+        )}
       </div>
       {/* ── Filtered sections ── */}
       <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
