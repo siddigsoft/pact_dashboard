@@ -7,7 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus, Pencil, FileText } from 'lucide-react';
+import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus, Pencil, FileText, Shield } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import MmpStateReport from '@/components/mmp/MmpStateReport';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -494,11 +496,16 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
   const [isOpen, setIsOpen] = useState(true);
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
   const [actionByNames, setActionByNames] = useState<Record<string, string>>({});
+  const [coordAvatarMap, setCoordAvatarMap] = useState<Record<string, string>>({});
   const [advanceMap, setAdvanceMap] = useState<Record<string, AdvanceInfo>>({});
   const [reportState, setReportState] = useState<{ stateName: string; rawEntries: any[] } | null>(null);
 
   const { createRequest, editRequest } = useDownPayment();
   const { currentUser } = useUser();
+
+  // Roles that may open the Operational Report
+  const REPORT_ROLES = new Set(['admin','Admin','superAdmin','super_admin','superadmin','SuperAdmin','fom','FOM','ict','ICT']);
+  const canAccessReport = REPORT_ROLES.has(currentUser?.role || '');
 
   const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null; editMode: boolean; existingAdvance: AdvanceInfo | null }>({ open: false, site: null, editMode: false, existingAdvance: null });
   const [fundAmount, setFundAmount] = useState('');
@@ -853,20 +860,23 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
 
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, avatar_url')
         .in('id', Array.from(allIds));
 
       if (data) {
         const coordNameMap: Record<string, string> = {};
         const actionNameMap: Record<string, string> = {};
+        const avatarMap: Record<string, string> = {};
         data.forEach((p: any) => {
           const name = p.full_name || p.id.substring(0, 8);
           if (coordIds.has(p.id)) coordNameMap[p.id] = name;
           if (actionByIds.has(p.id)) actionNameMap[p.id] = name;
           actionNameMap[p.id] = name;
+          if (p.avatar_url) avatarMap[p.id] = p.avatar_url;
         });
         setCoordinatorNames(coordNameMap);
         setActionByNames(actionNameMap);
+        setCoordAvatarMap(avatarMap);
       }
     };
 
@@ -1062,25 +1072,95 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                 data-testid={`coordinator-state-${stateData.state}`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    <span className="font-medium text-sm">{stateData.state}</span>
+                  {/* State name + coordinator mini-avatars */}
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="font-semibold text-sm">{stateData.state}</span>
+                    </div>
+                    {/* Coordinator avatar strip — small icons only, tooltip shows name */}
+                    {stateData.coordinators.filter(c => c.id !== '__direct__').length > 0 && (
+                      <TooltipProvider delayDuration={200}>
+                        <div className="flex items-center gap-0.5 ml-6">
+                          {stateData.coordinators
+                            .filter(c => c.id !== '__direct__')
+                            .slice(0, 6)
+                            .map(coord => {
+                              const name = coordinatorNames[coord.id] || coord.name;
+                              const initials = name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+                              const avatarUrl = coordAvatarMap[coord.id];
+                              return (
+                                <Tooltip key={coord.id}>
+                                  <TooltipTrigger asChild>
+                                    <Avatar className="h-5 w-5 border border-background ring-1 ring-purple-200 dark:ring-purple-800 cursor-default">
+                                      {avatarUrl && <AvatarImage src={avatarUrl} alt={name} className="object-cover" />}
+                                      <AvatarFallback className="text-[8px] font-bold bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
+                                        {initials}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="text-xs">
+                                    {name}
+                                    <span className="ml-1 text-muted-foreground">· {coord.sitesAssigned} sites</span>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })}
+                          {stateData.coordinators.filter(c => c.id !== '__direct__').length > 6 && (
+                            <span className="text-[10px] text-muted-foreground ml-0.5">
+                              +{stateData.coordinators.filter(c => c.id !== '__direct__').length - 6}
+                            </span>
+                          )}
+                        </div>
+                      </TooltipProvider>
+                    )}
                   </div>
+
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const stateEntries = siteEntries.filter((en: any) =>
-                          (cleanName(en.state || en.stateName) || 'Unknown State') === stateData.state
-                        );
-                        setReportState({ stateName: stateData.state, rawEntries: stateEntries });
-                      }}
-                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
-                      title="Generate operational report for this state"
-                    >
-                      <FileText className="h-3 w-3" />
-                      Report
-                    </button>
+                    {/* Report button — visible only to FOM / Admin / SuperAdmin */}
+                    {canAccessReport ? (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const stateEntries = siteEntries.filter((en: any) =>
+                                  (cleanName(en.state || en.stateName) || 'Unknown State') === stateData.state
+                                );
+                                setReportState({ stateName: stateData.state, rawEntries: stateEntries });
+                              }}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-md bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white shadow-sm transition-colors"
+                              title="Open operational report for this state"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              Report
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs max-w-[200px] text-center">
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <Shield className="h-3 w-3 text-purple-400" />
+                              <span className="font-semibold">Operational Report</span>
+                            </div>
+                            <span className="text-muted-foreground">Visible to FOM, Admin &amp; Super Admin only</span>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-dashed border-muted-foreground/30 text-muted-foreground/50 cursor-not-allowed select-none">
+                              <Shield className="h-3 w-3" />
+                              Report
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">
+                            Operational reports are available to FOM, Admin, and Super Admin
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     {sortedStatusEntries(stateData.statusCounts).map(([status, count]) => {
                       const cfg = getStatusCfg(status);
                       return (
@@ -1131,16 +1211,20 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                       <CollapsibleTrigger className="w-full rounded-md bg-muted/50 text-sm hover-elevate">
                         <div className="flex items-center justify-between gap-2 p-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              coord.id === '__direct__'
-                                ? 'bg-amber-100 dark:bg-amber-900/40'
-                                : 'bg-purple-200 dark:bg-purple-800'
-                            }`}>
-                              {coord.id === '__direct__'
-                                ? <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                                : <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                              }
-                            </div>
+                            {coord.id === '__direct__' ? (
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100 dark:bg-amber-900/40">
+                                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              </div>
+                            ) : (
+                              <Avatar className="h-8 w-8 shrink-0 ring-2 ring-purple-200 dark:ring-purple-800">
+                                {coordAvatarMap[coord.id] && (
+                                  <AvatarImage src={coordAvatarMap[coord.id]} alt={coordinatorNames[coord.id] || coord.name} className="object-cover" />
+                                )}
+                                <AvatarFallback className="text-xs font-bold bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300">
+                                  {(coordinatorNames[coord.id] || coord.name).split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                            )}
                             <div className="min-w-0 text-left">
                               <p className="font-medium truncate">
                                 {coordinatorNames[coord.id] || coord.name}
