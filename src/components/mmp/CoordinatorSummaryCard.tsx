@@ -272,15 +272,17 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
 function LocalityGroup({ locality, sites, userNames, advanceMap, onRequestFund, onEditFund }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo>; onRequestFund?: (site: SiteStatusDetail) => void; onEditFund?: (site: SiteStatusDetail, advance: AdvanceInfo) => void }) {
   const [open, setOpen] = useState(true);
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="ml-2" data-testid={`locality-group-${locality}`}>
-      <CollapsibleTrigger className="flex items-center gap-1.5 mb-1 w-full group hover:text-foreground transition-colors">
-        <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-        <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground flex-1 text-left">{locality}</span>
-        <span className="text-[10px] text-muted-foreground">({sites.length})</span>
-        <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform flex-shrink-0 ${open ? '' : '-rotate-90'}`} />
+    <Collapsible open={open} onOpenChange={setOpen} data-testid={`locality-group-${locality}`}>
+      <CollapsibleTrigger className="w-full group">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/60 border border-border/50 hover:bg-muted hover:border-border transition-colors">
+          <MapPin className="h-3.5 w-3.5 text-primary/70 flex-shrink-0" />
+          <span className="text-[12px] font-semibold text-foreground flex-1 text-left">{locality}</span>
+          <span className="text-[11px] font-medium bg-background border border-border/60 rounded-full px-1.5 py-0.5 text-muted-foreground leading-none">{sites.length}</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform flex-shrink-0 ${open ? '' : '-rotate-90'}`} />
+        </div>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="space-y-1 ml-4">
+        <div className="space-y-1 mt-1 ml-3 pl-2 border-l-2 border-border/40">
           {sites.map((site) => (
             <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} onRequestFund={onRequestFund} onEditFund={onEditFund} />
           ))}
@@ -317,6 +319,22 @@ function StatusCategorySection({
 
   const config = categoryConfig[category];
   const Icon = config.icon;
+  const [open, setOpen] = useState(true);
+
+  const bgMap: Record<string, string> = {
+    verified: 'bg-green-50/60 dark:bg-green-950/20 border-green-200/60 dark:border-green-800/40',
+    returned: 'bg-orange-50/60 dark:bg-orange-950/20 border-orange-200/60 dark:border-orange-800/40',
+    rejected: 'bg-red-50/60 dark:bg-red-950/20 border-red-200/60 dark:border-red-800/40',
+    in_progress: 'bg-blue-50/60 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40',
+    pending: 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/40',
+  };
+  const stripMap: Record<string, string> = {
+    verified: 'bg-green-500',
+    returned: 'bg-orange-500',
+    rejected: 'bg-red-500',
+    in_progress: 'bg-blue-500',
+    pending: 'bg-amber-400',
+  };
 
   const byLocality = new Map<string, SiteStatusDetail[]>();
   sites.forEach(site => {
@@ -328,16 +346,24 @@ function StatusCategorySection({
   const sortedLocalities = Array.from(byLocality.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
   return (
-    <div>
-      <p className={`text-[11px] font-semibold mb-1.5 flex items-center gap-1 ${config.colorClass}`}>
-        <Icon className="h-3 w-3" /> {config.label} ({sites.length})
-      </p>
-      <div className="space-y-2">
-        {sortedLocalities.map(([locality, locSites]) => (
-          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-        ))}
-      </div>
-    </div>
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="w-full group">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-md border ${bgMap[category]} hover:opacity-90 transition-opacity`}>
+          <span className={`w-1 h-4 rounded-full flex-shrink-0 ${stripMap[category]}`} />
+          <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${config.colorClass}`} />
+          <span className={`text-[12px] font-bold flex-1 text-left ${config.colorClass}`}>{config.label}</span>
+          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full border ${bgMap[category]} ${config.colorClass}`}>{sites.length}</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform flex-shrink-0 ${open ? '' : '-rotate-90'}`} />
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-1.5 mt-1.5 ml-1">
+          {sortedLocalities.map(([locality, locSites]) => (
+            <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
