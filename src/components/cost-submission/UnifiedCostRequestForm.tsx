@@ -1024,23 +1024,25 @@ export default function UnifiedCostRequestForm({
                         <Label className="text-sm font-medium mb-2 block">
                           Expense Category <span className="text-destructive">*</span>
                         </Label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {Object.entries(EXPENSE_CATEGORIES).map(([key, { label, icon: Icon, color }]) => (
                             <Button
                               key={key}
                               type="button"
                               variant="outline"
                               className={cn(
-                                "h-auto py-2.5 px-2 flex-col gap-1 border-2 transition-all",
+                                "h-auto min-w-0 w-full overflow-hidden py-3 px-2 flex flex-col items-center justify-center gap-1.5 border-2 transition-all",
                                 item.expenseCategory === key
-                                  ? `bg-gradient-to-br ${color} text-white border-transparent shadow-lg scale-[1.02]`
+                                  ? `bg-gradient-to-br ${color} text-white border-transparent shadow-md ring-2 ring-offset-1 ring-black/10`
                                   : "hover-elevate"
                               )}
                               onClick={() => updateLineItem(item.id, 'expenseCategory', key)}
                               data-testid={`category-${key}-${index}`}
                             >
-                              <Icon className="h-4 w-4" />
-                              <span className="text-[10px] sm:text-xs font-medium text-center leading-tight">{label}</span>
+                              <Icon className="h-4 w-4 shrink-0" />
+                              <span className="w-full min-w-0 text-[11px] sm:text-xs font-medium text-center leading-snug break-words whitespace-normal">
+                                {label}
+                              </span>
                             </Button>
                           ))}
                         </div>
