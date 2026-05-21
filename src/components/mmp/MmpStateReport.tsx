@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Download, MapPin, Users, User, Clock, CheckCircle2,
   XCircle, FileText, Activity, ShieldAlert, BarChart3, Loader2,
-  LockKeyhole, Unlock, ChevronDown,
+  LockKeyhole, Unlock, ChevronDown, X,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -121,6 +121,8 @@ export default function MmpStateReport({
   const [advancesDetail, setAdvancesDetail] = useState<any[]>([]);
   const [userMap, setUserMap]               = useState<Record<string, string>>({});
   const [siteCollectorMap, setSiteCollectorMap] = useState<Record<string, string>>({});
+  // entry_id → resolved display name (from additional_data fallback)
+  const [siteCollectorNameMap, setSiteCollectorNameMap] = useState<Record<string, string>>({});
   const [cycleStatus, setCycleStatus]       = useState<string>('active');
   const [exporting, setExporting]           = useState(false);
   const [activeTab, setActiveTab]           = useState('summary');
@@ -151,7 +153,7 @@ export default function MmpStateReport({
           // sites store the collector in accepted_by (text: UUID, email or name)
           supabase
             .from('mmp_site_entries')
-            .select('id,accepted_by,claimed_by,visit_started_by')
+            .select('id,accepted_by,claimed_by,visit_started_by,additional_data')
             .in('id', siteIds),
           // Fetch cycle status for this MMP
           mmpId
@@ -175,6 +177,26 @@ export default function MmpStateReport({
           if (val) colMap[row.id] = val;
         });
         setSiteCollectorMap(colMap);
+
+        // Build entry_id → collector display name from additional_data stored text fields.
+        // This resolves data collectors whose auth UUIDs are NOT in the profiles table
+        // (e.g. mobile-only users, legacy accounts). Priority: collector_name →
+        // accepted_by_name → enumerator_name → data_collector_name.
+        const nameMap: Record<string, string> = {};
+        entries.forEach((row: any) => {
+          if (!row.id) return;
+          const ad = row.additional_data || {};
+          const textName = cleanName(
+            ad.collector_name      ||
+            ad.accepted_by_name    ||
+            ad.enumerator_name     ||
+            ad.data_collector_name ||
+            ad.collectorName       ||
+            ''
+          );
+          if (textName) nameMap[row.id] = textName;
+        });
+        setSiteCollectorNameMap(nameMap);
 
         if (cycleRes.data) {
           setCycleStatus((cycleRes.data as any).cycle_status || 'active');
@@ -272,16 +294,18 @@ export default function MmpStateReport({
         try { return new Date(ts) > new Date(latest) ? ts : latest; } catch { return latest; }
       }, timestamps[0] || '');
 
-      // Resolve data collector name: UUID → userMap → coordinatorNames → direct text → UUID prefix
-      // NOTE: never fall back to '—' when there's a known collectorId — that would cause the
-      // collector to be silently skipped in the Data Collectors tab grouping logic.
+      // Resolve data collector name: UUID → userMap → coordinatorNames → additional_data text →
+      // direct text on entry → UUID prefix fallback.
+      // siteCollectorNameMap[e.id] holds names extracted from additional_data fields at fetch time,
+      // which resolves mobile / legacy users not present in the profiles table.
       const resolvedFromUuid = collectorId
         ? (userMap[collectorId] || coordinatorNames[collectorId])
         : '';
       const collectorName =
         resolvedFromUuid ||
+        siteCollectorNameMap[e.id] ||
         collectorDirect ||
-        cleanName(ad.collector_name || e.collectorName) ||
+        cleanName(ad.collector_name || ad.accepted_by_name || ad.enumerator_name || e.collectorName) ||
         (collectorId ? `Collector #${collectorId.substring(0, 8)}` : '—');
 
       return {
@@ -317,7 +341,7 @@ export default function MmpStateReport({
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawEntries, coordinatorNames, userMap, advanceMap, siteCollectorMap]);
+  }, [rawEntries, coordinatorNames, userMap, advanceMap, siteCollectorMap, siteCollectorNameMap]);
 
   // ── Derived: coordinators ──────────────────────────────────────────────────
   const coordinatorRows = useMemo<ReportCoordinatorRow[]>(() => {
@@ -412,7 +436,7 @@ export default function MmpStateReport({
       if (site.statusCategory === 'rejected')
         items.push({ category: 'Rejected Site', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: 'Site rejected — requires escalation or closure', daysAffected: d });
       if (!site.coordinatorName || site.coordinatorName === '—' || site.coordinatorName === 'Unassigned')
-        items.push({ category: 'Unassigned Site', siteName: site.siteName, locality: site.locality, coordinator: '—', dataCollector: '—', detail: 'No coordinator assigned to this site', daysAffected: d });
+        items.push({ category: 'Unassigned Site', siteName: site.siteName, locality: site.locality, coordinator: '—', dataCollector: site.dataCollectorName && site.dataCollectorName !== '—' ? site.dataCollectorName : site.acceptedByName && site.acceptedByName !== '—' ? site.acceptedByName : '—', detail: 'No coordinator assigned to this site', daysAffected: d });
       if (site.statusCategory === 'pending' && d >= 14)
         items.push({ category: 'Pending Too Long', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: `Pending for ${d} days — no movement`, daysAffected: d });
     });
@@ -494,7 +518,7 @@ export default function MmpStateReport({
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent
-        className="p-0 gap-0 overflow-hidden"
+        className="p-0 gap-0 overflow-hidden [&>button:last-child]:hidden"
         style={{
           width: '98vw',
           maxWidth: '98vw',
@@ -521,7 +545,7 @@ export default function MmpStateReport({
                 {mmpName} · Generated {format(new Date(), 'MMM d, yyyy HH:mm')}
               </p>
             </div>
-            {/* Right: status badge + export */}
+            {/* Right: status badge + export + close */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               {cycleStatus === 'closed' ? (
@@ -550,6 +574,17 @@ export default function MmpStateReport({
               >
                 {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                 Export Excel (6 sheets)
+              </Button>
+              {/* Explicit close — kept visually separate from Export button */}
+              <div style={{ width: 1, height: 24, background: 'var(--border)', flexShrink: 0 }} />
+              <Button
+                onClick={onClose}
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 rounded-full shrink-0 text-muted-foreground hover:text-foreground"
+                title="Close report"
+              >
+                <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -920,16 +955,46 @@ export default function MmpStateReport({
                         'Unassigned Site':              'bg-purple-100 text-purple-700',
                         'Pending Too Long':             'bg-pink-100 text-pink-700',
                       };
+                      const hasCoord   = item.coordinator && item.coordinator !== '—';
+                      const hasCollect = item.dataCollector && item.dataCollector !== '—';
                       return (
-                        <TableRow key={idx}>
+                        <TableRow key={idx} className={idx % 2 === 0 ? '' : 'bg-muted/20'}>
                           <TableCell>
                             <Badge className={`text-[10px] px-1.5 py-0 ${catColor[item.category] || 'bg-muted'}`}>{item.category}</Badge>
                           </TableCell>
-                          <TableCell className="font-medium text-sm">{item.siteName}</TableCell>
+                          <TableCell className="font-medium text-sm max-w-[160px]">
+                            <div className="truncate" title={item.siteName}>{item.siteName}</div>
+                          </TableCell>
                           <TableCell className="text-xs">{item.locality || '—'}</TableCell>
-                          <TableCell className="text-xs">{item.coordinator}</TableCell>
-                          <TableCell className="text-xs">{item.dataCollector}</TableCell>
-                          <TableCell className="text-xs max-w-[280px]">{item.detail}</TableCell>
+                          <TableCell className="text-xs min-w-[120px]">
+                            {hasCoord ? (
+                              <div className="flex items-center gap-1">
+                                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                                  <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <span className="truncate max-w-[110px]" title={item.coordinator}>{item.coordinator}</span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-muted-foreground text-[10px] italic">
+                                <XCircle className="h-3 w-3 text-red-400" /> Not assigned
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs min-w-[120px]">
+                            {hasCollect ? (
+                              <div className="flex items-center gap-1">
+                                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center">
+                                  <User className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <span className="truncate max-w-[110px]" title={item.dataCollector}>{item.dataCollector}</span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-muted-foreground text-[10px] italic">
+                                <XCircle className="h-3 w-3 text-muted-foreground" /> None
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[260px] text-muted-foreground">{item.detail}</TableCell>
                           <TableCell className="text-center">
                             <Badge className={`text-[10px] px-1.5 py-0 ${item.daysAffected >= 14 ? 'bg-red-100 text-red-700' : item.daysAffected >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
                               {item.daysAffected}d
