@@ -106,8 +106,12 @@ interface DispatchedSiteData {
   dispatched_by: string;
   dispatched_by_name?: string;
   dispatched_at?: string;
+  accepted_at?: string;
   main_activity?: string;
   hub_office?: string;
+  transport_fee?: number | null;
+  enumerator_fee?: number | null;
+  mmp_file_id?: string | null;
 }
 
 interface WalletData {
@@ -237,6 +241,13 @@ export function SuperAdminDataManagement() {
   const [claimedByFilter, setClaimedByFilter] = useState('all');
   const [claimedMmpFilter, setClaimedMmpFilter] = useState('all');
   const [hubFilter, setHubFilter] = useState('all');
+
+  // Dispatched-tab filters — kept separate so they never bleed into the Claimed tab
+  const [dispatchedStateFilter, setDispatchedStateFilter] = useState('all');
+  const [dispatchedLocalityFilter, setDispatchedLocalityFilter] = useState('all');
+  const [dispatchedActivityFilter, setDispatchedActivityFilter] = useState('all');
+  const [dispatchedHubFilter, setDispatchedHubFilter] = useState('all');
+  const [dispatchedNoCostFilter, setDispatchedNoCostFilter] = useState(false);
   const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
   const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
 
@@ -530,9 +541,10 @@ export function SuperAdminDataManagement() {
   const loadDispatchedSites = async () => {
     setLoadingDispatched(true);
     try {
+      // 'forwarded_to_coordinator' is intentionally excluded — it is already
+      // covered by POST_DISPATCH_STATUSES in loadClaimedSites to avoid duplicates.
       const DISPATCHED_STATUSES = [
         'dispatched', 'Dispatched',
-        'forwarded_to_coordinator',
         'smart_assigned', 'Smart_Assigned',
       ];
       const PAGE_SIZE = 1000;
@@ -541,7 +553,7 @@ export function SuperAdminDataManagement() {
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office, accepted_by')
+          .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, accepted_at, main_activity, activity_at_site, hub_office, accepted_by, transport_fee, enumerator_fee, mmp_file_id')
           .in('status', DISPATCHED_STATUSES)
           .order('dispatched_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
@@ -1292,29 +1304,30 @@ export function SuperAdminDataManagement() {
         site.state?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         site.locality?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         site.hub_office?.toLowerCase().includes(debouncedSearch.toLowerCase());
-      
-      const matchesState = stateFilter === 'all' || site.state === stateFilter;
-      const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
-      const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
-      const matchesHub = hubFilter === 'all' || site.hub_office === hubFilter;
-      
-      return matchesSearch && matchesState && matchesLocality && matchesActivity && matchesHub;
+
+      const matchesState    = dispatchedStateFilter    === 'all' || site.state         === dispatchedStateFilter;
+      const matchesLocality = dispatchedLocalityFilter === 'all' || site.locality      === dispatchedLocalityFilter;
+      const matchesActivity = dispatchedActivityFilter === 'all' || site.main_activity === dispatchedActivityFilter;
+      const matchesHub      = dispatchedHubFilter      === 'all' || site.hub_office    === dispatchedHubFilter;
+      const matchesNoCost   = !dispatchedNoCostFilter  || (site.transport_fee == null && site.enumerator_fee == null);
+
+      return matchesSearch && matchesState && matchesLocality && matchesActivity && matchesHub && matchesNoCost;
     });
-  }, [dispatchedSites, debouncedSearch, stateFilter, localityFilter, activityFilter, hubFilter]);
+  }, [dispatchedSites, debouncedSearch, dispatchedStateFilter, dispatchedLocalityFilter, dispatchedActivityFilter, dispatchedHubFilter, dispatchedNoCostFilter]);
 
   // Get unique values for dispatched sites filters
   const dispatchedSitesFilterOptions = useMemo(() => {
     const states = [...new Set(dispatchedSites.map(s => s.state).filter(Boolean))].sort();
     const localities = [...new Set(
       dispatchedSites
-        .filter(s => stateFilter === 'all' || s.state === stateFilter)
+        .filter(s => dispatchedStateFilter === 'all' || s.state === dispatchedStateFilter)
         .map(s => s.locality)
         .filter(Boolean)
     )].sort();
     const activities = [...new Set(dispatchedSites.map(s => s.main_activity).filter(Boolean))].sort();
     const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort();
     return { states, localities, activities, hubs };
-  }, [dispatchedSites, stateFilter]);
+  }, [dispatchedSites, dispatchedStateFilter]);
 
   const filteredMMPs = useMemo(() => {
     return mmps.filter(mmp => {
@@ -2336,7 +2349,7 @@ export function SuperAdminDataManagement() {
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
-                  <Select value={activityFilter} onValueChange={setActivityFilter}>
+                  <Select value={dispatchedActivityFilter} onValueChange={setDispatchedActivityFilter}>
                     <SelectTrigger data-testid="select-dispatched-activity-filter">
                       <SelectValue placeholder="All Activities" />
                     </SelectTrigger>
@@ -2350,10 +2363,10 @@ export function SuperAdminDataManagement() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">State</Label>
-                  <Select value={stateFilter} onValueChange={(val) => {
-                    setStateFilter(val);
-                    setLocalityFilter('all');
-                    setActivityFilter('all');
+                  <Select value={dispatchedStateFilter} onValueChange={(val) => {
+                    setDispatchedStateFilter(val);
+                    setDispatchedLocalityFilter('all');
+                    setDispatchedActivityFilter('all');
                   }}>
                     <SelectTrigger data-testid="select-dispatched-state-filter">
                       <SelectValue placeholder="All States" />
@@ -2368,7 +2381,7 @@ export function SuperAdminDataManagement() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Locality</Label>
-                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                  <Select value={dispatchedLocalityFilter} onValueChange={setDispatchedLocalityFilter}>
                     <SelectTrigger data-testid="select-dispatched-locality-filter">
                       <SelectValue placeholder="All Localities" />
                     </SelectTrigger>
@@ -2382,7 +2395,7 @@ export function SuperAdminDataManagement() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Hub</Label>
-                  <Select value={hubFilter} onValueChange={setHubFilter}>
+                  <Select value={dispatchedHubFilter} onValueChange={setDispatchedHubFilter}>
                     <SelectTrigger data-testid="select-dispatched-hub-filter">
                       <SelectValue placeholder="All Hubs" />
                     </SelectTrigger>
@@ -2394,6 +2407,27 @@ export function SuperAdminDataManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              {/* No-cost quick filter */}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDispatchedNoCostFilter(v => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    dispatchedNoCostFilter
+                      ? 'bg-amber-500 border-amber-500 text-white'
+                      : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600'
+                  }`}
+                  data-testid="button-dispatched-no-cost-filter"
+                >
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  No Transport Cost
+                </button>
+                {dispatchedNoCostFilter && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    Showing {filteredDispatchedSites.length} site{filteredDispatchedSites.length !== 1 ? 's' : ''} without cost set
+                  </span>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -2412,10 +2446,12 @@ export function SuperAdminDataManagement() {
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead className="font-semibold">Site</TableHead>
+                        <TableHead className="font-semibold">MMP</TableHead>
                         <TableHead className="font-semibold">Activity</TableHead>
                         <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Hub</TableHead>
                         <TableHead className="font-semibold">Dispatched At</TableHead>
+                        <TableHead className="font-semibold">Fees</TableHead>
                         <TableHead className="text-right font-semibold">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2427,6 +2463,19 @@ export function SuperAdminDataManagement() {
                               <p className="font-medium">{site.site_name}</p>
                               <p className="text-sm text-muted-foreground">{site.site_code}</p>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const mmp = site.mmp_file_id ? mmpById[site.mmp_file_id] : null;
+                              const label = mmp ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`) : null;
+                              return label ? (
+                                <Badge variant="secondary" className="whitespace-nowrap text-xs max-w-[120px] truncate block">
+                                  {label}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="whitespace-nowrap">
@@ -2444,6 +2493,22 @@ export function SuperAdminDataManagement() {
                           </TableCell>
                           <TableCell>
                             {site.dispatched_at ? format(new Date(site.dispatched_at), 'MMM d, yyyy h:mm a') : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm space-y-0.5">
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground text-xs">Enum:</span>
+                                <span className={`font-medium text-xs ${site.enumerator_fee == null ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+                                  {site.enumerator_fee != null ? `${site.enumerator_fee.toLocaleString()} SDG` : '—'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground text-xs">Trans:</span>
+                                <span className={`font-medium text-xs ${site.transport_fee == null ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+                                  {site.transport_fee != null ? `${site.transport_fee.toLocaleString()} SDG` : '—'}
+                                </span>
+                              </div>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
