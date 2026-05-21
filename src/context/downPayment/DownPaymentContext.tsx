@@ -338,6 +338,31 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         console.log('[DownPayment] Using currentUser hubId:', hubId);
       }
 
+      // ── Duplicate guard (server-side) ────────────────────────────────────────
+      // Check for any active (non-cancelled, non-rejected) request for the same
+      // mmp_site_entry_id before inserting. This prevents double-submissions from
+      // both the UI (coordinator on-behalf-of + DC submitting themselves) and any
+      // race-condition double-click scenario.
+      if (request.mmpSiteEntryId) {
+        const { data: existingActive } = await supabase
+          .from('down_payment_requests')
+          .select('id, status, requested_by, requested_amount')
+          .eq('mmp_site_entry_id', request.mmpSiteEntryId)
+          .not('status', 'in', '("cancelled","rejected","deleted")')
+          .limit(1);
+
+        if (existingActive && existingActive.length > 0) {
+          const ex = existingActive[0];
+          toastRef.current({
+            title: 'Duplicate Request Blocked / تم منع الطلب المكرر',
+            description: `An active advance request (${ex.requested_amount?.toLocaleString() || '?'} SDG — status: ${ex.status?.replace(/_/g, ' ')}) already exists for this site. Cancel or resolve it before submitting a new one.`,
+            variant: 'destructive',
+          });
+          return false;
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       const { error } = await supabase.from('down_payment_requests').insert({
         site_visit_id: request.siteVisitId,
         mmp_site_entry_id: request.mmpSiteEntryId,
