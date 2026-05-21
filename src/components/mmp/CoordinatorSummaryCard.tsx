@@ -187,6 +187,21 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
           <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColor}`}>
             {site.statusLabel}
           </Badge>
+          {site.statusCategory === 'in_progress' && site.actionAt && (() => {
+            try {
+              const d = new Date(site.actionAt);
+              if (!isNaN(d.getTime())) {
+                const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+                if (diffDays >= 7) return (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                    <Clock className="h-2.5 w-2.5" />
+                    Stale {diffDays}d
+                  </Badge>
+                );
+              }
+            } catch { /* ignore */ }
+            return null;
+          })()}
           {advance && advanceCfg ? (
             <div className="flex items-center gap-1">
               <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
@@ -718,6 +733,19 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       }
     });
 
+    // Within each state, sort coordinators: most urgent first
+    // (returned/rejected → least complete → __direct__ always last)
+    stateMap.forEach((stateData) => {
+      stateData.coordinators.sort((a, b) => {
+        if (a.id === '__direct__') return 1;
+        if (b.id === '__direct__') return -1;
+        if (b.sitesReturned !== a.sitesReturned) return b.sitesReturned - a.sitesReturned;
+        const aRatio = a.sitesAssigned > 0 ? a.sitesVerified / a.sitesAssigned : 0;
+        const bRatio = b.sitesAssigned > 0 ? b.sitesVerified / b.sitesAssigned : 0;
+        return aRatio - bRatio;
+      });
+    });
+
     return Array.from(stateMap.values())
       .sort((a, b) => a.state.localeCompare(b.state));
   }, [siteEntries, coordinatorNames]);
@@ -1059,6 +1087,12 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             <div className="flex items-center gap-1 flex-wrap justify-end max-w-[280px]">
+                              {coord.sitesReturned > 0 && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 flex items-center gap-0.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 animate-pulse">
+                                  <AlertCircle className="h-2.5 w-2.5" />
+                                  {coord.sitesReturned} need action
+                                </Badge>
+                              )}
                               {sortedStatusEntries(coord.statusCounts).map(([status, count]) => {
                                 const cfg = getStatusCfg(status);
                                 return (
