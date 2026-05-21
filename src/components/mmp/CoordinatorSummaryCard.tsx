@@ -445,7 +445,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     // (DB stores: 'Accepted', 'Pending', 'Completed', 'Approved and Costed', 'In Progress', etc.)
     const verifiedStatuses = new Set([
       'verified', 'approved', 'approved and costed', 'costed',
-      'dispatched', 'completed', 'partially_paid', 'fully_paid',
+      'completed', 'partially_paid', 'fully_paid',
       'pending_admin', 'pending_supervisor',
       'submitted', 'wfp_confirmed', 'not_covered',
     ]);
