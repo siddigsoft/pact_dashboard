@@ -243,6 +243,7 @@ const MMPCycleClose = () => {
   const [reopenConfirmId, setReopenConfirmId] = useState<string | null>(null);
   const [reopeningCycle, setReopeningCycle] = useState(false);
   const [reopenReason, setReopenReason] = useState('');
+  const [abortingClose, setAbortingClose] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
@@ -3106,6 +3107,44 @@ const MMPCycleClose = () => {
       toast({ title: 'Re-open Failed', description: err?.message || 'Could not re-open the cycle. Please try again.', variant: 'destructive' });
     } finally {
       setReopeningCycle(false);
+    }
+  };
+
+  const handleAbortClose = async (mmpId: string) => {
+    if (!canManageCycle) {
+      toast({ title: 'Access Denied', description: 'Only FOM, Admin, and Super Admin can abort a cycle close.', variant: 'destructive' });
+      return;
+    }
+    setAbortingClose(true);
+    try {
+      const mmpName = mmpFiles?.find(m => m.id === mmpId)?.name || mmpId;
+      const { error } = await supabase
+        .from('mmp_files')
+        .update({
+          cycle_status: 'active',
+          cycle_close_records: [],
+          cycle_closing_started_at: null,
+          cycle_closing_started_by: null,
+          cycle_close_deadline: null,
+        } as any)
+        .eq('id', mmpId);
+      if (error) throw error;
+      await logMMPAudit({
+        mmpId,
+        mmpName,
+        action: 'status_change',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.fullName || 'Unknown',
+        previousStatus: 'closing',
+        newStatus: 'active',
+        metadata: { cycleAction: 'abort_close', abortedAt: new Date().toISOString() },
+      });
+      await refreshMMPFiles();
+      toast({ title: 'Close Aborted', description: `"${mmpName}" has been returned to Active status. You can restart closing at any time.` });
+    } catch (err: any) {
+      toast({ title: 'Abort Failed', description: err?.message || 'Could not abort the cycle close. Please try again.', variant: 'destructive' });
+    } finally {
+      setAbortingClose(false);
     }
   };
 
@@ -6208,6 +6247,7 @@ const MMPCycleClose = () => {
                         handleApproveCycle={handleApproveCycle}
                         handleRejectCycle={handleRejectCycle}
                         handleSendReminders={handleSendReminders}
+                        handleAbortClose={handleAbortClose}
                         setSelectedMmpId={setSelectedMmpId}
                         setActiveTab={setActiveTab}
                         getReasonLabel={getReasonLabel}

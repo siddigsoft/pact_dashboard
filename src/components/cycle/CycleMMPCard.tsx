@@ -11,7 +11,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, XCircle, ArrowRight, MapPin,
   ChevronDown, ChevronUp, FileText, Calendar, User, Users, Eye,
   ShieldCheck, FolderOpen, Info, BarChart3, CircleDot, Wallet,
-  Building2, Globe, Activity, History
+  Building2, Globe, Activity, History, RotateCcw
 } from 'lucide-react';
 
 interface UncoveredSite {
@@ -98,6 +98,7 @@ interface CycleMMPCardProps {
   handleApproveCycle: (mmpId: string) => void;
   handleRejectCycle: (mmpId: string, note: string) => void;
   handleSendReminders: (mmpId: string) => void;
+  handleAbortClose?: (mmpId: string) => void;
   setSelectedMmpId: (id: string) => void;
   setActiveTab: (tab: string) => void;
   getReasonLabel: (reason: string | null) => string;
@@ -212,6 +213,7 @@ export function CycleMMPCard({
   handleApproveCycle,
   handleRejectCycle,
   handleSendReminders,
+  handleAbortClose,
   setSelectedMmpId,
   setActiveTab,
   getReasonLabel,
@@ -807,6 +809,57 @@ export function CycleMMPCard({
                       <Button size="sm" variant="outline" onClick={() => handleSendReminders(mmp.id)} data-testid={`button-send-reminder-${mmp.id}`}>
                         <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Send Reminders
                       </Button>
+                    )}
+
+                    {canManageCycle && handleAbortClose && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-orange-400/60 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                            data-testid={`button-abort-close-${mmp.id}`}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Abort Close
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Abort Cycle Close — Return to Active?</AlertDialogTitle>
+                            <AlertDialogDescription asChild>
+                              <div className="space-y-3">
+                                <p>
+                                  This will cancel the closing process for <strong>{mmp.name}</strong> and return
+                                  the cycle to <strong>Active</strong> status.
+                                </p>
+                                <div className="bg-muted rounded-lg p-3 text-sm space-y-1.5">
+                                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                                    <span className="font-medium">What will be reset:</span>
+                                  </div>
+                                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground text-sm">
+                                    <li>Cycle status → Active</li>
+                                    <li>All close-scope records cleared</li>
+                                    <li>Closing deadline and timestamps removed</li>
+                                    <li>Site visits flagged as "not covered" will remain — review them manually after aborting</li>
+                                  </ul>
+                                </div>
+                                <p className="text-xs text-muted-foreground">You can restart the closing process at any time after aborting.</p>
+                              </div>
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-orange-600 hover:bg-orange-700 text-white"
+                              onClick={() => handleAbortClose(mmp.id)}
+                              data-testid={`button-confirm-abort-close-${mmp.id}`}
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1.5" /> Yes, Abort Close
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     )}
                   </div>
 
