@@ -487,8 +487,13 @@ export default function MmpStateReport({
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent
-        className="max-w-[98vw] w-[98vw] h-[96vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="max-w-[98vw] w-[98vw] p-0 gap-0 overflow-hidden"
+        style={{ height: '96vh', maxHeight: '96vh' }}
       >
+        {/* Inner flex wrapper — DialogContent uses display:grid which fights flex-1/min-h-0.
+            Wrapping in a plain div gives us a clean flex column that fills the fixed height. */}
+        <div className="flex flex-col w-full overflow-hidden" style={{ height: '96vh' }}>
+
         {/* ── Fixed header ── */}
         <DialogHeader className="px-6 pt-4 pb-3 border-b flex-shrink-0">
           <div className="flex items-center justify-between gap-4">
@@ -908,6 +913,8 @@ export default function MmpStateReport({
           )}
 
         </div>
+
+        </div>{/* end inner flex wrapper */}
       </DialogContent>
     </Dialog>
   );
