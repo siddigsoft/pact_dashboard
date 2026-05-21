@@ -324,14 +324,12 @@ function StatusCategorySection({
 
 function CoordExpandedContent({
   coord,
-  coordinatorNames,
   userNames,
   advanceMap,
   onRequestFund,
   onEditFund,
 }: {
   coord: CoordinatorInfo;
-  coordinatorNames: Record<string, string>;
   userNames: Record<string, string>;
   advanceMap: Record<string, AdvanceInfo>;
   onRequestFund?: (site: SiteStatusDetail) => void;
@@ -856,24 +854,29 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   const totalCoordinators = useMemo(() => {
     const uniqueCoords = new Set<string>();
     coordinatorsByState.forEach(state => {
-      state.coordinators.forEach(c => uniqueCoords.add(c.id));
+      state.coordinators.forEach(c => { if (c.id !== '__direct__') uniqueCoords.add(c.id); });
     });
     return uniqueCoords.size;
   }, [coordinatorsByState]);
 
   const totalAssigned = useMemo(() => {
-    return coordinatorsByState.reduce((sum, state) => 
-      sum + state.coordinators.reduce((s, c) => s + c.sitesAssigned, 0), 0);
+    return coordinatorsByState.reduce((sum, state) => sum + state.totalSites, 0);
   }, [coordinatorsByState]);
 
   const totalVerified = useMemo(() => {
-    return coordinatorsByState.reduce((sum, state) => 
-      sum + state.coordinators.reduce((s, c) => s + c.sitesVerified, 0), 0);
+    return coordinatorsByState.reduce((sum, state) => sum + state.verifiedSites, 0);
+  }, [coordinatorsByState]);
+
+  const totalInProgress = useMemo(() => {
+    return coordinatorsByState.reduce((sum, state) => sum + state.inProgressSites, 0);
+  }, [coordinatorsByState]);
+
+  const totalPending = useMemo(() => {
+    return coordinatorsByState.reduce((sum, state) => sum + state.pendingSites, 0);
   }, [coordinatorsByState]);
 
   const totalReturned = useMemo(() => {
-    return coordinatorsByState.reduce((sum, state) => 
-      sum + state.coordinators.reduce((s, c) => s + c.sitesReturned, 0), 0);
+    return coordinatorsByState.reduce((sum, state) => sum + state.returnedSites, 0);
   }, [coordinatorsByState]);
 
   if (coordinatorsByState.length === 0) {
@@ -912,14 +915,18 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             </Badge>
           </div>
         </div>
-        <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="text-muted-foreground">{totalAssigned} assigned</span>
-          </div>
+        <div className="flex items-center gap-3 mt-2 text-xs flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-muted-foreground">{totalVerified} verified</span>
+            <span className="text-muted-foreground">{totalVerified} done</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-blue-400" />
+            <span className="text-muted-foreground">{totalInProgress} in progress</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-amber-400" />
+            <span className="text-muted-foreground">{totalPending} pending</span>
           </div>
           {totalReturned > 0 && (
             <div className="flex items-center gap-1">
@@ -927,21 +934,22 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
               <span className="text-muted-foreground">{totalReturned} returned</span>
             </div>
           )}
-          <div className="flex-1 min-w-[80px] max-w-[120px]">
-            <div className="flex h-2 rounded-full overflow-hidden bg-muted">
+          <div className="flex items-center gap-2 flex-1 min-w-[100px] max-w-[160px]">
+            <div className="flex h-2 rounded-full overflow-hidden bg-muted flex-1">
               {totalAssigned > 0 && (
                 <>
-                  <div 
-                    className="bg-green-500 transition-all" 
-                    style={{ width: `${(totalVerified / totalAssigned) * 100}%` }} 
-                  />
-                  <div 
-                    className="bg-red-500 transition-all" 
-                    style={{ width: `${(totalReturned / totalAssigned) * 100}%` }} 
-                  />
+                  <div className="bg-green-500 transition-all" style={{ width: `${(totalVerified   / totalAssigned) * 100}%` }} />
+                  <div className="bg-blue-400 transition-all"  style={{ width: `${(totalInProgress / totalAssigned) * 100}%` }} />
+                  <div className="bg-amber-400 transition-all" style={{ width: `${(totalPending    / totalAssigned) * 100}%` }} />
+                  <div className="bg-red-500 transition-all"   style={{ width: `${(totalReturned   / totalAssigned) * 100}%` }} />
                 </>
               )}
             </div>
+            {totalAssigned > 0 && (
+              <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
+                {Math.round((totalVerified / totalAssigned) * 100)}%
+              </span>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -1009,12 +1017,6 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
 
                 <div className="space-y-2">
                   {stateData.coordinators.map((coord) => {
-                    const verifiedSites = coord.siteDetails.filter(s => s.statusCategory === 'verified');
-                    const returnedSites = coord.siteDetails.filter(s => s.statusCategory === 'returned');
-                    const rejectedSites = coord.siteDetails.filter(s => s.statusCategory === 'rejected');
-                    const inProgressSites = coord.siteDetails.filter(s => s.statusCategory === 'in_progress');
-                    const pendingSites = coord.siteDetails.filter(s => s.statusCategory === 'pending');
-
                     return (
                     <Collapsible 
                       key={coord.id}
@@ -1125,7 +1127,6 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                       <CollapsibleContent>
                         <CoordExpandedContent
                           coord={coord}
-                          coordinatorNames={coordinatorNames}
                           userNames={actionByNames}
                           advanceMap={advanceMap}
                           onRequestFund={handleOpenRequestFund}
