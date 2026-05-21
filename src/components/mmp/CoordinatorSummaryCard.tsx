@@ -181,12 +181,12 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
   const advanceCfg = advance ? ADVANCE_STATUS_CONFIG[advance.status] : null;
 
   return (
-    <div className={`flex items-start gap-2 p-1.5 rounded border text-xs ${rowColor}`}>
+    <div className={`flex items-start gap-2 p-2 rounded border text-sm ${rowColor}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">{site.name}</span>
-          {site.siteCode && <span className="text-muted-foreground">({site.siteCode})</span>}
-          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColor}`}>
+          <span className="font-semibold text-sm">{site.name}</span>
+          {site.siteCode && <span className="text-xs text-muted-foreground">({site.siteCode})</span>}
+          <Badge variant="secondary" className={`text-[11px] px-1.5 py-0 ${badgeColor}`}>
             {site.statusLabel}
           </Badge>
           {site.statusCategory === 'in_progress' && site.actionAt && (() => {
@@ -195,8 +195,8 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
               if (!isNaN(d.getTime())) {
                 const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000);
                 if (diffDays >= 7) return (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                    <Clock className="h-2.5 w-2.5" />
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                    <Clock className="h-3 w-3" />
                     Stale {diffDays}d
                   </Badge>
                 );
@@ -206,8 +206,8 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
           })()}
           {advance && advanceCfg ? (
             <div className="flex items-center gap-1">
-              <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
-                <Wallet className="h-2.5 w-2.5" />
+              <Badge variant="secondary" className={`text-[11px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
+                <Wallet className="h-3 w-3" />
                 {advanceCfg.label}
                 {advance.requestedAmount > 0 && (
                   <span className="ml-0.5 opacity-80">
@@ -222,27 +222,27 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
               {onEditFund && ['pending_supervisor', 'pending_admin'].includes(advance.status) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onEditFund(site, advance); }}
-                  className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                  className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
                   title="Edit this advance request"
                 >
-                  <Pencil className="h-2.5 w-2.5" />
+                  <Pencil className="h-3 w-3" />
                   Edit
                 </button>
               )}
             </div>
           ) : (
             <div className="flex items-center gap-1">
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex items-center gap-1 text-muted-foreground border-dashed">
-                <Wallet className="h-2.5 w-2.5" />
+              <Badge variant="outline" className="text-[11px] px-1.5 py-0 flex items-center gap-1 text-muted-foreground border-dashed">
+                <Wallet className="h-3 w-3" />
                 No Advance Request
               </Badge>
               {onRequestFund && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onRequestFund(site); }}
-                  className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors"
+                  className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors"
                   title="Request transport advance for this site"
                 >
-                  <Plus className="h-2.5 w-2.5" />
+                  <Plus className="h-3 w-3" />
                   Request Fund
                 </button>
               )}
@@ -250,19 +250,19 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
           )}
         </div>
         {site.reason && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
             {site.reason}
           </p>
         )}
         {(resolvedActionBy || site.actionAt) && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">
+          <p className="text-[11px] text-muted-foreground mt-0.5">
             {resolvedActionBy && !isUuid(resolvedActionBy) && <>By: {resolvedActionBy}</>}
             {site.actionAt && <>{resolvedActionBy ? ' ' : ''}{formatDate(site.actionAt)}</>}
           </p>
         )}
         {site.claimedBy && (
-          <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-            <User className="h-2.5 w-2.5 shrink-0" />
+          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+            <User className="h-3 w-3 shrink-0" />
             DC: {userNames[site.claimedBy] || (isUuid(site.claimedBy) ? site.claimedBy.slice(0, 8) + '…' : site.claimedBy)}
           </p>
         )}
@@ -479,11 +479,13 @@ function CoordExpandedContent({
         );
       })()}
       {/* ── Filtered sections ── */}
-      <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-      <StatusCategorySection category="pending"     sites={pendingSites}    userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-      <StatusCategorySection category="verified"    sites={verifiedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-      <StatusCategorySection category="returned"    sites={returnedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-      <StatusCategorySection category="rejected"    sites={rejectedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+      <div className="space-y-1">
+        <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="pending"     sites={pendingSites}    userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="verified"    sites={verifiedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="returned"    sites={returnedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="rejected"    sites={rejectedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+      </div>
     </div>
   );
 }
