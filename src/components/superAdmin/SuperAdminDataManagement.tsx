@@ -1399,7 +1399,12 @@ export function SuperAdminDataManagement() {
           { value: 'accepted', label: 'Accepted' },
           { value: 'ongoing', label: 'Ongoing' },
           { value: 'completed', label: 'Completed' },
+          { value: 'submitted', label: 'Submitted' },
+          { value: 'wfp_confirmed', label: 'WFP Confirmed' },
+          { value: 'not_covered', label: 'Not Covered' },
+          { value: 'verified', label: 'Verified' },
           { value: 'rejected', label: 'Rejected' },
+          { value: 'returned_to_fom', label: 'Returned to FOM' },
         ];
       case 'dispatched-sites':
         // Flow: Dispatched → Assigned (sites ready for claiming)
@@ -2229,6 +2234,7 @@ export function SuperAdminDataManagement() {
                       <SelectItem value="not_covered">Not Covered</SelectItem>
                       <SelectItem value="verified">Verified</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="returned_to_fom">Returned to FOM</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
