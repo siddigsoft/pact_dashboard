@@ -1,4 +1,4 @@
-  import { useLocation, Link, useNavigate } from "react-router-dom";
+﻿  import { useLocation, Link, useNavigate } from "react-router-dom";
   import { Button } from "@/components/ui/button";
   import { 
     Users,
@@ -94,7 +94,12 @@
     SidebarHeader, 
     SidebarMenu, 
     SidebarMenuItem, 
-    SidebarMenuButton, 
+    SidebarMenuButton,
+    SidebarMenuAction,
+    SidebarMenuSub,
+    SidebarMenuSubItem,
+    SidebarMenuSubButton,
+    SidebarSeparator,
     SidebarTrigger,
     SidebarRail,
     SidebarResizeHandle,
@@ -126,6 +131,35 @@
   import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
   import { CSS } from '@dnd-kit/utilities';
   import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+  import { toast } from "@/hooks/use-toast";
+  import { cn } from "@/lib/utils";
+
+  /** Groups with many links â€” collapsed by default to reduce visual clutter */
+  const DENSE_COLLAPSED_BY_DEFAULT = new Set([
+    'super-admin',
+    'finance-accounting',
+    'finance-reports',
+    'finance-management',
+    'admin',
+    'hr-people',
+    'analytics',
+    'finance-parent',
+  ]);
+
+  const SIDEBAR_GROUP_SHELL = "py-1 px-2";
+  const SIDEBAR_GROUP_LABEL =
+    "h-8 px-2.5 text-[11px] tracking-wide font-semibold cursor-pointer flex items-center gap-2 rounded-lg transition-colors";
+  const SIDEBAR_NAV_ITEM =
+    "h-9 rounded-lg text-[13px] font-medium transition-all duration-200";
+  const SIDEBAR_NAV_SUB_ITEM =
+    "h-8 rounded-md text-[12px] font-medium transition-all duration-200";
+
+  const isNavPathActive = (pathname: string, url: string) => {
+    const base = url.split('?')[0];
+    if (pathname === base) return true;
+    if (base !== '/' && pathname.startsWith(base + '/')) return true;
+    return false;
+  };
 
   const ICON_MAP: Record<string, any> = {
     LayoutDashboard,
@@ -169,7 +203,7 @@
     Compass
   };
 
-  /** Maps PAGE_DEFS group label → AppSidebar MenuGroup id */
+  /** Maps PAGE_DEFS group label â†’ AppSidebar MenuGroup id */
   const PAGEDEF_GROUP_TO_SIDEBAR: Record<string, string> = {
     'My Workspace':          'workspace',
     'Communication':         'communication',
@@ -217,57 +251,46 @@
     };
 
     return (
-      <SidebarMenuItem ref={setNodeRef} style={style} className="py-0 group/fav">
-        <div className="flex items-center w-full gap-0.5">
-          {/* Drag handle — zero width when not hovered so it doesn't push text right */}
-          <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing shrink-0 w-0 overflow-hidden opacity-0 group-hover/fav:w-4 group-hover/fav:opacity-100 transition-all duration-150 flex items-center justify-center"
-            aria-label="Drag to reorder"
-            data-testid={`drag-handle-${item.id}`}
-          >
-            <GripVertical className="h-3 w-3 text-muted-foreground" />
-          </button>
-
-          <SidebarMenuButton
-            asChild
-            isActive={isActive}
-            tooltip={item.title}
-            className={`flex-1 min-w-0 rounded text-[13px] font-medium transition-all duration-200
-              ${isActive
-                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 font-semibold"
-                : ""
-              }`}
-          >
-            <Link to={item.url} className="flex items-center gap-1.5 w-full" data-testid={`nav-favorite-${item.id}`}>
-              <item.icon
-                className={`h-4 w-4 shrink-0 ${isActive
+      <SidebarMenuItem ref={setNodeRef} style={style} className="group/fav">
+        <button
+          {...attributes}
+          {...listeners}
+          className="absolute left-0.5 top-1/2 -translate-y-1/2 z-10 cursor-grab active:cursor-grabbing opacity-0 group-hover/fav:opacity-100 transition-opacity flex items-center justify-center p-0.5"
+          aria-label="Drag to reorder"
+          data-testid={`drag-handle-${item.id}`}
+        >
+          <GripVertical className="h-3 w-3 text-muted-foreground" />
+        </button>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          tooltip={item.title}
+          className={cn(
+            SIDEBAR_NAV_ITEM,
+            isActive &&
+              "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 font-semibold"
+          )}
+        >
+          <Link to={item.url} className="flex items-center gap-2.5 pl-4" data-testid={`nav-favorite-${item.id}`}>
+            <item.icon
+              className={cn(
+                "h-4 w-4 shrink-0",
+                isActive
                   ? "text-amber-700 dark:text-amber-300"
                   : "text-amber-600 dark:text-amber-400"
-                }`}
-              />
-              <span className="truncate flex-1 min-w-0">{item.title}</span>
-            </Link>
-          </SidebarMenuButton>
-
-          {/* Remove button — zero width when not hovered */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={(e) => { e.stopPropagation(); onRemove(item.url); }}
-                className="shrink-0 w-0 overflow-hidden opacity-0 group-hover/fav:w-5 group-hover/fav:opacity-100 transition-all duration-150 flex items-center justify-center rounded hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                aria-label="Remove from favorites"
-                data-testid={`button-unfavorite-${item.id}`}
-              >
-                <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>Remove from favorites</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+              )}
+            />
+            <span className="truncate flex-1 min-w-0">{item.title}</span>
+          </Link>
+        </SidebarMenuButton>
+        <SidebarMenuAction
+          showOnHover
+          onClick={(e) => { e.stopPropagation(); onRemove(item.url); }}
+          aria-label="Remove from favorites"
+          data-testid={`button-unfavorite-${item.id}`}
+        >
+          <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+        </SidebarMenuAction>
       </SidebarMenuItem>
     );
   };
@@ -319,7 +342,7 @@
 
     const groups: MenuGroup[] = [];
 
-    // ── 1. My Workspace ───────────────────────────────────────────────────────
+    // â”€â”€ 1. My Workspace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const workspaceItems: MenuGroup['items'] = [];
     if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || isEmployee || perms.dashboard)) {
       workspaceItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
@@ -344,7 +367,7 @@
     }
     if (workspaceItems.length) groups.push({ id: 'workspace', label: "My Workspace", order: 1, items: workspaceItems });
 
-    // ── 2. Communication ──────────────────────────────────────────────────────
+    // â”€â”€ 2. Communication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const communicationItems: MenuGroup['items'] = [];
     if (!isHidden('/chat')) {
       communicationItems.push({ id: 'chat', title: "Chat", url: "/chat", icon: MessageSquare, priority: 1, isPinned: isPinned('/chat') });
@@ -363,7 +386,7 @@
     }
     if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 3, items: communicationItems });
 
-    // ── 2. Programme Management ───────────────────────────────────────────────
+    // â”€â”€ 2. Programme Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const planningItems: MenuGroup['items'] = [];
     if (!isHidden('/projects') && canSeePath('/projects', defaultRole)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
@@ -386,7 +409,7 @@
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
-    // ── 4. Field Operations ───────────────────────────────────────────────────
+    // â”€â”€ 4. Field Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const fieldOpsItems: MenuGroup['items'] = [];
     if (!isHidden('/site-visits') && (isSuperAdmin || isAdmin || isICT || perms.siteVisits)) {
       fieldOpsItems.push({ id: 'site-visits', title: "Site Visits", url: "/site-visits", icon: ClipboardList, priority: 1, isPinned: isPinned('/site-visits') });
@@ -414,7 +437,7 @@
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 4, items: fieldOpsItems });
 
-    // ── 5. Coordination & Oversight ───────────────────────────────────────────
+    // â”€â”€ 5. Coordination & Oversight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const coordinationItems: MenuGroup['items'] = [];
     if (!isHidden('/supervisor/sites') && isSupervisor && !isCoordinator) {
       coordinationItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: Map, priority: 1, isPinned: isPinned('/supervisor/sites') });
@@ -433,7 +456,7 @@
     }
     if (coordinationItems.length) groups.push({ id: 'coordination', label: "Coordination & Oversight", order: 4.5, items: coordinationItems });
 
-    // ── 6. Payments & Finance (sub-groups) ────────────────────────────────────
+    // â”€â”€ 6. Payments & Finance (sub-groups) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const myMoneyItems: MenuGroup['items'] = [];
     if (!isHidden('/wallet') && (isFinancialAdmin || isAuditor || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
       myMoneyItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 1, isPinned: isPinned('/wallet') });
@@ -500,9 +523,9 @@
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 
-    // ── Accounting module: Super Admin only ──────────────────────────────────
+    // â”€â”€ Accounting module: Super Admin only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // All accounting pages are restricted to super_admin until the module is
-    // ready for wider rollout. Change isSuperAdmin → the desired role set
+    // ready for wider rollout. Change isSuperAdmin â†’ the desired role set
     // when you are ready to open access.
     const acctItems: MenuGroup['items'] = [];
     if (isSuperAdmin) {
@@ -547,59 +570,59 @@
     }
     if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);
 
-    // ── 7. HR & People — logical flow: Employees → Payroll → Retainer → Leave → Analytics → My Payslip ──
+    // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
     const hrItems: MenuGroup['items'] = [];
-    // 1. Employees — admin & super admin only; data shows all except coordinators & data collectors
+    // 1. Employees â€” admin & super admin only; data shows all except coordinators & data collectors
     const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
     const hrStrictAccess = isSuperAdmin || isAdmin;
     if (!isHidden('/employees') && hrStrictAccess) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
-    // 2. Payroll — salary setup, run payroll, payslips, reports (admin only)
+    // 2. Payroll â€” salary setup, run payroll, payslips, reports (admin only)
     if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'payroll-admin', title: "Payroll", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 2, isPinned: false });
     }
-    // 3. Retainer Payments — admin & super admin only; data shows coordinator-role users only
+    // 3. Retainer Payments â€” admin & super admin only; data shows coordinator-role users only
     if (!isHidden('/retainer-management') && hrStrictAccess) {
       hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/retainer-management", icon: CreditCard, priority: 3, isPinned: isPinned('/retainer-management') });
     }
-    // 4. Leave Requests — all staff submit; admins approve
+    // 4. Leave Requests â€” all staff submit; admins approve
     if (!isHidden('/leave')) {
       hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 4, isPinned: isPinned('/leave') });
     }
-    // 5. HR Analytics — staff cost projections, org chart, budget vs actual (admin only)
+    // 5. HR Analytics â€” staff cost projections, org chart, budget vs actual (admin only)
     if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'hr-analytics', title: "HR Analytics", url: "/hr?tab=hr-tools", icon: TrendingUp, priority: 5, isPinned: false });
     }
-    // 6. Timesheet — daily work log for all staff
+    // 6. Timesheet â€” daily work log for all staff
     if (!isHidden('/hr')) {
       hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 6, isPinned: false });
     }
-    // 7. Performance Reviews — admin-managed annual/quarterly reviews
+    // 7. Performance Reviews â€” admin-managed annual/quarterly reviews
     if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'performance-reviews', title: "Performance Reviews", url: "/hr?tab=performance", icon: Activity, priority: 7, isPinned: false });
     }
-    // 8. Salary Increments — merit-based increment management
+    // 8. Salary Increments â€” merit-based increment management
     if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'salary-increments', title: "Salary Increments", url: "/hr?tab=salary-increments", icon: Award, priority: 8, isPinned: false });
     }
-    // 9. My Payslip — personal payslip for every staff member
+    // 9. My Payslip â€” personal payslip for every staff member
     if (!isHidden('/hr')) {
       hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 9, isPinned: isPinned('/hr') });
     }
-    // 10. Positions / Vacancies — visible to everyone, edit-restricted via RLS
+    // 10. Positions / Vacancies â€” visible to everyone, edit-restricted via RLS
     if (!isHidden('/positions')) {
       hrItems.push({ id: 'positions', title: "Positions & Vacancies", url: "/positions", icon: Briefcase, priority: 10, isPinned: isPinned('/positions') });
     }
-    // 11. Training & Certifications — every staff sees their own; admins see all
+    // 11. Training & Certifications â€” every staff sees their own; admins see all
     if (!isHidden('/training-certifications')) {
       hrItems.push({ id: 'training-certifications', title: "Training & Certifications", url: "/training-certifications", icon: Award, priority: 11, isPinned: isPinned('/training-certifications') });
     }
-    // 12. Hierarchy Audit Log — admin & super admin only
+    // 12. Hierarchy Audit Log â€” admin & super admin only
     if (!isHidden('/hierarchy-audit') && (isSuperAdmin || isAdmin)) {
       hrItems.push({ id: 'hierarchy-audit', title: "Hierarchy Audit Log", url: "/hierarchy-audit", icon: ScrollText, priority: 12, isPinned: isPinned('/hierarchy-audit') });
     }
-    // 13–16. HR audit gaps H2-H5 self-service pages
+    // 13â€“16. HR audit gaps H2-H5 self-service pages
     if (!isHidden('/my-advances')) {
       hrItems.push({ id: 'my-advances', title: "My Advances", url: "/my-advances", icon: Wallet, priority: 13, isPinned: isPinned('/my-advances') });
     }
@@ -614,7 +637,7 @@
     }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
-    // ── 8. CRM ────────────────────────────────────────────────────────────────
+    // â”€â”€ 8. CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const crmItems: MenuGroup['items'] = [];
     const hasCrmAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector;
     if (hasCrmAccess) {
@@ -636,7 +659,7 @@
     }
     if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 
-    // ── Surveys ───────────────────────────────────────────────────────────────
+    // â”€â”€ Surveys â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const hasSurveyAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager;
     if (hasSurveyAccess && !isHidden('/surveys')) {
       groups.push({
@@ -649,7 +672,7 @@
       });
     }
 
-    // ── 9. Analytics & Reports ────────────────────────────────────────────────
+    // â”€â”€ 9. Analytics & Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const analyticsItems: MenuGroup['items'] = [];
     if (!isHidden('/data-export-center') && (isSuperAdmin || isAdmin)) {
       analyticsItems.push({ id: 'data-export-center', title: "Data Export Center", url: "/data-export-center", icon: BarChart3, priority: 1, isPinned: isPinned('/data-export-center') });
@@ -674,7 +697,7 @@
     }
     if (analyticsItems.length) groups.push({ id: 'analytics', label: "Analytics & Reports", order: 6, items: analyticsItems });
 
-    // ── 10. Administration ────────────────────────────────────────────────────
+    // â”€â”€ 10. Administration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const adminItems: MenuGroup['items'] = [];
     if (!isHidden('/users') && (canSeePath('/users', defaultRole) || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
@@ -714,7 +737,7 @@
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 7, items: adminItems });
 
-    // ── 11. Help & Support ────────────────────────────────────────────────────
+    // â”€â”€ 11. Help & Support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const helpItems: MenuGroup['items'] = [];
     if (!isHidden('/changelog')) {
       helpItems.push({ id: 'changelog', title: "What's New", url: "/changelog", icon: Sparkles, priority: 0, isPinned: isPinned('/changelog') });
@@ -736,7 +759,7 @@
     }
     if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 8, items: helpItems });
 
-    // ── 12. Super Admin ───────────────────────────────────────────────────────
+    // â”€â”€ 12. Super Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (isSuperAdmin) {
       const superAdminItems: MenuGroup['items'] = [];
       if (!isHidden('/super-admin-management')) {
@@ -836,7 +859,7 @@
       staleTime: 30_000,
     });
 
-    // slug → is_blocked  (false = granted, true = blocked)
+    // slug â†’ is_blocked  (false = granted, true = blocked)
     const pageOverrideMap = useMemo(() => {
       const m: Record<string, boolean> = {};
       myPageOverrides.forEach(o => { m[o.page_slug] = o.is_blocked; });
@@ -851,25 +874,22 @@
                             currentUser?.role?.toLowerCase() === 'data collector';
 
     // Pre-compute stable role booleans so they can be used as useEffect deps
-    // (the hasAnyRole function reference changes every render — never put it in deps)
+    // (the hasAnyRole function reference changes every render â€” never put it in deps)
     const roleIsCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
     const roleIsSupervisor   = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
     const roleIsFomOrAdmin   = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
     const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
     const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
 
-    const ALL_GROUP_IDS = ['workspace','communication','programme-management','field-ops','coordination','finance-parent','hr-people','crm','surveys','analytics','admin','help','super-admin'];
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
         const stored = localStorage.getItem('pact-sidebar-collapsed');
         if (stored !== null) {
           const parsed: string[] = JSON.parse(stored);
-          // If the stored value was the old "everything collapsed" default, ignore it
-          if (parsed.length >= ALL_GROUP_IDS.length) return new Set();
           return new Set(parsed);
         }
       } catch {}
-      return new Set(); // default: all groups open
+      return new Set(DENSE_COLLAPSED_BY_DEFAULT);
     });
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(() => {
       try {
@@ -895,26 +915,26 @@
     const myTasksOverdueCount = counts.myTasksOverdue;
     const changelogUnreadCount = getChangelogUnreadCount(currentUser?.id ?? '', currentUser?.role ?? '');
 
-    // Aggregate approvals hub badge — mirrors useApprovalsData status-scope exactly.
+    // Aggregate approvals hub badge â€” mirrors useApprovalsData status-scope exactly.
     // Uses the same role gates and status filters as the useApprovalsData hook sections:
-    // §1 withdrawal pending (supervisor): supervisor/FOM/admin
-    // §2 withdrawal supervisor_approved (finance): financialAdmin/FOM/admin
-    // §3 cost tier-1 pending: supervisor/FOM/admin
-    // §4 cost tier-2 pending: FOM/admin
-    // §5 DP pending_supervisor: supervisor/FOM/admin
-    // §6 DP pending_admin: admin/FOM/financialAdmin (pendingDpAdmin now fetched for all these roles)
-    // §7 pending users: admin only
-    // §8 MMP unassigned: FOM/admin
+    // Â§1 withdrawal pending (supervisor): supervisor/FOM/admin
+    // Â§2 withdrawal supervisor_approved (finance): financialAdmin/FOM/admin
+    // Â§3 cost tier-1 pending: supervisor/FOM/admin
+    // Â§4 cost tier-2 pending: FOM/admin
+    // Â§5 DP pending_supervisor: supervisor/FOM/admin
+    // Â§6 DP pending_admin: admin/FOM/financialAdmin (pendingDpAdmin now fetched for all these roles)
+    // Â§7 pending users: admin only
+    // Â§8 MMP unassigned: FOM/admin
     const isStrictAdmin = isSuperAdmin || hasAnyRole(['admin', 'Admin']);
     const approvalsHubCount =
-      ((roleIsSupervisor || roleIsFomOrAdmin) ? counts.pendingWithdrawals : 0)        // §1
-      + (roleIsFinance ? counts.pendingFinanceWithdrawals : 0)                         // §2
-      + ((roleIsSupervisor || roleIsFomOrAdmin) ? pendingCostApprovalCount : 0)        // §3
-      + (roleIsFomOrAdmin ? pendingTier2CostCount : 0)                                 // §4
-      + ((roleIsSupervisor || roleIsFomOrAdmin) ? pendingDownPaymentCount : 0)         // §5
-      + ((roleIsFomOrAdmin || roleIsFinance) ? counts.pendingDpAdmin : 0)              // §6
-      + (isStrictAdmin ? counts.pendingUsers : 0)                                      // §7
-      + (roleIsFomOrAdmin ? pendingMmpCount : 0);                                      // §8
+      ((roleIsSupervisor || roleIsFomOrAdmin) ? counts.pendingWithdrawals : 0)        // Â§1
+      + (roleIsFinance ? counts.pendingFinanceWithdrawals : 0)                         // Â§2
+      + ((roleIsSupervisor || roleIsFomOrAdmin) ? pendingCostApprovalCount : 0)        // Â§3
+      + (roleIsFomOrAdmin ? pendingTier2CostCount : 0)                                 // Â§4
+      + ((roleIsSupervisor || roleIsFomOrAdmin) ? pendingDownPaymentCount : 0)         // Â§5
+      + ((roleIsFomOrAdmin || roleIsFinance) ? counts.pendingDpAdmin : 0)              // Â§6
+      + (isStrictAdmin ? counts.pendingUsers : 0)                                      // Â§7
+      + (roleIsFomOrAdmin ? pendingMmpCount : 0);                                      // Â§8
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
@@ -926,7 +946,7 @@
       useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
-    // T33 — surface persistence errors so users notice when favourites silently fail to save.
+    // T33 â€” surface persistence errors so users notice when favourites silently fail to save.
     const toggleFavorite = useCallback(async (url: string, title: string, iconName: string) => {
       const currentFavorites = menuPrefs.favoritePages || [];
       const isFavorite = currentFavorites.includes(url);
@@ -1067,6 +1087,31 @@
       });
     };
 
+    // Keep the section for the current page expanded
+    useEffect(() => {
+      if (!menuGroups.length) return;
+      const toExpand = new Set<string>();
+      menuGroups.forEach((group: MenuGroup & { parentGroup?: string }) => {
+        if (group.items.some(item => isNavPathActive(pathname, item.url))) {
+          toExpand.add(group.id);
+          if ((group as { parentGroup?: string }).parentGroup) {
+            toExpand.add((group as { parentGroup?: string }).parentGroup!);
+          }
+        }
+      });
+      if (toExpand.size === 0) return;
+      setCollapsedGroups(prev => {
+        const next = new Set(prev);
+        let changed = false;
+        toExpand.forEach(id => {
+          if (next.has(id)) { next.delete(id); changed = true; }
+        });
+        if (!changed) return prev;
+        try { localStorage.setItem('pact-sidebar-collapsed', JSON.stringify([...next])); } catch {}
+        return next;
+      });
+    }, [pathname, menuGroups]);
+
     const getInitials = (name: string) =>
       name.split(" ").map((part) => part[0]).join("").toUpperCase().substring(0, 2);
 
@@ -1138,47 +1183,60 @@
       <>
         <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-slate-50 dark:border-gray-800 dark:bg-gray-900">
 
-        <SidebarHeader className="border-b border-slate-200/70 py-1">
-          <div className="flex h-14 items-center gap-1 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+        <SidebarHeader className="border-b border-slate-200/70 px-3 py-3">
+          <div className="flex h-10 items-center gap-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
-            <SidebarTrigger className="ml-auto h-4 w-4 group-data-[collapsible=icon]:hidden" data-testid="button-sidebar-trigger" />
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate group-data-[collapsible=icon]:hidden">
+              PACT
+            </span>
+            <SidebarTrigger
+              className="ml-auto h-7 w-7 shrink-0 rounded-md group-data-[collapsible=icon]:hidden"
+              data-testid="button-sidebar-trigger"
+            />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-1 pt-2 pb-1">
+        <SidebarContent className="px-2 pt-3 pb-2 gap-0.5">
           {favoriteItems.length > 0 && (
-            <Collapsible open={!isFavoritesCollapsed} className="">
-              <SidebarGroup className="pt-3 pb-1 px-0">
+            <Collapsible open={!isFavoritesCollapsed}>
+              <SidebarGroup className={cn(SIDEBAR_GROUP_SHELL, "pb-2")}>
                 <CollapsibleTrigger asChild>
-                  <SidebarGroupLabel 
-                    className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-amber-600 dark:text-amber-400 cursor-pointer flex items-center justify-between hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
-                    onClick={() => { const next = !isFavoritesCollapsed; setIsFavoritesCollapsed(next); try { localStorage.setItem('pact-favorites-collapsed', String(next)); } catch {} }}
+                  <SidebarGroupLabel
+                    className={cn(
+                      SIDEBAR_GROUP_LABEL,
+                      "text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                    )}
+                    onClick={() => {
+                      const next = !isFavoritesCollapsed;
+                      setIsFavoritesCollapsed(next);
+                      try { localStorage.setItem('pact-favorites-collapsed', String(next)); } catch {}
+                    }}
                     data-testid="group-label-favorites"
                   >
-                    <span className="flex items-center gap-1">
-                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                      Favorites
-                    </span>
-                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isFavoritesCollapsed ? '-rotate-90' : ''}`} />
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                        isFavoritesCollapsed && "-rotate-90"
+                      )}
+                    />
+                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
+                    <span className="flex-1 truncate">Favorites</span>
+                    <span className="text-[10px] font-normal tabular-nums opacity-60">{favoriteItems.length}</span>
                   </SidebarGroupLabel>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <SidebarGroupContent>
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragEnd={handleDragEnd}
-                    >
+                  <SidebarGroupContent className="pt-0.5">
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                       <SortableContext
                         items={favoriteItems.map(item => item.url)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <SidebarMenu className="space-y-0">
+                        <SidebarMenu className="gap-0.5">
                           {favoriteItems.map((item) => (
                             <SortableFavoriteItem
                               key={item.url}
                               item={item}
-                              isActive={pathname === item.url}
+                              isActive={isNavPathActive(pathname, item.url)}
                               onRemove={removeFavorite}
                             />
                           ))}
@@ -1188,154 +1246,217 @@
                   </SidebarGroupContent>
                 </CollapsibleContent>
               </SidebarGroup>
+              <SidebarSeparator className="mx-2 mb-1" />
             </Collapsible>
           )}
 
           {(() => {
-            const financeSubGroups = menuGroups.filter((g: any) => g.parentGroup === 'finance');
-            const regularGroups = menuGroups.filter((g: any) => !g.parentGroup);
+            const financeSubGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => g.parentGroup === 'finance');
+            const regularGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => !g.parentGroup);
             const allGroupsSorted = [...regularGroups].sort((a, b) => a.order - b.order);
 
-            const renderMenuItems = (items: MenuGroup['items']) => (
-              <SidebarMenu className="space-y-0">
-                {items.map((item, itemIndex) => {
-                  const isItemFavorite = isFavorite(item.url);
-                  return (
-                    <SidebarMenuItem key={item.id} index={itemIndex} className="py-0 group/item">
-                      <div className="flex items-center w-full">
+            const NavCountBadge = ({ count, className, testId }: { count: number; className: string; testId: string }) =>
+              count > 0 ? (
+                <span
+                  className={cn(
+                    "ml-auto shrink-0 inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-white text-[9px] font-bold leading-none",
+                    className
+                  )}
+                  data-testid={testId}
+                >
+                  {count > 99 ? '99+' : count}
+                </span>
+              ) : null;
+
+            const renderItemBadge = (itemId: string) => {
+              switch (itemId) {
+                case 'approvals-hub':
+                  return <NavCountBadge count={approvalsHubCount} className="bg-red-500" testId="badge-approvals-hub-count" />;
+                case 'advance-requests-report':
+                case 'reconciliation-dashboard':
+                  return <NavCountBadge count={pendingReclaimCount} className="bg-orange-500" testId={`badge-${itemId}-count`} />;
+                case 'cost-submission':
+                case 'supervisor-approvals':
+                  return <NavCountBadge count={pendingCostApprovalCount} className="bg-red-500" testId={`badge-${itemId}-count`} />;
+                case 'down-payment-approval':
+                  return <NavCountBadge count={pendingDownPaymentCount} className="bg-amber-500" testId="badge-down-payment-count" />;
+                case 'mmp-management':
+                  return <NavCountBadge count={pendingMmpCount} className="bg-blue-600" testId="badge-mmp-count" />;
+                case 'site-verification':
+                case 'sites-for-verification':
+                  return <NavCountBadge count={pendingVerificationCount} className="bg-red-500" testId="badge-site-verification-count" />;
+                case 'withdrawal-approval':
+                  return <NavCountBadge count={pendingTier2CostCount} className="bg-amber-600" testId="badge-tier2-approval-count" />;
+                case 'finance-approval':
+                  return <NavCountBadge count={pendingFinanceCount} className="bg-indigo-500" testId="badge-finance-approval-count" />;
+                case 'notifications':
+                  return <NavCountBadge count={unreadNotifCount} className="bg-blue-500" testId="badge-notifications-unread-count" />;
+                case 'incident-reports':
+                case 'safety-hub':
+                  return <NavCountBadge count={openIncidentCount} className="bg-red-600" testId="badge-incident-count" />;
+                case 'my-wallet':
+                  return <NavCountBadge count={pendingWalletCount} className="bg-green-600" testId="badge-wallet-pending-count" />;
+                case 'my-tasks':
+                  return <NavCountBadge count={myTasksOverdueCount} className="bg-red-500" testId="badge-my-tasks-overdue-count" />;
+                case 'changelog':
+                  return <NavCountBadge count={changelogUnreadCount} className="bg-blue-600" testId="badge-changelog-unread-count" />;
+                default:
+                  return null;
+              }
+            };
+
+            const renderMenuItems = (items: MenuGroup['items'], nested = false) => {
+              if (nested) {
+                return (
+                  <SidebarMenuSub className="mx-2 gap-0.5 border-l border-slate-200/80 dark:border-gray-700">
+                    {items.map((item) => {
+                      const isActive = isNavPathActive(pathname, item.url);
+                      return (
+                        <SidebarMenuSubItem key={item.id}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isActive}
+                            className={cn(
+                              SIDEBAR_NAV_SUB_ITEM,
+                              isActive &&
+                                "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold"
+                            )}
+                          >
+                            <Link to={item.url} className="flex items-center gap-2" data-testid={`nav-link-${item.id}`}>
+                              <item.icon
+                                className={cn(
+                                  "h-3.5 w-3.5 shrink-0",
+                                  isActive
+                                    ? "text-blue-700 dark:text-blue-300"
+                                    : "text-slate-500 dark:text-slate-400"
+                                )}
+                              />
+                              <span className="truncate flex-1">{item.title}</span>
+                              {renderItemBadge(item.id)}
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      );
+                    })}
+                  </SidebarMenuSub>
+                );
+              }
+
+              return (
+                <SidebarMenu className="gap-0.5 px-0.5">
+                  {items.map((item, itemIndex) => {
+                    const isActive = isNavPathActive(pathname, item.url);
+                    const isItemFavorite = isFavorite(item.url);
+                    return (
+                      <SidebarMenuItem key={item.id} index={itemIndex}>
                         <SidebarMenuButton
                           asChild
-                          isActive={pathname === item.url}
+                          isActive={isActive}
                           tooltip={item.title}
-                          className={`flex-1 rounded-md text-[13px] font-medium transition-all duration-200 h-8 
-                            ${
-                              pathname === item.url
-                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold"
-                                : ""
-                            }`}
+                          className={cn(
+                            SIDEBAR_NAV_ITEM,
+                            isActive &&
+                              "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold shadow-sm border border-blue-200/60 dark:border-blue-800/50"
+                          )}
                         >
-                          <Link to={item.url} className="flex items-center gap-2" data-testid={`nav-link-${item.id}`}>
+                          <Link to={item.url} className="flex items-center gap-2.5" data-testid={`nav-link-${item.id}`}>
                             <item.icon
-                              className={`h-3.5 w-3.5 ${
-                                pathname === item.url
+                              className={cn(
+                                "h-4 w-4 shrink-0",
+                                isActive
                                   ? "text-blue-700 dark:text-blue-300"
                                   : "text-slate-500 dark:text-slate-400"
-                              }`}
+                              )}
                             />
                             <span className="truncate flex-1">{item.title}</span>
-                            {item.id === 'approvals-hub' && approvalsHubCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-approvals-hub-count">
-                                {approvalsHubCount > 99 ? '99+' : approvalsHubCount}
-                              </span>
-                            )}
-                            {item.id === 'advance-requests-report' && pendingReclaimCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold leading-none" data-testid="badge-reconciliation-count">
-                                {pendingReclaimCount > 99 ? '99+' : pendingReclaimCount}
-                              </span>
-                            )}
-                            {item.id === 'cost-submission' && pendingCostApprovalCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-cost-approval-count">
-                                {pendingCostApprovalCount > 99 ? '99+' : pendingCostApprovalCount}
-                              </span>
-                            )}
-                            {item.id === 'supervisor-approvals' && pendingCostApprovalCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-tier1-approval-count">
-                                {pendingCostApprovalCount > 99 ? '99+' : pendingCostApprovalCount}
-                              </span>
-                            )}
-                            {item.id === 'down-payment-approval' && pendingDownPaymentCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none" data-testid="badge-down-payment-count">
-                                {pendingDownPaymentCount > 99 ? '99+' : pendingDownPaymentCount}
-                              </span>
-                            )}
-                            {item.id === 'mmp-management' && pendingMmpCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-600 text-white text-[9px] font-bold leading-none" data-testid="badge-mmp-count">
-                                {pendingMmpCount > 99 ? '99+' : pendingMmpCount}
-                              </span>
-                            )}
-                            {(item.id === 'site-verification' || item.id === 'sites-for-verification') && pendingVerificationCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-site-verification-count">
-                                {pendingVerificationCount > 99 ? '99+' : pendingVerificationCount}
-                              </span>
-                            )}
-                            {item.id === 'withdrawal-approval' && pendingTier2CostCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-600 text-white text-[9px] font-bold leading-none" data-testid="badge-tier2-approval-count">
-                                {pendingTier2CostCount > 99 ? '99+' : pendingTier2CostCount}
-                              </span>
-                            )}
-                            {item.id === 'finance-approval' && pendingFinanceCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none" data-testid="badge-finance-approval-count">
-                                {pendingFinanceCount > 99 ? '99+' : pendingFinanceCount}
-                              </span>
-                            )}
-                            {item.id === 'notifications' && unreadNotifCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold leading-none" data-testid="badge-notifications-unread-count">
-                                {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
-                              </span>
-                            )}
-                            {(item.id === 'incident-reports' || item.id === 'safety-hub') && openIncidentCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-600 text-white text-[9px] font-bold leading-none" data-testid="badge-incident-count">
-                                {openIncidentCount > 99 ? '99+' : openIncidentCount}
-                              </span>
-                            )}
-                            {item.id === 'reconciliation-dashboard' && pendingReclaimCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold leading-none" data-testid="badge-reconciliation-dashboard-count">
-                                {pendingReclaimCount > 99 ? '99+' : pendingReclaimCount}
-                              </span>
-                            )}
-                            {item.id === 'my-wallet' && pendingWalletCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-green-600 text-white text-[9px] font-bold leading-none" data-testid="badge-wallet-pending-count">
-                                {pendingWalletCount > 99 ? '99+' : pendingWalletCount}
-                              </span>
-                            )}
-                            {item.id === 'my-tasks' && myTasksOverdueCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-my-tasks-overdue-count">
-                                {myTasksOverdueCount > 99 ? '99+' : myTasksOverdueCount}
-                              </span>
-                            )}
-                            {item.id === 'changelog' && changelogUnreadCount > 0 && (
-                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-600 text-white text-[9px] font-bold leading-none" data-testid="badge-changelog-unread-count">
-                                {changelogUnreadCount > 99 ? '99+' : changelogUnreadCount}
-                              </span>
-                            )}
+                            {renderItemBadge(item.id)}
                           </Link>
                         </SidebarMenuButton>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                toggleFavorite(item.url, item.title, item.icon?.name || 'Star'); 
-                              }}
-                              className={`transition-opacity shrink-0 ${
-                                isItemFavorite 
-                                  ? 'opacity-100' 
-                                  : 'opacity-0 group-hover/item:opacity-100'
-                              }`}
-                              aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                              data-testid={`button-favorite-${item.id}`}
-                            >
-                              <Star 
-                                className={`h-3 w-3 ${
-                                  isItemFavorite 
-                                    ? 'text-amber-500 fill-amber-500' 
-                                    : 'text-muted-foreground'
-                                }`} 
-                              />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            <p>{isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            );
+                        <SidebarMenuAction
+                          showOnHover={!isItemFavorite}
+                          className={isItemFavorite ? "opacity-100" : undefined}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
+                          }}
+                          aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                          data-testid={`button-favorite-${item.id}`}
+                        >
+                          <Star
+                            className={cn(
+                              "h-3.5 w-3.5",
+                              isItemFavorite
+                                ? "text-amber-500 fill-amber-500"
+                                : "text-muted-foreground"
+                            )}
+                          />
+                        </SidebarMenuAction>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              );
+            };
+
+            const renderFinanceSection = (testIdSuffix = '') => {
+              const isFinanceCollapsed = collapsedGroups.has('finance-parent');
+              return (
+                <Collapsible key={`finance-parent${testIdSuffix}`} open={!isFinanceCollapsed}>
+                  <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
+                    <CollapsibleTrigger asChild>
+                      <SidebarGroupLabel
+                        className={cn(
+                          SIDEBAR_GROUP_LABEL,
+                          "text-green-600 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30"
+                        )}
+                        onClick={() => toggleGroupCollapse('finance-parent')}
+                        data-testid={`group-label-finance-parent${testIdSuffix}`}
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            isFinanceCollapsed && "-rotate-90"
+                          )}
+                        />
+                        <Banknote className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1 truncate">Payments & Finance</span>
+                      </SidebarGroupLabel>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarGroupContent className="space-y-1 pt-0.5">
+                        {financeSubGroups.sort((a, b) => a.order - b.order).map(subGroup => {
+                          const isSubCollapsed = collapsedGroups.has(subGroup.id);
+                          return (
+                            <Collapsible key={subGroup.id} open={!isSubCollapsed}>
+                              <CollapsibleTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="w-full h-7 px-3 text-[11px] font-medium text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
+                                  onClick={() => toggleGroupCollapse(subGroup.id)}
+                                  data-testid={`group-label-${subGroup.id}`}
+                                >
+                                  <ChevronDown
+                                    className={cn(
+                                      "h-3 w-3 shrink-0 transition-transform duration-200",
+                                      isSubCollapsed && "-rotate-90"
+                                    )}
+                                  />
+                                  <span className="flex-1 truncate text-left">{subGroup.label}</span>
+                                  <span className="text-[10px] tabular-nums opacity-50">{subGroup.items.length}</span>
+                                </button>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                {renderMenuItems(subGroup.items, true)}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+                      </SidebarGroupContent>
+                    </CollapsibleContent>
+                  </SidebarGroup>
+                </Collapsible>
+              );
+            };
 
             const rendered: JSX.Element[] = [];
             let financeInserted = false;
@@ -1343,70 +1464,37 @@
             for (const group of allGroupsSorted) {
               if (!financeInserted && group.order > 5 && financeSubGroups.length > 0) {
                 financeInserted = true;
-                const isFinanceCollapsed = collapsedGroups.has('finance-parent');
-                rendered.push(
-                  <Collapsible key="finance-parent" open={!isFinanceCollapsed}>
-                    <SidebarGroup className="py-0 px-0">
-                      <CollapsibleTrigger asChild>
-                        <SidebarGroupLabel 
-                          className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-green-600 dark:text-green-300 cursor-pointer flex items-center justify-between hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
-                          onClick={() => toggleGroupCollapse('finance-parent')}
-                          data-testid="group-label-finance-parent"
-                        >
-                          <span className="flex items-center gap-1">
-                            <Banknote className="h-3 w-3" />
-                            Payments & Finance
-                          </span>
-                          <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isFinanceCollapsed ? '-rotate-90' : ''}`} />
-                        </SidebarGroupLabel>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarGroupContent>
-                          {financeSubGroups.sort((a, b) => a.order - b.order).map(subGroup => {
-                            const isSubCollapsed = collapsedGroups.has(subGroup.id);
-                            return (
-                              <Collapsible key={subGroup.id} open={!isSubCollapsed}>
-                                <div className="pl-1">
-                                  <CollapsibleTrigger asChild>
-                                    <div 
-                                      className="px-1 py-0.5 h-5 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground cursor-pointer flex items-center justify-between hover:bg-muted/50 rounded transition-colors"
-                                      onClick={() => toggleGroupCollapse(subGroup.id)}
-                                      data-testid={`group-label-${subGroup.id}`}
-                                    >
-                                      <span>{subGroup.label}</span>
-                                      <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${isSubCollapsed ? '-rotate-90' : ''}`} />
-                                    </div>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent>
-                                    {renderMenuItems(subGroup.items)}
-                                  </CollapsibleContent>
-                                </div>
-                              </Collapsible>
-                            );
-                          })}
-                        </SidebarGroupContent>
-                      </CollapsibleContent>
-                    </SidebarGroup>
-                  </Collapsible>
-                );
+                rendered.push(renderFinanceSection());
               }
 
               const isCollapsed = collapsedGroups.has(group.id);
+              const hasActiveItem = group.items.some(item => isNavPathActive(pathname, item.url));
+
               rendered.push(
                 <Collapsible key={group.id} open={!isCollapsed}>
-                  <SidebarGroup className="py-0 px-0">
+                  <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
                     <CollapsibleTrigger asChild>
-                      <SidebarGroupLabel 
-                        className="px-2 py-0.5 h-6 text-[11px] uppercase tracking-[0.14em] font-semibold text-slate-500 dark:text-slate-400 cursor-pointer flex items-center justify-between hover:bg-slate-200/50 dark:hover:bg-gray-800 rounded transition-colors"
+                      <SidebarGroupLabel
+                        className={cn(
+                          SIDEBAR_GROUP_LABEL,
+                          "text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-gray-800",
+                          hasActiveItem && "text-slate-700 dark:text-slate-200"
+                        )}
                         onClick={() => toggleGroupCollapse(group.id)}
                         data-testid={`group-label-${group.id}`}
                       >
-                        <span>{group.label}</span>
-                        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                        <ChevronDown
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            isCollapsed && "-rotate-90"
+                          )}
+                        />
+                        <span className="flex-1 truncate">{group.label}</span>
+                        <span className="text-[10px] font-normal tabular-nums opacity-50">{group.items.length}</span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <SidebarGroupContent>
+                      <SidebarGroupContent className="pt-0.5 pb-1">
                         {renderMenuItems(group.items)}
                       </SidebarGroupContent>
                     </CollapsibleContent>
@@ -1416,71 +1504,26 @@
             }
 
             if (!financeInserted && financeSubGroups.length > 0) {
-              const isFinanceCollapsed = collapsedGroups.has('finance-parent');
-              rendered.push(
-                <Collapsible key="finance-parent" open={!isFinanceCollapsed}>
-                  <SidebarGroup className="py-0 px-0">
-                    <CollapsibleTrigger asChild>
-                      <SidebarGroupLabel 
-                        className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-green-600 dark:text-green-300 cursor-pointer flex items-center justify-between hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
-                        onClick={() => toggleGroupCollapse('finance-parent')}
-                        data-testid="group-label-finance-parent-end"
-                      >
-                        <span className="flex items-center gap-1">
-                          <Banknote className="h-3 w-3" />
-                          Payments & Finance
-                        </span>
-                        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isFinanceCollapsed ? '-rotate-90' : ''}`} />
-                      </SidebarGroupLabel>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarGroupContent>
-                        {financeSubGroups.sort((a, b) => a.order - b.order).map(subGroup => {
-                          const isSubCollapsed = collapsedGroups.has(subGroup.id);
-                          return (
-                            <Collapsible key={subGroup.id} open={!isSubCollapsed}>
-                              <div className="pl-1">
-                                <CollapsibleTrigger asChild>
-                                  <div 
-                                    className="px-1 py-0.5 h-5 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground cursor-pointer flex items-center justify-between hover:bg-muted/50 rounded transition-colors"
-                                    onClick={() => toggleGroupCollapse(subGroup.id)}
-                                    data-testid={`group-label-${subGroup.id}`}
-                                  >
-                                    <span>{subGroup.label}</span>
-                                    <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${isSubCollapsed ? '-rotate-90' : ''}`} />
-                                  </div>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                  {renderMenuItems(subGroup.items)}
-                                </CollapsibleContent>
-                              </div>
-                            </Collapsible>
-                          );
-                        })}
-                      </SidebarGroupContent>
-                    </CollapsibleContent>
-                  </SidebarGroup>
-                </Collapsible>
-              );
+              rendered.push(renderFinanceSection('-end'));
             }
 
             return rendered;
           })()}
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-slate-200/70 p-2">
+        <SidebarFooter className="border-t border-slate-200/70 px-3 py-3">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-2 px-2 py-1.5 h-9 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-lg group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                  className="w-full justify-start gap-2.5 px-2.5 py-2 h-11 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-xl group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
                   data-testid="button-user-menu"
                 >
                   <div className="relative shrink-0">
-                    <Avatar className="h-6 w-6">
+                    <Avatar className="h-7 w-7">
                       <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                      <AvatarFallback className="bg-blue-600 text-white text-[9px]">
+                      <AvatarFallback className="bg-blue-600 text-white text-[10px]">
                         {getInitials(currentUser.name)}
                       </AvatarFallback>
                     </Avatar>
@@ -1490,7 +1533,7 @@
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate w-full">{currentUser.name}</span>
                     <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate w-full">{getPrimaryRole()}</span>
                   </div>
-                  <ChevronUp className="ml-auto h-3 w-3 text-muted-foreground group-data-[collapsible=icon]:hidden shrink-0" />
+                  <ChevronUp className="ml-auto h-3.5 w-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="end" className="w-56">
@@ -1542,4 +1585,4 @@
     );
   };
 
-  export default AppSidebar;
+  export default AppSidebar;
