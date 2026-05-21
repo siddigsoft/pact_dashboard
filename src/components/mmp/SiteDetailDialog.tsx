@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Save, X, Play, Banknote, CalendarClock, ClipboardList } from 'lucide-react';
+import { Pencil, Save, X, Play, Banknote, CalendarClock, ClipboardList, Check } from 'lucide-react';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { PostponementDialog } from './PostponementDialog';
@@ -57,6 +57,9 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [editingTransport, setEditingTransport] = useState(false);
+  const [transportInput, setTransportInput] = useState('');
+  const [savingTransport, setSavingTransport] = useState(false);
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackComments, setSendBackComments] = useState('');
   const [postponementOpen, setPostponementOpen] = useState(false);
@@ -485,6 +488,32 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const handleCancel = () => {
     setIsEditing(false);
     setDraft(null);
+  };
+
+  const handleSaveTransportFeeDirectly = async () => {
+    const siteId = site?.id;
+    if (!siteId || !transportInput) return;
+    const newFee = Number(transportInput);
+    if (isNaN(newFee) || newFee < 0) return;
+    setSavingTransport(true);
+    try {
+      const enumFee = Number(site?.enumerator_fee ?? 0);
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ transport_fee: newFee, cost: enumFee + newFee })
+        .eq('id', siteId);
+      if (error) throw error;
+      setEditingTransport(false);
+      setTransportInput('');
+      if (onUpdateSite) {
+        const updated = { ...site, transport_fee: newFee, transportFee: newFee, cost: enumFee + newFee };
+        onUpdateSite([updated]);
+      }
+    } catch (err: any) {
+      console.error('Failed to update transport fee:', err);
+    } finally {
+      setSavingTransport(false);
+    }
   };
 
   if (!site || !row) return null;
@@ -1025,7 +1054,18 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                       <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Payment for completing the site visit</p>
                     </div>
                     <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
-                      <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Transport Budget</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Transport Budget</Label>
+                        {!isEditing && canSeeAuditTrail && !editingTransport && (
+                          <button
+                            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                            title="Fix transport fee"
+                            onClick={() => { setEditingTransport(true); setTransportInput(String(row.transportFee ?? '')); }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                       {isEditing ? (
                         <Input
                           type="number"
@@ -1046,15 +1086,42 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                           className="mt-2 text-2xl font-semibold"
                           placeholder="Set at dispatch"
                         />
+                      ) : editingTransport ? (
+                        <div className="mt-2 flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            autoFocus
+                            value={transportInput}
+                            onChange={e => setTransportInput(e.target.value)}
+                            disabled={savingTransport}
+                            className="text-xl font-semibold w-36"
+                            placeholder="Amount in SDG"
+                          />
+                          <button
+                            className="h-7 w-7 flex items-center justify-center rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-40"
+                            disabled={savingTransport || !transportInput}
+                            onClick={handleSaveTransportFeeDirectly}
+                          >
+                            {savingTransport ? <Save className="h-3.5 w-3.5 animate-pulse" /> : <Check className="h-3.5 w-3.5" />}
+                          </button>
+                          <button
+                            className="h-7 w-7 flex items-center justify-center rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 disabled:opacity-40"
+                            disabled={savingTransport}
+                            onClick={() => { setEditingTransport(false); setTransportInput(''); }}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       ) : (
                         <>
-                          <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                          <p className={`text-2xl font-semibold mt-2 ${(!row.transportFee || Number(row.transportFee) === 0) ? 'text-amber-500' : 'text-gray-900 dark:text-gray-100'}`}>
                             {row.transportFee !== undefined && row.transportFee !== null && Number(row.transportFee) > 0
                               ? `${Number(row.transportFee).toLocaleString()} SDG`
                               : '0 SDG'}
                           </p>
                           {(!row.transportFee || row.transportFee === null || Number(row.transportFee) === 0) && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Set at dispatch)</p>
+                            <p className="text-xs text-amber-500 mt-1">Not set — tap pencil to fix</p>
                           )}
                         </>
                       )}
