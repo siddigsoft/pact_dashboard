@@ -982,6 +982,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       // Step 1: Store TRANSPORT costs only in mmp_site_entries
       // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
       // based on the claiming data collector's classification level (A, B, or C)
+      const costSaveFailures: string[] = [];
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
         if (costs) {
@@ -1084,11 +1085,23 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           }
 
           if (costError) {
-            // For re-dispatched sites, cost update failure is non-critical - continue dispatch
-            // The transport costs may already be set from previous dispatch
-            console.warn(`⚠️ Cost update failed for ${costs.siteName}, continuing dispatch:`, costError);
+            console.error(`❌ Transport cost save failed for ${costs.siteName}:`, costError);
+            costSaveFailures.push(costs.siteName || siteEntry.id);
           }
         }
+      }
+
+      // Abort dispatch if ANY transport cost failed to save — prevents sites being
+      // dispatched with null/zero transport_fee in the database.
+      if (costSaveFailures.length > 0) {
+        clearTimeout(dispatchTimeout);
+        setLoading(false);
+        toast({
+          title: "Dispatch Aborted — Cost Save Failed",
+          description: `Transport costs could not be saved for: ${costSaveFailures.join(", ")}. Please try again.`,
+          variant: "destructive",
+        });
+        return;
       }
 
       // Step 2: Prepare notifications for collectors AND all team members in same state/locality
