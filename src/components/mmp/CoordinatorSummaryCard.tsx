@@ -568,36 +568,39 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         claimedBy: ad.claimed_by || entry.claimed_by || entry.accepted_by || '',
       };
 
-      if (coordId) {
-        const existingCoord = stateData.coordinators.find(c => c.id === coordId);
-        
-        if (existingCoord) {
-          existingCoord.sitesAssigned++;
-          if (isVerified) existingCoord.sitesVerified++;
-          if (isReturned || isRejected) existingCoord.sitesReturned++;
-          if (isInProgress) existingCoord.sitesInProgress++;
-          if (!isVerified && !isReturned && !isRejected && !isInProgress) existingCoord.sitesPending++;
-          existingCoord.statusCounts[entryStatus] = (existingCoord.statusCounts[entryStatus] ?? 0) + 1;
-          existingCoord.siteDetails.push(siteDetail);
-        } else {
-          stateData.coordinators.push({ 
-            id: coordId, 
-            name: coordName || coordinatorNames[coordId] || coordId.substring(0, 8),
-            sitesAssigned: 1,
-            sitesVerified: isVerified ? 1 : 0,
-            sitesReturned: (isReturned || isRejected) ? 1 : 0,
-            sitesInProgress: isInProgress ? 1 : 0,
-            sitesPending: (!isVerified && !isReturned && !isRejected && !isInProgress) ? 1 : 0,
-            statusCounts: { [entryStatus]: 1 },
-            receivedAt: receivedAt,
-            siteDetails: [siteDetail],
-          });
-        }
+      // Sites with no coordinator (directly dispatched to DCs) go under a special group
+      const effectiveCoordId = coordId || '__direct__';
+      const effectiveCoordName = coordId
+        ? (coordName || coordinatorNames[coordId] || coordId.substring(0, 8))
+        : 'Directly Dispatched';
+
+      const existingCoord = stateData.coordinators.find(c => c.id === effectiveCoordId);
+
+      if (existingCoord) {
+        existingCoord.sitesAssigned++;
+        if (isVerified) existingCoord.sitesVerified++;
+        if (isReturned || isRejected) existingCoord.sitesReturned++;
+        if (isInProgress) existingCoord.sitesInProgress++;
+        if (!isVerified && !isReturned && !isRejected && !isInProgress) existingCoord.sitesPending++;
+        existingCoord.statusCounts[entryStatus] = (existingCoord.statusCounts[entryStatus] ?? 0) + 1;
+        existingCoord.siteDetails.push(siteDetail);
+      } else {
+        stateData.coordinators.push({
+          id: effectiveCoordId,
+          name: effectiveCoordName,
+          sitesAssigned: 1,
+          sitesVerified: isVerified ? 1 : 0,
+          sitesReturned: (isReturned || isRejected) ? 1 : 0,
+          sitesInProgress: isInProgress ? 1 : 0,
+          sitesPending: (!isVerified && !isReturned && !isRejected && !isInProgress) ? 1 : 0,
+          statusCounts: { [entryStatus]: 1 },
+          receivedAt: receivedAt,
+          siteDetails: [siteDetail],
+        });
       }
     });
 
     return Array.from(stateMap.values())
-      .filter(state => state.coordinators.length > 0)
       .sort((a, b) => a.state.localeCompare(b.state));
   }, [siteEntries, coordinatorNames]);
 
