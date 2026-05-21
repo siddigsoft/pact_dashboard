@@ -34,6 +34,7 @@ import {
   CheckCheck, CircleDot, CircleX, ClipboardList,
   RefreshCw, FunctionSquare, PenLine, ArrowRightLeft, Activity, AlertCircle,
   Upload, LayoutList, BookOpen, GripVertical, CheckSquare2,
+  BellRing, MessageSquareMore,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -410,6 +411,10 @@ export default function SurveyDetail() {
     fill_password: '',
     notify_emails: '',
     is_template: false,
+    reminder_enabled: false,
+    reminder_emails: '',
+    reminder_phones: '',
+    reminder_days_before: '1,3,7',
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -436,6 +441,10 @@ export default function SurveyDetail() {
         fill_password: String(s.fill_password ?? ''),
         notify_emails: String(s.notify_emails ?? ''),
         is_template: Boolean(s.is_template),
+        reminder_enabled: Boolean(s.reminder_enabled),
+        reminder_emails: String(s.reminder_emails ?? ''),
+        reminder_phones: String(s.reminder_phones ?? ''),
+        reminder_days_before: String(s.reminder_days_before ?? '1,3,7'),
       });
       return data as Survey;
     },
@@ -510,6 +519,10 @@ export default function SurveyDetail() {
         fill_password: settingsForm.fill_password.trim() || null,
         notify_emails: settingsForm.notify_emails.trim() || null,
         is_template: settingsForm.is_template,
+        reminder_enabled: settingsForm.reminder_enabled,
+        reminder_emails: settingsForm.reminder_emails.trim() || null,
+        reminder_phones: settingsForm.reminder_phones.trim() || null,
+        reminder_days_before: settingsForm.reminder_days_before.trim() || '1,3,7',
       };
       const { error } = await supabase.from('surveys').update({
         settings: updatedSettings,
@@ -3530,6 +3543,145 @@ export default function SurveyDetail() {
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Deadline Reminders */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <BellRing className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Deadline Reminders</h3>
+              {settingsForm.reminder_enabled && (
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Active</span>
+              )}
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-[11px] text-slate-400">
+                Automatically send email and WhatsApp reminders every day as the deadline approaches. Only works when a deadline (expires at) is set and the survey is active.
+                تذكيرات تلقائية يومية عبر البريد الإلكتروني و واتساب عندما يقترب الموعد النهائي للاستبيان.
+              </p>
+
+              {/* Enable toggle */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className="relative shrink-0">
+                  <input type="checkbox" className="sr-only"
+                    checked={settingsForm.reminder_enabled}
+                    onChange={e => setSettingsForm(s => ({ ...s, reminder_enabled: e.target.checked }))}
+                    data-testid="toggle-reminder-enabled"
+                  />
+                  <div className={cn('w-10 h-6 rounded-full transition-colors', settingsForm.reminder_enabled ? 'bg-indigo-600' : 'bg-slate-200')}>
+                    <div className={cn('w-4 h-4 bg-white rounded-full shadow transition-transform m-1', settingsForm.reminder_enabled ? 'translate-x-4' : 'translate-x-0')} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Enable automatic daily reminders</p>
+                  <p className="text-[11px] text-slate-400">Sends reminders on the days you select below</p>
+                </div>
+              </label>
+
+              {settingsForm.reminder_enabled && (
+                <div className="space-y-4 pt-1 border-t border-slate-100">
+                  {/* Days before */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Send reminders on these days before deadline</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: '7 days before', value: '7' },
+                        { label: '3 days before', value: '3' },
+                        { label: '1 day before', value: '1' },
+                        { label: 'Day of deadline', value: '0' },
+                      ].map(opt => {
+                        const selected = settingsForm.reminder_days_before.split(',').map(d => d.trim()).includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            data-testid={`toggle-reminder-day-${opt.value}`}
+                            onClick={() => {
+                              const current = settingsForm.reminder_days_before.split(',').map(d => d.trim()).filter(Boolean);
+                              const next = selected
+                                ? current.filter(d => d !== opt.value)
+                                : [...current, opt.value].sort((a, b) => Number(b) - Number(a));
+                              setSettingsForm(s => ({ ...s, reminder_days_before: next.join(',') || '1' }));
+                            }}
+                            className={cn(
+                              'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border font-medium transition-colors',
+                              selected
+                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300',
+                            )}
+                          >
+                            {selected && <CheckCircle2 className="w-3 h-3" />}
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-slate-400">Selected: {settingsForm.reminder_days_before || 'none'}</p>
+                  </div>
+
+                  {/* Reminder emails */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reminder-emails" className="text-sm font-medium flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />Email addresses to remind
+                    </Label>
+                    <Input
+                      id="reminder-emails"
+                      type="text"
+                      placeholder="e.g. team@org.org, manager@org.org"
+                      value={settingsForm.reminder_emails}
+                      onChange={e => setSettingsForm(s => ({ ...s, reminder_emails: e.target.value }))}
+                      data-testid="input-reminder-emails"
+                    />
+                    <p className="text-[11px] text-slate-400">Comma-separated email addresses. Leave blank to use the submission notification emails above.</p>
+                  </div>
+
+                  {/* Reminder WhatsApp phones */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reminder-phones" className="text-sm font-medium flex items-center gap-1.5">
+                      <MessageSquareMore className="w-3.5 h-3.5 text-slate-400" />WhatsApp numbers to remind
+                    </Label>
+                    <Input
+                      id="reminder-phones"
+                      type="text"
+                      placeholder="e.g. +249912345678, +249923456789"
+                      value={settingsForm.reminder_phones}
+                      onChange={e => setSettingsForm(s => ({ ...s, reminder_phones: e.target.value }))}
+                      data-testid="input-reminder-phones"
+                    />
+                    <p className="text-[11px] text-slate-400">Comma-separated international numbers (e.g. +249…). Leave blank to skip WhatsApp reminders.</p>
+                  </div>
+
+                  {/* Preview */}
+                  {settingsForm.expires_at && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-1.5">
+                      <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
+                        <BellRing className="w-3.5 h-3.5" />Reminder schedule preview
+                      </p>
+                      {settingsForm.reminder_days_before.split(',').map(d => d.trim()).filter(Boolean).sort((a, b) => Number(b) - Number(a)).map(days => {
+                        const deadline = new Date(settingsForm.expires_at);
+                        const reminderDate = new Date(deadline.getTime() - Number(days) * 86_400_000);
+                        const isPast = reminderDate < new Date();
+                        return (
+                          <div key={days} className={`flex items-center gap-2 text-[11px] ${isPast ? 'text-slate-400 line-through' : 'text-indigo-600'}`}>
+                            <Clock className="w-3 h-3 shrink-0" />
+                            {Number(days) === 0 ? 'Day of deadline' : `${days} day${Number(days) > 1 ? 's' : ''} before`}
+                            {' — '}
+                            {reminderDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {isPast && ' (past)'}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!settingsForm.expires_at && (
+                    <div className="flex items-center gap-2 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Set a deadline (expires at) in Collection Settings above to activate reminders.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
