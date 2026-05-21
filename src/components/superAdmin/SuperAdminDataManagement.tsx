@@ -58,7 +58,10 @@ import {
   Eye,
   Archive,
   Send,
-  Undo2
+  Undo2,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -327,6 +330,8 @@ export function SuperAdminDataManagement() {
   const [reason, setReason] = useState('');
   const [processing, setProcessing] = useState(false);
   const [resetTargetStatus, setResetTargetStatus] = useState<'new' | 'approved' | 'assigned' | 'dispatched'>('dispatched');
+  const [claimedNoCostFilter, setClaimedNoCostFilter] = useState(false);
+  const [editingTransportFee, setEditingTransportFee] = useState<{ siteId: string; value: string; saving: boolean } | null>(null);
 
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
@@ -1017,6 +1022,24 @@ export function SuperAdminDataManagement() {
     }
   };
 
+  const handleSaveTransportFee = async (siteId: string, newFee: number, source: 'claimed' | 'dispatched') => {
+    setEditingTransportFee(prev => prev ? { ...prev, saving: true } : null);
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ transport_fee: newFee })
+        .eq('id', siteId);
+      if (error) throw error;
+      toast({ title: 'Transport Cost Updated', description: `Transport fee set to ${newFee.toLocaleString()} SDG.` });
+      setEditingTransportFee(null);
+      if (source === 'claimed') loadClaimedSites();
+      else loadDispatchedSites();
+    } catch (err: any) {
+      toast({ title: 'Update Failed', description: err.message || 'Could not update transport fee.', variant: 'destructive' });
+      setEditingTransportFee(prev => prev ? { ...prev, saving: false } : null);
+    }
+  };
+
   const openReclaimSiteDialog = async (site: ClaimedSiteData) => {
     setSelectedClaimedSite(site);
     setReason('');
@@ -1258,9 +1281,10 @@ export function SuperAdminDataManagement() {
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
       const matchesMmp = claimedMmpFilter === 'all' || site.mmp_id === claimedMmpFilter;
       
-      return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp;
+      const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
+      return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
     });
-  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter]);
+  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
@@ -2209,6 +2233,27 @@ export function SuperAdminDataManagement() {
                   </Select>
                 </div>
               </div>
+              {/* No-cost quick filter */}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setClaimedNoCostFilter(v => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    claimedNoCostFilter
+                      ? 'bg-amber-500 border-amber-500 text-white'
+                      : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600'
+                  }`}
+                  data-testid="button-claimed-no-cost-filter"
+                >
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  No Transport Cost
+                </button>
+                {claimedNoCostFilter && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    Showing {filteredClaimedSites.length} site{filteredClaimedSites.length !== 1 ? 's' : ''} without cost set
+                  </span>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {loadingClaimed ? (
@@ -2300,9 +2345,50 @@ export function SuperAdminDataManagement() {
                               </div>
                               <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Trans:</span>
-                                <span className="font-medium">
-                                  {site.transport_fee != null ? site.transport_fee.toLocaleString() : '—'} SDG
-                                </span>
+                                {editingTransportFee?.siteId === site.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      className="w-20 h-6 border rounded px-1 text-xs bg-background"
+                                      value={editingTransportFee.value}
+                                      onChange={e => setEditingTransportFee(prev => prev ? { ...prev, value: e.target.value } : null)}
+                                      disabled={editingTransportFee.saving}
+                                      autoFocus
+                                      data-testid={`input-transport-fee-${site.id}`}
+                                    />
+                                    <button
+                                      className="h-5 w-5 flex items-center justify-center rounded text-green-600 hover:bg-green-50 disabled:opacity-40"
+                                      disabled={editingTransportFee.saving || !editingTransportFee.value}
+                                      onClick={() => handleSaveTransportFee(site.id, Number(editingTransportFee.value), 'claimed')}
+                                      data-testid={`button-save-transport-fee-${site.id}`}
+                                    >
+                                      {editingTransportFee.saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                    </button>
+                                    <button
+                                      className="h-5 w-5 flex items-center justify-center rounded text-red-500 hover:bg-red-50 disabled:opacity-40"
+                                      disabled={editingTransportFee.saving}
+                                      onClick={() => setEditingTransportFee(null)}
+                                      data-testid={`button-cancel-transport-fee-${site.id}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <span className={`font-medium ${site.transport_fee == null || site.transport_fee === 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+                                      {site.transport_fee != null ? `${site.transport_fee.toLocaleString()} SDG` : '—'}
+                                    </span>
+                                    <button
+                                      className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                                      onClick={() => setEditingTransportFee({ siteId: site.id, value: String(site.transport_fee ?? ''), saving: false })}
+                                      title="Edit transport fee"
+                                      data-testid={`button-edit-transport-fee-${site.id}`}
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </TableCell>
@@ -2504,9 +2590,50 @@ export function SuperAdminDataManagement() {
                               </div>
                               <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground text-xs">Trans:</span>
-                                <span className={`font-medium text-xs ${site.transport_fee == null ? 'text-amber-600 dark:text-amber-400' : ''}`}>
-                                  {site.transport_fee != null ? `${site.transport_fee.toLocaleString()} SDG` : '—'}
-                                </span>
+                                {editingTransportFee?.siteId === site.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      className="w-20 h-6 border rounded px-1 text-xs bg-background"
+                                      value={editingTransportFee.value}
+                                      onChange={e => setEditingTransportFee(prev => prev ? { ...prev, value: e.target.value } : null)}
+                                      disabled={editingTransportFee.saving}
+                                      autoFocus
+                                      data-testid={`input-transport-fee-${site.id}`}
+                                    />
+                                    <button
+                                      className="h-5 w-5 flex items-center justify-center rounded text-green-600 hover:bg-green-50 disabled:opacity-40"
+                                      disabled={editingTransportFee.saving || !editingTransportFee.value}
+                                      onClick={() => handleSaveTransportFee(site.id, Number(editingTransportFee.value), 'dispatched')}
+                                      data-testid={`button-save-transport-fee-${site.id}`}
+                                    >
+                                      {editingTransportFee.saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                    </button>
+                                    <button
+                                      className="h-5 w-5 flex items-center justify-center rounded text-red-500 hover:bg-red-50 disabled:opacity-40"
+                                      disabled={editingTransportFee.saving}
+                                      onClick={() => setEditingTransportFee(null)}
+                                      data-testid={`button-cancel-transport-fee-${site.id}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <span className={`font-medium text-xs ${site.transport_fee == null || site.transport_fee === 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+                                      {site.transport_fee != null ? `${site.transport_fee.toLocaleString()} SDG` : '—'}
+                                    </span>
+                                    <button
+                                      className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                                      onClick={() => setEditingTransportFee({ siteId: site.id, value: String(site.transport_fee ?? ''), saving: false })}
+                                      title="Edit transport fee"
+                                      data-testid={`button-edit-transport-fee-${site.id}`}
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </TableCell>
