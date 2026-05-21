@@ -270,19 +270,23 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
 }
 
 function LocalityGroup({ locality, sites, userNames, advanceMap, onRequestFund, onEditFund }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo>; onRequestFund?: (site: SiteStatusDetail) => void; onEditFund?: (site: SiteStatusDetail, advance: AdvanceInfo) => void }) {
+  const [open, setOpen] = useState(true);
   return (
-    <div className="ml-2" data-testid={`locality-group-${locality}`}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <MapPin className="h-3 w-3 text-muted-foreground" />
-        <span className="text-[11px] font-medium text-muted-foreground">{locality}</span>
+    <Collapsible open={open} onOpenChange={setOpen} className="ml-2" data-testid={`locality-group-${locality}`}>
+      <CollapsibleTrigger className="flex items-center gap-1.5 mb-1 w-full group hover:text-foreground transition-colors">
+        <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+        <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground flex-1 text-left">{locality}</span>
         <span className="text-[10px] text-muted-foreground">({sites.length})</span>
-      </div>
-      <div className="space-y-1 ml-4">
-        {sites.map((site) => (
-          <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-        ))}
-      </div>
-    </div>
+        <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform flex-shrink-0 ${open ? '' : '-rotate-90'}`} />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-1 ml-4">
+          {sites.map((site) => (
+            <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
