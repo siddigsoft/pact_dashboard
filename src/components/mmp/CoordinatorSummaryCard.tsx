@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus, Pencil } from 'lucide-react';
+import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus, Pencil, FileText } from 'lucide-react';
+import MmpStateReport from '@/components/mmp/MmpStateReport';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
@@ -120,6 +121,7 @@ function sortedStatusEntries(counts: Record<string, number>): [string, number][]
 interface CoordinatorSummaryCardProps {
   siteEntries: any[];
   mmpId?: string;
+  mmpName?: string;
 }
 
 const ADVANCE_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -486,11 +488,12 @@ function CoordExpandedContent({
   );
 }
 
-export default function CoordinatorSummaryCard({ siteEntries, mmpId }: CoordinatorSummaryCardProps) {
+export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '' }: CoordinatorSummaryCardProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
   const [actionByNames, setActionByNames] = useState<Record<string, string>>({});
   const [advanceMap, setAdvanceMap] = useState<Record<string, AdvanceInfo>>({});
+  const [reportState, setReportState] = useState<{ stateName: string; rawEntries: any[] } | null>(null);
 
   const { createRequest, editRequest } = useDownPayment();
   const { currentUser } = useUser();
@@ -1062,6 +1065,20 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                     <span className="font-medium text-sm">{stateData.state}</span>
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const stateEntries = siteEntries.filter((en: any) =>
+                          (cleanName(en.state || en.stateName) || 'Unknown State') === stateData.state
+                        );
+                        setReportState({ stateName: stateData.state, rawEntries: stateEntries });
+                      }}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                      title="Generate operational report for this state"
+                    >
+                      <FileText className="h-3 w-3" />
+                      Report
+                    </button>
                     {sortedStatusEntries(stateData.statusCounts).map(([status, count]) => {
                       const cfg = getStatusCfg(status);
                       return (
@@ -1328,6 +1345,20 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── State Operational Report modal ── */}
+      {reportState && (
+        <MmpStateReport
+          open={!!reportState}
+          onClose={() => setReportState(null)}
+          stateName={reportState.stateName}
+          rawEntries={reportState.rawEntries}
+          coordinatorNames={coordinatorNames}
+          advanceMap={advanceMap}
+          mmpId={mmpId || ''}
+          mmpName={mmpName}
+        />
+      )}
     </Card>
   );
 }

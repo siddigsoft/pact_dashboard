@@ -793,7 +793,7 @@ const MMPDetailView = () => {
       )}
 
       {/* Coordinator Summary */}
-      <CoordinatorSummaryCard siteEntries={siteEntries} mmpId={mmpFile?.id} />
+      <CoordinatorSummaryCard siteEntries={siteEntries} mmpId={mmpFile?.id} mmpName={mmpFile?.name || ''} />
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-3">
