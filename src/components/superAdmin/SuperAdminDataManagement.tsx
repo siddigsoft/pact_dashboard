@@ -225,6 +225,32 @@ function StatsCard({ title, value, subtitle, icon: Icon, trend, trendValue, colo
   );
 }
 
+const normalizeStatus = (s: string): string => {
+  const l = (s || '').toLowerCase().replace(/\s+/g, '_');
+  if (['inprogress', 'in_progress', 'inprogress', 'ongoing'].includes(l)) return 'ongoing';
+  if (['wfp_confirmed', 'wfp_confirmed'].includes(l)) return 'wfp_confirmed';
+  if (['not_covered'].includes(l)) return 'not_covered';
+  if (['approved_and_costed'].includes(l)) return 'costed';
+  if (['declined'].includes(l)) return 'rejected';
+  return l;
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  accepted: 'Accepted',
+  assigned: 'Assigned',
+  ongoing: 'Ongoing',
+  completed: 'Completed',
+  submitted: 'Submitted',
+  wfp_confirmed: 'WFP Confirmed',
+  not_covered: 'Not Covered',
+  verified: 'Verified',
+  rejected: 'Rejected',
+  costed: 'Costed',
+  returned_to_fom: 'Returned to FOM',
+  recalled: 'Recalled',
+  forwarded_to_coordinator: 'Forwarded to Coordinator',
+};
+
 export function SuperAdminDataManagement() {
   const { currentUser, users } = useUser();
   const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet, reclaimSite } = useSuperAdmin();
@@ -1276,7 +1302,7 @@ export function SuperAdminDataManagement() {
         site.site_name?.toLowerCase().includes(localSearch) ||
         site.site_code?.toLowerCase().includes(localSearch);
       
-      const matchesStatus = statusFilter === 'all' || site.status?.toLowerCase() === statusFilter.toLowerCase();
+      const matchesStatus = statusFilter === 'all' || normalizeStatus(site.status) === statusFilter;
       const matchesState = stateFilter === 'all' || site.state === stateFilter;
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
@@ -1311,6 +1337,11 @@ export function SuperAdminDataManagement() {
         .filter(Boolean)
     )].sort();
 
+    // Dynamic status options — built from actual data so nothing is ever missing
+    const statusOptions = [...new Set(
+      claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
+    )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
+
     // Unique MMPs across all claimed sites — resolve name via mmpById, deduplicate by name
     const mmpOptions = [...new Map(
       claimedSites
@@ -1322,7 +1353,7 @@ export function SuperAdminDataManagement() {
         .filter((x): x is [string, { id: string; name: string }] => x !== null)
     ).values()].sort((a, b) => a.name.localeCompare(b.name));
 
-    return { states, localities, activities, claimedByUsers, mmpOptions };
+    return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
   }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById]);
 
   const filteredDispatchedSites = useMemo(() => {
@@ -2232,15 +2263,9 @@ export function SuperAdminDataManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="accepted">Accepted</SelectItem>
-                      <SelectItem value="ongoing">Ongoing</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="submitted">Submitted</SelectItem>
-                      <SelectItem value="wfp_confirmed">WFP Confirmed</SelectItem>
-                      <SelectItem value="not_covered">Not Covered</SelectItem>
-                      <SelectItem value="verified">Verified</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="returned_to_fom">Returned to FOM</SelectItem>
+                      {claimedSitesFilterOptions.statusOptions.map(s => (
+                        <SelectItem key={s} value={s}>{STATUS_LABELS[s] || s}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
