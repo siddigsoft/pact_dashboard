@@ -65,6 +65,8 @@ interface StateCoordinatorGroup {
   totalSites: number;
   verifiedSites: number;
   returnedSites: number;
+  inProgressSites: number;
+  pendingSites: number;
   /** Per-status counts for the whole state */
   statusCounts: Record<string, number>;
 }
@@ -592,6 +594,8 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           totalSites: 0,
           verifiedSites: 0,
           returnedSites: 0,
+          inProgressSites: 0,
+          pendingSites: 0,
           statusCounts: {},
         });
       }
@@ -621,6 +625,8 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       
       if (isVerified) stateData.verifiedSites++;
       if (isReturned || isRejected) stateData.returnedSites++;
+      if (isInProgress) stateData.inProgressSites++;
+      if (!isVerified && !isReturned && !isRejected && !isInProgress) stateData.pendingSites++;
 
       const ad = entry.additional_data || entry.additionalData || {};
       const statusCategory: SiteStatusDetail['statusCategory'] = isVerified
@@ -987,20 +993,19 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                   </div>
                 </div>
                 
-                <div className="flex h-1.5 rounded-full overflow-hidden bg-muted mb-3">
-                  {stateData.totalSites > 0 && (
-                    <>
-                      <div 
-                        className="bg-green-500 transition-all" 
-                        style={{ width: `${(stateData.verifiedSites / stateData.totalSites) * 100}%` }} 
-                      />
-                      <div 
-                        className="bg-red-500 transition-all" 
-                        style={{ width: `${(stateData.returnedSites / stateData.totalSites) * 100}%` }} 
-                      />
-                    </>
-                  )}
-                </div>
+                {stateData.totalSites > 0 && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex h-2 rounded-full overflow-hidden bg-muted flex-1">
+                      <div className="bg-green-500 transition-all" style={{ width: `${(stateData.verifiedSites / stateData.totalSites) * 100}%` }} />
+                      <div className="bg-blue-400 transition-all"  style={{ width: `${(stateData.inProgressSites / stateData.totalSites) * 100}%` }} />
+                      <div className="bg-amber-400 transition-all" style={{ width: `${(stateData.pendingSites / stateData.totalSites) * 100}%` }} />
+                      <div className="bg-red-500 transition-all"   style={{ width: `${(stateData.returnedSites / stateData.totalSites) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap font-medium flex-shrink-0">
+                      {Math.round((stateData.verifiedSites / stateData.totalSites) * 100)}% done
+                    </span>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   {stateData.coordinators.map((coord) => {
@@ -1078,15 +1083,39 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                                 );
                               })()}
                             </div>
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">
-                              {coord.sitesAssigned} sites
-                            </span>
-                            <div className="w-12">
-                              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                            <div className="text-right flex-shrink-0">
+                              <div className="text-xs text-muted-foreground whitespace-nowrap">
+                                {coord.sitesVerified > 0
+                                  ? <><span className="text-green-600 dark:text-green-400 font-medium">{coord.sitesVerified} done</span> / {coord.sitesAssigned} sites</>
+                                  : <>{coord.sitesAssigned} sites</>
+                                }
+                              </div>
+                              {(() => {
+                                const lastActivity = coord.siteDetails
+                                  .map(s => s.actionAt)
+                                  .filter(Boolean)
+                                  .sort()
+                                  .at(-1);
+                                if (!lastActivity) return null;
+                                try {
+                                  const d = new Date(lastActivity);
+                                  if (isNaN(d.getTime())) return null;
+                                  const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+                                  const label = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
+                                  const color = diffDays <= 2 ? 'text-green-600 dark:text-green-400' : diffDays <= 7 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500 dark:text-red-400';
+                                  return <div className={`text-[10px] ${color}`}>Last activity: {label}</div>;
+                                } catch { return null; }
+                              })()}
+                            </div>
+                            <div className="w-14 flex-shrink-0">
+                              <div className="flex h-2 rounded-full overflow-hidden bg-muted">
                                 <div className="bg-green-500 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} />
-                                <div className="bg-blue-400 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesInProgress / coord.sitesAssigned) * 100 : 0}%` }} />
+                                <div className="bg-blue-400 transition-all"  style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesInProgress / coord.sitesAssigned) * 100 : 0}%` }} />
                                 <div className="bg-amber-400 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesPending / coord.sitesAssigned) * 100 : 0}%` }} />
-                                <div className="bg-red-500 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} />
+                                <div className="bg-red-500 transition-all"   style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} />
+                              </div>
+                              <div className="text-[9px] text-muted-foreground text-right mt-0.5">
+                                {coord.sitesAssigned > 0 ? Math.round((coord.sitesVerified / coord.sitesAssigned) * 100) : 0}%
                               </div>
                             </div>
                             <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
