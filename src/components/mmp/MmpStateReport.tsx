@@ -487,28 +487,36 @@ export default function MmpStateReport({
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent
-        className="max-w-[98vw] w-[98vw] p-0 gap-0 overflow-hidden"
-        style={{ height: '96vh', maxHeight: '96vh' }}
+        className="p-0 gap-0 overflow-hidden"
+        style={{
+          width: '98vw',
+          maxWidth: '98vw',
+          height: '96vh',
+          maxHeight: '96vh',
+        }}
       >
-        {/* Inner flex wrapper — DialogContent uses display:grid which fights flex-1/min-h-0.
-            Wrapping in a plain div gives us a clean flex column that fills the fixed height. */}
-        <div className="flex flex-col w-full overflow-hidden" style={{ height: '96vh' }}>
+        {/* Inner flex wrapper — DialogContent base uses display:grid; an inner div
+            with explicit flex styles avoids the flex-1/min-h-0 conflict entirely. */}
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
 
         {/* ── Fixed header ── */}
-        <DialogHeader className="px-6 pt-4 pb-3 border-b flex-shrink-0">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <DialogTitle className="text-base flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-purple-600 shrink-0" />
-                Operational Report — {stateName}
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
+        <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', padding: '10px 20px 10px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            {/* Left: title + meta */}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                <MapPin style={{ height: 14, width: 14, color: '#9333ea', flexShrink: 0 }} />
+                <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Operational Report — {stateName}
+                </span>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {mmpName} · Generated {format(new Date(), 'MMM d, yyyy HH:mm')}
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Right: status badge + export */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              {/* Cycle open / closed badge */}
               {cycleStatus === 'closed' ? (
                 <Badge className="gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-xs px-2 py-0.5 border border-slate-300 dark:border-slate-600">
                   <LockKeyhole className="h-3 w-3" /> Cycle Closed
@@ -531,19 +539,17 @@ export default function MmpStateReport({
                 disabled={loading || exporting}
                 size="sm"
                 variant="outline"
-                className="gap-1.5 text-xs"
+                className="gap-1.5 text-xs whitespace-nowrap"
               >
-                {exporting
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <Download className="h-3.5 w-3.5" />}
+                {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                 Export Excel (6 sheets)
               </Button>
             </div>
           </div>
-        </DialogHeader>
+        </div>
 
         {/* ── Quick-stat bar ── */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 px-6 py-2 bg-muted/30 border-b text-xs flex-shrink-0">
+        <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', padding: '6px 20px', fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '4px 16px', backgroundColor: 'var(--muted)/0.3' }} className="bg-muted/30">
           {[
             { label: 'Total Sites',  value: cycleSummary.totalSites,   cls: 'font-bold text-foreground' },
             { label: 'Verified',     value: cycleSummary.verified,      cls: 'text-green-700 dark:text-green-400' },
@@ -562,7 +568,7 @@ export default function MmpStateReport({
         </div>
 
         {/* ── Tab bar ── */}
-        <div className="flex items-end border-b flex-shrink-0 overflow-x-auto px-4">
+        <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto', display: 'flex', alignItems: 'flex-end', paddingLeft: 16, paddingRight: 16 }}>
           {TABS.map(({ value, icon: Icon }) => (
             <button
               key={value}
@@ -585,7 +591,7 @@ export default function MmpStateReport({
         </div>
 
         {/* ── Scrollable tab content ── */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
 
           {/* Summary */}
           {activeTab === 'summary' && (
