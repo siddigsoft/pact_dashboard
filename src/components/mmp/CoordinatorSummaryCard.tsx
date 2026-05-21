@@ -669,6 +669,28 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       }
     });
 
+    // When a state has exactly 1 real coordinator + an unassigned group,
+    // fold the unassigned sites into that coordinator's row.
+    stateMap.forEach((stateData) => {
+      const directIdx = stateData.coordinators.findIndex(c => c.id === '__direct__');
+      if (directIdx === -1) return;
+      const realCoords = stateData.coordinators.filter(c => c.id !== '__direct__');
+      if (realCoords.length === 1) {
+        const direct = stateData.coordinators[directIdx];
+        const coord = realCoords[0];
+        coord.sitesAssigned   += direct.sitesAssigned;
+        coord.sitesVerified   += direct.sitesVerified;
+        coord.sitesReturned   += direct.sitesReturned;
+        coord.sitesInProgress += direct.sitesInProgress;
+        coord.sitesPending    += direct.sitesPending;
+        Object.entries(direct.statusCounts).forEach(([s, n]) => {
+          coord.statusCounts[s] = (coord.statusCounts[s] ?? 0) + n;
+        });
+        coord.siteDetails.push(...direct.siteDetails);
+        stateData.coordinators.splice(directIdx, 1);
+      }
+    });
+
     return Array.from(stateMap.values())
       .sort((a, b) => a.state.localeCompare(b.state));
   }, [siteEntries, coordinatorNames]);
