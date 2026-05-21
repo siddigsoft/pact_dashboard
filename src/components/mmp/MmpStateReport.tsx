@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Download, MapPin, Users, User, Clock, CheckCircle2,
   XCircle, FileText, Activity, ShieldAlert, BarChart3, Loader2,
-  LockKeyhole, Unlock,
+  LockKeyhole, Unlock, ChevronDown,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,6 +58,7 @@ const cleanName = (raw: any): string => {
   if (!raw) return '';
   return String(raw).trim().replace(/^["']|["']$/g, '').trim();
 };
+
 const nextStep = (status: string): string => {
   const s = status.toLowerCase();
   if (['verified', 'approved', 'approved and costed', 'completed', 'wfp_confirmed'].includes(s)) return 'Complete ✓';
@@ -123,6 +124,7 @@ export default function MmpStateReport({
   const [cycleStatus, setCycleStatus]       = useState<string>('active');
   const [exporting, setExporting]           = useState(false);
   const [activeTab, setActiveTab]           = useState('summary');
+  const [expandedCollector, setExpandedCollector] = useState<string | null>(null);
 
   // ── Fetch supplementary data when modal opens ──────────────────────────────
   useEffect(() => {
@@ -270,12 +272,17 @@ export default function MmpStateReport({
         try { return new Date(ts) > new Date(latest) ? ts : latest; } catch { return latest; }
       }, timestamps[0] || '');
 
-      // Resolve data collector name: UUID → userMap → coordinatorNames → direct text → '—'
+      // Resolve data collector name: UUID → userMap → coordinatorNames → direct text → UUID prefix
+      // NOTE: never fall back to '—' when there's a known collectorId — that would cause the
+      // collector to be silently skipped in the Data Collectors tab grouping logic.
+      const resolvedFromUuid = collectorId
+        ? (userMap[collectorId] || coordinatorNames[collectorId])
+        : '';
       const collectorName =
-        (collectorId ? (userMap[collectorId] || coordinatorNames[collectorId]) : '') ||
+        resolvedFromUuid ||
         collectorDirect ||
         cleanName(ad.collector_name || e.collectorName) ||
-        '—';
+        (collectorId ? `Collector #${collectorId.substring(0, 8)}` : '—');
 
       return {
         id: e.id || '',
@@ -732,35 +739,96 @@ export default function MmpStateReport({
                   <User className="h-8 w-8" />
                   <p className="text-sm">No data collector activity recorded for this state.</p>
                   <p className="text-xs text-center max-w-sm">
-                    Collectors are linked via the "accepted by" or "claimed by" fields on each site entry.
-                    Sites must be accepted/claimed by a collector for them to appear here.
+                    Collectors appear here once a site is accepted/claimed by them.
+                    Sites still in dispatched or pending status have no collector yet.
                   </p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {['Data Collector / Enumerator','Claimed Sites','Completed','In Progress','First Claim','Last Activity','Advances Req.','Adv. Approved','Total Requested (SDG)'].map(h => (
-                        <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {collectorRows.map(col => (
-                      <TableRow key={col.name}>
-                        <TableCell className="font-medium text-sm">{col.name}</TableCell>
-                        <TableCell className="text-center">{col.claimedSites}</TableCell>
-                        <TableCell className="text-center text-green-700">{col.completedSites}</TableCell>
-                        <TableCell className="text-center text-blue-700">{col.inProgressSites}</TableCell>
-                        <TableCell className="text-xs">{col.firstClaimAt}</TableCell>
-                        <TableCell className="text-xs">{col.lastActivityAt}</TableCell>
-                        <TableCell className="text-center">{col.advancesRequested}</TableCell>
-                        <TableCell className="text-center">{col.advancesApproved}</TableCell>
-                        <TableCell className="text-right">{col.totalAmountRequested.toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="space-y-1">
+                  {/* Header row */}
+                  <div className="grid text-[11px] font-semibold text-muted-foreground border-b pb-1 mb-1"
+                    style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
+                    <span className="pl-7">Data Collector / Enumerator</span>
+                    <span className="text-center">Claimed</span>
+                    <span className="text-center text-green-700">Completed</span>
+                    <span className="text-center text-blue-700">In Progress</span>
+                    <span>First Claim</span>
+                    <span>Last Activity</span>
+                    <span className="text-center">Adv. Req.</span>
+                    <span className="text-center">Adv. Appr.</span>
+                    <span className="text-right">Total (SDG)</span>
+                    <span />
+                  </div>
+
+                  {collectorRows.map(col => {
+                    const isExpanded = expandedCollector === col.name;
+                    const collectorSites = sites.filter(s => s.dataCollectorName === col.name);
+                    return (
+                      <div key={col.name} className="rounded-lg border border-border/50 overflow-hidden">
+                        {/* Summary row — click to expand */}
+                        <button
+                          onClick={() => setExpandedCollector(isExpanded ? null : col.name)}
+                          className="w-full text-left hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="grid items-center py-2 px-2 text-sm"
+                            style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
+                            <div className="flex items-center gap-1.5 font-medium min-w-0">
+                              <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                              <span className="truncate">{col.name}</span>
+                            </div>
+                            <span className="text-center text-sm">{col.claimedSites}</span>
+                            <span className={`text-center text-sm font-medium ${col.completedSites > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>{col.completedSites}</span>
+                            <span className={`text-center text-sm ${col.inProgressSites > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>{col.inProgressSites}</span>
+                            <span className="text-xs text-muted-foreground">{col.firstClaimAt}</span>
+                            <span className="text-xs text-muted-foreground">{col.lastActivityAt}</span>
+                            <span className="text-center text-sm">{col.advancesRequested}</span>
+                            <span className="text-center text-sm">{col.advancesApproved}</span>
+                            <span className="text-right text-sm">{col.totalAmountRequested > 0 ? col.totalAmountRequested.toLocaleString() : '—'}</span>
+                            <span />
+                          </div>
+                        </button>
+
+                        {/* Expanded site list */}
+                        {isExpanded && (
+                          <div className="border-t bg-muted/20 px-3 py-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                              Site Details — {col.claimedSites} site{col.claimedSites !== 1 ? 's' : ''}
+                            </p>
+                            <div className="space-y-1">
+                              {collectorSites
+                                .sort((a, b) => a.siteName.localeCompare(b.siteName))
+                                .map(site => (
+                                  <div key={site.id}
+                                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${STATUS_ROW[site.statusCategory] || 'bg-background'} border border-border/30`}>
+                                    <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${STATUS_BADGE[site.statusCategory] || ''}`}>
+                                      {site.status.replace(/_/g, ' ')}
+                                    </Badge>
+                                    <span className="font-medium min-w-0 truncate flex-1">{site.siteName}</span>
+                                    {site.siteCode && <span className="text-muted-foreground shrink-0">({site.siteCode})</span>}
+                                    {site.locality && <span className="text-muted-foreground shrink-0">· {site.locality}</span>}
+                                    {site.dispatchedAt && (
+                                      <span className="text-muted-foreground shrink-0">Dispatched: {fmtShort(site.dispatchedAt)}</span>
+                                    )}
+                                    {site.verifiedAt && (
+                                      <span className="text-green-700 dark:text-green-400 shrink-0">✓ Verified: {fmtShort(site.verifiedAt)}</span>
+                                    )}
+                                    {site.advanceStatus && (
+                                      <Badge className="text-[10px] px-1.5 py-0 shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                        {site.advanceStatus.replace(/_/g, ' ')}
+                                      </Badge>
+                                    )}
+                                    {site.advanceRequested > 0 && (
+                                      <span className="text-muted-foreground shrink-0">{site.advanceRequested.toLocaleString()} SDG</span>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}
