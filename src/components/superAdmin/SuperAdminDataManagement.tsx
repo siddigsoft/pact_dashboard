@@ -1276,7 +1276,7 @@ export function SuperAdminDataManagement() {
         site.site_name?.toLowerCase().includes(localSearch) ||
         site.site_code?.toLowerCase().includes(localSearch);
       
-      const matchesStatus = statusFilter === 'all' || site.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || site.status?.toLowerCase() === statusFilter.toLowerCase();
       const matchesState = stateFilter === 'all' || site.state === stateFilter;
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
