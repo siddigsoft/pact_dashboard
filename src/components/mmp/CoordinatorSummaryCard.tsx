@@ -924,9 +924,21 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                         </Badge>
                       );
                     })}
-                    <Badge variant="outline" className="text-xs ml-1">
-                      {stateData.coordinators.length} coordinator{stateData.coordinators.length !== 1 ? 's' : ''}
-                    </Badge>
+                    {(() => {
+                      const realCoordCount = stateData.coordinators.filter(c => c.id !== '__direct__').length;
+                      const unassignedGroup = stateData.coordinators.find(c => c.id === '__direct__');
+                      return (
+                        <>
+                          <Badge variant="outline" className="text-xs">
+                            {stateData.totalSites} sites total
+                          </Badge>
+                          <Badge variant="outline" className="text-xs ml-1">
+                            {realCoordCount} coordinator{realCoordCount !== 1 ? 's' : ''}
+                            {unassignedGroup ? ` · ${unassignedGroup.sitesAssigned} unassigned` : ''}
+                          </Badge>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 
@@ -961,8 +973,15 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                       <CollapsibleTrigger className="w-full rounded-md bg-muted/50 text-sm hover-elevate">
                         <div className="flex items-center justify-between gap-2 p-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center flex-shrink-0">
-                              <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              coord.id === '__direct__'
+                                ? 'bg-amber-100 dark:bg-amber-900/40'
+                                : 'bg-purple-200 dark:bg-purple-800'
+                            }`}>
+                              {coord.id === '__direct__'
+                                ? <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                : <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                              }
                             </div>
                             <div className="min-w-0 text-left">
                               <p className="font-medium truncate">
