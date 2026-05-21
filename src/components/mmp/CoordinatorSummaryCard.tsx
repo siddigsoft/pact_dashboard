@@ -320,6 +320,75 @@ function StatusCategorySection({
   );
 }
 
+function CoordExpandedContent({
+  coord,
+  coordinatorNames,
+  userNames,
+  advanceMap,
+  onRequestFund,
+  onEditFund,
+}: {
+  coord: CoordinatorInfo;
+  coordinatorNames: Record<string, string>;
+  userNames: Record<string, string>;
+  advanceMap: Record<string, AdvanceInfo>;
+  onRequestFund?: (site: SiteStatusDetail) => void;
+  onEditFund?: (site: SiteStatusDetail, advance: AdvanceInfo) => void;
+}) {
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const filteredDetails = statusFilter === 'all'
+    ? coord.siteDetails
+    : coord.siteDetails.filter(s => s.status === statusFilter);
+
+  const verifiedSites   = filteredDetails.filter(s => s.statusCategory === 'verified');
+  const returnedSites   = filteredDetails.filter(s => s.statusCategory === 'returned');
+  const rejectedSites   = filteredDetails.filter(s => s.statusCategory === 'rejected');
+  const inProgressSites = filteredDetails.filter(s => s.statusCategory === 'in_progress');
+  const pendingSites    = filteredDetails.filter(s => s.statusCategory === 'pending');
+
+  return (
+    <div className="px-2 pb-2 mt-2 space-y-3">
+      {/* ── Status filter pills ── */}
+      <div className="flex flex-wrap gap-1.5 border-b pb-2">
+        <button
+          onClick={() => setStatusFilter('all')}
+          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+            statusFilter === 'all'
+              ? 'bg-foreground text-background border-foreground'
+              : 'border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground'
+          }`}
+        >
+          All ({coord.sitesAssigned})
+        </button>
+        {sortedStatusEntries(coord.statusCounts).map(([status, count]) => {
+          const cfg = getStatusCfg(status);
+          const isActive = statusFilter === status;
+          return (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(isActive ? 'all' : status)}
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+                isActive
+                  ? `${cfg.color} border-transparent`
+                  : `border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground`
+              }`}
+            >
+              {count} {cfg.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* ── Filtered sections ── */}
+      <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+      <StatusCategorySection category="pending"     sites={pendingSites}    userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+      <StatusCategorySection category="verified"    sites={verifiedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+      <StatusCategorySection category="returned"    sites={returnedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+      <StatusCategorySection category="rejected"    sites={rejectedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+    </div>
+  );
+}
+
 export default function CoordinatorSummaryCard({ siteEntries, mmpId }: CoordinatorSummaryCardProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
@@ -961,13 +1030,14 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                         </div>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="px-2 pb-2 space-y-3 mt-2">
-                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
-                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
-                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
-                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
-                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
-                        </div>
+                        <CoordExpandedContent
+                          coord={coord}
+                          coordinatorNames={coordinatorNames}
+                          userNames={actionByNames}
+                          advanceMap={advanceMap}
+                          onRequestFund={handleOpenRequestFund}
+                          onEditFund={handleOpenEditFund}
+                        />
                       </CollapsibleContent>
                     </Collapsible>
                     );
