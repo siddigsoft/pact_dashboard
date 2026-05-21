@@ -795,31 +795,6 @@ export default function MmpStateReport({
                     <span />
                   </div>
 
-                  {/* Totals footer */}
-                  {(() => {
-                    const totClaimed   = collectorRows.reduce((s, c) => s + c.claimedSites,          0);
-                    const totCompleted = collectorRows.reduce((s, c) => s + c.completedSites,         0);
-                    const totProgress  = collectorRows.reduce((s, c) => s + c.inProgressSites,        0);
-                    const totAdvReq    = collectorRows.reduce((s, c) => s + c.advancesRequested,       0);
-                    const totAdvAppr   = collectorRows.reduce((s, c) => s + c.advancesApproved,        0);
-                    const totSDG       = collectorRows.reduce((s, c) => s + (c.totalAmountRequested || 0), 0);
-                    return (
-                      <div className="grid items-center py-2 px-2 text-sm font-bold bg-muted/60 border border-border rounded-lg mt-1"
-                        style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
-                        <span className="pl-6 text-foreground">Total ({collectorRows.length} collectors)</span>
-                        <span className="text-center">{totClaimed}</span>
-                        <span className={`text-center ${totCompleted > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>{totCompleted}</span>
-                        <span className={`text-center ${totProgress > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>{totProgress}</span>
-                        <span className="text-xs text-muted-foreground">—</span>
-                        <span className="text-xs text-muted-foreground">—</span>
-                        <span className="text-center">{totAdvReq}</span>
-                        <span className="text-center">{totAdvAppr}</span>
-                        <span className="text-right">{totSDG > 0 ? totSDG.toLocaleString() : '—'}</span>
-                        <span />
-                      </div>
-                    );
-                  })()}
-
                   {collectorRows.map(col => {
                     const isExpanded = expandedCollector === col.name;
                     const collectorSites = sites.filter(s => s.dataCollectorName === col.name);
@@ -888,6 +863,31 @@ export default function MmpStateReport({
                       </div>
                     );
                   })}
+
+                  {/* Totals footer — below all collectors */}
+                  {(() => {
+                    const totClaimed   = collectorRows.reduce((s, c) => s + c.claimedSites,          0);
+                    const totCompleted = collectorRows.reduce((s, c) => s + c.completedSites,         0);
+                    const totProgress  = collectorRows.reduce((s, c) => s + c.inProgressSites,        0);
+                    const totAdvReq    = collectorRows.reduce((s, c) => s + c.advancesRequested,       0);
+                    const totAdvAppr   = collectorRows.reduce((s, c) => s + c.advancesApproved,        0);
+                    const totSDG       = collectorRows.reduce((s, c) => s + (c.totalAmountRequested || 0), 0);
+                    return (
+                      <div className="grid items-center py-2 px-2 text-sm font-bold bg-muted/60 border border-border rounded-lg mt-2"
+                        style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
+                        <span className="pl-6 text-foreground">Total ({collectorRows.length} collectors)</span>
+                        <span className="text-center">{totClaimed}</span>
+                        <span className={`text-center ${totCompleted > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>{totCompleted}</span>
+                        <span className={`text-center ${totProgress > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>{totProgress}</span>
+                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-center">{totAdvReq}</span>
+                        <span className="text-center">{totAdvAppr}</span>
+                        <span className="text-right">{totSDG > 0 ? totSDG.toLocaleString() : '—'}</span>
+                        <span />
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
