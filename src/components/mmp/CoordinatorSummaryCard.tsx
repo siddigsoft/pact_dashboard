@@ -1212,15 +1212,15 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                         <div className="flex items-center justify-between gap-2 p-2">
                           <div className="flex items-center gap-2 min-w-0">
                             {coord.id === '__direct__' ? (
-                              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100 dark:bg-amber-900/40">
-                                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100 dark:bg-amber-900/40">
+                                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                               </div>
                             ) : (
-                              <Avatar className="h-8 w-8 shrink-0 ring-2 ring-purple-200 dark:ring-purple-800">
+                              <Avatar className="h-12 w-12 shrink-0 ring-2 ring-purple-300 dark:ring-purple-700">
                                 {coordAvatarMap[coord.id] && (
                                   <AvatarImage src={coordAvatarMap[coord.id]} alt={coordinatorNames[coord.id] || coord.name} className="object-cover" />
                                 )}
-                                <AvatarFallback className="text-xs font-bold bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300">
+                                <AvatarFallback className="text-sm font-bold bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300">
                                   {(coordinatorNames[coord.id] || coord.name).split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
                                 </AvatarFallback>
                               </Avatar>
