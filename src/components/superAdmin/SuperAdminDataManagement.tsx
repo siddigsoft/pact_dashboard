@@ -1279,7 +1279,7 @@ export function SuperAdminDataManagement() {
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
-      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_id === claimedMmpFilter;
+      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_name === claimedMmpFilter;
       
       const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
       return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
@@ -1309,11 +1309,11 @@ export function SuperAdminDataManagement() {
         .filter(Boolean)
     )].sort();
 
-    // Unique MMPs across all claimed sites (not cascaded — always show all available MMPs)
+    // Unique MMPs across all claimed sites — deduplicated by NAME so duplicate DB records collapse
     const mmpOptions = [...new Map(
       claimedSites
-        .filter(s => s.mmp_id && s.mmp_name)
-        .map(s => [s.mmp_id!, { id: s.mmp_id!, name: s.mmp_name! }])
+        .filter(s => s.mmp_name)
+        .map(s => [s.mmp_name!, { id: s.mmp_name!, name: s.mmp_name! }])
     ).values()].sort((a, b) => a.name.localeCompare(b.name));
 
     return { states, localities, activities, claimedByUsers, mmpOptions };
@@ -2144,7 +2144,7 @@ export function SuperAdminDataManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All MMPs</SelectItem>
-                      {mmps.map(m => (
+                      {claimedSitesFilterOptions.mmpOptions.map(m => (
                         <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                       ))}
                     </SelectContent>
