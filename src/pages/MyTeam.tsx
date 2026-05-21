@@ -5,10 +5,10 @@ import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Users, ClipboardList, Calendar, AlertTriangle, Search, ExternalLink } from 'lucide-react';
+import { Loader2, Users, ClipboardList, Calendar, AlertTriangle, ExternalLink } from 'lucide-react';
 import { format, parseISO, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -157,16 +157,13 @@ export default function MyTeam() {
             <TabsTrigger value="all" data-testid="tab-all">All ({members.length})</TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="relative ml-auto">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            data-testid="input-search-team"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, role, department…"
-            className="pl-8 w-64"
-          />
-        </div>
+        <SearchInput
+          wrapperClassName="ml-auto w-64"
+          data-testid="input-search-team"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name, role, department…"
+        />
       </div>
 
       {loading ? (

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IconInput } from "@/components/ui/icon-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -377,16 +378,15 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
 
                       <div>
                         <Label>Expense Date *</Label>
-                        <div className="relative mt-1">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            type="date"
-                            className={`pl-10 ${itemErrors[item.id]?.expenseDate ? 'border-destructive' : ''}`}
-                            value={item.expenseDate}
-                            onChange={(e) => { updateLineItem(item.id, 'expenseDate', e.target.value); setItemErrors(prev => { const next = { ...prev }; if (next[item.id]) { const { expenseDate, ...rest } = next[item.id]; next[item.id] = rest; } return next; }); }}
-                            data-testid={`input-date-${index}`}
-                          />
-                        </div>
+                        <IconInput
+                          wrapperClassName="mt-1"
+                          type="date"
+                          leftIcon={<Calendar />}
+                          className={itemErrors[item.id]?.expenseDate ? 'border-destructive' : ''}
+                          value={item.expenseDate}
+                          onChange={(e) => { updateLineItem(item.id, 'expenseDate', e.target.value); setItemErrors(prev => { const next = { ...prev }; if (next[item.id]) { const { expenseDate, ...rest } = next[item.id]; next[item.id] = rest; } return next; }); }}
+                          data-testid={`input-date-${index}`}
+                        />
                         {itemErrors[item.id]?.expenseDate && <p className="text-xs text-destructive mt-1">{itemErrors[item.id].expenseDate}</p>}
                       </div>
                     </div>
@@ -394,19 +394,18 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label>Amount (SDG) *</Label>
-                        <div className="relative mt-1">
-                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            type="number"
-                            min="0"
-                            step="100"
-                            className={`pl-10 ${itemErrors[item.id]?.amountCents ? 'border-destructive' : ''}`}
-                            placeholder="Enter amount in SDG"
-                            value={item.amountCents > 0 ? item.amountCents / 100 : ""}
-                            onChange={(e) => { updateLineItem(item.id, 'amountCents', Math.round(parseFloat(e.target.value || "0") * 100)); setItemErrors(prev => { const next = { ...prev }; if (next[item.id]) { const { amountCents, ...rest } = next[item.id]; next[item.id] = rest; } return next; }); }}
-                            data-testid={`input-amount-${index}`}
-                          />
-                        </div>
+                        <IconInput
+                          wrapperClassName="mt-1"
+                          type="number"
+                          min="0"
+                          step="100"
+                          leftIcon={<DollarSign />}
+                          className={itemErrors[item.id]?.amountCents ? 'border-destructive' : ''}
+                          placeholder="Enter amount in SDG"
+                          value={item.amountCents > 0 ? item.amountCents / 100 : ""}
+                          onChange={(e) => { updateLineItem(item.id, 'amountCents', Math.round(parseFloat(e.target.value || "0") * 100)); setItemErrors(prev => { const next = { ...prev }; if (next[item.id]) { const { amountCents, ...rest } = next[item.id]; next[item.id] = rest; } return next; }); }}
+                          data-testid={`input-amount-${index}`}
+                        />
                         {itemErrors[item.id]?.amountCents && <p className="text-xs text-destructive mt-1">{itemErrors[item.id].amountCents}</p>}
                         {!itemErrors[item.id]?.amountCents && item.amountCents > 0 && (
                           <p className="text-xs text-primary font-medium mt-1">
@@ -417,32 +416,28 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
 
                       <div>
                         <Label>Vendor / Supplier</Label>
-                        <div className="relative mt-1">
-                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            className="pl-10"
-                            placeholder="Vendor name (optional)"
-                            value={item.vendor}
-                            onChange={(e) => updateLineItem(item.id, 'vendor', e.target.value)}
-                            data-testid={`input-vendor-${index}`}
-                          />
-                        </div>
+                        <IconInput
+                          wrapperClassName="mt-1"
+                          leftIcon={<Building2 />}
+                          placeholder="Vendor name (optional)"
+                          value={item.vendor}
+                          onChange={(e) => updateLineItem(item.id, 'vendor', e.target.value)}
+                          data-testid={`input-vendor-${index}`}
+                        />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label>Invoice / Receipt Number</Label>
-                        <div className="relative mt-1">
-                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            className="pl-10"
-                            placeholder="Reference number (optional)"
-                            value={item.referenceNumber}
-                            onChange={(e) => updateLineItem(item.id, 'referenceNumber', e.target.value)}
-                            data-testid={`input-reference-${index}`}
-                          />
-                        </div>
+                        <IconInput
+                          wrapperClassName="mt-1"
+                          leftIcon={<FileText />}
+                          placeholder="Reference number (optional)"
+                          value={item.referenceNumber}
+                          onChange={(e) => updateLineItem(item.id, 'referenceNumber', e.target.value)}
+                          data-testid={`input-reference-${index}`}
+                        />
                       </div>
                     </div>
 

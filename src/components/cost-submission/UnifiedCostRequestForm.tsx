@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IconInput } from "@/components/ui/icon-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -850,16 +851,14 @@ export default function UnifiedCostRequestForm({
               <Label className="text-sm font-medium mb-1.5 block">
                 Request Date <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="date"
-                  className={cn("pl-9", !requestDate && "border-destructive/50")}
-                  value={requestDate}
-                  onChange={(e) => setRequestDate(e.target.value)}
-                  data-testid="input-request-date"
-                />
-              </div>
+              <IconInput
+                type="date"
+                leftIcon={<Calendar />}
+                className={cn(!requestDate && "border-destructive/50")}
+                value={requestDate}
+                onChange={(e) => setRequestDate(e.target.value)}
+                data-testid="input-request-date"
+              />
             </div>
           </div>
 
@@ -918,16 +917,14 @@ export default function UnifiedCostRequestForm({
             <Label className="text-sm font-medium mb-1.5 block">
               Request Title <span className="text-destructive">*</span>
             </Label>
-            <div className="relative">
-              <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="e.g. March Field Operations - Khartoum Hub"
-                className={cn("pl-9", !requestTitle && "border-destructive/50")}
-                value={requestTitle}
-                onChange={(e) => setRequestTitle(e.target.value)}
-                data-testid="input-request-title"
-              />
-            </div>
+            <IconInput
+              leftIcon={<FileText />}
+              placeholder="e.g. March Field Operations - Khartoum Hub"
+              className={cn(!requestTitle && "border-destructive/50")}
+              value={requestTitle}
+              onChange={(e) => setRequestTitle(e.target.value)}
+              data-testid="input-request-title"
+            />
             <p className="text-xs text-muted-foreground mt-1">A brief title describing this payment request</p>
           </div>
 
@@ -1102,17 +1099,16 @@ export default function UnifiedCostRequestForm({
 
                         <div>
                           <Label className="text-sm font-medium">Unit Cost <span className="text-destructive">*</span></Label>
-                          <div className="relative mt-1">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              type="number"
-                              placeholder="0"
-                              className={cn("pl-9", itemErrors[item.id]?.unitCost && "border-destructive")}
-                              value={item.unitCost > 0 ? item.unitCost : ''}
-                              onChange={(e) => updateLineItem(item.id, 'unitCost', parseFloat(e.target.value) || 0)}
-                              data-testid={`input-unitcost-${index}`}
-                            />
-                          </div>
+                          <IconInput
+                            wrapperClassName="mt-1"
+                            type="number"
+                            leftIcon={<DollarSign />}
+                            placeholder="0"
+                            className={cn(itemErrors[item.id]?.unitCost && "border-destructive")}
+                            value={item.unitCost > 0 ? item.unitCost : ''}
+                            onChange={(e) => updateLineItem(item.id, 'unitCost', parseFloat(e.target.value) || 0)}
+                            data-testid={`input-unitcost-${index}`}
+                          />
                           {itemErrors[item.id]?.unitCost && (
                             <p className="text-xs text-destructive mt-1">{itemErrors[item.id].unitCost}</p>
                           )}
@@ -1173,29 +1169,25 @@ export default function UnifiedCostRequestForm({
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-sm font-medium">Vendor/Supplier (Optional)</Label>
-                          <div className="relative mt-1">
-                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              placeholder="Vendor name"
-                              className="pl-9"
-                              value={item.vendor}
-                              onChange={(e) => updateLineItem(item.id, 'vendor', e.target.value)}
-                              data-testid={`input-vendor-${index}`}
-                            />
-                          </div>
+                          <IconInput
+                            wrapperClassName="mt-1"
+                            leftIcon={<Building2 />}
+                            placeholder="Vendor name"
+                            value={item.vendor}
+                            onChange={(e) => updateLineItem(item.id, 'vendor', e.target.value)}
+                            data-testid={`input-vendor-${index}`}
+                          />
                         </div>
                         <div>
                           <Label className="text-sm font-medium">Reference # (Optional)</Label>
-                          <div className="relative mt-1">
-                            <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              placeholder="Invoice/Receipt number"
-                              className="pl-9"
-                              value={item.referenceNumber}
-                              onChange={(e) => updateLineItem(item.id, 'referenceNumber', e.target.value)}
-                              data-testid={`input-reference-${index}`}
-                            />
-                          </div>
+                          <IconInput
+                            wrapperClassName="mt-1"
+                            leftIcon={<FileText />}
+                            placeholder="Invoice/Receipt number"
+                            value={item.referenceNumber}
+                            onChange={(e) => updateLineItem(item.id, 'referenceNumber', e.target.value)}
+                            data-testid={`input-reference-${index}`}
+                          />
                         </div>
                       </div>
                     </div>

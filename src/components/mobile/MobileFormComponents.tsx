@@ -1,5 +1,5 @@
 import { forwardRef, useState } from 'react';
-import { Input } from '@/components/ui/input';
+import { IconInput } from '@/components/ui/icon-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -28,31 +28,18 @@ export const MobileInput = forwardRef<HTMLInputElement, MobileInputProps>(
             {label}
           </Label>
         )}
-        <div className="relative">
-          {leftIcon && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              {leftIcon}
-            </div>
+        <IconInput
+          ref={ref}
+          id={inputId}
+          leftIcon={leftIcon}
+          rightIcon={rightIcon}
+          className={cn(
+            'min-h-[48px] text-base py-3 touch-manipulation',
+            error && 'border-destructive focus-visible:ring-destructive',
+            className
           )}
-          <Input
-            ref={ref}
-            id={inputId}
-            className={cn(
-              'min-h-[48px] text-base px-4 py-3',
-              'touch-manipulation',
-              leftIcon && 'pl-10',
-              rightIcon && 'pr-10',
-              error && 'border-destructive focus-visible:ring-destructive',
-              className
-            )}
-            {...props}
-          />
-          {rightIcon && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              {rightIcon}
-            </div>
-          )}
-        </div>
+          {...props}
+        />
         {error && (
           <p className="text-xs text-destructive flex items-center gap-1">
             <AlertCircle className="h-3 w-3" />

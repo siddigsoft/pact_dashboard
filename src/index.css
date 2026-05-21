@@ -1046,6 +1046,48 @@
 }
 
 @layer components {
+  /*
+   * IconInput: WebKit date/time inputs ignore normal padding on the editable segment.
+   * Force inset so values do not sit under the prefix icon.
+   */
+  [data-icon-input][data-has-left-icon] .icon-input-field {
+    padding-inline-start: 2.75rem !important;
+  }
+
+  [data-icon-input][data-has-right-icon] .icon-input-field,
+  [data-icon-input][data-type="date"] .icon-input-field,
+  [data-icon-input][data-type="datetime-local"] .icon-input-field,
+  [data-icon-input][data-type="time"] .icon-input-field {
+    padding-inline-end: 2.75rem !important;
+  }
+
+  [data-icon-input][data-type="date"] .icon-input-field::-webkit-calendar-picker-indicator,
+  [data-icon-input][data-type="datetime-local"] .icon-input-field::-webkit-calendar-picker-indicator,
+  [data-icon-input][data-type="time"] .icon-input-field::-webkit-calendar-picker-indicator {
+    margin-inline-start: auto;
+    cursor: pointer;
+  }
+
+  [data-icon-input][data-type="date"] .icon-input-field::-webkit-datetime-edit-fields-wrapper,
+  [data-icon-input][data-type="datetime-local"] .icon-input-field::-webkit-datetime-edit-fields-wrapper {
+    padding-inline-start: 0;
+  }
+
+  /*
+   * Legacy fields: <div class="relative"><Icon class="absolute …" /><Input class="pl-8" />
+   * tailwind-merge keeps px-4/pl-4 and pl-8/pl-9 together so padding-left often stays 16–32px.
+   * Applies app-wide until each call site uses IconInput / SearchInput.
+   */
+  .relative:not([data-icon-input]) > svg.absolute + input,
+  .relative:not([data-icon-input]) > svg[class*="absolute"] + input {
+    padding-inline-start: 2.75rem !important;
+  }
+
+  .relative:not([data-icon-input]) > svg.absolute + textarea,
+  .relative:not([data-icon-input]) > svg[class*="absolute"] + textarea {
+    padding-inline-start: 2.75rem !important;
+  }
+
   /* Fix for calendar popover transparency issue */
   [data-radix-popper-content-wrapper] {
     z-index: 9999 !important;
