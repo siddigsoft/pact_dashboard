@@ -167,6 +167,7 @@ const PositionsPage = lazy(() => import('./pages/Positions'));
 const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertifications'));
 const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
 const AccountingHub = lazy(() => import('./pages/AccountingHub'));
+const FinanceHub = lazy(() => import('./pages/FinanceHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
 const AccountingJournals = lazy(() => import('./pages/AccountingJournals'));
 const AccountingTrialBalance = lazy(() => import('./pages/AccountingTrialBalance'));
@@ -401,7 +402,7 @@ const AppRoutes = () => {
         <Route path="/call-analytics" element={<CallAnalytics />} />
         <Route path="/field-team" element={<FieldTeam />} />
         <Route path="/finance" element={<Finance />} />
-        <Route path="/financial-operations" element={<FinancialOperations />} />
+        <Route path="/financial-operations" element={<Navigate to="/finance-hub?tab=financial-ops" replace />} />
         <Route path="/data-visibility" element={<DataVisibility />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
@@ -431,20 +432,21 @@ const AppRoutes = () => {
         <Route path="/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
         <Route path="/hr" element={<HRHub />} />
         <Route path="/leave" element={<Navigate to="/hr?tab=leave-requests" replace />} />
-        <Route path="/admin/wallets" element={<AdminWallets />} />
+        <Route path="/finance-hub" element={<FinanceHub />} />
+        <Route path="/admin/wallets" element={<Navigate to="/finance-hub?tab=admin-wallets" replace />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
-        <Route path="/advance-requests-report" element={<AdvanceRequestsReport />} />
+        <Route path="/advance-requests-report" element={<Navigate to="/finance-hub?tab=advance-report" replace />} />
         <Route path="/enumerator-fees-report" element={<EnumeratorFeesReport />} />
-        <Route path="/down-payment-advance-report" element={<Navigate to="/advance-requests-report" replace />} />
-        <Route path="/cost-predictions" element={<CostPredictions />} />
-        <Route path="/exchange-rates" element={<ExchangeRates />} />
+        <Route path="/down-payment-advance-report" element={<Navigate to="/finance-hub?tab=advance-report" replace />} />
+        <Route path="/cost-predictions" element={<Navigate to="/finance-hub?tab=cost-predictions" replace />} />
+        <Route path="/exchange-rates" element={<Navigate to="/finance-hub?tab=exchange-rates" replace />} />
         <Route path="/supervisor-approvals" element={<SupervisorApprovals />} />
         <Route path="/cost-approval" element={<SupervisorApprovals />} />
-        <Route path="/wallet-reports" element={<WalletReports />} />
-        <Route path="/budget" element={<BudgetPage />} />
+        <Route path="/wallet-reports" element={<Navigate to="/finance-hub?tab=wallet-reports" replace />} />
+        <Route path="/budget" element={<Navigate to="/finance-hub?tab=budget" replace />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
         <Route path="/cost-submission/reports" element={<CostSubmissionReports />} />
         <Route path="/questionnaire-analytics" element={<QuestionnaireAnalytics />} />
@@ -507,7 +509,7 @@ const AppRoutes = () => {
         <Route path="/mobile-signatures" element={<MobileSignatureAdmin />} />
         <Route path="/mobile-call-scheduling" element={<MobileCallScheduling />} />
         <Route path="/mobile-document-sync" element={<MobileDocumentSync />} />
-        <Route path="/reconciliation-dashboard" element={<ReconciliationDashboard />} />
+        <Route path="/reconciliation-dashboard" element={<Navigate to="/finance-hub?tab=reconciliation" replace />} />
         <Route path="/safety-hub" element={<SafetyHub />} />
         <Route path="/incident-reports" element={<IncidentReports />} />
         <Route path="/equipment" element={<EquipmentPage />} />
@@ -524,9 +526,9 @@ const AppRoutes = () => {
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
         <Route path="/integrations" element={<IntegrationsSettings />} />
-        <Route path="/subscriptions" element={<PageWrapper><SubscriptionsPage /></PageWrapper>} />
-        <Route path="/salary-retainer-report" element={<PageWrapper><SalaryRetainerReport /></PageWrapper>} />
-        <Route path="/month-end-summary" element={<PageWrapper><MonthEndFinancialSummary /></PageWrapper>} />
+        <Route path="/subscriptions" element={<Navigate to="/finance-hub?tab=subscriptions" replace />} />
+        <Route path="/salary-retainer-report" element={<Navigate to="/finance-hub?tab=salary-retainer" replace />} />
+        <Route path="/month-end-summary" element={<Navigate to="/finance-hub?tab=month-end" replace />} />
         <Route path="/my-team" element={<PageWrapper><MyTeam /></PageWrapper>} />
         <Route path="/performance-reviews" element={<Navigate to="/hr?tab=performance" replace />} />
         <Route path="/salary-increments" element={<Navigate to="/hr?tab=salary-increments" replace />} />
@@ -534,46 +536,46 @@ const AppRoutes = () => {
         <Route path="/training-certifications" element={<Navigate to="/hr?tab=training" replace />} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
-        <Route path="/accounting/coa" element={<SuperAdminRoute><PageWrapper><AccountingCOA /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/journals" element={<SuperAdminRoute><PageWrapper><AccountingJournals /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/trial-balance" element={<SuperAdminRoute><PageWrapper><AccountingTrialBalance /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/ledger" element={<SuperAdminRoute><PageWrapper><AccountingGeneralLedger /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/reports" element={<SuperAdminRoute><PageWrapper><AccountingFinancialStatements /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/bank-recon" element={<SuperAdminRoute><PageWrapper><AccountingBankRecon /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/fiscal-years" element={<SuperAdminRoute><PageWrapper><AccountingFiscalYears /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/funds" element={<SuperAdminRoute><PageWrapper><AccountingFunds /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/settings" element={<SuperAdminRoute><PageWrapper><AccountingSettings /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/budget-variance" element={<SuperAdminRoute><PageWrapper><AccountingBudgetVsActual /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/vendors" element={<SuperAdminRoute><PageWrapper><AccountingVendors /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/finance-dashboard" element={<SuperAdminRoute><PageWrapper><AccountingFinanceDashboard /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/purchase-orders" element={<SuperAdminRoute><PageWrapper><AccountingPurchaseOrders /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/ap-aging" element={<SuperAdminRoute><PageWrapper><AccountingAPAging /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/cash-flow" element={<SuperAdminRoute><PageWrapper><AccountingCashFlow /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/fixed-assets" element={<SuperAdminRoute><PageWrapper><AccountingFixedAssets /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/gl-bridge" element={<SuperAdminRoute><PageWrapper><AccountingGLBridge /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/purchase-requisitions" element={<SuperAdminRoute><PageWrapper><AccountingPurchaseRequisitions /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/grn" element={<SuperAdminRoute><PageWrapper><AccountingGRN /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/ap-invoices" element={<SuperAdminRoute><PageWrapper><AccountingAPInvoices /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/cheque-register" element={<SuperAdminRoute><PageWrapper><AccountingChequeRegister /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/period-close" element={<SuperAdminRoute><PageWrapper><AccountingPeriodClose /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/coa" element={<Navigate to="/accounting?tab=coa" replace />} />
+        <Route path="/accounting/journals" element={<Navigate to="/accounting?tab=journals" replace />} />
+        <Route path="/accounting/trial-balance" element={<Navigate to="/accounting?tab=trial-balance" replace />} />
+        <Route path="/accounting/ledger" element={<Navigate to="/accounting?tab=ledger" replace />} />
+        <Route path="/accounting/reports" element={<Navigate to="/accounting?tab=reports" replace />} />
+        <Route path="/accounting/bank-recon" element={<Navigate to="/accounting?tab=bank-recon" replace />} />
+        <Route path="/accounting/fiscal-years" element={<Navigate to="/accounting?tab=fiscal-years" replace />} />
+        <Route path="/accounting/funds" element={<Navigate to="/accounting?tab=funds" replace />} />
+        <Route path="/accounting/settings" element={<Navigate to="/accounting?tab=settings" replace />} />
+        <Route path="/accounting/budget-variance" element={<Navigate to="/accounting?tab=budget-variance" replace />} />
+        <Route path="/accounting/vendors" element={<Navigate to="/accounting?tab=vendors" replace />} />
+        <Route path="/accounting/finance-dashboard" element={<Navigate to="/accounting?tab=finance-dashboard" replace />} />
+        <Route path="/accounting/purchase-orders" element={<Navigate to="/accounting?tab=purchase-orders" replace />} />
+        <Route path="/accounting/ap-aging" element={<Navigate to="/accounting?tab=ap-aging" replace />} />
+        <Route path="/accounting/cash-flow" element={<Navigate to="/accounting?tab=cash-flow" replace />} />
+        <Route path="/accounting/fixed-assets" element={<Navigate to="/accounting?tab=fixed-assets" replace />} />
+        <Route path="/accounting/gl-bridge" element={<Navigate to="/accounting?tab=gl-bridge" replace />} />
+        <Route path="/accounting/purchase-requisitions" element={<Navigate to="/accounting?tab=purchase-requisitions" replace />} />
+        <Route path="/accounting/grn" element={<Navigate to="/accounting?tab=grn" replace />} />
+        <Route path="/accounting/ap-invoices" element={<Navigate to="/accounting?tab=ap-invoices" replace />} />
+        <Route path="/accounting/cheque-register" element={<Navigate to="/accounting?tab=cheque-register" replace />} />
+        <Route path="/accounting/period-close" element={<Navigate to="/accounting?tab=period-close" replace />} />
         <Route path="/coverage-map" element={<PageWrapper><CoverageMap /></PageWrapper>} />
         <Route path="/executive" element={<SuperAdminRoute><PageWrapper><ExecutiveDashboard /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/tax" element={<SuperAdminRoute><PageWrapper><AccountingTaxManagement /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/multi-currency" element={<SuperAdminRoute><PageWrapper><AccountingMultiCurrency /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/budget-encumbrance" element={<SuperAdminRoute><PageWrapper><AccountingBudgetEncumbrance /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/donor-reports" element={<SuperAdminRoute><PageWrapper><AccountingDonorReports /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/sod" element={<SuperAdminRoute><PageWrapper><AccountingSOD /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/cash-flow-forecast" element={<SuperAdminRoute><PageWrapper><AccountingCashFlowForecast /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/grants" element={<SuperAdminRoute><PageWrapper><AccountingGrants /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/cost-allocation" element={<SuperAdminRoute><PageWrapper><AccountingCostAllocation /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/depreciation-run" element={<SuperAdminRoute><PageWrapper><AccountingDepreciationRun /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/consolidation" element={<SuperAdminRoute><PageWrapper><AccountingConsolidation /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/budget-planning" element={<SuperAdminRoute><PageWrapper><AccountingBudgetPlanning /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/search" element={<SuperAdminRoute><PageWrapper><AccountingSearch /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/gl-audit" element={<SuperAdminRoute><PageWrapper><AccountingGLAudit /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/aml" element={<SuperAdminRoute><PageWrapper><AccountingAMLCompliance /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/accounting/intercompany" element={<SuperAdminRoute><PageWrapper><AccountingIntercompany /></PageWrapper></SuperAdminRoute>} />
-        <Route path="/finance/audit-trail" element={<SuperAdminRoute><PageWrapper><FinanceAuditTrail /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/tax" element={<Navigate to="/accounting?tab=tax" replace />} />
+        <Route path="/accounting/multi-currency" element={<Navigate to="/accounting?tab=multi-currency" replace />} />
+        <Route path="/accounting/budget-encumbrance" element={<Navigate to="/accounting?tab=budget-encumbrance" replace />} />
+        <Route path="/accounting/donor-reports" element={<Navigate to="/accounting?tab=donor-reports" replace />} />
+        <Route path="/accounting/sod" element={<Navigate to="/accounting?tab=sod" replace />} />
+        <Route path="/accounting/cash-flow-forecast" element={<Navigate to="/accounting?tab=cash-flow-forecast" replace />} />
+        <Route path="/accounting/grants" element={<Navigate to="/accounting?tab=grants" replace />} />
+        <Route path="/accounting/cost-allocation" element={<Navigate to="/accounting?tab=cost-allocation" replace />} />
+        <Route path="/accounting/depreciation-run" element={<Navigate to="/accounting?tab=depreciation-run" replace />} />
+        <Route path="/accounting/consolidation" element={<Navigate to="/accounting?tab=consolidation" replace />} />
+        <Route path="/accounting/budget-planning" element={<Navigate to="/accounting?tab=budget-planning" replace />} />
+        <Route path="/accounting/search" element={<Navigate to="/accounting?tab=search" replace />} />
+        <Route path="/accounting/gl-audit" element={<Navigate to="/accounting?tab=gl-audit" replace />} />
+        <Route path="/accounting/aml" element={<Navigate to="/accounting?tab=aml" replace />} />
+        <Route path="/accounting/intercompany" element={<Navigate to="/accounting?tab=intercompany" replace />} />
+        <Route path="/finance/audit-trail" element={<Navigate to="/accounting?tab=finance-audit-trail" replace />} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
         <Route path="/my-expenses" element={<PageWrapper><MyExpenses /></PageWrapper>} />

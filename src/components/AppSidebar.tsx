@@ -493,44 +493,12 @@
     }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
-    const finMgmtItems: MenuGroup['items'] = [];
-    if (!isHidden('/budget') && canSeePath('/budget', defaultRole)) {
-      finMgmtItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 1, isPinned: isPinned('/budget') });
+    // ── Finance Hub (replaces Financial Management + Financial Reports) ──────
+    const finHubItems: MenuGroup['items'] = [];
+    if (!isHidden('/finance-hub') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector)) {
+      finHubItems.push({ id: 'finance-hub', title: "Finance Hub", url: "/finance-hub", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') });
     }
-    if (!isHidden('/admin/wallets') && canSeePath('/admin/wallets', defaultRole)) {
-      finMgmtItems.push({ id: 'wallets', title: "Wallets Admin", url: "/admin/wallets", icon: CreditCard, priority: 2, isPinned: isPinned('/admin/wallets') });
-    }
-    if (!isHidden('/financial-operations') && (canSeePath('/financial-operations', defaultRole) || perms.financialOperations)) {
-      finMgmtItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
-    }
-    if (!isHidden('/reconciliation-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
-      finMgmtItems.push({ id: 'reconciliation-dashboard', title: "Reconciliation Dashboard", url: "/reconciliation-dashboard", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/reconciliation-dashboard') });
-    }
-    if (!isHidden('/subscriptions') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      finMgmtItems.push({ id: 'subscriptions', title: "Subscriptions", url: "/subscriptions", icon: CreditCard, priority: 6, isPinned: isPinned('/subscriptions') });
-    }
-    if (finMgmtItems.length) groups.push({ id: 'finance-management', label: "Financial Management", order: 5.3, items: finMgmtItems, parentGroup: 'finance' } as any);
-
-    const finReportItems: MenuGroup['items'] = [];
-    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
-      finReportItems.push({ id: 'wallet-reports', title: "Wallet Reports", url: "/wallet-reports", icon: BarChart3, priority: 1, isPinned: isPinned('/wallet-reports') });
-    }
-    if (!isHidden('/advance-requests-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM)) {
-      finReportItems.push({ id: 'advance-requests-report', title: "Transport Advance Report", url: "/advance-requests-report", icon: BarChart3, priority: 2, isPinned: isPinned('/advance-requests-report') });
-    }
-    if (!isHidden('/cost-predictions') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
-      finReportItems.push({ id: 'cost-predictions', title: "Cost Predictions", url: "/cost-predictions", icon: TrendingUp, priority: 3, isPinned: isPinned('/cost-predictions') });
-    }
-    if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
-      finReportItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 4, isPinned: isPinned('/exchange-rates') });
-    }
-    if (!isHidden('/salary-retainer-report') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      finReportItems.push({ id: 'salary-retainer-report', title: "Salary & Retainer Report", url: "/salary-retainer-report", icon: Users, priority: 5, isPinned: isPinned('/salary-retainer-report') });
-    }
-    if (!isHidden('/month-end-summary') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      finReportItems.push({ id: 'month-end-summary', title: "Month-End Summary", url: "/month-end-summary", icon: CalendarCheck, priority: 6, isPinned: isPinned('/month-end-summary') });
-    }
-    if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
+    if (finHubItems.length) groups.push({ id: 'finance-management', label: "Finance Hub", order: 5.3, items: finHubItems, parentGroup: 'finance' } as any);
 
     // ── Accounting module ────────────────────────────────────────────
     const acctItems: MenuGroup['items'] = [];

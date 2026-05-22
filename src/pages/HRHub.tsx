@@ -54,49 +54,49 @@ type HRTab =
   // legacy aliases kept for backwards-compat URL links
   | 'hr-tools';
 
-interface TabDef { id: HRTab; label: string; icon: React.ElementType; adminOnly: boolean }
+interface TabDef { id: HRTab; label: string; icon: React.ElementType; adminOnly: boolean; description: string }
 interface SectionDef { id: HRSection; label: string; icon: React.ElementType; adminOnly: boolean; tabs: TabDef[] }
 
 const SECTIONS: SectionDef[] = [
   {
     id: 'pay', label: 'Pay & Compensation', icon: Banknote, adminOnly: false,
     tabs: [
-      { id: 'payroll',          label: 'My Payslip',       icon: Banknote,    adminOnly: false },
-      { id: 'payroll-admin',    label: 'Payroll Admin',    icon: Settings2,   adminOnly: true  },
-      { id: 'retainer',         label: 'Retainer',         icon: FileText,    adminOnly: true  },
-      { id: 'eosb',             label: 'EOSB / Gratuity',  icon: ShieldCheck, adminOnly: true  },
-      { id: 'salary-advances',  label: 'Salary Advances',  icon: CreditCard,  adminOnly: true  },
-      { id: 'salary-increments',label: 'Salary Increments',icon: Calculator,  adminOnly: true  },
-      { id: 'field-wallet',     label: 'Field Wallet',     icon: Wallet,      adminOnly: true  },
-      { id: 'payroll-summary',  label: 'Payroll Report',   icon: Download,    adminOnly: true  },
+      { id: 'payroll',           label: 'My Payslip',        icon: Banknote,    adminOnly: false, description: 'View and download your monthly payslip — see gross pay, net pay, deductions, and full payment history for every period.' },
+      { id: 'payroll-admin',     label: 'Payroll Admin',     icon: Settings2,   adminOnly: true,  description: 'Run monthly payroll for all staff, review calculations, approve variances, and export to bank transfer files or print pay summaries.' },
+      { id: 'retainer',          label: 'Retainer',          icon: FileText,    adminOnly: true,  description: 'Manage retainer contracts — set monthly rates, track renewal dates, and generate scheduled retainer payment records.' },
+      { id: 'eosb',              label: 'EOSB / Gratuity',   icon: ShieldCheck, adminOnly: true,  description: 'Calculate end-of-service benefits per Sudan Labour Law (21 days/year for ≤5 yrs, 30 days/year for >5 yrs), with per-staff salary overrides and XLSX export.' },
+      { id: 'salary-advances',   label: 'Salary Advances',   icon: CreditCard,  adminOnly: true,  description: 'Issue salary advances to staff, set recovery schedules across future payslips, and automatically mark advances as fully recovered when cleared.' },
+      { id: 'salary-increments', label: 'Salary Increments', icon: Calculator,  adminOnly: true,  description: 'Review and approve structured salary increment proposals — with justification narratives, effective dates, and a full change audit trail.' },
+      { id: 'field-wallet',      label: 'Field Wallet',      icon: Wallet,      adminOnly: true,  description: 'Manage field wallet allocations for operational staff — issue funds, process top-ups, and reconcile field cash balances against transactions.' },
+      { id: 'payroll-summary',   label: 'Payroll Report',    icon: Download,    adminOnly: true,  description: 'Generate and export consolidated payroll summary reports filtered by department, contract type, or pay period for finance and audit.' },
     ],
   },
   {
     id: 'time-leave', label: 'Time & Leave', icon: Clock, adminOnly: false,
     tabs: [
-      { id: 'timesheet',      label: 'Timesheet',      icon: Clock,       adminOnly: false },
-      { id: 'leave-requests', label: 'Leave Requests', icon: CalendarOff, adminOnly: false },
-      { id: 'leave-calendar', label: 'Leave Calendar', icon: Calendar,    adminOnly: true  },
-      { id: 'attendance',     label: 'Attendance',     icon: Activity,    adminOnly: true  },
+      { id: 'timesheet',      label: 'Timesheet',      icon: Clock,       adminOnly: false, description: 'Log daily work hours, submit timesheets for supervisor approval, and view your approved time records by week or pay period.' },
+      { id: 'leave-requests', label: 'Leave Requests', icon: CalendarOff, adminOnly: false, description: 'Submit leave requests, track approval status through the multi-tier workflow, and check your remaining leave balance by type.' },
+      { id: 'leave-calendar', label: 'Leave Calendar', icon: Calendar,    adminOnly: true,  description: 'Visual team calendar showing all approved leave, planned absences, and overlaps — helping managers plan coverage across the organisation.' },
+      { id: 'attendance',     label: 'Attendance',     icon: Activity,    adminOnly: true,  description: 'Track daily attendance records for all staff, monitor punctuality patterns, and flag unexplained absences for HR follow-up.' },
     ],
   },
   {
     id: 'people', label: 'People & Development', icon: Users, adminOnly: true,
     tabs: [
-      { id: 'performance', label: 'Performance Reviews', icon: TrendingUp,    adminOnly: true  },
-      { id: 'training',    label: 'Training & Certs',    icon: GraduationCap, adminOnly: false },
-      { id: 'contracts',   label: 'Contract Renewals',   icon: FileText,      adminOnly: true  },
-      { id: 'positions',   label: 'Positions & Vacancies',icon: Briefcase,    adminOnly: false },
-      { id: 'onboarding',  label: 'Onboarding',          icon: UserPlus,      adminOnly: true  },
-      { id: 'offboarding', label: 'Offboarding',         icon: LogOut,        adminOnly: true  },
+      { id: 'performance', label: 'Performance Reviews',   icon: TrendingUp,    adminOnly: true,  description: 'Manage staff performance review cycles — set objectives, record mid-year check-ins, and finalise annual ratings with narrative feedback.' },
+      { id: 'training',    label: 'Training & Certs',      icon: GraduationCap, adminOnly: false, description: 'Log training courses completed, track professional certifications and expiry dates, and plan upcoming development activities per staff member.' },
+      { id: 'contracts',   label: 'Contract Renewals',     icon: FileText,      adminOnly: true,  description: 'Track employment contract end dates, flag those approaching expiry, and process renewal offers or issue non-renewal notices in time.' },
+      { id: 'positions',   label: 'Positions & Vacancies', icon: Briefcase,     adminOnly: false, description: 'Manage the approved position register, track open vacancies against the org structure, and link positions to departments and salary grades.' },
+      { id: 'onboarding',  label: 'Onboarding',            icon: UserPlus,      adminOnly: true,  description: 'Manage new-hire onboarding checklists — documentation collection, equipment issue, system access setup, and orientation task sign-off.' },
+      { id: 'offboarding', label: 'Offboarding',           icon: LogOut,        adminOnly: true,  description: 'Process staff departures — run clearance checklists, trigger final pay calculations, confirm equipment returns, and record exit interview notes.' },
     ],
   },
   {
     id: 'analytics', label: 'Analytics & Comms', icon: BarChart2, adminOnly: true,
     tabs: [
-      { id: 'overview',     label: 'HR Overview',  icon: BarChart2,    adminOnly: true },
-      { id: 'hr-analytics', label: 'HR Analytics', icon: TrendingUp,   adminOnly: true },
-      { id: 'wa-broadcast', label: 'HR Broadcast', icon: MessageSquare,adminOnly: true },
+      { id: 'overview',     label: 'HR Overview',  icon: BarChart2,    adminOnly: true, description: 'Aggregate HR dashboard showing live headcount, leave utilisation rates, payroll totals, contract expiry alerts, and key people metrics at a glance.' },
+      { id: 'hr-analytics', label: 'HR Analytics', icon: TrendingUp,   adminOnly: true, description: 'Deep-dive analytics on workforce trends — staff turnover rates, salary distributions, contract type breakdown, and departmental staffing levels over time.' },
+      { id: 'wa-broadcast', label: 'HR Broadcast', icon: MessageSquare,adminOnly: true, description: 'Send targeted WhatsApp broadcasts to staff groups — payslip-ready notifications, policy announcements, and important HR communications at scale.' },
     ],
   },
 ];
@@ -251,8 +251,18 @@ export default function HRHub() {
         </div>
       </div>
 
+      {/* ── Description banner ──────────────────────────────────── */}
+      <div className="border-b" style={{ background: accent + '0d', borderColor: accent + '25' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-start gap-2.5">
+          <span className="mt-0.5 shrink-0 opacity-60 text-base leading-none" style={{ color: accent }}>ⓘ</span>
+          <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">
+            {activeTabDef.description}
+          </p>
+        </div>
+      </div>
+
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="min-h-[calc(100vh-140px)]">
+      <div className="min-h-[calc(100vh-160px)]">
 
         {/* Pay & Compensation */}
         {tab === 'payroll' && <Suspense fallback={<PanelLoader />}><PayrollPanel embedded /></Suspense>}
