@@ -51,6 +51,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
+  try {
+
   // ── Auth: verify user JWT ────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) return json({ ok: false, error: 'Missing auth token' })
@@ -241,4 +243,9 @@ serve(async (req: Request) => {
     phones,
     emails,
   })
+
+  } catch (e) {
+    console.error('[survey-reminder-test] Unhandled error:', e)
+    return json({ ok: false, error: e instanceof Error ? e.message : 'Internal server error' })
+  }
 })

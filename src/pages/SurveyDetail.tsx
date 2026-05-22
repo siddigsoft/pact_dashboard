@@ -591,14 +591,20 @@ export default function SurveyDetail() {
       body: { survey_id: id, test_mode: testMode },
     });
     if (error) {
-      // Supabase wraps non-2xx as a generic FunctionsHttpError — try to extract the real message
-      let msg = 'Edge function error';
+      // Supabase wraps non-2xx as FunctionsHttpError — context is a Response whose body
+      // may already be consumed; use text() then parse manually to extract the real message.
+      let msg = error.message ?? 'Edge function error';
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const body = await (error as any).context?.json?.();
-        if (body?.error) msg = body.error;
-        else if (body?.message) msg = body.message;
-      } catch { msg = error.message ?? msg; }
+        const raw = await (error as any).context?.text?.();
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed?.error) msg = parsed.error;
+            else if (parsed?.message) msg = parsed.message;
+          } catch { msg = raw; }
+        }
+      } catch { /* keep error.message */ }
       throw new Error(msg);
     }
     if (!data?.ok) throw new Error(data?.error ?? (testMode ? 'Test failed' : 'Send failed'));
