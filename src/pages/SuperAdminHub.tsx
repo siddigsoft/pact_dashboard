@@ -158,7 +158,9 @@ const Spinner = () => (
 export default function SuperAdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as SATab | null;
-  const activeTab: SATab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as SATab) : DEFAULT_TAB;
+  const _savedSA = localStorage.getItem('hub_last_tab_super_admin') as SATab | null;
+  const _defaultSA: SATab = (_savedSA && ALL_TABS.find(t => t.id === _savedSA)) ? _savedSA : DEFAULT_TAB;
+  const activeTab: SATab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as SATab) : _defaultSA;
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab)!;
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;

@@ -112,7 +112,9 @@ export default function FinanceHub() {
   const allTabs = SECTIONS.flatMap(s => s.tabs);
   const rawTab = params.get('tab') ?? '';
   const tabDef = allTabs.find(t => t.id === rawTab);
-  const tab: FinTab = tabDef ? (rawTab as FinTab) : 'budget';
+  const _savedFin = localStorage.getItem('hub_last_tab_finance') as FinTab | null;
+  const _defaultFin: FinTab = (_savedFin && allTabs.some(t => t.id === _savedFin)) ? _savedFin : 'budget';
+  const tab: FinTab = tabDef ? (rawTab as FinTab) : _defaultFin;
 
   const setTab = (t: FinTab) => { localStorage.setItem('hub_last_tab_finance', t); setParams({ tab: t }, { replace: true }); };
 

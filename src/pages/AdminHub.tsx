@@ -125,7 +125,9 @@ const Spinner = () => (
 export default function AdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as AdminTab | null;
-  const activeTab: AdminTab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as AdminTab) : DEFAULT_TAB;
+  const _savedAdm = localStorage.getItem('hub_last_tab_admin') as AdminTab | null;
+  const _defaultAdm: AdminTab = (_savedAdm && ALL_TABS.find(t => t.id === _savedAdm)) ? _savedAdm : DEFAULT_TAB;
+  const activeTab: AdminTab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as AdminTab) : _defaultAdm;
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab)!;
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;

@@ -94,7 +94,9 @@ const Spinner = () => (
 export default function AnalyticsHub() {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as ATab | null;
-  const activeTab: ATab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as ATab) : DEFAULT_TAB;
+  const _savedAn = localStorage.getItem('hub_last_tab_analytics') as ATab | null;
+  const _defaultAn: ATab = (_savedAn && ALL_TABS.find(t => t.id === _savedAn)) ? _savedAn : DEFAULT_TAB;
+  const activeTab: ATab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as ATab) : _defaultAn;
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab)!;
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;

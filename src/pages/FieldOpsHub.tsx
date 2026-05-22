@@ -107,7 +107,9 @@ const Spinner = () => (
 export default function FieldOpsHub() {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as FOTab | null;
-  const activeTab: FOTab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as FOTab) : DEFAULT_TAB;
+  const _savedFO = localStorage.getItem('hub_last_tab_field_ops') as FOTab | null;
+  const _defaultFO: FOTab = (_savedFO && ALL_TABS.find(t => t.id === _savedFO)) ? _savedFO : DEFAULT_TAB;
+  const activeTab: FOTab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as FOTab) : _defaultFO;
 
   const activeTabDef = ALL_TABS.find(t => t.id === activeTab)!;
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;

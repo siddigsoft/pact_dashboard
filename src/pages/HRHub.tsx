@@ -138,7 +138,10 @@ export default function HRHub() {
   // Find canonical tab definition across all sections
   const allTabs = SECTIONS.flatMap(s => s.tabs);
   const tabDef = allTabs.find(t => t.id === resolvedTab);
-  const tab: HRTab = tabDef && (!tabDef.adminOnly || isAdmin) ? resolvedTab : defaultTab;
+  const _savedHR = localStorage.getItem('hub_last_tab_hr') as HRTab | null;
+  const _savedHRDef = allTabs.find(t => t.id === _savedHR);
+  const _resolvedDefault: HRTab = (_savedHRDef && (!_savedHRDef.adminOnly || isAdmin)) ? (_savedHR as HRTab) : defaultTab;
+  const tab: HRTab = tabDef && (!tabDef.adminOnly || isAdmin) ? resolvedTab : _resolvedDefault;
 
   const setTab = (t: HRTab) => { localStorage.setItem('hub_last_tab_hr', t); setParams({ tab: t }, { replace: true }); };
 

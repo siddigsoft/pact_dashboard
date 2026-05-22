@@ -269,7 +269,9 @@ export default function AccountingHub() {
   const allTabs = SECTIONS.flatMap(s => s.tabs);
   const rawTab = params.get('tab') ?? '';
   const tabDef = allTabs.find(t => t.id === rawTab);
-  const tab: AcctTab = tabDef ? (rawTab as AcctTab) : 'finance-dashboard';
+  const _savedAcct = localStorage.getItem('hub_last_tab_accounting') as AcctTab | null;
+  const _defaultAcct: AcctTab = (_savedAcct && allTabs.some(t => t.id === _savedAcct)) ? _savedAcct : 'finance-dashboard';
+  const tab: AcctTab = tabDef ? (rawTab as AcctTab) : _defaultAcct;
 
   const setTab = (t: AcctTab) => { localStorage.setItem('hub_last_tab_accounting', t); setParams({ tab: t }, { replace: true }); };
 
