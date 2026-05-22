@@ -576,68 +576,27 @@
 
     // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
     const hrItems: MenuGroup['items'] = [];
-    // 1. Employees â€” admin & super admin only; data shows all except coordinators & data collectors
     const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
     const hrStrictAccess = isSuperAdmin || isAdmin;
+    // 1. Employees — admin & super admin only
     if (!isHidden('/employees') && hrStrictAccess) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
-    // 2. Payroll â€” salary setup, run payroll, payslips, reports (admin only)
+    // 2. HR Hub — full hub with all sections (admin only)
     if (!isHidden('/hr') && hrAdminAccess) {
-      hrItems.push({ id: 'payroll-admin', title: "Payroll", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 2, isPinned: false });
+      hrItems.push({ id: 'hr-hub', title: "HR Hub", url: "/hr", icon: Briefcase, priority: 2, isPinned: isPinned('/hr') });
     }
-    // 3. Retainer Payments â€” admin & super admin only; data shows coordinator-role users only
-    if (!isHidden('/retainer-management') && hrStrictAccess) {
-      hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/retainer-management", icon: CreditCard, priority: 3, isPinned: isPinned('/retainer-management') });
-    }
-    // 4. Leave Requests â€” all staff submit; admins approve
-    if (!isHidden('/leave')) {
-      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 4, isPinned: isPinned('/leave') });
-    }
-    // 5. HR Analytics â€” staff cost projections, org chart, budget vs actual (admin only)
-    if (!isHidden('/hr') && hrAdminAccess) {
-      hrItems.push({ id: 'hr-analytics', title: "HR Analytics", url: "/hr?tab=hr-tools", icon: TrendingUp, priority: 5, isPinned: false });
-    }
-    // 6. Timesheet â€” daily work log for all staff
+    // 3. My Payslip — personal payslip for every staff member
     if (!isHidden('/hr')) {
-      hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 6, isPinned: false });
+      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 3, isPinned: false });
     }
-    // 7. Performance Reviews â€” admin-managed annual/quarterly reviews
-    if (!isHidden('/hr') && hrAdminAccess) {
-      hrItems.push({ id: 'performance-reviews', title: "Performance Reviews", url: "/hr?tab=performance", icon: Activity, priority: 7, isPinned: false });
-    }
-    // 8. Salary Increments â€” merit-based increment management
-    if (!isHidden('/hr') && hrAdminAccess) {
-      hrItems.push({ id: 'salary-increments', title: "Salary Increments", url: "/hr?tab=salary-increments", icon: Award, priority: 8, isPinned: false });
-    }
-    // 9. My Payslip â€” personal payslip for every staff member
+    // 4. Leave Requests — all staff submit; admins approve
     if (!isHidden('/hr')) {
-      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 9, isPinned: isPinned('/hr') });
+      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/hr?tab=leave-requests", icon: CalendarOff, priority: 4, isPinned: false });
     }
-    // 10. Positions / Vacancies â€” visible to everyone, edit-restricted via RLS
-    if (!isHidden('/positions')) {
-      hrItems.push({ id: 'positions', title: "Positions & Vacancies", url: "/positions", icon: Briefcase, priority: 10, isPinned: isPinned('/positions') });
-    }
-    // 11. Training & Certifications â€” every staff sees their own; admins see all
-    if (!isHidden('/training-certifications')) {
-      hrItems.push({ id: 'training-certifications', title: "Training & Certifications", url: "/training-certifications", icon: Award, priority: 11, isPinned: isPinned('/training-certifications') });
-    }
-    // 12. Hierarchy Audit Log â€” admin & super admin only
-    if (!isHidden('/hierarchy-audit') && (isSuperAdmin || isAdmin)) {
-      hrItems.push({ id: 'hierarchy-audit', title: "Hierarchy Audit Log", url: "/hierarchy-audit", icon: ScrollText, priority: 12, isPinned: isPinned('/hierarchy-audit') });
-    }
-    // 13â€“16. HR audit gaps H2-H5 self-service pages
-    if (!isHidden('/my-advances')) {
-      hrItems.push({ id: 'my-advances', title: "My Advances", url: "/my-advances", icon: Wallet, priority: 13, isPinned: isPinned('/my-advances') });
-    }
-    if (!isHidden('/my-expenses')) {
-      hrItems.push({ id: 'my-expenses', title: "My Expenses", url: "/my-expenses", icon: Receipt, priority: 14, isPinned: isPinned('/my-expenses') });
-    }
-    if (!isHidden('/attendance')) {
-      hrItems.push({ id: 'attendance', title: "Attendance", url: "/attendance", icon: Clock, priority: 15, isPinned: isPinned('/attendance') });
-    }
-    if (!isHidden('/offboarding') && (isSuperAdmin || isAdmin || ['hr','hr_manager','financialadmin','financial_admin','finance'].includes(defaultRole.toLowerCase()))) {
-      hrItems.push({ id: 'offboarding', title: "Offboarding", url: "/offboarding", icon: LogOut, priority: 16, isPinned: isPinned('/offboarding') });
+    // 5. Timesheet — daily work log for all staff
+    if (!isHidden('/hr')) {
+      hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 5, isPinned: false });
     }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
@@ -745,9 +704,6 @@
     const helpItems: MenuGroup['items'] = [];
     if (!isHidden('/changelog')) {
       helpItems.push({ id: 'changelog', title: "What's New", url: "/changelog", icon: Sparkles, priority: 0, isPinned: isPinned('/changelog') });
-    }
-    if (!isHidden('/staff-onboarding')) {
-      helpItems.push({ id: 'staff-onboarding', title: "Staff Onboarding", url: "/staff-onboarding", icon: GraduationCap, priority: 0.5, isPinned: isPinned('/staff-onboarding') });
     }
     if (!isHidden('/documentation')) {
       helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });

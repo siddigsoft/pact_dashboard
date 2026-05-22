@@ -1,7 +1,14 @@
 import { Suspense, lazy, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, FileDown, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X, ShieldCheck, CreditCard } from 'lucide-react';
+import {
+  Banknote, FileText, Loader2, Settings2, Calculator, Download,
+  RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown,
+  Search, Users, BarChart2, TableIcon, Filter, Copy, X, ShieldCheck,
+  CreditCard, Clock, CalendarOff, Calendar, Activity, GraduationCap,
+  Briefcase, UserPlus, LogOut, MessageSquare, TrendingUp, Wallet,
+  Plus, Minus, FileDown, GitBranch, ExternalLink, Wrench,
+} from 'lucide-react';
 import EOSBPanel from '@/components/hr/EOSBPanel';
 import SalaryAdvancesPanel from '@/components/hr/SalaryAdvancesPanel';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
@@ -18,47 +25,96 @@ import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, CartesianGrid } from 'recharts';
 import * as XLSX from 'xlsx';
 
-const PayrollPanel      = lazy(() => import('./Payroll'));
-const RetainerPanel     = lazy(() => import('./RetainerManagement'));
-const PayrollAdminPanel = lazy(() => import('./PayrollAdmin'));
-const TimesheetPanel    = lazy(() => import('./Timesheet'));
-const PerformancePanel  = lazy(() => import('./PerformanceReviews'));
-const SalaryIncrPanel   = lazy(() => import('./SalaryIncrements'));
-const TrainingPanel     = lazy(() => import('@/components/hr/TrainingCertifications'));
+const PayrollPanel         = lazy(() => import('./Payroll'));
+const RetainerPanel        = lazy(() => import('./RetainerManagement'));
+const PayrollAdminPanel    = lazy(() => import('./PayrollAdmin'));
+const TimesheetPanel       = lazy(() => import('./Timesheet'));
+const PerformancePanel     = lazy(() => import('./PerformanceReviews'));
+const SalaryIncrPanel      = lazy(() => import('./SalaryIncrements'));
+const TrainingPanel        = lazy(() => import('@/components/hr/TrainingCertifications'));
 const LeaveCalendarPanel   = lazy(() => import('@/components/hr/LeaveCalendar'));
 const ContractRenewalPanel = lazy(() => import('@/components/hr/ContractRenewal'));
 const PayrollReportPanel   = lazy(() => import('@/components/hr/PayrollSummaryReport'));
 const HRAnalyticsPanel     = lazy(() => import('@/components/hr/HRAnalytics'));
 const FieldWalletPanel     = lazy(() => import('@/components/hr/FieldWallet'));
 const HRBroadcastPanel     = lazy(() => import('@/components/hr/HRBroadcast'));
+const LeaveRequestsPanel   = lazy(() => import('./LeaveRequests'));
+const AttendancePanel      = lazy(() => import('./Attendance'));
+const PositionsPanel       = lazy(() => import('./Positions'));
+const OnboardingPanel      = lazy(() => import('./StaffOnboarding'));
+const OffboardingPanel     = lazy(() => import('./Offboarding'));
 
-type HRTab = 'overview' | 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training' | 'eosb' | 'salary-advances' | 'leave-calendar' | 'contracts' | 'payroll-summary' | 'hr-analytics' | 'field-wallet' | 'wa-broadcast';
+// ── Types ─────────────────────────────────────────────────────────────────────
+type HRSection = 'pay' | 'time-leave' | 'people' | 'analytics';
+type HRTab =
+  | 'payroll' | 'payroll-admin' | 'retainer' | 'eosb' | 'salary-advances' | 'salary-increments' | 'field-wallet' | 'payroll-summary'
+  | 'timesheet' | 'leave-requests' | 'leave-calendar' | 'attendance'
+  | 'performance' | 'training' | 'contracts' | 'positions' | 'onboarding' | 'offboarding'
+  | 'overview' | 'hr-analytics' | 'wa-broadcast'
+  // legacy aliases kept for backwards-compat URL links
+  | 'hr-tools';
 
-const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: string; bg: string; adminOnly: boolean }[] = [
-  { id: 'overview',          label: 'HR Overview',         icon: BarChart2,  accent: '#6366f1', bg: 'rgba(99,102,241,0.12)',  adminOnly: true  },
-  { id: 'payroll',           label: 'My Payroll',          icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
-  { id: 'payroll-admin',     label: 'Payroll Admin',        icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
-  { id: 'retainer',          label: 'Retainer',             icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
-  { id: 'timesheet',         label: 'Timesheet',            icon: Wrench,     accent: '#f472b6', bg: 'rgba(244,114,182,0.12)', adminOnly: false },
-  { id: 'training',          label: 'Training & Certs',     icon: BarChart2,  accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: false },
-  { id: 'performance',       label: 'Performance Reviews',  icon: BarChart2,  accent: '#fb923c', bg: 'rgba(251,146,60,0.12)',  adminOnly: true  },
-  { id: 'salary-increments', label: 'Salary Increments',   icon: Calculator, accent: '#4ade80', bg: 'rgba(74,222,128,0.12)',  adminOnly: true  },
-  { id: 'hr-tools',          label: 'HR Analytics',         icon: GitBranch,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
-  { id: 'eosb',              label: 'EOSB / Gratuity',      icon: ShieldCheck, accent: '#0d9488', bg: 'rgba(13,148,136,0.12)', adminOnly: true  },
-  { id: 'salary-advances',   label: 'Salary Advances',      icon: CreditCard, accent: '#e11d48', bg: 'rgba(225,29,72,0.12)',  adminOnly: true  },
-  { id: 'leave-calendar',    label: 'Leave Calendar',       icon: CreditCard, accent: '#3b82f6', bg: 'rgba(59,130,246,0.12)', adminOnly: true  },
-  { id: 'contracts',         label: 'Contract Renewals',    icon: FileText,   accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)', adminOnly: true  },
-  { id: 'payroll-summary',   label: 'Payroll Report',       icon: Download,   accent: '#22c55e', bg: 'rgba(34,197,94,0.12)',  adminOnly: true  },
-  { id: 'hr-analytics',      label: 'HR Analytics',         icon: BarChart2,  accent: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', adminOnly: true  },
-  { id: 'field-wallet',      label: 'Field Wallet',         icon: CreditCard, accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)',adminOnly: true  },
-  { id: 'wa-broadcast',      label: 'HR Broadcast',         icon: ExternalLink, accent: '#10b981', bg: 'rgba(16,185,129,0.12)',adminOnly: true },
+interface TabDef { id: HRTab; label: string; icon: React.ElementType; adminOnly: boolean }
+interface SectionDef { id: HRSection; label: string; icon: React.ElementType; adminOnly: boolean; tabs: TabDef[] }
+
+const SECTIONS: SectionDef[] = [
+  {
+    id: 'pay', label: 'Pay & Compensation', icon: Banknote, adminOnly: false,
+    tabs: [
+      { id: 'payroll',          label: 'My Payslip',       icon: Banknote,    adminOnly: false },
+      { id: 'payroll-admin',    label: 'Payroll Admin',    icon: Settings2,   adminOnly: true  },
+      { id: 'retainer',         label: 'Retainer',         icon: FileText,    adminOnly: true  },
+      { id: 'eosb',             label: 'EOSB / Gratuity',  icon: ShieldCheck, adminOnly: true  },
+      { id: 'salary-advances',  label: 'Salary Advances',  icon: CreditCard,  adminOnly: true  },
+      { id: 'salary-increments',label: 'Salary Increments',icon: Calculator,  adminOnly: true  },
+      { id: 'field-wallet',     label: 'Field Wallet',     icon: Wallet,      adminOnly: true  },
+      { id: 'payroll-summary',  label: 'Payroll Report',   icon: Download,    adminOnly: true  },
+    ],
+  },
+  {
+    id: 'time-leave', label: 'Time & Leave', icon: Clock, adminOnly: false,
+    tabs: [
+      { id: 'timesheet',      label: 'Timesheet',      icon: Clock,       adminOnly: false },
+      { id: 'leave-requests', label: 'Leave Requests', icon: CalendarOff, adminOnly: false },
+      { id: 'leave-calendar', label: 'Leave Calendar', icon: Calendar,    adminOnly: true  },
+      { id: 'attendance',     label: 'Attendance',     icon: Activity,    adminOnly: true  },
+    ],
+  },
+  {
+    id: 'people', label: 'People & Development', icon: Users, adminOnly: true,
+    tabs: [
+      { id: 'performance', label: 'Performance Reviews', icon: TrendingUp,    adminOnly: true  },
+      { id: 'training',    label: 'Training & Certs',    icon: GraduationCap, adminOnly: false },
+      { id: 'contracts',   label: 'Contract Renewals',   icon: FileText,      adminOnly: true  },
+      { id: 'positions',   label: 'Positions & Vacancies',icon: Briefcase,    adminOnly: false },
+      { id: 'onboarding',  label: 'Onboarding',          icon: UserPlus,      adminOnly: true  },
+      { id: 'offboarding', label: 'Offboarding',         icon: LogOut,        adminOnly: true  },
+    ],
+  },
+  {
+    id: 'analytics', label: 'Analytics & Comms', icon: BarChart2, adminOnly: true,
+    tabs: [
+      { id: 'overview',     label: 'HR Overview',  icon: BarChart2,    adminOnly: true },
+      { id: 'hr-analytics', label: 'HR Analytics', icon: TrendingUp,   adminOnly: true },
+      { id: 'wa-broadcast', label: 'HR Broadcast', icon: MessageSquare,adminOnly: true },
+    ],
+  },
 ];
 
-const ADMIN_ROLES = [
-  'super_admin', 'superAdmin', 'SuperAdmin',
-  'admin', 'Admin',
-  'finance', 'Finance',
-];
+// Map legacy tab ids to their canonical replacement
+const LEGACY_TAB_MAP: Partial<Record<string, HRTab>> = {
+  'hr-tools': 'hr-analytics',
+};
+
+// Derive which section a tab belongs to
+function sectionOfTab(tabId: HRTab): HRSection {
+  for (const s of SECTIONS) {
+    if (s.tabs.some(t => t.id === tabId)) return s.id;
+  }
+  return 'pay';
+}
+
+const ADMIN_ROLES = ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'finance', 'Finance'];
 
 function PanelLoader() {
   return (
@@ -72,147 +128,160 @@ function PanelLoader() {
 export default function HRHub() {
   const [params, setParams] = useSearchParams();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-
   const isAdmin = isSuperAdmin() || hasAnyRole(ADMIN_ROLES);
 
-  // Tabs this user can see
-  const visibleTabs = ALL_TABS.filter(t => !t.adminOnly || isAdmin);
-
-  const requestedTab = params.get('tab') as HRTab | null;
+  // Resolve requested tab — handle legacy aliases
+  const rawTab = params.get('tab') ?? '';
+  const resolvedTab = (LEGACY_TAB_MAP[rawTab] ?? rawTab) as HRTab;
   const defaultTab: HRTab = isAdmin ? 'overview' : 'payroll';
-  const tab: HRTab = (() => {
-    const t = requestedTab ?? defaultTab;
-    // If non-admin requests an admin-only tab, fall back to payroll
-    const found = visibleTabs.find(vt => vt.id === t);
-    return found ? t : defaultTab;
-  })();
+
+  // Find canonical tab definition across all sections
+  const allTabs = SECTIONS.flatMap(s => s.tabs);
+  const tabDef = allTabs.find(t => t.id === resolvedTab);
+  const tab: HRTab = tabDef && (!tabDef.adminOnly || isAdmin) ? resolvedTab : defaultTab;
 
   const setTab = (t: HRTab) => setParams({ tab: t }, { replace: true });
 
-  // Redirect if URL has an unauthorised tab
+  // If URL had a legacy/invalid tab, fix it silently
   useEffect(() => {
-    if (requestedTab && tab !== requestedTab) setParams({ tab: defaultTab }, { replace: true });
-  }, [requestedTab, tab]);
+    if (rawTab && tab !== rawTab) setParams({ tab }, { replace: true });
+  }, [rawTab, tab]);
 
-  const activeTab = visibleTabs.find(t => t.id === tab) ?? visibleTabs[0];
+  // Current section derived from active tab
+  const section = sectionOfTab(tab);
+
+  // Visible sections and tabs based on role
+  const visibleSections = SECTIONS.filter(s => !s.adminOnly || isAdmin);
+  const currentSection = visibleSections.find(s => s.id === section) ?? visibleSections[0];
+  const visibleTabsInSection = currentSection.tabs.filter(t => !t.adminOnly || isAdmin);
+
+  const activeSectionFirstTab = (s: SectionDef) =>
+    (s.tabs.find(t => !t.adminOnly || isAdmin))?.id ?? 'payroll';
+
+  const activeTabDef = allTabs.find(t => t.id === tab) ?? allTabs[0];
+
+  // Section accent colours
+  const SECTION_ACCENT: Record<HRSection, string> = {
+    pay:       '#D97706',
+    'time-leave': '#3b82f6',
+    people:    '#8b5cf6',
+    analytics: '#6366f1',
+  };
+  const accent = SECTION_ACCENT[section];
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] dark:bg-[#0d1117]">
 
-      {/* ── Hero Header ───────────────────────────────────────── */}
+      {/* ── Hero Header ─────────────────────────────────────────── */}
       <div
         className="sticky top-0 z-30"
         style={{ background: 'linear-gradient(135deg, #0F2041 0%, #1D3461 60%, #1e4080 100%)' }}
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
-          {/* Connected pages bar */}
           <div className="pt-3 pb-1 opacity-90">
             <ConnectedPagesBar exclude="hr" />
           </div>
 
-          {/* Title row */}
-          <div className="flex items-end justify-between pt-3 pb-1 gap-4">
+          {/* Title + section pills row */}
+          <div className="flex items-center justify-between pt-3 pb-2 gap-4 flex-wrap">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: activeTab.bg }}>
-                <activeTab.icon className="h-5 w-5" style={{ color: activeTab.accent }} />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: accent + '22' }}>
+                <activeTabDef.icon className="h-5 w-5" style={{ color: accent }} />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white leading-tight tracking-tight">
-                  {isAdmin ? 'HR & Finance' : 'My Payroll'}
+                  HR & People
                 </h1>
-                <p className="text-xs text-blue-200/80 font-medium">{activeTab.label}</p>
+                <p className="text-xs font-medium" style={{ color: accent }}>
+                  {currentSection.label} · {activeTabDef.label}
+                </p>
               </div>
             </div>
-          </div>
 
-          {/* Tab strip — only render if more than one tab is visible */}
-          {visibleTabs.length > 1 && (
-            <div className="flex gap-0 overflow-x-auto mt-2 scrollbar-hide -mb-px">
-              {visibleTabs.map(t => {
-                const Icon = t.icon;
-                const isActive = tab === t.id;
+            {/* Section pills */}
+            <div className="flex items-center gap-1 flex-wrap">
+              {visibleSections.map(s => {
+                const SIcon = s.icon;
+                const isActive = s.id === section;
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    data-testid={`hr-tab-${t.id}`}
+                    key={s.id}
+                    onClick={() => setTab(activeSectionFirstTab(s))}
+                    data-testid={`hr-section-${s.id}`}
                     className={cn(
-                      'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap shrink-0 select-none',
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border',
                       isActive
-                        ? 'border-white text-white'
-                        : 'border-transparent text-blue-200/60 hover:text-blue-100 hover:border-blue-200/30'
+                        ? 'bg-white text-slate-900 border-white shadow-sm'
+                        : 'text-blue-200/80 border-blue-200/20 hover:bg-white/10 hover:text-white'
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    {t.label}
+                    <SIcon className="h-3 w-3 shrink-0" />
+                    {s.label}
                   </button>
                 );
               })}
             </div>
-          )}
+          </div>
+
+          {/* Sub-tab strip for the active section */}
+          <div className="flex gap-0 overflow-x-auto scrollbar-hide -mb-px">
+            {visibleTabsInSection.map(t => {
+              const Icon = t.icon;
+              const isActive = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  data-testid={`hr-tab-${t.id}`}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap shrink-0',
+                    isActive
+                      ? 'border-white text-white'
+                      : 'border-transparent text-blue-200/50 hover:text-blue-100 hover:border-blue-200/30'
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* ── Content ───────────────────────────────────────────── */}
-      <div className="min-h-[calc(100vh-130px)]">
-        {tab === 'payroll' && (
-          <Suspense fallback={<PanelLoader />}>
-            <PayrollPanel embedded />
-          </Suspense>
-        )}
-        {tab === 'retainer' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}>
-            <RetainerPanel />
-          </Suspense>
-        )}
-        {tab === 'payroll-admin' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}>
-            <PayrollAdminPanel />
-          </Suspense>
-        )}
-        {tab === 'timesheet' && (
-          <Suspense fallback={<PanelLoader />}>
-            <TimesheetPanel />
-          </Suspense>
-        )}
-        {tab === 'performance' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}>
-            <PerformancePanel />
-          </Suspense>
-        )}
-        {tab === 'salary-increments' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}>
-            <SalaryIncrPanel />
-          </Suspense>
-        )}
-        {tab === 'training' && (
-          <Suspense fallback={<PanelLoader />}>
-            <TrainingPanel />
-          </Suspense>
-        )}
-        {tab === 'hr-tools' && isAdmin && <HRToolsPanel />}
-        {tab === 'overview' && isAdmin && <HROverviewPanel />}
+      {/* ── Content ─────────────────────────────────────────────── */}
+      <div className="min-h-[calc(100vh-140px)]">
+
+        {/* Pay & Compensation */}
+        {tab === 'payroll' && <Suspense fallback={<PanelLoader />}><PayrollPanel embedded /></Suspense>}
+        {tab === 'payroll-admin' && isAdmin && <Suspense fallback={<PanelLoader />}><PayrollAdminPanel /></Suspense>}
+        {tab === 'retainer' && isAdmin && <Suspense fallback={<PanelLoader />}><RetainerPanel /></Suspense>}
         {tab === 'eosb' && isAdmin && <EOSBPanel />}
         {tab === 'salary-advances' && isAdmin && <SalaryAdvancesPanel />}
-        {tab === 'leave-calendar' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>
-        )}
-        {tab === 'contracts' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>
-        )}
-        {tab === 'payroll-summary' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>
-        )}
-        {tab === 'hr-analytics' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>
-        )}
-        {tab === 'field-wallet' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>
-        )}
-        {tab === 'wa-broadcast' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>
-        )}
+        {tab === 'salary-increments' && isAdmin && <Suspense fallback={<PanelLoader />}><SalaryIncrPanel /></Suspense>}
+        {tab === 'field-wallet' && isAdmin && <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>}
+        {tab === 'payroll-summary' && isAdmin && <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>}
+
+        {/* Time & Leave */}
+        {tab === 'timesheet' && <Suspense fallback={<PanelLoader />}><TimesheetPanel /></Suspense>}
+        {tab === 'leave-requests' && <Suspense fallback={<PanelLoader />}><LeaveRequestsPanel /></Suspense>}
+        {tab === 'leave-calendar' && isAdmin && <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>}
+        {tab === 'attendance' && isAdmin && <Suspense fallback={<PanelLoader />}><AttendancePanel /></Suspense>}
+
+        {/* People & Development */}
+        {tab === 'performance' && isAdmin && <Suspense fallback={<PanelLoader />}><PerformancePanel /></Suspense>}
+        {tab === 'training' && <Suspense fallback={<PanelLoader />}><TrainingPanel /></Suspense>}
+        {tab === 'contracts' && isAdmin && <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>}
+        {tab === 'positions' && <Suspense fallback={<PanelLoader />}><PositionsPanel /></Suspense>}
+        {tab === 'onboarding' && isAdmin && <Suspense fallback={<PanelLoader />}><OnboardingPanel /></Suspense>}
+        {tab === 'offboarding' && isAdmin && <Suspense fallback={<PanelLoader />}><OffboardingPanel /></Suspense>}
+
+        {/* Analytics & Comms */}
+        {tab === 'overview' && isAdmin && <HROverviewPanel />}
+        {tab === 'hr-analytics' && isAdmin && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
+        {tab === 'wa-broadcast' && isAdmin && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
       </div>
     </div>
   );
@@ -636,7 +705,7 @@ function QuickActionsCard({ stats, costSummary }: { stats: QAStats; costSummary:
       badge: stats.incompleteCount,
       color: stats.incompleteCount > 0 ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30' : 'border-border bg-muted/20',
       badgeColor: 'bg-blue-500',
-      onClick: () => navigate('/staff-onboarding'),
+      onClick: () => navigate('/hr?tab=onboarding'),
     },
   ];
 

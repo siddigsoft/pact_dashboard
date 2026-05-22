@@ -374,7 +374,7 @@ const AppRoutes = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
       <Route path="/email-preview" element={<EmailPreviewPage />} />
-      <Route path="/staff-onboarding" element={<StaffOnboarding />} />
+      <Route path="/staff-onboarding" element={<Navigate to="/hr?tab=onboarding" replace />} />
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
@@ -427,9 +427,9 @@ const AppRoutes = () => {
         <Route path="/notification-analytics" element={<NotificationAnalytics />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
-        <Route path="/payroll" element={<PayrollPage />} />
+        <Route path="/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
         <Route path="/hr" element={<HRHub />} />
-        <Route path="/leave" element={<LeaveRequests />} />
+        <Route path="/leave" element={<Navigate to="/hr?tab=leave-requests" replace />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
@@ -460,7 +460,7 @@ const AppRoutes = () => {
         <Route path="/users/:id" element={<UserDetail />} />
         <Route path="/classifications" element={<Classifications />} />
         <Route path="/classification-fees" element={<ClassificationFeeManagement />} />
-        <Route path="/retainer-management" element={<RetainerManagement />} />
+        <Route path="/retainer-management" element={<Navigate to="/hr?tab=retainer" replace />} />
         <Route path="/map" element={<AdvancedMap />} />
         <Route path="/advanced-map" element={<Navigate to="/map" replace />} />
         <Route path="/audit-compliance" element={<AuditCompliance />} />
@@ -527,10 +527,10 @@ const AppRoutes = () => {
         <Route path="/salary-retainer-report" element={<PageWrapper><SalaryRetainerReport /></PageWrapper>} />
         <Route path="/month-end-summary" element={<PageWrapper><MonthEndFinancialSummary /></PageWrapper>} />
         <Route path="/my-team" element={<PageWrapper><MyTeam /></PageWrapper>} />
-        <Route path="/performance-reviews" element={<PageWrapper><PerformanceReviews /></PageWrapper>} />
-        <Route path="/salary-increments" element={<PageWrapper><SalaryIncrements /></PageWrapper>} />
-        <Route path="/positions" element={<PageWrapper><PositionsPage /></PageWrapper>} />
-        <Route path="/training-certifications" element={<PageWrapper><TrainingCertificationsPage /></PageWrapper>} />
+        <Route path="/performance-reviews" element={<Navigate to="/hr?tab=performance" replace />} />
+        <Route path="/salary-increments" element={<Navigate to="/hr?tab=salary-increments" replace />} />
+        <Route path="/positions" element={<Navigate to="/hr?tab=positions" replace />} />
+        <Route path="/training-certifications" element={<Navigate to="/hr?tab=training" replace />} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/accounting/coa" element={<SuperAdminRoute><PageWrapper><AccountingCOA /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/journals" element={<SuperAdminRoute><PageWrapper><AccountingJournals /></PageWrapper></SuperAdminRoute>} />
@@ -575,8 +575,8 @@ const AppRoutes = () => {
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
         <Route path="/my-expenses" element={<PageWrapper><MyExpenses /></PageWrapper>} />
-        <Route path="/attendance" element={<PageWrapper><Attendance /></PageWrapper>} />
-        <Route path="/offboarding" element={<PageWrapper><Offboarding /></PageWrapper>} />
+        <Route path="/attendance" element={<Navigate to="/hr?tab=attendance" replace />} />
+        <Route path="/offboarding" element={<Navigate to="/hr?tab=offboarding" replace />} />
       </Route>
 
       {/* Redirects */}

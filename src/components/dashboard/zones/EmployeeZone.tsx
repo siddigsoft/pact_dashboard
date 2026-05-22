@@ -170,7 +170,7 @@ export function EmployeeZone() {
           <div className="rounded-xl border bg-card p-4 space-y-2 mt-3">
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Leave Balance</p>
-              <Link to="/leave" className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+              <Link to="/hr?tab=leave-requests" className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
                 View all <ChevronRight className="h-2.5 w-2.5" />
               </Link>
             </div>

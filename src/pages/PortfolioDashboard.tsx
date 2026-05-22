@@ -3527,7 +3527,7 @@ export default function PortfolioDashboard() {
               </SectionCard>
 
               {/* Leave requests */}
-              <SectionCard icon={Calendar} title="Leave Requests" action={() => navigate('/leave')} actionLabel="Leave Manager">
+              <SectionCard icon={Calendar} title="Leave Requests" action={() => navigate('/hr?tab=leave-requests')} actionLabel="Leave Manager">
                 <StatRow label="Pending Approval" value={peopleStats.pendingLeave} color={peopleStats.pendingLeave > 0 ? 'text-amber-600' : undefined} />
                 <StatRow label="Approved" value={peopleStats.approvedLeave} color="text-emerald-600" />
                 <StatRow label="Rejected" value={peopleStats.leaveByStatus['rejected'] ?? 0} />
