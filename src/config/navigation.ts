@@ -1,9 +1,9 @@
 import {
-  Home, Map, FileText, Users, MessageSquare, Receipt,
-  DollarSign, Wallet, BarChart, Calendar, Settings,
-  Archive, FolderOpen, CheckCircle, Banknote, CreditCard,
-  TrendingUp, MapPin, Sparkles, Bell, Search, User,
-  Moon, Sun, LogOut, BarChart3, CheckSquare
+  Home, MessageSquare, Receipt,
+  DollarSign, Wallet, BarChart3, Calendar, Settings,
+  CheckCircle, Banknote, Bell, Compass, FolderKanban,
+  Database, CheckSquare, Inbox, LayoutDashboard,
+  BookOpen, Briefcase, ShieldCheck
 } from 'lucide-react';
 import { AppRole } from '@/types';
 
@@ -15,7 +15,7 @@ export interface NavigationItem {
   roles?: AppRole[];
   badge?: 'chat' | 'notifications';
   category: 'primary' | 'secondary' | 'tertiary';
-  priority: number; // Higher priority items appear first
+  priority: number;
   description?: string;
 }
 
@@ -27,11 +27,10 @@ export interface NavigationGroup {
   roles?: AppRole[];
 }
 
-// Centralized navigation configuration
 export const navigationConfig: NavigationGroup[] = [
   {
     id: 'core',
-    label: 'Core Features',
+    label: 'My Workspace',
     items: [
       {
         id: 'dashboard',
@@ -49,59 +48,84 @@ export const navigationConfig: NavigationGroup[] = [
         path: '/my-tasks',
         category: 'primary',
         priority: 98,
-        description: 'Personal workspace — assigned project tasks and daily to-dos'
+        description: 'Personal workspace — assigned tasks and daily to-dos'
       },
       {
-        id: 'field-team',
-        icon: Map,
-        label: 'Field Team',
-        path: '/field-team',
-        category: 'primary',
-        priority: 95,
-        description: 'Field operations map'
+        id: 'notifications',
+        icon: Bell,
+        label: 'Notifications',
+        path: '/notifications',
+        category: 'secondary',
+        priority: 85,
+        badge: 'notifications',
+        description: 'System notifications'
       },
       {
-        id: 'site-visits',
-        icon: MapPin,
-        label: 'Site Visits',
-        path: '/site-visits',
-        category: 'primary',
-        priority: 90,
-        description: 'Manage site visits'
+        id: 'calendar',
+        icon: Calendar,
+        label: 'Calendar',
+        path: '/calendar',
+        category: 'secondary',
+        priority: 71,
+        description: 'Schedule calendar'
       }
     ]
   },
   {
-    id: 'documents',
-    label: 'Documents & Files',
+    id: 'field-ops',
+    label: 'Field Operations',
     items: [
       {
+        id: 'field-ops-hub',
+        icon: Compass,
+        label: 'Field Ops Hub',
+        path: '/field-ops',
+        category: 'primary',
+        priority: 95,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'ICT' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Coordinator' as AppRole, 'Supervisor' as AppRole, 'DataCollector' as AppRole],
+        description: 'Site visits, safety, equipment and field team'
+      },
+      {
         id: 'mmp',
-        icon: FileText,
-        label: 'MMP Files',
+        icon: Database,
+        label: 'My Sites',
         path: '/mmp',
         category: 'primary',
-        priority: 85,
-        description: 'Manage MMP documents'
-      },
+        priority: 88,
+        roles: ['DataCollector' as AppRole, 'Coordinator' as AppRole, 'Supervisor' as AppRole],
+        description: 'Monthly monitoring plans'
+      }
+    ]
+  },
+  {
+    id: 'communication',
+    label: 'Communication',
+    items: [
       {
-        id: 'projects',
-        icon: FolderOpen,
-        label: 'Projects',
-        path: '/projects',
-        category: 'secondary',
-        priority: 80,
-        description: 'Project management'
-      },
+        id: 'communication-hub',
+        icon: MessageSquare,
+        label: 'Communication',
+        path: '/communication-hub',
+        category: 'primary',
+        priority: 90,
+        badge: 'chat',
+        description: 'Chat, calls, notifications and broadcasts'
+      }
+    ]
+  },
+  {
+    id: 'programme',
+    label: 'Programme Management',
+    items: [
       {
-        id: 'archive',
-        icon: Archive,
-        label: 'Archive',
-        path: '/archive',
-        category: 'tertiary',
-        priority: 20,
-        roles: ['Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'Archived items'
+        id: 'programme-hub',
+        icon: FolderKanban,
+        label: 'Programme Hub',
+        path: '/programme-hub',
+        category: 'primary',
+        priority: 82,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'ICT' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Project Manager' as AppRole, 'Country Director' as AppRole],
+        description: 'Projects, portfolio, surveys and analytics'
       }
     ]
   },
@@ -114,121 +138,30 @@ export const navigationConfig: NavigationGroup[] = [
         icon: CheckCircle,
         label: 'Close Cycle',
         path: '/mmp/cycle-close',
-        category: 'primary',
-        priority: 90,
-        roles: ['Admin' as AppRole, 'Super Admin' as AppRole],
-        description: 'Start and manage MMP cycle closures'
-      },
-      {
-        id: 'cycle-history',
-        icon: Archive,
-        label: 'Cycle History',
-        path: '/mmp/cycle-close?tab=archive',
         category: 'secondary',
-        priority: 80,
+        priority: 78,
         roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'View past closed cycles and coverage reports'
+        description: 'Manage MMP cycle closures'
       },
       {
         id: 'data-export-center',
         icon: BarChart3,
-        label: 'Data Export Center',
+        label: 'Data Export',
         path: '/data-export-center',
-        category: 'secondary',
-        priority: 70,
+        category: 'tertiary',
+        priority: 40,
         roles: ['Admin' as AppRole, 'Super Admin' as AppRole],
         description: 'Export cycle reports, site visits, and analytics data'
       }
     ]
   },
   {
-    id: 'communication',
-    label: 'Communication',
-    items: [
-      {
-        id: 'chat',
-        icon: MessageSquare,
-        label: 'Chat',
-        path: '/chat',
-        category: 'primary',
-        priority: 88,
-        badge: 'chat',
-        description: 'Team messaging'
-      },
-      {
-        id: 'notifications',
-        icon: Bell,
-        label: 'Notifications',
-        path: '/notifications',
-        category: 'secondary',
-        priority: 75,
-        badge: 'notifications',
-        description: 'System notifications'
-      }
-    ]
-  },
-  {
-    id: 'team',
-    label: 'Team Management',
-    items: [
-      {
-        id: 'users',
-        icon: Users,
-        label: 'Team Members',
-        path: '/users',
-        category: 'primary',
-        priority: 82,
-        description: 'Manage team members'
-      },
-      {
-        id: 'user-management',
-        icon: Users,
-        label: 'User Management',
-        path: '/users',
-        category: 'secondary',
-        priority: 70,
-        roles: ['Admin' as AppRole],
-        description: 'Advanced user management'
-      },
-      {
-        id: 'role-management',
-        icon: Settings,
-        label: 'Role Management',
-        path: '/role-management',
-        category: 'tertiary',
-        priority: 15,
-        roles: ['Admin' as AppRole],
-        description: 'Manage user roles'
-      }
-    ]
-  },
-  {
     id: 'finance',
-    label: 'Finance & Operations',
+    label: 'Finance',
     collapsible: true,
     items: [
       {
-        id: 'finance',
-        icon: DollarSign,
-        label: 'Finance',
-        path: '/finance',
-        category: 'secondary',
-        priority: 78,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'Financial overview'
-      },
-      {
-        id: 'financial-operations',
-        icon: TrendingUp,
-        label: 'Financial Ops',
-        path: '/financial-operations',
-        category: 'secondary',
-        priority: 77,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'Financial operations'
-      },
-      {
-        id: 'wallet',
+        id: 'my-wallet',
         icon: Wallet,
         label: 'My Wallet',
         path: '/wallet',
@@ -238,98 +171,106 @@ export const navigationConfig: NavigationGroup[] = [
         description: 'My digital wallet'
       },
       {
-        id: 'admin-wallets',
-        icon: CreditCard,
-        label: 'Admin Wallets',
-        path: '/admin/wallets',
-        category: 'tertiary',
-        priority: 25,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole],
-        description: 'Administrative wallets'
-      },
-      {
-        id: 'withdrawal-approval',
-        icon: CheckCircle,
-        label: 'Supervisor Approval',
-        path: '/withdrawal-approval',
-        category: 'secondary',
-        priority: 74,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole],
-        description: 'Approve withdrawals'
-      },
-      {
-        id: 'finance-approval',
-        icon: Banknote,
-        label: 'Finance Approval',
-        path: '/finance-approval',
-        category: 'secondary',
-        priority: 73,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole],
-        description: 'Financial approvals'
-      },
-      {
-        id: 'budget',
-        icon: DollarSign,
-        label: 'Budget',
-        path: '/budget',
-        category: 'tertiary',
-        priority: 30,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'Budget management'
-      },
-      {
-        id: 'enumerator-fees-report',
-        icon: Receipt,
-        label: 'Enumerator Fees',
-        path: '/enumerator-fees-report',
-        category: 'tertiary',
-        priority: 29,
-        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'Track and report enumerator fees across MMP cycles'
-      }
-    ],
-    roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole, 'Coordinator' as AppRole, 'DataCollector' as AppRole]
-  },
-  {
-    id: 'operations',
-    label: 'Operations',
-    items: [
-      {
         id: 'cost-submission',
         icon: Receipt,
         label: 'Cost Submission',
         path: '/cost-submission',
         category: 'secondary',
-        priority: 72,
-        roles: ['DataCollector' as AppRole, 'Admin' as AppRole],
+        priority: 74,
+        roles: ['DataCollector' as AppRole, 'Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Coordinator' as AppRole],
         description: 'Submit operation costs'
       },
       {
-        id: 'calendar',
-        icon: Calendar,
-        label: 'Calendar',
-        path: '/calendar',
+        id: 'approvals-hub',
+        icon: Inbox,
+        label: 'Approvals',
+        path: '/approvals',
         category: 'secondary',
-        priority: 71,
-        description: 'Schedule calendar'
+        priority: 73,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole],
+        description: 'All pending financial approvals'
       },
       {
-        id: 'reports',
-        icon: BarChart,
-        label: 'Reports',
-        path: '/reports',
+        id: 'finance-hub',
+        icon: DollarSign,
+        label: 'Finance Hub',
+        path: '/finance-hub',
         category: 'secondary',
-        priority: 79,
-        roles: ['Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'FinancialAdmin' as AppRole],
-        description: 'Analytics and reports'
+        priority: 72,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
+        description: 'Budgets, wallets, reconciliation and financial reports'
+      },
+      {
+        id: 'accounting-hub',
+        icon: BookOpen,
+        label: 'Accounting',
+        path: '/accounting',
+        category: 'tertiary',
+        priority: 35,
+        roles: ['Super Admin' as AppRole, 'Admin' as AppRole, 'FinancialAdmin' as AppRole],
+        description: 'Chart of accounts, journals, ledger and payables'
+      }
+    ],
+    roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole, 'Coordinator' as AppRole, 'DataCollector' as AppRole]
+  },
+  {
+    id: 'hr',
+    label: 'HR & People',
+    items: [
+      {
+        id: 'hr-hub',
+        icon: Briefcase,
+        label: 'HR Hub',
+        path: '/hr',
+        category: 'secondary',
+        priority: 70,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'FinancialAdmin' as AppRole],
+        description: 'Payroll, leave, performance and retainer management'
+      }
+    ],
+    roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'FinancialAdmin' as AppRole]
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics & Reports',
+    items: [
+      {
+        id: 'analytics-hub',
+        icon: BarChart3,
+        label: 'Analytics Hub',
+        path: '/analytics',
+        category: 'secondary',
+        priority: 68,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Country Director' as AppRole],
+        description: 'Reports, monitoring, archive and data exports'
       }
     ]
   },
   {
-    id: 'settings',
-    label: 'Settings & Configuration',
+    id: 'admin',
+    label: 'Administration',
     collapsible: true,
     items: [
+      {
+        id: 'admin-hub',
+        icon: LayoutDashboard,
+        label: 'Admin Hub',
+        path: '/admin-hub',
+        category: 'secondary',
+        priority: 50,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'ICT' as AppRole],
+        description: 'Users, roles, locations, sites and system settings'
+      },
+      {
+        id: 'super-admin-hub',
+        icon: ShieldCheck,
+        label: 'Super Admin',
+        path: '/super-admin-hub',
+        category: 'tertiary',
+        priority: 20,
+        roles: ['Super Admin' as AppRole],
+        description: 'Platform-wide system configuration'
+      },
       {
         id: 'settings',
         icon: Settings,
@@ -339,28 +280,25 @@ export const navigationConfig: NavigationGroup[] = [
         priority: 10,
         description: 'Application settings'
       }
-    ]
+    ],
+    roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'ICT' as AppRole]
   }
 ];
 
-// Helper functions for filtering navigation items
 export function getNavigationItemsForRoles(userRoles: AppRole[] = []): NavigationItem[] {
   const allItems: NavigationItem[] = [];
 
   navigationConfig.forEach(group => {
-    // Check if group has role restrictions
     if (group.roles && group.roles.length > 0) {
       const hasAccess = group.roles.some(role => userRoles.includes(role));
       if (!hasAccess) return;
     }
 
     group.items.forEach(item => {
-      // Check if item has role restrictions
       if (item.roles && item.roles.length > 0) {
         const hasAccess = item.roles.some(role => userRoles.includes(role));
         if (!hasAccess) return;
       }
-
       allItems.push(item);
     });
   });
@@ -383,7 +321,6 @@ export function getTertiaryNavigationItems(userRoles: AppRole[] = []): Navigatio
 export function getNavigationGroupsForRoles(userRoles: AppRole[] = []): NavigationGroup[] {
   return navigationConfig
     .filter(group => {
-      // Check if group has role restrictions
       if (group.roles && group.roles.length > 0) {
         return group.roles.some(role => userRoles.includes(role));
       }
@@ -392,7 +329,6 @@ export function getNavigationGroupsForRoles(userRoles: AppRole[] = []): Navigati
     .map(group => ({
       ...group,
       items: group.items.filter(item => {
-        // Check if item has role restrictions
         if (item.roles && item.roles.length > 0) {
           return item.roles.some(role => userRoles.includes(role));
         }
@@ -402,7 +338,6 @@ export function getNavigationGroupsForRoles(userRoles: AppRole[] = []): Navigati
     .filter(group => group.items.length > 0);
 }
 
-// Get navigation item by path
 export function getNavigationItemByPath(path: string): NavigationItem | undefined {
   for (const group of navigationConfig) {
     const item = group.items.find(item => item.path === path);
@@ -411,7 +346,6 @@ export function getNavigationItemByPath(path: string): NavigationItem | undefine
   return undefined;
 }
 
-// Get navigation item by ID
 export function getNavigationItemById(id: string): NavigationItem | undefined {
   for (const group of navigationConfig) {
     const item = group.items.find(item => item.id === id);
