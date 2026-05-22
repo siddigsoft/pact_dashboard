@@ -249,15 +249,16 @@ serve(async (req: Request) => {
     let waOk = 0
     for (const phone of phones) {
       try {
-        await fetch(`${SUPABASE_URL}/functions/v1/send-whatsapp`, {
+        const waResp = await fetch(`${SUPABASE_URL}/functions/v1/send-whatsapp`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${SERVICE_KEY}`,
           },
           body: JSON.stringify({
-            to: phone,
+            phone_numbers: [phone],
             event_type: 'reminder',
+            priority: 'urgent',
             data: {
               recipient_name: 'there',
               message: `Survey "${titleEn}" deadline is ${daysLabel} (${deadlineDateStr}). Fill it here: ${surveyUrl}`,
@@ -265,7 +266,9 @@ serve(async (req: Request) => {
             },
           }),
         })
-        waOk++
+        const waBody = await waResp.json().catch(() => ({}))
+        if (waBody.sent > 0) waOk++
+        else console.warn(`[WhatsApp] skipped/failed for ${phone}:`, waBody)
       } catch (e) {
         console.warn(`WhatsApp to ${phone} failed:`, e)
       }
