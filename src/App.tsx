@@ -168,6 +168,10 @@ const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertificat
 const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
 const AccountingHub = lazy(() => import('./pages/AccountingHub'));
 const FinanceHub = lazy(() => import('./pages/FinanceHub'));
+const FieldOpsHub = lazy(() => import('./pages/FieldOpsHub'));
+const AnalyticsHub = lazy(() => import('./pages/AnalyticsHub'));
+const AdminHub = lazy(() => import('./pages/AdminHub'));
+const SuperAdminHub = lazy(() => import('./pages/SuperAdminHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
 const AccountingJournals = lazy(() => import('./pages/AccountingJournals'));
 const AccountingTrialBalance = lazy(() => import('./pages/AccountingTrialBalance'));
@@ -397,13 +401,15 @@ const AppRoutes = () => {
         <Route path="/mmp/:id/verification" element={<MMPVerificationPage />} />
         <Route path="/mmp/:id/permit-message" element={<MMPPermitMessagePage />} />
         <Route path="/mmp/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />
-        <Route path="/data-export-center" element={<DataExportCenter />} />
+        {/* ── Analytics Hub ── */}
+        <Route path="/analytics" element={<AnalyticsHub />} />
+        <Route path="/data-export-center" element={<Navigate to="/analytics?tab=data-export-center" replace />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/call-analytics" element={<CallAnalytics />} />
-        <Route path="/field-team" element={<FieldTeam />} />
+        <Route path="/field-team" element={<Navigate to="/field-ops?tab=field-team" replace />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/financial-operations" element={<Navigate to="/finance-hub?tab=financial-ops" replace />} />
-        <Route path="/data-visibility" element={<DataVisibility />} />
+        <Route path="/data-visibility" element={<Navigate to="/analytics?tab=data-visibility" replace />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
         <Route path="/tasks/:id" element={<PageWrapper><TaskDetail /></PageWrapper>} />
@@ -417,17 +423,17 @@ const AppRoutes = () => {
         <Route path="/projects/:id/activities/create" element={<CreateProjectActivity />} />
         <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
-        <Route path="/reports" element={<Reports />} />
+        <Route path="/reports" element={<Navigate to="/analytics?tab=reports" replace />} />
         <Route path="/documentation" element={<Documentation />} />
         <Route path="/changelog" element={<PageWrapper><ChangelogPage /></PageWrapper>} />
         <Route path="/mobile-documentation" element={<MobileDocumentation />} />
         <Route path="/public-documentation" element={<PublicDocumentation />} />
-        <Route path="/documents" element={<DocumentsPage />} />
+        <Route path="/documents" element={<Navigate to="/analytics?tab=documents" replace />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/notification-preferences" element={<NotificationPreferences />} />
         <Route path="/notification-history" element={<NotificationHistory />} />
         <Route path="/notification-analytics" element={<NotificationAnalytics />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={<Navigate to="/admin-hub?tab=settings" replace />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
         <Route path="/hr" element={<HRHub />} />
@@ -449,9 +455,11 @@ const AppRoutes = () => {
         <Route path="/budget" element={<Navigate to="/finance-hub?tab=budget" replace />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
         <Route path="/cost-submission/reports" element={<CostSubmissionReports />} />
-        <Route path="/questionnaire-analytics" element={<QuestionnaireAnalytics />} />
-        <Route path="/dct-pdm" element={<DCTPDMDashboard />} />
+        <Route path="/questionnaire-analytics" element={<Navigate to="/analytics?tab=questionnaire-analytics" replace />} />
+        <Route path="/dct-pdm" element={<Navigate to="/analytics?tab=dct-pdm" replace />} />
         <Route path="/mobile-cost-submission" element={<MobileCostSubmission />} />
+        {/* ── Field Ops Hub ── */}
+        <Route path="/field-ops" element={<FieldOpsHub />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
         <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />
@@ -459,20 +467,24 @@ const AppRoutes = () => {
         <Route path="/site-visits/create/urgent" element={<CreateSiteVisitUrgent />} />
         <Route path="/site-visits/:id" element={<SiteVisitDetail />} />
         <Route path="/site-visits/:id/edit" element={<EditSiteVisit />} />
-        <Route path="/users" element={<Users />} />
+        {/* ── Admin Hub ── */}
+        <Route path="/admin-hub" element={<AdminHub />} />
+        <Route path="/users" element={<Navigate to="/admin-hub?tab=users" replace />} />
         <Route path="/users/:id" element={<UserDetail />} />
-        <Route path="/classifications" element={<Classifications />} />
-        <Route path="/classification-fees" element={<ClassificationFeeManagement />} />
+        <Route path="/classifications" element={<Navigate to="/admin-hub?tab=classifications" replace />} />
+        <Route path="/classification-fees" element={<Navigate to="/admin-hub?tab=classification-fees" replace />} />
         <Route path="/retainer-management" element={<Navigate to="/hr?tab=retainer" replace />} />
-        <Route path="/map" element={<AdvancedMap />} />
-        <Route path="/advanced-map" element={<Navigate to="/map" replace />} />
-        <Route path="/audit-compliance" element={<AuditCompliance />} />
-        <Route path="/archive" element={<Archive />} />
+        <Route path="/map" element={<Navigate to="/field-ops?tab=map" replace />} />
+        <Route path="/advanced-map" element={<Navigate to="/field-ops?tab=map" replace />} />
+        <Route path="/audit-compliance" element={<Navigate to="/admin-hub?tab=audit-compliance" replace />} />
+        <Route path="/archive" element={<Navigate to="/analytics?tab=archive" replace />} />
         <Route path="/calendar" element={<Calendar />} />
-        <Route path="/role-management" element={<RoleManagement />} />
-        <Route path="/page-access" element={<PageAccessControl />} />
-        <Route path="/super-admin-management" element={<SuperAdminManagement />} />
-        <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
+        <Route path="/role-management" element={<Navigate to="/admin-hub?tab=role-management" replace />} />
+        <Route path="/page-access" element={<Navigate to="/admin-hub?tab=page-access" replace />} />
+        {/* ── Super Admin Hub ── */}
+        <Route path="/super-admin-hub" element={<SuperAdminHub />} />
+        <Route path="/super-admin-management" element={<Navigate to="/super-admin-hub?tab=super-admin" replace />} />
+        <Route path="/super-admin-data" element={<Navigate to="/super-admin-hub?tab=data-management" replace />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />
   {/* Coordinator: Sites for Verification */}
@@ -482,38 +494,40 @@ const AppRoutes = () => {
   <Route path="/supervisor/sites" element={<CoordinatorSites />} />
   <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
   <Route path="/hub-operations" element={<HubOperations />} />
-  <Route path="/hub-management" element={<HubManagement />} />
+  <Route path="/hub-management" element={<Navigate to="/admin-hub?tab=hub-management" replace />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
         <Route path="/signatures" element={<SignaturesPage />} />
         <Route path="/approvals" element={<ApprovalsHub />} />
-        <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
-        <Route path="/admin/monitoring" element={<MonitoringDashboard />} />
-        <Route path="/audit-logs" element={<AuditLogs />} />
+        <Route path="/approval-dashboard" element={<Navigate to="/super-admin-hub?tab=approval-dashboard" replace />} />
+        <Route path="/admin/monitoring" element={<Navigate to="/super-admin-hub?tab=system-monitoring" replace />} />
+        <Route path="/audit-logs" element={<Navigate to="/super-admin-hub?tab=audit-logs" replace />} />
         <Route path="/login-analytics" element={<LoginAnalytics />} />
-        <Route path="/email-tracking" element={<EmailTracking />} />
-        <Route path="/email-management" element={<EmailManagement />} />
+        <Route path="/email-tracking" element={<Navigate to="/super-admin-hub?tab=email-tracking" replace />} />
+        <Route path="/email-management" element={<Navigate to="/super-admin-hub?tab=email-management" replace />} />
         <Route path="/admin/broadcast" element={<AdminBroadcast />} />
         <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
-        <Route path="/admin/cycle-health" element={<AdminCycleHealth />} />
+        <Route path="/admin/cycle-health" element={<Navigate to="/super-admin-hub?tab=cycle-health" replace />} />
         <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
         <Route path="/employees" element={<Employees />} />
-        <Route path="/departments" element={<Departments />} />
-        <Route path="/task-admin" element={<TaskAdmin />} />
-        <Route path="/admin/project-flow-stages" element={<AdminProjectFlowStages />} />
-        <Route path="/admin/transaction-scanner" element={<TransactionScanner />} />
-        <Route path="/permissions-management" element={<PermissionsManagement />} />
+        <Route path="/departments" element={<Navigate to="/admin-hub?tab=departments" replace />} />
+        <Route path="/task-admin" element={<Navigate to="/admin-hub?tab=task-admin" replace />} />
+        <Route path="/admin/project-flow-stages" element={<Navigate to="/admin-hub?tab=project-flow-stages" replace />} />
+        <Route path="/admin/transaction-scanner" element={<Navigate to="/super-admin-hub?tab=transaction-scanner" replace />} />
+        <Route path="/permissions-management" element={<Navigate to="/super-admin-hub?tab=permissions" replace />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />
         <Route path="/mobile-support-tickets" element={<MobileSupportTickets />} />
-        <Route path="/mobile-help-articles" element={<MobileHelpArticles />} />
-        <Route path="/mobile-signatures" element={<MobileSignatureAdmin />} />
-        <Route path="/mobile-call-scheduling" element={<MobileCallScheduling />} />
-        <Route path="/mobile-document-sync" element={<MobileDocumentSync />} />
+        <Route path="/mobile-help-articles" element={<Navigate to="/super-admin-hub?tab=mobile-help-articles" replace />} />
+        <Route path="/mobile-signatures" element={<Navigate to="/super-admin-hub?tab=mobile-signatures" replace />} />
+        <Route path="/mobile-call-scheduling" element={<Navigate to="/super-admin-hub?tab=mobile-call-scheduling" replace />} />
+        <Route path="/mobile-document-sync" element={<Navigate to="/super-admin-hub?tab=mobile-document-sync" replace />} />
         <Route path="/reconciliation-dashboard" element={<Navigate to="/finance-hub?tab=reconciliation" replace />} />
-        <Route path="/safety-hub" element={<SafetyHub />} />
-        <Route path="/incident-reports" element={<IncidentReports />} />
-        <Route path="/equipment" element={<EquipmentPage />} />
-        <Route path="/monitoring-form" element={<MonitoringForm />} />
+        <Route path="/safety-hub" element={<Navigate to="/field-ops?tab=safety-hub" replace />} />
+        <Route path="/incident-reports" element={<Navigate to="/field-ops?tab=incident-reports" replace />} />
+        <Route path="/equipment" element={<Navigate to="/field-ops?tab=equipment" replace />} />
+        <Route path="/monitoring-form" element={<Navigate to="/field-ops?tab=monitoring-form" replace />} />
+        <Route path="/coverage-map" element={<Navigate to="/field-ops?tab=coverage-map" replace />} />
+        <Route path="/field-operation-manager" element={<Navigate to="/field-ops?tab=field-operation-manager" replace />} />
         <Route path="/helpline" element={<Helpline />} />
         <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/partners" element={<CRMPartners />} />

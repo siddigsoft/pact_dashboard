@@ -410,33 +410,11 @@
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
     // â”€â”€ 4. Field Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Field Ops Hub (replaces 9 flat items) ─────────────────────────────────
     const fieldOpsItems: MenuGroup['items'] = [];
-    if (!isHidden('/site-visits') && (isSuperAdmin || isAdmin || isICT || perms.siteVisits)) {
-      fieldOpsItems.push({ id: 'site-visits', title: "Site Visits", url: "/site-visits", icon: ClipboardList, priority: 1, isPinned: isPinned('/site-visits') });
-    }
-    if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isSupervisor || isFOM)) {
-      fieldOpsItems.push({ id: 'monitoring-form', title: "Monitoring Form", url: "/monitoring-form", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/monitoring-form') });
-    }
-    if (!isHidden('/safety-hub') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isDataTeam)) {
-      fieldOpsItems.push({ id: 'safety-hub', title: "Safety Hub", url: "/safety-hub", icon: Siren, priority: 3, isPinned: isPinned('/safety-hub') });
-    }
-    if (!isHidden('/incident-reports') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam)) {
-      fieldOpsItems.push({ id: 'incident-reports', title: "Incident Reports", url: "/incident-reports", icon: AlertTriangle, priority: 4, isPinned: isPinned('/incident-reports') });
-    }
-    if (!isHidden('/equipment') && canSeePath('/equipment', defaultRole)) {
-      fieldOpsItems.push({ id: 'equipment', title: "Equipment Tracking", url: "/equipment", icon: Package, priority: 5, isPinned: isPinned('/equipment') });
-    }
-    if (!isHidden('/field-team') && (isSuperAdmin || ((isAdmin || perms.fieldTeam) && !isICT))) {
-      fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 6, isPinned: isPinned('/field-team') });
-    }
-    if (!isHidden('/map') && canSeePath('/map', defaultRole)) {
-      fieldOpsItems.push({ id: 'advanced-map', title: "Field Map", url: "/map", icon: Map, priority: 7, isPinned: isPinned('/map') });
-    }
-    if (!isHidden('/coverage-map') && (isSuperAdmin || isAdmin || isFOM || isSupervisor || isCoordinator)) {
-      fieldOpsItems.push({ id: 'coverage-map', title: "MMP Coverage Map", url: "/coverage-map", icon: MapPin, priority: 8, isPinned: isPinned('/coverage-map') });
-    }
-    if (!isHidden('/field-operation-manager') && canSeePath('/field-operation-manager', defaultRole)) {
-      fieldOpsItems.push({ id: 'field-operation-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: Compass, priority: 8, isPinned: isPinned('/field-operation-manager') });
+    const canSeeFieldOps = isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isDataTeam || perms.siteVisits || perms.fieldTeam;
+    if (canSeeFieldOps && !isHidden('/field-ops')) {
+      fieldOpsItems.push({ id: 'field-ops-hub', title: "Field Ops Hub", url: "/field-ops", icon: Compass, priority: 1, isPinned: isPinned('/field-ops') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 4, items: fieldOpsItems });
 
@@ -572,70 +550,20 @@
     }
 
     // â”€â”€ 9. Analytics & Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Analytics Hub (replaces 8 flat items) ─────────────────────────────────
     const analyticsItems: MenuGroup['items'] = [];
-    if (!isHidden('/data-export-center') && (isSuperAdmin || isAdmin)) {
-      analyticsItems.push({ id: 'data-export-center', title: "Data Export Center", url: "/data-export-center", icon: BarChart3, priority: 1, isPinned: isPinned('/data-export-center') });
-    }
-    if (!isHidden('/data-visibility') && (isSuperAdmin || ((isAdmin || perms.dataVisibility) && !isICT))) {
-      analyticsItems.push({ id: 'data-visibility', title: "Data Visibility", url: "/data-visibility", icon: Link2, priority: 2, isPinned: isPinned('/data-visibility') });
-    }
-    if (!isHidden('/reports') && (isSuperAdmin || ((isAdmin || perms.reports) && !isICT))) {
-      analyticsItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: BarChart3, priority: 3, isPinned: isPinned('/reports') });
-    }
-    if (!isHidden('/documents') && (isSuperAdmin || isAdmin || isICT || isFinancialAdmin || isAuditor)) {
-      analyticsItems.push({ id: 'documents', title: "Documents", url: "/documents", icon: FileText, priority: 4, isPinned: isPinned('/documents') });
-    }
-    if (!isHidden('/archive') && (isSuperAdmin || isAdmin || perms.archive)) {
-      analyticsItems.push({ id: 'archive', title: "Archive", url: "/archive", icon: Archive, priority: 5, isPinned: isPinned('/archive') });
-    }
-    if (!isHidden('/questionnaire-analytics') && (isSuperAdmin || isAdmin || isDataTeam || isFOM)) {
-      analyticsItems.push({ id: 'questionnaire-analytics', title: "Questionnaire Analytics", url: "/questionnaire-analytics", icon: BarChart3, priority: 6, isPinned: isPinned('/questionnaire-analytics') });
-    }
-    if (!isHidden('/dct-pdm') && (isSuperAdmin || isAdmin || isICT)) {
-      analyticsItems.push({ id: 'dct-pdm', title: "DCT PDM Dashboard", url: "/dct-pdm", icon: BarChart3, priority: 8, isPinned: isPinned('/dct-pdm') });
-    }
-    if (!isHidden('/executive') && (isSuperAdmin || isCountryDirector)) {
-      analyticsItems.push({ id: 'executive-dashboard', title: "Executive Dashboard", url: "/executive", icon: LayoutDashboard, priority: 9, isPinned: isPinned('/executive') });
+    const canSeeAnalytics = isSuperAdmin || isAdmin || isICT || isFinancialAdmin || isAuditor || isDataTeam || isFOM || isCountryDirector || perms.reports || perms.dataVisibility || perms.archive;
+    if (canSeeAnalytics && !isHidden('/analytics')) {
+      analyticsItems.push({ id: 'analytics-hub', title: "Analytics Hub", url: "/analytics", icon: BarChart3, priority: 1, isPinned: isPinned('/analytics') });
     }
     if (analyticsItems.length) groups.push({ id: 'analytics', label: "Analytics & Reports", order: 6, items: analyticsItems });
 
     // â”€â”€ 10. Administration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Admin Hub (replaces 12 flat items) ────────────────────────────────────
     const adminItems: MenuGroup['items'] = [];
-    if (!isHidden('/users') && (canSeePath('/users', defaultRole) || perms.users)) {
-      adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
-    }
-    if (!isHidden('/audit-compliance') && (isSuperAdmin || isAdmin || isICT)) {
-      adminItems.push({ id: 'audit-compliance', title: "Audit & Compliance", url: "/audit-compliance", icon: Shield, priority: 2, isPinned: isPinned('/audit-compliance') });
-    }
-    if (!isHidden('/hub-management') && (isSuperAdmin || isAdmin || isICT)) {
-      adminItems.push({ id: 'hub-management', title: "Hub Management", url: "/hub-management", icon: Building2, priority: 3, isPinned: isPinned('/hub-management') });
-    }
-    if (!isHidden('/departments') && canSeePath('/departments', defaultRole)) {
-      adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 4, isPinned: isPinned('/departments') });
-    }
-    if (!isHidden('/role-management') && (canSeePath('/role-management', defaultRole) || perms.roleManagement)) {
-      adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 4, isPinned: isPinned('/role-management') });
-    }
-    if (!isHidden('/page-access') && isSuperAdmin) {
-      adminItems.push({ id: 'page-access', title: "Page Access Control", url: "/page-access", icon: Lock, priority: 5, isPinned: isPinned('/page-access') });
-    }
-    if (!isHidden('/classifications') && canSeePath('/classifications', defaultRole)) {
-      adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 5, isPinned: isPinned('/classifications') });
-    }
-    if (!isHidden('/classification-fees') && canSeePath('/classification-fees', defaultRole)) {
-      adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 6, isPinned: isPinned('/classification-fees') });
-    }
-    if (!isHidden('/task-admin') && canSeePath('/task-admin', defaultRole)) {
-      adminItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 7, isPinned: isPinned('/task-admin') });
-    }
-    if (!isHidden('/admin/project-flow-stages') && (isSuperAdmin || isAdmin)) {
-      adminItems.push({ id: 'admin-project-flow-stages', title: "Project Flow Stages", url: "/admin/project-flow-stages", icon: ClipboardList, priority: 7, isPinned: isPinned('/admin/project-flow-stages') });
-    }
-    if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
-      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 8, isPinned: isPinned('/settings') });
-    }
-    if (!isSuperAdmin && hasMonitoringAccess && !isHidden('/admin/monitoring')) {
-      adminItems.push({ id: 'monitoring-dashboard', title: "System Monitoring", url: "/admin/monitoring", icon: Activity, priority: 8, isPinned: isPinned('/admin/monitoring') });
+    const canSeeAdmin = isSuperAdmin || isAdmin || isICT || canSeePath('/users', defaultRole) || canSeePath('/departments', defaultRole) || canSeePath('/role-management', defaultRole) || canSeePath('/classifications', defaultRole) || canSeePath('/task-admin', defaultRole) || perms.users || perms.roleManagement || perms.settings || hasMonitoringAccess;
+    if (canSeeAdmin && !isHidden('/admin-hub')) {
+      adminItems.push({ id: 'admin-hub', title: "Admin Hub", url: "/admin-hub", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/admin-hub') });
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 7, items: adminItems });
 
@@ -659,52 +587,11 @@
     if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 8, items: helpItems });
 
     // â”€â”€ 12. Super Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Super Admin Hub (replaces 14 flat items) ──────────────────────────────
     if (isSuperAdmin) {
       const superAdminItems: MenuGroup['items'] = [];
-      if (!isHidden('/super-admin-management')) {
-        superAdminItems.push({ id: 'super-admin', title: "Super Admin Management", url: "/super-admin-management", icon: ShieldCheck, priority: 1, isPinned: isPinned('/super-admin-management') });
-      }
-      if (!isHidden('/admin/monitoring')) {
-        superAdminItems.push({ id: 'monitoring-dashboard', title: "System Monitoring", url: "/admin/monitoring", icon: Activity, priority: 2, isPinned: isPinned('/admin/monitoring') });
-      }
-      if (!isHidden('/admin/cycle-health')) {
-        superAdminItems.push({ id: 'cycle-health', title: "Cycle Health Dashboard", url: "/admin/cycle-health", icon: HeartPulse, priority: 3, isPinned: isPinned('/admin/cycle-health') });
-      }
-      if (!isHidden('/approval-dashboard')) {
-        superAdminItems.push({ id: 'approval-dashboard', title: "Approval Dashboard", url: "/approval-dashboard", icon: ClipboardCheck, priority: 3, isPinned: isPinned('/approval-dashboard') });
-      }
-      if (!isHidden('/permissions-management')) {
-        superAdminItems.push({ id: 'permissions-management', title: "User Permissions", url: "/permissions-management", icon: ShieldCheck, priority: 4, isPinned: isPinned('/permissions-management') });
-      }
-      if (!isHidden('/audit-logs')) {
-        superAdminItems.push({ id: 'audit-logs', title: "Audit Logs", url: "/audit-logs", icon: ScrollText, priority: 5, isPinned: isPinned('/audit-logs') });
-      }
-      if (!isHidden('/email-tracking')) {
-        superAdminItems.push({ id: 'email-tracking', title: "Email Tracking", url: "/email-tracking", icon: Mail, priority: 6, isPinned: isPinned('/email-tracking') });
-      }
-      if (!isHidden('/email-management')) {
-        superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 7, isPinned: isPinned('/email-management') });
-      }
-      if (!isHidden('/email-preview')) {
-        superAdminItems.push({ id: 'email-preview', title: "Email Preview", url: "/email-preview", icon: Eye, priority: 8, isPinned: isPinned('/email-preview') });
-      }
-      if (!isHidden('/admin/transaction-scanner')) {
-        superAdminItems.push({ id: 'transaction-scanner', title: "Transaction Scanner", url: "/admin/transaction-scanner", icon: ScanLine, priority: 9, isPinned: isPinned('/admin/transaction-scanner') });
-      }
-      if (!isHidden('/mobile-help-articles')) {
-        superAdminItems.push({ id: 'mobile-help-articles', title: "Mobile Help Articles", url: "/mobile-help-articles", icon: HelpCircle, priority: 10, isPinned: isPinned('/mobile-help-articles') });
-      }
-      if (!isHidden('/mobile-signatures')) {
-        superAdminItems.push({ id: 'mobile-signatures', title: "Mobile Signatures", url: "/mobile-signatures", icon: PenTool, priority: 11, isPinned: isPinned('/mobile-signatures') });
-      }
-      if (!isHidden('/mobile-call-scheduling')) {
-        superAdminItems.push({ id: 'mobile-call-scheduling', title: "Mobile Call Scheduling", url: "/mobile-call-scheduling", icon: PhoneCall, priority: 12, isPinned: isPinned('/mobile-call-scheduling') });
-      }
-      if (!isHidden('/mobile-document-sync')) {
-        superAdminItems.push({ id: 'mobile-document-sync', title: "Mobile Document Sync", url: "/mobile-document-sync", icon: RefreshCw, priority: 13, isPinned: isPinned('/mobile-document-sync') });
-      }
-      if (!isHidden('/super-admin-data')) {
-        superAdminItems.push({ id: 'super-admin-data', title: "Data Management", url: "/super-admin-data", icon: Database, priority: 14, isPinned: isPinned('/super-admin-data') });
+      if (!isHidden('/super-admin-hub')) {
+        superAdminItems.push({ id: 'super-admin-hub', title: "Super Admin Hub", url: "/super-admin-hub", icon: ShieldCheck, priority: 1, isPinned: isPinned('/super-admin-hub') });
       }
       if (superAdminItems.length) groups.push({ id: 'super-admin', label: "Super Admin", order: 9, items: superAdminItems });
     }
