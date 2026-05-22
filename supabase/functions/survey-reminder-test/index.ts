@@ -24,7 +24,7 @@ const APP_URL      = Deno.env.get('APP_URL') ?? 'https://app.pactorg.com'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-const ALLOWED_ROLES = ['admin', 'coordinator', 'supervisor', 'fom', 'countryDirector', 'ict']
+const ALLOWED_ROLES = ['admin', 'coordinator', 'supervisor', 'fom', 'countryDirector', 'ict', 'superAdmin', 'super_admin', 'SuperAdmin']
 
 function normalizePhone(raw: string): string {
   const p = raw.trim().replace(/[\s\-\(\)\.]/g, '')
