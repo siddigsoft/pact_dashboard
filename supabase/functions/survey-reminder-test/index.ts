@@ -63,9 +63,9 @@ serve(async (req: Request) => {
   }
 
   // ── Parse body ───────────────────────────────────────────────────────────────
-  let body: { survey_id?: string }
+  let body: { survey_id?: string; test_mode?: boolean }
   try { body = await req.json() } catch { return json({ ok: false, error: 'Invalid JSON body' }, 400) }
-  const { survey_id } = body
+  const { survey_id, test_mode = false } = body
   if (!survey_id) return json({ ok: false, error: 'survey_id is required' }, 400)
 
   // ── Fetch survey ─────────────────────────────────────────────────────────────
@@ -106,16 +106,14 @@ serve(async (req: Request) => {
     })
   }
 
-  // ── Build email HTML (identical to cron, with [TEST] banner) ────────────────
+  // ── Build email HTML ─────────────────────────────────────────────────────────
   const emailHtml = `
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
 <body style="font-family:Arial,Helvetica,sans-serif;background:#f9fafb;margin:0;padding:0;">
   <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-    <div style="background:#f59e0b;padding:10px 32px;">
-      <p style="color:#fff;font-size:12px;font-weight:700;margin:0;">⚠️ TEST MESSAGE — This is a manual test of the reminder system</p>
-    </div>
+    ${test_mode ? `<div style="background:#f59e0b;padding:10px 32px;"><p style="color:#fff;font-size:12px;font-weight:700;margin:0;">⚠️ TEST MESSAGE — This is a manual test of the reminder system</p></div>` : ''}
     <div style="background:#4f46e5;padding:28px 32px;">
       <p style="color:#e0e7ff;font-size:12px;margin:0 0 4px;">PACT Platform — Survey Reminder</p>
       <h1 style="color:#fff;font-size:20px;margin:0;line-height:1.3;">⏰ Survey Deadline Approaching</h1>
@@ -151,7 +149,7 @@ serve(async (req: Request) => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           to,
-          subject: `[TEST] ⏰ Reminder: "${titleEn}" closes ${daysLabel} — PACT Surveys`,
+          subject: `${test_mode ? '[TEST] ' : ''}⏰ Reminder: "${titleEn}" closes ${daysLabel} — PACT Surveys`,
           html: emailHtml,
           type: 'general',
         }),
@@ -195,7 +193,7 @@ serve(async (req: Request) => {
           event_type: 'reminder',
           data: {
             recipient_name: 'there',
-            message: `[TEST] Survey "${titleEn}" deadline is ${daysLabel} (${deadlineDateStr}). Fill it here: ${surveyUrl}`,
+            message: `${test_mode ? '[TEST] ' : ''}Survey "${titleEn}" deadline is ${daysLabel} (${deadlineDateStr}). Fill it here: ${surveyUrl}`,
             url: surveyUrl,
           },
         }),
@@ -206,14 +204,16 @@ serve(async (req: Request) => {
     }
   }
 
-  // ── Audit log (action = 'test' so it doesn't block the real dedup) ───────────
+  // ── Audit log ────────────────────────────────────────────────────────────────
+  // action='test' never blocks the daily dedup; action='manual_send' does not
+  // block it either — the dedup check only matches action='send' (cron rows).
   await sb.from('audit_logs').insert({
     module: 'survey_reminder',
-    action: 'test',
+    action: test_mode ? 'test' : 'manual_send',
     entity_type: 'survey',
     entity_id: survey_id,
     entity_name: titleEn.substring(0, 200),
-    description: `Manual test reminder fired by ${user.email}. Emails: ${emailOk}/${emails.length}, WhatsApp: ${waOk}/${phones.length}`,
+    description: `${test_mode ? 'Test' : 'Manual'} reminder fired by ${user.email}. Emails: ${emailOk}/${emails.length}, WhatsApp: ${waOk}/${phones.length}`,
     success: true,
     actor_id: user.id,
     actor_name: user.email ?? 'unknown',
