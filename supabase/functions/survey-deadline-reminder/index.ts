@@ -188,8 +188,36 @@ serve(async (req: Request) => {
     }
 
     // ── WhatsApp recipients ─────────────────────────────────────────────────────
-    const rawPhones = String(s.reminder_phones ?? '')
-    const phones = rawPhones.split(',').map(p => p.trim()).filter(p => p.length >= 7)
+    // Start with manually entered numbers
+    const manualPhones = String(s.reminder_phones ?? '')
+      .split(',').map(p => p.trim()).filter(p => p.length >= 7)
+
+    // Resolve phones from selected roles
+    const selectedRoles = Array.isArray(s.reminder_roles) ? (s.reminder_roles as string[]) : []
+    let rolePhones: string[] = []
+    if (selectedRoles.length > 0) {
+      const { data: roleUsers } = await sb
+        .from('profiles')
+        .select('phone')
+        .in('role', selectedRoles)
+        .not('phone', 'is', null)
+      rolePhones = (roleUsers ?? []).map((u: { phone: string }) => u.phone).filter(p => p?.length >= 7)
+    }
+
+    // Resolve phones from individually selected users
+    const selectedUserIds = Array.isArray(s.reminder_user_ids) ? (s.reminder_user_ids as string[]) : []
+    let userPhones: string[] = []
+    if (selectedUserIds.length > 0) {
+      const { data: pickedUsers } = await sb
+        .from('profiles')
+        .select('phone')
+        .in('id', selectedUserIds)
+        .not('phone', 'is', null)
+      userPhones = (pickedUsers ?? []).map((u: { phone: string }) => u.phone).filter(p => p?.length >= 7)
+    }
+
+    // Deduplicate all sources
+    const phones = [...new Set([...rolePhones, ...userPhones, ...manualPhones])]
 
     let waOk = 0
     for (const phone of phones) {
@@ -223,7 +251,7 @@ serve(async (req: Request) => {
       entity_type: 'survey',
       entity_id: survey.id,
       entity_name: titleEn.substring(0, 200),
-      description: `Deadline reminder sent — ${daysRemaining}d before deadline. Emails: ${emailOk}/${emails.length}, WhatsApp: ${waOk}/${phones.length}`,
+      description: `Deadline reminder sent — ${daysRemaining}d before deadline. Emails: ${emailOk}/${emails.length}, WhatsApp: ${waOk}/${phones.length} (roles:${rolePhones.length} users:${userPhones.length} manual:${manualPhones.length})`,
       success: true,
       actor_id: 'system',
       actor_name: 'Survey Reminder Cron',
@@ -232,6 +260,9 @@ serve(async (req: Request) => {
         days_remaining: daysRemaining,
         emails_sent: emailOk,
         wa_sent: waOk,
+        wa_from_roles: rolePhones.length,
+        wa_from_users: userPhones.length,
+        wa_from_manual: manualPhones.length,
         expires_at: expiresAtStr,
       },
     })
