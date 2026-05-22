@@ -187,6 +187,7 @@ serve(async (req: Request) => {
   const phones = [...new Set([...rolePhones, ...userPhones, ...manualPhones])]
 
   let waOk = 0
+  const waErrors: string[] = []
   for (const phone of phones) {
     try {
       const waResp = await fetch(`${SUPABASE_URL}/functions/v1/send-whatsapp`, {
@@ -204,10 +205,17 @@ serve(async (req: Request) => {
         }),
       })
       const waBody = await waResp.json().catch(() => ({}))
-      if (waBody.sent > 0) waOk++
-      else console.warn(`[WhatsApp] skipped/failed for ${phone}:`, waBody)
+      if (waBody.sent > 0) {
+        waOk++
+      } else {
+        const detail = waBody.failure_details?.[0]?.error ?? waBody.error ?? waBody.reason ?? 'unknown'
+        const sample = `${phone}: ${detail}`
+        console.warn(`[WhatsApp] skipped/failed: ${sample}`, waBody)
+        if (waErrors.length < 3) waErrors.push(sample)
+      }
     } catch (e) {
       console.warn(`WhatsApp to ${phone} failed:`, e)
+      if (waErrors.length < 3) waErrors.push(`${phone}: ${e instanceof Error ? e.message : 'fetch error'}`)
     }
   }
 
@@ -240,6 +248,7 @@ serve(async (req: Request) => {
     emails_total: emails.length,
     wa_sent: waOk,
     wa_total: phones.length,
+    wa_errors: waErrors,
     phones,
     emails,
   })

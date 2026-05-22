@@ -427,11 +427,11 @@ export default function SurveyDetail() {
   const [testReminderResult, setTestReminderResult] = useState<{
     emails_sent: number; emails_total: number;
     wa_sent: number; wa_total: number;
-    phones: string[]; emails: string[];
+    wa_errors?: string[]; phones: string[]; emails: string[];
   } | null>(null);
   const [sendReminderResult, setSendReminderResult] = useState<{
     emails_sent: number; emails_total: number;
-    wa_sent: number; wa_total: number;
+    wa_sent: number; wa_total: number; wa_errors?: string[];
     phones: string[]; emails: string[];
   } | null>(null);
 
@@ -618,9 +618,13 @@ export default function SurveyDetail() {
     try {
       const data = await invokeReminder(true);
       setTestReminderResult(data);
+      const waNote = data.wa_sent === 0 && data.wa_errors?.length
+        ? ` (WA error: ${data.wa_errors[0]})`
+        : '';
       toast({
         title: 'Test reminder sent',
-        description: `${data.wa_sent}/${data.wa_total} WhatsApp · ${data.emails_sent}/${data.emails_total} email`,
+        description: `${data.wa_sent}/${data.wa_total} WhatsApp · ${data.emails_sent}/${data.emails_total} email${waNote}`,
+        variant: data.wa_sent === 0 && data.wa_total > 0 ? 'destructive' : 'default',
       });
     } catch (e: unknown) {
       toast({ title: 'Test failed', description: (e as Error).message, variant: 'destructive' });
@@ -636,9 +640,13 @@ export default function SurveyDetail() {
     try {
       const data = await invokeReminder(false);
       setSendReminderResult(data);
+      const waNote = data.wa_sent === 0 && data.wa_errors?.length
+        ? ` (WA error: ${data.wa_errors[0]})`
+        : '';
       toast({
         title: 'Reminder sent',
-        description: `${data.wa_sent}/${data.wa_total} WhatsApp · ${data.emails_sent}/${data.emails_total} email`,
+        description: `${data.wa_sent}/${data.wa_total} WhatsApp · ${data.emails_sent}/${data.emails_total} email${waNote}`,
+        variant: data.wa_sent === 0 && data.wa_total > 0 ? 'destructive' : 'default',
       });
     } catch (e: unknown) {
       toast({ title: 'Send failed', description: (e as Error).message, variant: 'destructive' });
