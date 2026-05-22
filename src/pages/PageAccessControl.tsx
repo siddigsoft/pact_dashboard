@@ -201,7 +201,7 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Surveys ───────────────────────────────────────────────────────────────
   { slug:'surveys',             label:'Surveys',                path:'/surveys',                icon:ClipboardEdit, group:'Surveys',
-    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataCollector','dataTeam'] },
+    roles:['all'] },
   { slug:'questionnaire-analytics', label:'Questionnaire Analytics', path:'/questionnaire-analytics', icon:PieChart, group:'Surveys',
     roles:['superAdmin','admin','fom','dataTeam'] },
 

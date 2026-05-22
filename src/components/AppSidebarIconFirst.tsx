@@ -229,7 +229,7 @@ const getWorkflowMenuGroups = (
 
   // 10. Surveys
   const surveyItems: MenuGroup["items"] = [];
-  if (!isHidden("/surveys") && (isSuperAdmin || isAdmin || isICT || isDataTeam || isCoordinator || isFOM))
+  if (!isHidden("/surveys"))
     surveyItems.push({ id: "surveys", title: "Surveys", url: "/surveys", icon: ClipboardList, priority: 1 });
   if (surveyItems.length) groups.push({ id: "surveys", label: "Surveys", order: 8, items: surveyItems });
 

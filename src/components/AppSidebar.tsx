@@ -500,8 +500,7 @@
     if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 
     // â”€â”€ Surveys â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const hasSurveyAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager;
-    if (hasSurveyAccess && !isHidden('/surveys')) {
+    if (!isHidden('/surveys')) {
       groups.push({
         id: 'surveys',
         label: 'Surveys',
