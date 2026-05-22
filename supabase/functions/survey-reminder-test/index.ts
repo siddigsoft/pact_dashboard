@@ -54,27 +54,27 @@ serve(async (req: Request) => {
 
   // ── Auth: verify user JWT ────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') ?? ''
-  if (!authHeader.startsWith('Bearer ')) return json({ ok: false, error: 'Missing auth token' }, 401)
+  if (!authHeader.startsWith('Bearer ')) return json({ ok: false, error: 'Missing auth token' })
 
   const userToken = authHeader.slice(7)
   const userSb = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
     global: { headers: { Authorization: `Bearer ${userToken}` } },
   })
   const { data: { user }, error: authErr } = await userSb.auth.getUser()
-  if (authErr || !user) return json({ ok: false, error: 'Unauthorized' }, 401)
+  if (authErr || !user) return json({ ok: false, error: 'Unauthorized — please log in again' })
 
   // ── Check role ───────────────────────────────────────────────────────────────
   const sb = createClient(SUPABASE_URL, SERVICE_KEY)
   const { data: profile } = await sb.from('profiles').select('role').eq('id', user.id).single()
   if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
-    return json({ ok: false, error: 'Insufficient permissions' }, 403)
+    return json({ ok: false, error: `Your role (${profile?.role ?? 'unknown'}) does not have permission to send reminders` })
   }
 
   // ── Parse body ───────────────────────────────────────────────────────────────
   let body: { survey_id?: string; test_mode?: boolean }
-  try { body = await req.json() } catch { return json({ ok: false, error: 'Invalid JSON body' }, 400) }
+  try { body = await req.json() } catch { return json({ ok: false, error: 'Invalid request body' }) }
   const { survey_id, test_mode = false } = body
-  if (!survey_id) return json({ ok: false, error: 'survey_id is required' }, 400)
+  if (!survey_id) return json({ ok: false, error: 'survey_id is required' })
 
   // ── Fetch survey ─────────────────────────────────────────────────────────────
   const { data: survey, error: fetchErr } = await sb
@@ -83,12 +83,12 @@ serve(async (req: Request) => {
     .eq('id', survey_id)
     .single()
 
-  if (fetchErr || !survey) return json({ ok: false, error: 'Survey not found' }, 404)
+  if (fetchErr || !survey) return json({ ok: false, error: 'Survey not found' })
 
   const s = (survey.settings ?? {}) as Record<string, unknown>
 
   if (!s.reminder_enabled) {
-    return json({ ok: false, error: 'Reminders are not enabled for this survey. Enable them in Settings first.' }, 400)
+    return json({ ok: false, error: 'Reminders are not enabled for this survey. Enable the toggle in Settings and save first.' })
   }
 
   // ── Build deadline info ──────────────────────────────────────────────────────

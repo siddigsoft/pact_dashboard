@@ -586,16 +586,31 @@ export default function SurveyDetail() {
     }
   };
 
+  const invokeReminder = async (testMode: boolean) => {
+    const { data, error } = await supabase.functions.invoke('survey-reminder-test', {
+      body: { survey_id: id, test_mode: testMode },
+    });
+    if (error) {
+      // Supabase wraps non-2xx as a generic FunctionsHttpError — try to extract the real message
+      let msg = 'Edge function error';
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const body = await (error as any).context?.json?.();
+        if (body?.error) msg = body.error;
+        else if (body?.message) msg = body.message;
+      } catch { msg = error.message ?? msg; }
+      throw new Error(msg);
+    }
+    if (!data?.ok) throw new Error(data?.error ?? (testMode ? 'Test failed' : 'Send failed'));
+    return data;
+  };
+
   const sendTestReminder = async () => {
     if (!id) return;
     setTestingReminder(true);
     setTestReminderResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('survey-reminder-test', {
-        body: { survey_id: id, test_mode: true },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error ?? 'Test failed');
+      const data = await invokeReminder(true);
       setTestReminderResult(data);
       toast({
         title: 'Test reminder sent',
@@ -613,11 +628,7 @@ export default function SurveyDetail() {
     setSendingReminder(true);
     setSendReminderResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('survey-reminder-test', {
-        body: { survey_id: id, test_mode: false },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error ?? 'Send failed');
+      const data = await invokeReminder(false);
       setSendReminderResult(data);
       toast({
         title: 'Reminder sent',
