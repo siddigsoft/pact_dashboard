@@ -222,7 +222,7 @@ export default function HRHub() {
         {tab === 'hr-analytics' && isAdmin && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
         {tab === 'wa-broadcast' && isAdmin && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
       </div>
-    </div>
+    </HubLayout>
   );
 }
 
@@ -1923,6 +1923,6 @@ function OrgChartView() {
         </div>
       )}
       </div>
-    </HubLayout>
+    </div>
   );
 }
