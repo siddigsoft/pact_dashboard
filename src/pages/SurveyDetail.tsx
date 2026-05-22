@@ -415,8 +415,26 @@ export default function SurveyDetail() {
     reminder_emails: '',
     reminder_phones: '',
     reminder_days_before: '1,3,7',
+    reminder_roles: [] as string[],
+    reminder_user_ids: [] as string[],
   });
   const [savingSettings, setSavingSettings] = useState(false);
+  const [waUserSearch, setWaUserSearch] = useState('');
+  const [waUserDropOpen, setWaUserDropOpen] = useState(false);
+
+  const REMINDER_ROLES = [
+    { id: 'admin',           label: 'Admin' },
+    { id: 'ict',             label: 'ICT' },
+    { id: 'fom',             label: 'Field Ops Manager' },
+    { id: 'coordinator',     label: 'Coordinator' },
+    { id: 'supervisor',      label: 'Supervisor' },
+    { id: 'dataCollector',   label: 'Data Collector' },
+    { id: 'projectManager',  label: 'Project Manager' },
+    { id: 'countryDirector', label: 'Country Director' },
+    { id: 'financialAdmin',  label: 'Finance Admin' },
+    { id: 'auditor',         label: 'Auditor' },
+    { id: 'employee',        label: 'Employee' },
+  ];
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey', id],
@@ -445,8 +463,22 @@ export default function SurveyDetail() {
         reminder_emails: String(s.reminder_emails ?? ''),
         reminder_phones: String(s.reminder_phones ?? ''),
         reminder_days_before: String(s.reminder_days_before ?? '1,3,7'),
+        reminder_roles: Array.isArray(s.reminder_roles) ? (s.reminder_roles as string[]) : [],
+        reminder_user_ids: Array.isArray(s.reminder_user_ids) ? (s.reminder_user_ids as string[]) : [],
       });
       return data as Survey;
+    },
+  });
+
+  const { data: waUsers = [] } = useQuery<{ id: string; full_name: string | null; role: string | null; phone: string | null }[]>({
+    queryKey: ['wa-reminder-users'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, phone')
+        .order('full_name');
+      if (error) throw error;
+      return (data ?? []).filter(u => u.phone?.trim());
     },
   });
 
@@ -521,6 +553,8 @@ export default function SurveyDetail() {
         is_template: settingsForm.is_template,
         reminder_enabled: settingsForm.reminder_enabled,
         reminder_emails: settingsForm.reminder_emails.trim() || null,
+        reminder_roles: settingsForm.reminder_roles.length ? settingsForm.reminder_roles : null,
+        reminder_user_ids: settingsForm.reminder_user_ids.length ? settingsForm.reminder_user_ids : null,
         reminder_phones: settingsForm.reminder_phones.trim() || null,
         reminder_days_before: settingsForm.reminder_days_before.trim() || '1,3,7',
       };
@@ -3636,20 +3670,165 @@ export default function SurveyDetail() {
                     <p className="text-[11px] text-slate-400">Comma-separated email addresses. Leave blank to use the submission notification emails above.</p>
                   </div>
 
-                  {/* Reminder WhatsApp phones */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="reminder-phones" className="text-sm font-medium flex items-center gap-1.5">
-                      <MessageSquareMore className="w-3.5 h-3.5 text-slate-400" />WhatsApp numbers to remind
+                  {/* Reminder WhatsApp phones — smart picker */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium flex items-center gap-1.5">
+                      <MessageSquareMore className="w-3.5 h-3.5 text-slate-400" />WhatsApp recipients
                     </Label>
-                    <Input
-                      id="reminder-phones"
-                      type="text"
-                      placeholder="e.g. +249912345678, +249923456789"
-                      value={settingsForm.reminder_phones}
-                      onChange={e => setSettingsForm(s => ({ ...s, reminder_phones: e.target.value }))}
-                      data-testid="input-reminder-phones"
-                    />
-                    <p className="text-[11px] text-slate-400">Comma-separated international numbers (e.g. +249…). Leave blank to skip WhatsApp reminders.</p>
+
+                    {/* Role chips */}
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">By role — all users with that role</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {REMINDER_ROLES.map(r => {
+                          const count = waUsers.filter(u => u.role === r.id).length;
+                          const active = settingsForm.reminder_roles.includes(r.id);
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              data-testid={`toggle-wa-role-${r.id}`}
+                              onClick={() => setSettingsForm(s => ({
+                                ...s,
+                                reminder_roles: active
+                                  ? s.reminder_roles.filter(x => x !== r.id)
+                                  : [...s.reminder_roles, r.id],
+                              }))}
+                              className={cn(
+                                'flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-colors',
+                                active
+                                  ? 'bg-emerald-600 border-emerald-600 text-white'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-400',
+                              )}
+                            >
+                              {active && <CheckCircle2 className="w-3 h-3" />}
+                              {r.label}
+                              {count > 0 && (
+                                <span className={cn('ml-0.5 text-[10px] rounded-full px-1', active ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500')}>
+                                  {count}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Individual user picker */}
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Specific users</p>
+                      <div className="relative">
+                        <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-200 focus-within:border-indigo-400">
+                          <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Search by name…"
+                            value={waUserSearch}
+                            onChange={e => { setWaUserSearch(e.target.value); setWaUserDropOpen(true); }}
+                            onFocus={() => setWaUserDropOpen(true)}
+                            onBlur={() => setTimeout(() => setWaUserDropOpen(false), 150)}
+                            className="flex-1 text-sm bg-transparent outline-none placeholder-slate-400"
+                            data-testid="input-wa-user-search"
+                          />
+                        </div>
+                        {waUserDropOpen && (() => {
+                          const filtered = waUsers.filter(u =>
+                            !settingsForm.reminder_user_ids.includes(u.id) &&
+                            (u.full_name ?? '').toLowerCase().includes(waUserSearch.toLowerCase()),
+                          ).slice(0, 8);
+                          return filtered.length > 0 ? (
+                            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                              {filtered.map(u => (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  data-testid={`add-wa-user-${u.id}`}
+                                  onMouseDown={() => {
+                                    setSettingsForm(s => ({ ...s, reminder_user_ids: [...s.reminder_user_ids, u.id] }));
+                                    setWaUserSearch('');
+                                    setWaUserDropOpen(false);
+                                  }}
+                                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 text-left"
+                                >
+                                  <span className="font-medium text-slate-800">{u.full_name ?? '—'}</span>
+                                  <span className="text-[11px] text-slate-400">{u.phone}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
+                      {/* Selected individual users */}
+                      {settingsForm.reminder_user_ids.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {settingsForm.reminder_user_ids.map(uid => {
+                            const u = waUsers.find(x => x.id === uid);
+                            return (
+                              <span
+                                key={uid}
+                                className="flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs rounded-full pl-2.5 pr-1.5 py-1"
+                              >
+                                <Users className="w-3 h-3" />
+                                {u?.full_name ?? uid}
+                                {u?.phone && <span className="text-indigo-400 text-[10px]">· {u.phone}</span>}
+                                <button
+                                  type="button"
+                                  data-testid={`remove-wa-user-${uid}`}
+                                  onClick={() => setSettingsForm(s => ({ ...s, reminder_user_ids: s.reminder_user_ids.filter(x => x !== uid) }))}
+                                  className="ml-0.5 text-indigo-400 hover:text-indigo-700"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Manual phone numbers */}
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Additional numbers not in the system</p>
+                      <Input
+                        id="reminder-phones"
+                        type="text"
+                        placeholder="e.g. +249912345678, +249923456789"
+                        value={settingsForm.reminder_phones}
+                        onChange={e => setSettingsForm(s => ({ ...s, reminder_phones: e.target.value }))}
+                        data-testid="input-reminder-phones"
+                      />
+                      <p className="text-[11px] text-slate-400">Comma-separated international numbers. Only needed for people not in the system.</p>
+                    </div>
+
+                    {/* Resolved summary */}
+                    {(() => {
+                      const rolePhones = waUsers
+                        .filter(u => settingsForm.reminder_roles.includes(u.role ?? ''))
+                        .map(u => u.phone!);
+                      const userPhones = settingsForm.reminder_user_ids
+                        .map(uid => waUsers.find(u => u.id === uid)?.phone)
+                        .filter(Boolean) as string[];
+                      const manualPhones = settingsForm.reminder_phones
+                        .split(',').map(p => p.trim()).filter(Boolean);
+                      const allPhones = [...new Set([...rolePhones, ...userPhones, ...manualPhones])];
+                      if (!allPhones.length && !settingsForm.reminder_roles.length && !settingsForm.reminder_user_ids.length) return null;
+                      return (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 space-y-1">
+                          <p className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1.5">
+                            <MessageSquareMore className="w-3.5 h-3.5" />
+                            Will notify {allPhones.length} number{allPhones.length !== 1 ? 's' : ''}
+                            {settingsForm.reminder_roles.length > 0 && ` — ${settingsForm.reminder_roles.length} role${settingsForm.reminder_roles.length > 1 ? 's' : ''}`}
+                            {settingsForm.reminder_user_ids.length > 0 && ` + ${settingsForm.reminder_user_ids.length} individual${settingsForm.reminder_user_ids.length > 1 ? 's' : ''}`}
+                            {manualPhones.length > 0 && ` + ${manualPhones.length} manual`}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {allPhones.map(ph => (
+                              <span key={ph} className="text-[10px] bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5 font-mono">{ph}</span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Preview */}
