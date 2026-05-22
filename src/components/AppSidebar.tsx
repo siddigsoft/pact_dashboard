@@ -467,6 +467,12 @@
     if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM || isCoordinator || isDataTeam || isCountryDirector)) {
       myMoneyItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 2, isPinned: isPinned('/cost-submission') });
     }
+    if (!isHidden('/my-advances')) {
+      myMoneyItems.push({ id: 'my-advances', title: "My Advances", url: "/my-advances", icon: Wallet, priority: 3, isPinned: isPinned('/my-advances') });
+    }
+    if (!isHidden('/my-expenses')) {
+      myMoneyItems.push({ id: 'my-expenses', title: "My Expenses", url: "/my-expenses", icon: Receipt, priority: 4, isPinned: isPinned('/my-expenses') });
+    }
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
@@ -526,51 +532,13 @@
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 
-    // â”€â”€ Accounting module: Super Admin only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // All accounting pages are restricted to super_admin until the module is
-    // ready for wider rollout. Change isSuperAdmin â†’ the desired role set
-    // when you are ready to open access.
+    // ── Accounting module ────────────────────────────────────────────
     const acctItems: MenuGroup['items'] = [];
     if (isSuperAdmin) {
-      if (!isHidden('/executive') && (isSuperAdmin || isCountryDirector)) acctItems.push({ id: 'executive-dashboard', title: 'Executive Dashboard', url: '/executive', icon: BarChart3, priority: 0.1, isPinned: isPinned('/executive') });
-      if (!isHidden('/accounting/finance-dashboard')) acctItems.push({ id: 'accounting-finance-dashboard', title: 'Finance Dashboard', url: '/accounting/finance-dashboard', icon: LayoutDashboard, priority: 0.5, isPinned: isPinned('/accounting/finance-dashboard') });
-      if (!isHidden('/accounting/coa')) acctItems.push({ id: 'accounting-coa', title: 'Chart of Accounts', url: '/accounting/coa', icon: BarChart3, priority: 1, isPinned: isPinned('/accounting/coa') });
+      if (!isHidden('/accounting')) acctItems.push({ id: 'accounting-hub', title: 'Accounting Hub', url: '/accounting', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/accounting') });
       if (!isHidden('/accounting/journals')) acctItems.push({ id: 'accounting-journals', title: 'Journal Entries', url: '/accounting/journals', icon: Receipt, priority: 2, isPinned: isPinned('/accounting/journals') });
-      if (!isHidden('/accounting/trial-balance')) acctItems.push({ id: 'accounting-trial-balance', title: 'Trial Balance', url: '/accounting/trial-balance', icon: TrendingUp, priority: 3, isPinned: isPinned('/accounting/trial-balance') });
-      if (!isHidden('/accounting/ledger')) acctItems.push({ id: 'accounting-ledger', title: 'General Ledger', url: '/accounting/ledger', icon: BookOpen, priority: 3.5, isPinned: isPinned('/accounting/ledger') });
-      if (!isHidden('/accounting/reports')) acctItems.push({ id: 'accounting-reports', title: 'Financial Statements', url: '/accounting/reports', icon: FileText, priority: 3.6, isPinned: isPinned('/accounting/reports') });
-      if (!isHidden('/accounting/bank-recon')) acctItems.push({ id: 'accounting-bank-recon', title: 'Bank Reconciliation', url: '/accounting/bank-recon', icon: Landmark, priority: 3.7, isPinned: isPinned('/accounting/bank-recon') });
-      if (!isHidden('/accounting/budget-variance')) acctItems.push({ id: 'accounting-budget-variance', title: 'Budget vs. Actual', url: '/accounting/budget-variance', icon: BarChart3, priority: 3.8, isPinned: isPinned('/accounting/budget-variance') });
-      if (!isHidden('/accounting/vendors')) acctItems.push({ id: 'accounting-vendors', title: 'Vendor Registry', url: '/accounting/vendors', icon: Building2, priority: 3.9, isPinned: isPinned('/accounting/vendors') });
-      if (!isHidden('/accounting/purchase-requisitions')) acctItems.push({ id: 'accounting-purchase-requisitions', title: 'Purchase Requisitions', url: '/accounting/purchase-requisitions', icon: ClipboardList, priority: 3.901, isPinned: isPinned('/accounting/purchase-requisitions') });
-      if (!isHidden('/accounting/purchase-orders')) acctItems.push({ id: 'accounting-purchase-orders', title: 'Purchase Orders', url: '/accounting/purchase-orders', icon: ShoppingCart, priority: 3.905, isPinned: isPinned('/accounting/purchase-orders') });
-      if (!isHidden('/accounting/grn')) acctItems.push({ id: 'accounting-grn', title: 'Goods Receipt Notes', url: '/accounting/grn', icon: Package, priority: 3.907, isPinned: isPinned('/accounting/grn') });
-      if (!isHidden('/accounting/ap-invoices')) acctItems.push({ id: 'accounting-ap-invoices', title: 'AP Invoices', url: '/accounting/ap-invoices', icon: FileText, priority: 3.909, isPinned: isPinned('/accounting/ap-invoices') });
-      if (!isHidden('/accounting/cheque-register')) acctItems.push({ id: 'accounting-cheque-register', title: 'Cheque Register', url: '/accounting/cheque-register', icon: CreditCard, priority: 3.91, isPinned: isPinned('/accounting/cheque-register') });
-      if (!isHidden('/accounting/ap-aging')) acctItems.push({ id: 'accounting-ap-aging', title: 'AP Aging', url: '/accounting/ap-aging', icon: Clock, priority: 3.915, isPinned: isPinned('/accounting/ap-aging') });
-      if (!isHidden('/accounting/cash-flow')) acctItems.push({ id: 'accounting-cash-flow', title: 'Cash Flow', url: '/accounting/cash-flow', icon: Activity, priority: 3.92, isPinned: isPinned('/accounting/cash-flow') });
-      if (!isHidden('/accounting/fixed-assets')) acctItems.push({ id: 'accounting-fixed-assets', title: 'Fixed Assets', url: '/accounting/fixed-assets', icon: Package, priority: 3.93, isPinned: isPinned('/accounting/fixed-assets') });
-      if (!isHidden('/accounting/gl-bridge')) acctItems.push({ id: 'accounting-gl-bridge', title: 'GL Bridge Engine', url: '/accounting/gl-bridge', icon: Zap, priority: 3.94, isPinned: isPinned('/accounting/gl-bridge') });
-      if (!isHidden('/finance/audit-trail')) acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
-      if (!isHidden('/accounting/fiscal-years')) acctItems.push({ id: 'accounting-fiscal-years', title: 'Fiscal Years & Periods', url: '/accounting/fiscal-years', icon: Calendar, priority: 5, isPinned: isPinned('/accounting/fiscal-years') });
-      if (!isHidden('/accounting/period-close')) acctItems.push({ id: 'accounting-period-close', title: 'Period Close', url: '/accounting/period-close', icon: Lock, priority: 5.5, isPinned: isPinned('/accounting/period-close') });
-      if (!isHidden('/accounting/tax')) acctItems.push({ id: 'accounting-tax', title: 'Tax Management', url: '/accounting/tax', icon: Receipt, priority: 5.6, isPinned: isPinned('/accounting/tax') });
-      if (!isHidden('/accounting/multi-currency')) acctItems.push({ id: 'accounting-multi-currency', title: 'Multi-Currency', url: '/accounting/multi-currency', icon: ArrowLeftRight, priority: 5.7, isPinned: isPinned('/accounting/multi-currency') });
-      if (!isHidden('/accounting/budget-encumbrance')) acctItems.push({ id: 'accounting-budget-encumbrance', title: 'Budget Encumbrance', url: '/accounting/budget-encumbrance', icon: Wallet, priority: 5.8, isPinned: isPinned('/accounting/budget-encumbrance') });
-      if (!isHidden('/accounting/donor-reports')) acctItems.push({ id: 'accounting-donor-reports', title: 'Donor Fund Reports', url: '/accounting/donor-reports', icon: Heart, priority: 5.9, isPinned: isPinned('/accounting/donor-reports') });
-      if (!isHidden('/accounting/sod')) acctItems.push({ id: 'accounting-sod', title: 'Segregation of Duties', url: '/accounting/sod', icon: ShieldAlert, priority: 5.95, isPinned: isPinned('/accounting/sod') });
-      if (!isHidden('/accounting/aml')) acctItems.push({ id: 'accounting-aml', title: 'AML & Compliance', url: '/accounting/aml', icon: Shield, priority: 5.97, isPinned: isPinned('/accounting/aml') });
-      if (!isHidden('/accounting/intercompany')) acctItems.push({ id: 'accounting-intercompany', title: 'Intercompany Transfers', url: '/accounting/intercompany', icon: ArrowLeftRight, priority: 5.98, isPinned: isPinned('/accounting/intercompany') });
-      if (!isHidden('/accounting/funds')) acctItems.push({ id: 'accounting-funds', title: 'Funds', url: '/accounting/funds', icon: Landmark, priority: 6, isPinned: isPinned('/accounting/funds') });
-      if (!isHidden('/accounting/cash-flow-forecast')) acctItems.push({ id: 'accounting-cash-flow-forecast', title: 'Cash Flow Forecast', url: '/accounting/cash-flow-forecast', icon: TrendingUp, priority: 6.1, isPinned: isPinned('/accounting/cash-flow-forecast') });
-      if (!isHidden('/accounting/grants')) acctItems.push({ id: 'accounting-grants', title: 'Grant Tracking', url: '/accounting/grants', icon: Award, priority: 6.2, isPinned: isPinned('/accounting/grants') });
-      if (!isHidden('/accounting/cost-allocation')) acctItems.push({ id: 'accounting-cost-allocation', title: 'Cost Allocation', url: '/accounting/cost-allocation', icon: Zap, priority: 6.3, isPinned: isPinned('/accounting/cost-allocation') });
-      if (!isHidden('/accounting/depreciation-run')) acctItems.push({ id: 'accounting-depreciation-run', title: 'Depreciation Run', url: '/accounting/depreciation-run', icon: RotateCcw, priority: 6.4, isPinned: isPinned('/accounting/depreciation-run') });
-      if (!isHidden('/accounting/consolidation')) acctItems.push({ id: 'accounting-consolidation', title: 'Consolidation', url: '/accounting/consolidation', icon: Building2, priority: 6.5, isPinned: isPinned('/accounting/consolidation') });
-      if (!isHidden('/accounting/budget-planning')) acctItems.push({ id: 'accounting-budget-planning', title: 'Budget Planning', url: '/accounting/budget-planning', icon: PiggyBank, priority: 6.6, isPinned: isPinned('/accounting/budget-planning') });
-      if (!isHidden('/accounting/gl-audit')) acctItems.push({ id: 'accounting-gl-audit', title: 'GL Bridge Audit', url: '/accounting/gl-audit', icon: Activity, priority: 6.7, isPinned: isPinned('/accounting/gl-audit') });
-      if (!isHidden('/accounting/search')) acctItems.push({ id: 'accounting-search', title: 'Accounting Search', url: '/accounting/search', icon: Search, priority: 0.5, isPinned: isPinned('/accounting/search') });
-      if (!isHidden('/accounting/settings')) acctItems.push({ id: 'accounting-settings', title: 'Accounting Settings', url: '/accounting/settings', icon: Settings2, priority: 7, isPinned: isPinned('/accounting/settings') });
+      if (!isHidden('/accounting/bank-recon')) acctItems.push({ id: 'accounting-bank-recon', title: 'Bank Reconciliation', url: '/accounting/bank-recon', icon: Landmark, priority: 3, isPinned: isPinned('/accounting/bank-recon') });
+      if (!isHidden('/accounting/search')) acctItems.push({ id: 'accounting-search', title: 'Quick Search', url: '/accounting/search', icon: Search, priority: 4, isPinned: isPinned('/accounting/search') });
     }
     if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);
 
@@ -657,6 +625,9 @@
     }
     if (!isHidden('/dct-pdm') && (isSuperAdmin || isAdmin || isICT)) {
       analyticsItems.push({ id: 'dct-pdm', title: "DCT PDM Dashboard", url: "/dct-pdm", icon: BarChart3, priority: 8, isPinned: isPinned('/dct-pdm') });
+    }
+    if (!isHidden('/executive') && (isSuperAdmin || isCountryDirector)) {
+      analyticsItems.push({ id: 'executive-dashboard', title: "Executive Dashboard", url: "/executive", icon: LayoutDashboard, priority: 9, isPinned: isPinned('/executive') });
     }
     if (analyticsItems.length) groups.push({ id: 'analytics', label: "Analytics & Reports", order: 6, items: analyticsItems });
 

@@ -166,6 +166,7 @@ const SalaryIncrements = lazy(() => import('./pages/SalaryIncrements'));
 const PositionsPage = lazy(() => import('./pages/Positions'));
 const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertifications'));
 const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
+const AccountingHub = lazy(() => import('./pages/AccountingHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
 const AccountingJournals = lazy(() => import('./pages/AccountingJournals'));
 const AccountingTrialBalance = lazy(() => import('./pages/AccountingTrialBalance'));
@@ -532,6 +533,7 @@ const AppRoutes = () => {
         <Route path="/positions" element={<Navigate to="/hr?tab=positions" replace />} />
         <Route path="/training-certifications" element={<Navigate to="/hr?tab=training" replace />} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
+        <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
         <Route path="/accounting/coa" element={<SuperAdminRoute><PageWrapper><AccountingCOA /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/journals" element={<SuperAdminRoute><PageWrapper><AccountingJournals /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/trial-balance" element={<SuperAdminRoute><PageWrapper><AccountingTrialBalance /></PageWrapper></SuperAdminRoute>} />
