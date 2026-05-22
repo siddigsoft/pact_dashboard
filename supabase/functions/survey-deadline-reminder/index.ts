@@ -30,6 +30,25 @@ const APP_URL = Deno.env.get('APP_URL') ?? 'https://app.pactorg.com'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
+/**
+ * Normalise a phone number to E.164 international format.
+ *
+ * Rules (applied after stripping spaces / dashes / parentheses):
+ *   09xxxxxxxx  → +2499xxxxxxxx  (Sudan, Zain/MTN/Sudani 09x prefix)
+ *   01xxxxxxxx  → +2491xxxxxxxx  (Sudan, 01x prefix)
+ *   07xxxxxxxx  → +2567xxxxxxxx  (Uganda, 07x prefix)
+ *   +…          → unchanged       (already international)
+ *   anything else → unchanged
+ */
+function normalizePhone(raw: string): string {
+  const p = raw.trim().replace(/[\s\-\(\)\.]/g, '')
+  if (!p) return p
+  if (p.startsWith('+')) return p
+  if (p.startsWith('09') || p.startsWith('01')) return '+249' + p.slice(1)
+  if (p.startsWith('07')) return '+256' + p.slice(1)
+  return p
+}
+
 interface SurveyRow {
   id: string
   title: string
@@ -188,9 +207,9 @@ serve(async (req: Request) => {
     }
 
     // ── WhatsApp recipients ─────────────────────────────────────────────────────
-    // Start with manually entered numbers
+    // Start with manually entered numbers (normalise to E.164)
     const manualPhones = String(s.reminder_phones ?? '')
-      .split(',').map(p => p.trim()).filter(p => p.length >= 7)
+      .split(',').map(p => normalizePhone(p)).filter(p => p.length >= 7)
 
     // Resolve phones from selected roles
     const selectedRoles = Array.isArray(s.reminder_roles) ? (s.reminder_roles as string[]) : []
@@ -201,7 +220,7 @@ serve(async (req: Request) => {
         .select('phone')
         .in('role', selectedRoles)
         .not('phone', 'is', null)
-      rolePhones = (roleUsers ?? []).map((u: { phone: string }) => u.phone).filter(p => p?.length >= 7)
+      rolePhones = (roleUsers ?? []).map((u: { phone: string }) => normalizePhone(u.phone)).filter(p => p.length >= 7)
     }
 
     // Resolve phones from individually selected users
@@ -213,10 +232,10 @@ serve(async (req: Request) => {
         .select('phone')
         .in('id', selectedUserIds)
         .not('phone', 'is', null)
-      userPhones = (pickedUsers ?? []).map((u: { phone: string }) => u.phone).filter(p => p?.length >= 7)
+      userPhones = (pickedUsers ?? []).map((u: { phone: string }) => normalizePhone(u.phone)).filter(p => p.length >= 7)
     }
 
-    // Deduplicate all sources
+    // Deduplicate all sources (after normalisation, +249… and 09… won't clash)
     const phones = [...new Set([...rolePhones, ...userPhones, ...manualPhones])]
 
     let waOk = 0

@@ -3803,14 +3803,22 @@ export default function SurveyDetail() {
 
                     {/* Resolved summary */}
                     {(() => {
+                      const norm = (p: string) => {
+                        const s = p.trim().replace(/[\s\-\(\)\.]/g, '');
+                        if (!s) return '';
+                        if (s.startsWith('+')) return s;
+                        if (s.startsWith('09') || s.startsWith('01')) return '+249' + s.slice(1);
+                        if (s.startsWith('07')) return '+256' + s.slice(1);
+                        return s;
+                      };
                       const rolePhones = waUsers
                         .filter(u => settingsForm.reminder_roles.includes(u.role ?? ''))
-                        .map(u => u.phone!);
+                        .map(u => norm(u.phone!)).filter(Boolean);
                       const userPhones = settingsForm.reminder_user_ids
-                        .map(uid => waUsers.find(u => u.id === uid)?.phone)
-                        .filter(Boolean) as string[];
+                        .map(uid => waUsers.find(u => u.id === uid)?.phone ?? '')
+                        .map(norm).filter(Boolean);
                       const manualPhones = settingsForm.reminder_phones
-                        .split(',').map(p => p.trim()).filter(Boolean);
+                        .split(',').map(norm).filter(Boolean);
                       const allPhones = [...new Set([...rolePhones, ...userPhones, ...manualPhones])];
                       if (!allPhones.length && !settingsForm.reminder_roles.length && !settingsForm.reminder_user_ids.length) return null;
                       return (
