@@ -442,6 +442,12 @@ const AppRoutes = () => {
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
         <Route path="/hr" element={<HRHub />} />
+        <Route path="/hr/payroll" element={<Navigate to="/hr?tab=payroll" replace />} />
+        <Route path="/hr/retainer" element={<Navigate to="/hr?tab=retainer" replace />} />
+        <Route path="/hr/leave" element={<Navigate to="/hr?tab=leave-requests" replace />} />
+        <Route path="/hr/performance" element={<Navigate to="/hr?tab=performance" replace />} />
+        <Route path="/hr/eosb" element={<Navigate to="/hr?tab=eosb" replace />} />
+        <Route path="/hr/salary-advances" element={<Navigate to="/hr?tab=salary-advances" replace />} />
         <Route path="/leave" element={<Navigate to="/hr?tab=leave-requests" replace />} />
         <Route path="/finance-hub" element={<FinanceHub />} />
         <Route path="/admin/wallets" element={<Navigate to="/finance-hub?tab=admin-wallets" replace />} />
