@@ -421,6 +421,7 @@ export default function SurveyDetail() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [waUserSearch, setWaUserSearch] = useState('');
   const [waUserDropOpen, setWaUserDropOpen] = useState(false);
+  const [showMsgPreview, setShowMsgPreview] = useState(false);
 
   const REMINDER_ROLES = [
     { id: 'admin',           label: 'Admin' },
@@ -3831,7 +3832,98 @@ export default function SurveyDetail() {
                     })()}
                   </div>
 
-                  {/* Preview */}
+                  {/* Message content previews */}
+                  {(() => {
+                    const surveyTitle = survey?.title ?? 'Survey Title';
+                    const surveyTitleAr = (survey as unknown as Record<string,unknown>)?.title_ar as string | undefined;
+                    const shortCode = (survey as unknown as Record<string,unknown>)?.short_code as string | undefined;
+                    const surveyUrl = `https://app.pactorg.com/s/${shortCode ?? survey?.id ?? 'xxxxx'}`;
+
+                    let daysLabel = 'in N days';
+                    let deadlineDateStr = '—';
+                    if (settingsForm.expires_at) {
+                      const deadline = new Date(settingsForm.expires_at);
+                      const msRemaining = deadline.getTime() - Date.now();
+                      const daysRemaining = Math.round(msRemaining / 86_400_000);
+                      daysLabel = daysRemaining === 0 ? 'today' : daysRemaining === 1 ? 'tomorrow' : `in ${daysRemaining} days`;
+                      deadlineDateStr = deadline.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    }
+
+                    const waText = `Survey "${surveyTitle}" deadline is ${daysLabel} (${deadlineDateStr}). Fill it here: ${surveyUrl}`;
+
+                    return (
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          data-testid="toggle-msg-preview"
+                          onClick={() => setShowMsgPreview(v => !v)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+                        >
+                          <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                            <Eye className="w-3.5 h-3.5" />
+                            Preview reminder messages
+                          </span>
+                          <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 transition-transform', showMsgPreview && 'rotate-180')} />
+                        </button>
+
+                        {showMsgPreview && (
+                          <div className="divide-y divide-slate-100">
+
+                            {/* WhatsApp preview */}
+                            <div className="p-3 space-y-2">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                <MessageSquareMore className="w-3 h-3 text-emerald-500" />WhatsApp message
+                              </p>
+                              <div className="bg-[#dcf8c6] rounded-xl rounded-tl-sm px-3 py-2 max-w-xs text-[12px] text-slate-800 leading-relaxed shadow-sm">
+                                {waText}
+                              </div>
+                              <p className="text-[10px] text-slate-400">Sent as a plain-text WhatsApp message. The link opens the survey directly.</p>
+                            </div>
+
+                            {/* Email preview */}
+                            <div className="p-3 space-y-2">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                <Mail className="w-3 h-3 text-indigo-500" />Email message
+                              </p>
+                              <div className="border border-slate-200 rounded-lg overflow-hidden text-[12px] shadow-sm">
+                                {/* Email header */}
+                                <div className="bg-indigo-600 px-4 py-3">
+                                  <p className="text-indigo-200 text-[10px] mb-0.5">PACT Platform — Survey Reminder</p>
+                                  <p className="text-white font-bold">⏰ Survey Deadline Approaching</p>
+                                </div>
+                                {/* Email body */}
+                                <div className="px-4 py-3 bg-white space-y-3">
+                                  <p className="text-slate-600">
+                                    The following survey deadline is <strong>{daysLabel}</strong>:
+                                  </p>
+                                  <div className="bg-indigo-50 rounded-lg px-3 py-2.5">
+                                    <p className="text-indigo-700 font-bold">{surveyTitle}</p>
+                                    {surveyTitleAr && surveyTitleAr !== surveyTitle && (
+                                      <p className="text-slate-500 text-[11px] text-right mt-0.5" dir="rtl">{surveyTitleAr}</p>
+                                    )}
+                                    <p className="text-slate-500 text-[11px] mt-1">Deadline: <strong>{deadlineDateStr}</strong> ({daysLabel})</p>
+                                  </div>
+                                  <p className="text-slate-500 text-[11px]">Please make sure to submit your response before the deadline. After it closes, the survey will no longer accept responses.</p>
+                                  <div className="inline-block bg-indigo-600 text-white text-[11px] font-semibold px-4 py-1.5 rounded-lg">
+                                    Fill Out Survey →
+                                  </div>
+                                </div>
+                                {/* Email footer */}
+                                <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+                                  <p className="text-slate-400 text-[10px] text-center">This is an automatic reminder from PACT Command Center.</p>
+                                  <p className="text-slate-400 text-[10px] text-center mt-0.5" dir="rtl">تذكير تلقائي من منصة PACT — الموعد النهائي للاستبيان يقترب</p>
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-slate-400">Subject: ⏰ Reminder: "{surveyTitle}" closes {daysLabel} — PACT Surveys</p>
+                            </div>
+
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Schedule preview */}
                   {settingsForm.expires_at && (
                     <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-1.5">
                       <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
