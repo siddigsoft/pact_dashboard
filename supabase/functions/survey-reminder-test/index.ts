@@ -24,7 +24,6 @@ const APP_URL      = Deno.env.get('APP_URL') ?? 'https://app.pactorg.com'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-const ALLOWED_ROLES = ['admin', 'coordinator', 'supervisor', 'fom', 'countryDirector', 'ict', 'superAdmin', 'super_admin', 'SuperAdmin']
 
 function normalizePhone(raw: string): string {
   const p = raw.trim().replace(/[\s\-\(\)\.]/g, '')
@@ -63,12 +62,7 @@ serve(async (req: Request) => {
   const { data: { user }, error: authErr } = await userSb.auth.getUser()
   if (authErr || !user) return json({ ok: false, error: 'Unauthorized — please log in again' })
 
-  // ── Check role ───────────────────────────────────────────────────────────────
   const sb = createClient(SUPABASE_URL, SERVICE_KEY)
-  const { data: profile } = await sb.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
-    return json({ ok: false, error: `Your role (${profile?.role ?? 'unknown'}) does not have permission to send reminders` })
-  }
 
   // ── Parse body ───────────────────────────────────────────────────────────────
   let body: { survey_id?: string; test_mode?: boolean }
