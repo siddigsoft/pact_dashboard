@@ -51,10 +51,11 @@ const FinanceAuditTrailPanel  = lazy(() => import('./FinanceAuditTrail'));
 const AccountingSettingsPanel = lazy(() => import('./AccountingSettings'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type AcctSection = 'core' | 'operations' | 'controls' | 'advanced';
+type AcctSection = 'core' | 'fin-ops' | 'p2p' | 'controls' | 'advanced';
 type AcctTab =
   | 'finance-dashboard' | 'coa' | 'journals' | 'trial-balance' | 'ledger' | 'reports' | 'fiscal-years' | 'search'
-  | 'bank-recon' | 'budget-variance' | 'cash-flow' | 'vendors' | 'purchase-requisitions' | 'purchase-orders' | 'grn' | 'ap-invoices' | 'cheque-register' | 'ap-aging' | 'fixed-assets' | 'gl-bridge' | 'budget-planning'
+  | 'bank-recon' | 'budget-variance' | 'cash-flow' | 'fixed-assets' | 'gl-bridge' | 'budget-planning'
+  | 'vendors' | 'purchase-requisitions' | 'purchase-orders' | 'grn' | 'ap-invoices' | 'cheque-register' | 'ap-aging'
   | 'period-close' | 'tax' | 'multi-currency' | 'budget-encumbrance' | 'donor-reports' | 'sod' | 'aml' | 'intercompany' | 'funds'
   | 'cash-flow-forecast' | 'grants' | 'cost-allocation' | 'depreciation-run' | 'consolidation' | 'gl-audit' | 'finance-audit-trail' | 'settings';
 
@@ -101,12 +102,16 @@ const SECTIONS: SectionDef[] = [
     ],
   },
   {
-    id: 'operations', label: 'Operations & P2P', icon: ShoppingCart, color: '#0284c7',
-    description: 'End-to-end procure-to-pay cycle — vendors, purchasing, goods receipt, invoicing, payments, and asset management.',
+    id: 'fin-ops', label: 'Financial Operations', icon: Activity, color: '#0284c7',
+    description: 'Day-to-day financial management — bank reconciliation, cash flow, budget planning, fixed assets, and GL automation.',
     tabs: [
       {
         id: 'bank-recon', label: 'Bank Reconciliation', icon: Landmark,
         description: 'Match bank statement lines against GL entries, clear outstanding items, and identify unreconciled differences for each bank account.',
+      },
+      {
+        id: 'budget-planning', label: 'Budget Planning', icon: PiggyBank,
+        description: 'Build and submit annual or project budgets, route them through multi-level approval workflows, track revisions, and maintain a full audit log.',
       },
       {
         id: 'budget-variance', label: 'Budget vs Actual', icon: BarChart,
@@ -116,6 +121,20 @@ const SECTIONS: SectionDef[] = [
         id: 'cash-flow', label: 'Cash Flow', icon: Activity,
         description: 'Track money in and out across all accounts in real time to monitor liquidity, identify cash gaps, and manage operating reserves.',
       },
+      {
+        id: 'fixed-assets', label: 'Fixed Assets', icon: Package,
+        description: 'Manage the full asset lifecycle — acquisition, depreciation schedule, revaluation, disposal, and write-off — with an asset register.',
+      },
+      {
+        id: 'gl-bridge', label: 'GL Bridge Engine', icon: Zap,
+        description: 'Automatically generate and post journal entries from operational modules (payroll, advances, P2P) into the General Ledger without manual re-entry.',
+      },
+    ],
+  },
+  {
+    id: 'p2p', label: 'Procurement & P2P', icon: ShoppingCart, color: '#7c3aed',
+    description: 'Full procure-to-pay cycle — vendor registry, requisitions, purchase orders, goods receipt, AP invoices, and payment tracking.',
+    tabs: [
       {
         id: 'vendors', label: 'Vendor Registry', icon: Building2,
         description: 'Maintain the vendor master record — contact details, bank account info, payment terms, tax identifiers, and compliance/blacklist status.',
@@ -143,18 +162,6 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'ap-aging', label: 'AP Aging', icon: Clock,
         description: 'View outstanding payables grouped by due-date buckets (current, 30, 60, 90+ days) to prioritize payments and avoid late penalties.',
-      },
-      {
-        id: 'fixed-assets', label: 'Fixed Assets', icon: Package,
-        description: 'Manage the full asset lifecycle — acquisition, depreciation schedule, revaluation, disposal, and write-off — with an asset register.',
-      },
-      {
-        id: 'gl-bridge', label: 'GL Bridge Engine', icon: Zap,
-        description: 'Automatically generate and post journal entries from operational modules (payroll, advances, P2P) into the General Ledger without manual re-entry.',
-      },
-      {
-        id: 'budget-planning', label: 'Budget Planning', icon: PiggyBank,
-        description: 'Build and submit annual or project budgets, route them through multi-level approval workflows, track revisions, and maintain a full audit log.',
       },
     ],
   },
