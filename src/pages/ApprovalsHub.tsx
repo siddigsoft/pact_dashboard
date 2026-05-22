@@ -271,10 +271,62 @@ export default function ApprovalsHub() {
           .update(updates)
           .eq('id', costId);
         if (error) throw error;
-        toast({
-          title: action === 'approve' ? 'Cost Approved' : 'Cost Rejected',
-          description: action === 'approve' ? 'Cost submission has been approved.' : 'Submission has been rejected.',
-        });
+
+        if (action === 'approve') {
+          // DB bridge trigger fires automatically; verify GL posting status
+          await new Promise(r => setTimeout(r, 800));
+          const { data: bridgeLog } = await supabase
+            .from('acct_gl_bridge_log' as any)
+            .select('status, error_message, created_at')
+            .eq('source_table', 'operational_cost_submissions')
+            .eq('source_id', costId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const glStatus = (bridgeLog as any)?.status;
+          toast({
+            title: 'Cost Approved',
+            description: glStatus === 'posted'
+              ? 'Cost approved. GL journal entry posted automatically.'
+              : glStatus === 'skipped'
+              ? 'Cost approved. GL bridge skipped (posting engine disabled or period closed).'
+              : 'Cost approved. GL posting in progress via bridge engine.',
+          });
+        } else {
+          toast({ title: 'Cost Rejected', description: 'Submission has been rejected.' });
+        }
+      } else if (item.type === 'down_payment') {
+        const dpId = item.rawData?.id;
+        const now = new Date().toISOString();
+        const updates = action === 'approve'
+          ? { status: 'approved', approved_by: currentUser?.id, approved_at: now, approval_notes: actionNotes || 'Approved via Approvals Hub' }
+          : { status: 'rejected', approved_by: currentUser?.id, approved_at: now, approval_notes: actionNotes || 'Rejected via Approvals Hub' };
+        const { error } = await supabase
+          .from('down_payment_requests')
+          .update(updates)
+          .eq('id', dpId);
+        if (error) throw error;
+
+        if (action === 'approve') {
+          await new Promise(r => setTimeout(r, 800));
+          const { data: bridgeLog } = await supabase
+            .from('acct_gl_bridge_log' as any)
+            .select('status, error_message, created_at')
+            .eq('source_table', 'down_payment_requests')
+            .eq('source_id', dpId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const glStatus = (bridgeLog as any)?.status;
+          toast({
+            title: 'Advance Approved',
+            description: glStatus === 'posted'
+              ? 'Advance approved. GL journal entry posted automatically.'
+              : 'Advance approved. GL bridge engine will post the journal entry.',
+          });
+        } else {
+          toast({ title: 'Advance Rejected', description: 'Request has been rejected.' });
+        }
       }
 
       setActionDialog(null);

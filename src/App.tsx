@@ -188,6 +188,8 @@ const AccountingGRN        = lazy(() => import('./pages/AccountingGRN'));
 const AccountingAPInvoices = lazy(() => import('./pages/AccountingAPInvoices'));
 const AccountingChequeRegister = lazy(() => import('./pages/AccountingChequeRegister'));
 const AccountingPeriodClose = lazy(() => import('./pages/AccountingPeriodClose'));
+const CoverageMap = lazy(() => import('./pages/CoverageMap'));
+const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'));
 const AccountingTaxManagement = lazy(() => import('./pages/AccountingTaxManagement'));
 const AccountingMultiCurrency = lazy(() => import('./pages/AccountingMultiCurrency'));
 const AccountingBudgetEncumbrance = lazy(() => import('./pages/AccountingBudgetEncumbrance'));
@@ -552,6 +554,8 @@ const AppRoutes = () => {
         <Route path="/accounting/ap-invoices" element={<SuperAdminRoute><PageWrapper><AccountingAPInvoices /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/cheque-register" element={<SuperAdminRoute><PageWrapper><AccountingChequeRegister /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/period-close" element={<SuperAdminRoute><PageWrapper><AccountingPeriodClose /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/coverage-map" element={<PageWrapper><CoverageMap /></PageWrapper>} />
+        <Route path="/executive" element={<SuperAdminRoute><PageWrapper><ExecutiveDashboard /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/tax" element={<SuperAdminRoute><PageWrapper><AccountingTaxManagement /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/multi-currency" element={<SuperAdminRoute><PageWrapper><AccountingMultiCurrency /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/budget-encumbrance" element={<SuperAdminRoute><PageWrapper><AccountingBudgetEncumbrance /></PageWrapper></SuperAdminRoute>} />

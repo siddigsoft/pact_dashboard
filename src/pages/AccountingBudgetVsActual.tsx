@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, BarChart2, Download, RefreshCw, Pencil, Check, X, Plus } from 'lucide-react';
+import { Loader2, BarChart2, Download, RefreshCw, Pencil, Check, X, Plus, TrendingDown, TrendingUp, AlertTriangle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -363,6 +364,111 @@ export default function AccountingBudgetVsActual() {
       )}
 
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
+
+      {/* ── Burn-rate chart panel ─────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          {/* Top-10 accounts by spend */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-indigo-600" />
+                Top Accounts by Actual Spend
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-2 pb-3">
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart
+                  data={[...rows]
+                    .filter(r => r.actual > 0)
+                    .sort((a, b) => b.actual - a.actual)
+                    .slice(0, 10)
+                    .map(r => ({
+                      name: r.account_code,
+                      actual: r.actual,
+                      budget: r.budget,
+                      pct: r.pct,
+                      label: r.account_name_en.slice(0, 18),
+                    }))}
+                  margin={{ top: 4, right: 8, left: 0, bottom: 4 }}
+                >
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => formatNumber(v)} width={56} />
+                  <RechartTooltip
+                    formatter={(v: number, name: string) => [formatNumber(v), name === 'actual' ? 'Actual' : 'Budget']}
+                    labelFormatter={(l: string, payload: any[]) => payload?.[0]?.payload?.label ?? l}
+                  />
+                  <Bar dataKey="budget" fill="#c7d2fe" radius={[2, 2, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="actual" radius={[2, 2, 0, 0]} maxBarSize={28}>
+                    {[...rows]
+                      .filter(r => r.actual > 0)
+                      .sort((a, b) => b.actual - a.actual)
+                      .slice(0, 10)
+                      .map((r, i) => (
+                        <Cell key={i} fill={r.pct > 100 ? '#ef4444' : r.pct >= 85 ? '#f59e0b' : '#6366f1'} />
+                      ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-[10px] text-muted-foreground px-2 mt-1">Light bar = budget · Coloured bar = actual (red = over budget, amber = ≥85%)</p>
+            </CardContent>
+          </Card>
+
+          {/* Burn rate gauges */}
+          <Card>
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-indigo-600" />
+                Utilization Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-3 space-y-3">
+              {[
+                { label: 'Budget Used', pct: totals.pct, value: formatNumber(totals.actual), total: formatNumber(totals.budget) },
+                { label: 'Encumbered', pct: totals.budget > 0 ? Math.round((totals.encumbrance / totals.budget) * 100) : 0, value: formatNumber(totals.encumbrance), total: formatNumber(totals.budget) },
+                { label: 'Available', pct: totals.budget > 0 ? Math.round((totals.variance / totals.budget) * 100) : 0, value: formatNumber(totals.variance), total: formatNumber(totals.budget) },
+              ].map(g => (
+                <div key={g.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-muted-foreground font-medium">{g.label}</span>
+                    <span className="font-semibold tabular-nums">{g.pct}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all',
+                        g.label === 'Available'
+                          ? g.pct >= 10 ? 'bg-emerald-500' : 'bg-rose-500'
+                          : g.pct > 100 ? 'bg-rose-500' : g.pct >= 85 ? 'bg-amber-500' : 'bg-indigo-500'
+                      )}
+                      style={{ width: `${Math.max(0, Math.min(Math.abs(g.pct), 100))}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{g.value} / {g.total} {selectedCurrency}</p>
+                </div>
+              ))}
+
+              {/* Over-budget accounts list */}
+              {rows.filter(r => r.pct > 100 && r.budget > 0).length > 0 && (
+                <div className="mt-3 pt-3 border-t">
+                  <p className="text-xs font-medium text-rose-600 flex items-center gap-1 mb-1.5">
+                    <AlertTriangle className="h-3 w-3" />
+                    {rows.filter(r => r.pct > 100 && r.budget > 0).length} over-budget account{rows.filter(r => r.pct > 100 && r.budget > 0).length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="space-y-1 max-h-28 overflow-y-auto">
+                    {rows.filter(r => r.pct > 100 && r.budget > 0).map(r => (
+                      <div key={r.account_id} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground truncate max-w-[120px]">{r.account_code} {r.account_name_en.slice(0, 14)}</span>
+                        <span className="font-bold text-rose-600 tabular-nums shrink-0">{r.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>

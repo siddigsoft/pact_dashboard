@@ -432,6 +432,9 @@
     if (!isHidden('/map') && canSeePath('/map', defaultRole)) {
       fieldOpsItems.push({ id: 'advanced-map', title: "Field Map", url: "/map", icon: Map, priority: 7, isPinned: isPinned('/map') });
     }
+    if (!isHidden('/coverage-map') && (isSuperAdmin || isAdmin || isFOM || isSupervisor || isCoordinator)) {
+      fieldOpsItems.push({ id: 'coverage-map', title: "MMP Coverage Map", url: "/coverage-map", icon: MapPin, priority: 8, isPinned: isPinned('/coverage-map') });
+    }
     if (!isHidden('/field-operation-manager') && canSeePath('/field-operation-manager', defaultRole)) {
       fieldOpsItems.push({ id: 'field-operation-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: Compass, priority: 8, isPinned: isPinned('/field-operation-manager') });
     }
@@ -529,6 +532,7 @@
     // when you are ready to open access.
     const acctItems: MenuGroup['items'] = [];
     if (isSuperAdmin) {
+      if (!isHidden('/executive') && (isSuperAdmin || isCountryDirector)) acctItems.push({ id: 'executive-dashboard', title: 'Executive Dashboard', url: '/executive', icon: BarChart3, priority: 0.1, isPinned: isPinned('/executive') });
       if (!isHidden('/accounting/finance-dashboard')) acctItems.push({ id: 'accounting-finance-dashboard', title: 'Finance Dashboard', url: '/accounting/finance-dashboard', icon: LayoutDashboard, priority: 0.5, isPinned: isPinned('/accounting/finance-dashboard') });
       if (!isHidden('/accounting/coa')) acctItems.push({ id: 'accounting-coa', title: 'Chart of Accounts', url: '/accounting/coa', icon: BarChart3, priority: 1, isPinned: isPinned('/accounting/coa') });
       if (!isHidden('/accounting/journals')) acctItems.push({ id: 'accounting-journals', title: 'Journal Entries', url: '/accounting/journals', icon: Receipt, priority: 2, isPinned: isPinned('/accounting/journals') });
