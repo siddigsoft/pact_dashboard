@@ -1,6 +1,266 @@
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { format } from 'date-fns';
+
+/* ── helpers ── */
+function pct(n: number, d: number) { return d > 0 ? Math.round(n / d * 100) : 0; }
+function fmt(n: string | null) { return n ? format(new Date(n), 'dd MMM yy') : '—'; }
+
+/* ── Tracker view (admin-only) ──────────────────────────── */
+function TrackerView() {
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [salaryMap, setSalaryMap] = useState<Record<string, boolean>>({});
+  const [retainerMap, setRetainerMap] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filterDone, setFilterDone] = useState<'all' | 'complete' | 'incomplete'>('all');
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const [pRes, sRes, rRes] = await Promise.all([
+        supabase.from('profiles').select('id,full_name,email,role,department_id,bank_account,contract_type,contract_start_date,contract_end_date,is_employee,employee_id,created_at').eq('is_employee', true).order('full_name'),
+        (supabase as any).from('employee_salary_config').select('user_id'),
+        (supabase as any).from('current_user_classifications').select('user_id').eq('is_active', true),
+      ]);
+      setProfiles(pRes.data ?? []);
+      const sm: Record<string, boolean> = {};
+      (sRes.data ?? []).forEach((r: any) => { sm[r.user_id] = true; });
+      setSalaryMap(sm);
+      const rm: Record<string, boolean> = {};
+      (rRes.data ?? []).forEach((r: any) => { rm[r.user_id] = true; });
+      setRetainerMap(rm);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  type Step = { label: string; ok: boolean; link?: string };
+  function steps(p: any): Step[] {
+    const ba = p.bank_account as any;
+    const hasBank = !!(ba?.accountNumber || ba?.accountName);
+    const ct = p.contract_type as string | null;
+    const needsSalary = !ct || ct === 'salary' || ct === 'both';
+    const needsRetainer = ct === 'retainer' || ct === 'both';
+    return [
+      { label: 'Profile created',        ok: !!p.id,              link: `/users/${p.id}` },
+      { label: 'Role assigned',          ok: !!p.role },
+      { label: 'Department assigned',    ok: !!p.department_id },
+      { label: 'Contract type set',      ok: !!ct },
+      { label: 'Contract dates set',     ok: !!p.contract_start_date && !!p.contract_end_date },
+      ...(needsSalary   ? [{ label: 'Salary configured',    ok: salaryMap[p.id]   ?? false, link: '/hr?tab=payroll-admin' }] : []),
+      ...(needsRetainer ? [{ label: 'Retainer configured',  ok: retainerMap[p.id] ?? false, link: '/hr?tab=retainer'     }] : []),
+      { label: 'Bank account registered', ok: hasBank },
+      { label: 'Employee ID assigned',   ok: !!p.employee_id },
+    ];
+  }
+
+  const rows = useMemo(() => {
+    return profiles.map(p => {
+      const s = steps(p);
+      const done = s.filter(x => x.ok).length;
+      return { profile: p, steps: s, done, total: s.length, pct: pct(done, s.length) };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profiles, salaryMap, retainerMap]);
+
+  const filtered = useMemo(() => {
+    let r = rows;
+    if (search.trim()) { const q = search.toLowerCase(); r = r.filter(x => (x.profile.full_name ?? '').toLowerCase().includes(q) || (x.profile.email ?? '').toLowerCase().includes(q)); }
+    if (filterDone === 'complete')   r = r.filter(x => x.pct === 100);
+    if (filterDone === 'incomplete') r = r.filter(x => x.pct < 100);
+    return r;
+  }, [rows, search, filterDone]);
+
+  const overall = useMemo(() => {
+    const total = rows.length;
+    const complete = rows.filter(r => r.pct === 100).length;
+    const avgPct = total > 0 ? Math.round(rows.reduce((s, r) => s + r.pct, 0) / total) : 0;
+    return { total, complete, incomplete: total - complete, avgPct };
+  }, [rows]);
+
+  if (loading) return (
+    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
+      Loading staff onboarding data…
+    </div>
+  );
+
+  return (
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", background: '#f5f7fa', minHeight: '100vh', padding: '32px 24px 80px' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ background: 'linear-gradient(135deg, #0F2041 0%, #1D3461 60%, #1e4080 100%)', borderRadius: 20, padding: '32px 36px', marginBottom: 28, color: '#fff', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: -60, right: -60, width: 240, height: 240, background: 'rgba(255,255,255,0.04)', borderRadius: '50%' }} />
+          <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: -0.5 }}>Staff Onboarding Tracker</h1>
+          <p style={{ color: 'rgba(255,255,255,0.7)', marginTop: 6, fontSize: 14, marginBottom: 24 }}>
+            Real-time checklist showing each employee's setup completion status.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {[
+              { label: 'Total Employees', value: overall.total,      color: '#fff' },
+              { label: 'Fully Onboarded', value: overall.complete,   color: '#34d399' },
+              { label: 'Incomplete',      value: overall.incomplete, color: '#fb923c' },
+              { label: 'Avg Completion',  value: `${overall.avgPct}%`, color: overall.avgPct === 100 ? '#34d399' : overall.avgPct >= 75 ? '#fbbf24' : '#f87171' },
+            ].map(k => (
+              <div key={k.label} style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: k.color }}>{k.value}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{k.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Overall progress bar */}
+        <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, color: '#64748b' }}>
+            <span style={{ fontWeight: 700, color: '#1e293b' }}>Overall Onboarding Progress</span>
+            <span>{overall.complete} of {overall.total} fully onboarded</span>
+          </div>
+          <div style={{ height: 8, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${overall.total > 0 ? pct(overall.complete, overall.total) : 0}%`, background: 'linear-gradient(90deg, #0F2041, #2563eb)', borderRadius: 999, transition: 'width 0.5s ease' }} />
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name or email…"
+            style={{ flex: 1, minWidth: 200, border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontFamily: 'inherit', outline: 'none', background: '#fff' }}
+          />
+          {(['all', 'complete', 'incomplete'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterDone(f)}
+              style={{
+                padding: '8px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
+                background: filterDone === f ? '#0F2041' : '#e2e8f0',
+                color:      filterDone === f ? '#fff'    : '#475569',
+                transition: 'all 0.15s',
+              }}
+            >
+              {f === 'all' ? 'All' : f === 'complete' ? '✓ Complete' : '⏳ Incomplete'}
+            </button>
+          ))}
+        </div>
+
+        {/* Table */}
+        {filtered.length === 0 ? (
+          <div style={{ background: '#fff', borderRadius: 14, padding: '48px 24px', textAlign: 'center', color: '#94a3b8', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+            No employees match your filters.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {filtered.map(({ profile: p, steps: s, done, total: tot, pct: completion }) => (
+              <div key={p.id} style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: completion === 100 ? '1.5px solid #34d399' : '1.5px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                  {/* Avatar */}
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #0F2041, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
+                    {(p.full_name ?? '?').split(' ').filter(Boolean).map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{p.full_name ?? '—'}</span>
+                      {p.employee_id && <span style={{ fontSize: 11, fontFamily: 'monospace', background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 6 }}>{p.employee_id}</span>}
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 999,
+                        background: completion === 100 ? '#dcfce7' : completion >= 75 ? '#fef9c3' : '#fee2e2',
+                        color:      completion === 100 ? '#15803d' : completion >= 75 ? '#92400e' : '#b91c1c',
+                      }}>
+                        {completion === 100 ? '✓ Complete' : `${completion}%`}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{p.email ?? ''}{p.role ? ` · ${p.role}` : ''}</div>
+                  </div>
+                  {/* Progress bar */}
+                  <div style={{ minWidth: 120, textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>{done}/{tot} steps</div>
+                    <div style={{ height: 6, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${completion}%`, background: completion === 100 ? '#22c55e' : completion >= 75 ? '#f59e0b' : '#ef4444', borderRadius: 999, transition: 'width 0.3s' }} />
+                    </div>
+                    {p.created_at && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>Joined {fmt(p.created_at)}</div>}
+                  </div>
+                </div>
+
+                {/* Steps grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+                  {s.map((step, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, background: step.ok ? '#f0fdf4' : '#fafafa', border: `1.5px solid ${step.ok ? '#bbf7d0' : '#e2e8f0'}` }}>
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: step.ok ? '#22c55e' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {step.ok
+                          ? <span style={{ color: '#fff', fontSize: 11, fontWeight: 900 }}>✓</span>
+                          : <span style={{ color: '#94a3b8', fontSize: 11 }}>○</span>}
+                      </div>
+                      <span style={{ fontSize: 12, color: step.ok ? '#15803d' : '#64748b', fontWeight: step.ok ? 600 : 400, flex: 1 }}>
+                        {step.label}
+                      </span>
+                      {!step.ok && step.link && (
+                        <a href={step.link} style={{ fontSize: 10, color: '#2563eb', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>Fix →</a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/*  Main component — Guide | Tracker toggle                  */
+/* ══════════════════════════════════════════════════════════ */
 export default function StaffOnboarding() {
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const isAdmin = isSuperAdmin() || hasAnyRole(['super_admin','superAdmin','SuperAdmin','admin','Admin','finance','Finance']);
+  const [view, setView] = useState<'guide' | 'tracker'>('guide');
+
   return (
     <div style={{ fontFamily: "'Segoe UI', 'Inter', Arial, sans-serif", background: '#EEF2F7', minHeight: '100vh' }}>
+      {/* ── Mode toggle bar (admin only) ── */}
+      {isAdmin && (
+        <div style={{ background: '#0F2041', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>View:</span>
+          {([
+            { id: 'guide'   as const, label: '📄  Onboarding Guide'    },
+            { id: 'tracker' as const, label: '✅  Staff Tracker (Admin)' },
+          ]).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              style={{
+                padding: '6px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
+                background: view === id ? '#2563eb' : 'rgba(255,255,255,0.08)',
+                color:      view === id ? '#fff'    : 'rgba(255,255,255,0.6)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view === 'tracker' && isAdmin ? (
+        <TrackerView />
+      ) : (
+        <GuideView />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/*  Guide view — original printable onboarding document      */
+/* ══════════════════════════════════════════════════════════ */
+function GuideView() {
+  return (
+    <div>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -470,12 +730,10 @@ export default function StaffOnboarding() {
 
       <div className="ob-wrap">
 
-        {/* Print button */}
         <div className="ob-print-bar">
           <button className="ob-print-btn" onClick={() => window.print()}>🖨️ Print / Save as PDF</button>
         </div>
 
-        {/* ── HERO ── */}
         <div className="ob-hero">
           <img className="ob-hero-logo" src="/pact-logo.png" alt="PACT" />
           <h1>Welcome to PACT Command Center</h1>
@@ -490,7 +748,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── URGENCY BANNER ── */}
         <div className="ob-urgency">
           <div className="ob-urgency-top">
             <span className="ob-urgency-badge">🚨 &nbsp;MANDATORY — MANAGEMENT DIRECTIVE</span>
@@ -512,7 +769,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── INTRODUCTION ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">📢</div>
@@ -526,8 +782,6 @@ export default function StaffOnboarding() {
               We are officially launching the <strong>PACT Command Center</strong> — our centralized digital platform built to manage everything from <strong>daily tasks and projects</strong> to <strong>contracts, payroll, and field operations</strong> in one secure place.<br /><br />
               To enable full automation of HR and financial processes — including digital contract signing and payroll runs — <strong>every staff member must be registered and active on the platform.</strong>
             </p>
-
-            {/* Role box */}
             <div className="ob-role">
               <div className="ob-role-icon">👤</div>
               <div>
@@ -540,7 +794,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── REGISTRATION STEPS ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">📋</div>
@@ -551,83 +804,59 @@ export default function StaffOnboarding() {
           </div>
           <div className="ob-card-body">
             <div className="ob-steps">
-
               <div className="ob-step">
                 <div className="ob-step-num">1</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">Open the Platform in Your Browser</div>
-                  <div className="ob-step-desc">
-                    Go to: <a className="ob-step-link" href="https://app.pactorg.com" target="_blank" rel="noreferrer">https://app.pactorg.com</a><br />
-                    Works on Chrome, Firefox, Edge — and on your mobile phone.
-                  </div>
+                  <div className="ob-step-desc">Go to: <a className="ob-step-link" href="https://app.pactorg.com" target="_blank" rel="noreferrer">https://app.pactorg.com</a><br />Works on Chrome, Firefox, Edge — and on your mobile phone.</div>
                 </div>
               </div>
-
               <div className="ob-step">
                 <div className="ob-step-num">2</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">Click "Sign Up" on the Login Page</div>
-                  <div className="ob-step-desc">
-                    You will see a login form. Click the <strong>Sign Up</strong> link below it to start creating your account.
-                  </div>
+                  <div className="ob-step-desc">You will see a login form. Click the <strong>Sign Up</strong> link below it to start creating your account.</div>
                 </div>
               </div>
-
               <div className="ob-step">
                 <div className="ob-step-num">3</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">Enter Your Official PACT Work Email</div>
-                  <div className="ob-step-desc">
-                    Use your official PACT email address. Create a strong password — at least 8 characters, include numbers and symbols (e.g. <em>Pact@2026</em>).
-                  </div>
+                  <div className="ob-step-desc">Use your official PACT email address. Create a strong password — at least 8 characters, include numbers and symbols (e.g. <em>Pact@2026</em>).</div>
                 </div>
               </div>
-
               <div className="ob-step ob-step-highlight">
                 <div className="ob-step-num">4</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">⭐ Select Role: EMPLOYEE</div>
-                  <div className="ob-step-desc">
-                    When prompted to choose your role, select <strong>Employee</strong>. This is the correct role for all staff. Managers will be upgraded separately by the admin team.
-                  </div>
+                  <div className="ob-step-desc">When prompted to choose your role, select <strong>Employee</strong>. This is the correct role for all staff. Managers will be upgraded separately by the admin team.</div>
                 </div>
               </div>
-
               <div className="ob-step">
                 <div className="ob-step-num">5</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">Complete Your Profile</div>
-                  <div className="ob-step-desc">
-                    Enter your <strong>full name</strong>, <strong>department</strong>, <strong>job title</strong>, and <strong>phone number</strong>. A complete profile allows your manager to assign tasks and process payroll correctly.
-                  </div>
+                  <div className="ob-step-desc">Enter your <strong>full name</strong>, <strong>department</strong>, <strong>job title</strong>, and <strong>phone number</strong>. A complete profile allows your manager to assign tasks and process payroll correctly.</div>
                 </div>
               </div>
-
               <div className="ob-step">
                 <div className="ob-step-num">6</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">Wait for Account Activation</div>
-                  <div className="ob-step-desc">
-                    The admin team will review and activate your account. You will receive a confirmation email once it is ready — usually within 24 hours.
-                  </div>
+                  <div className="ob-step-desc">The admin team will review and activate your account. You will receive a confirmation email once it is ready — usually within 24 hours.</div>
                 </div>
               </div>
-
               <div className="ob-step">
                 <div className="ob-step-num">7</div>
                 <div className="ob-step-content">
                   <div className="ob-step-title">Log In and Explore Your Dashboard</div>
-                  <div className="ob-step-desc">
-                    Once activated, log in and go to <strong>My Tasks</strong> and <strong>My Board</strong> to see your assignments and get started.
-                  </div>
+                  <div className="ob-step-desc">Once activated, log in and go to <strong>My Tasks</strong> and <strong>My Board</strong> to see your assignments and get started.</div>
                 </div>
               </div>
-
             </div>
           </div>
         </div>
 
-        {/* ── WHATSAPP STEP ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">💬</div>
@@ -643,21 +872,9 @@ export default function StaffOnboarding() {
                 <div className="ob-wa-title">Send a WhatsApp message to activate notifications</div>
                 <div className="ob-wa-number">+256 751 900 013</div>
                 <div className="ob-wa-desc">
-                  Send a WhatsApp message to the number above saying <strong>"Hi PACT"</strong> or your name to opt in to platform notifications. You will then receive real-time alerts for:
-                  <ul style={{ marginTop: 10, paddingLeft: 20, lineHeight: 1.8 }}>
-                    <li>New tasks assigned to you</li>
-                    <li>Approvals and decisions on your requests</li>
-                    <li>Deadline reminders</li>
-                    <li>Payroll and contract updates</li>
-                    <li>Important announcements from management</li>
-                  </ul>
+                  Send a WhatsApp message saying <strong>"Hi PACT"</strong> or your name to opt in. You'll receive alerts for new tasks, approvals, deadlines, payroll, and announcements.
                 </div>
-                <a
-                  className="ob-wa-btn"
-                  href="https://wa.me/256751900013?text=Hi%20PACT%20-%20I%20have%20registered%20on%20the%20Command%20Center"
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a className="ob-wa-btn" href="https://wa.me/256751900013?text=Hi%20PACT%20-%20I%20have%20registered%20on%20the%20Command%20Center" target="_blank" rel="noreferrer">
                   💬 Open WhatsApp Chat
                 </a>
               </div>
@@ -665,7 +882,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── WHAT YOU CAN DO ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">🚀</div>
@@ -680,7 +896,7 @@ export default function StaffOnboarding() {
                 { icon: '📋', title: 'My Tasks', desc: 'View and update all tasks assigned to you. Add comments, attach files, and mark tasks complete. Log your daily output with proof uploads.' },
                 { icon: '📌', title: 'My Board (Kanban)', desc: 'A personal Kanban board showing all your tasks. Drag cards from To Do → In Progress → Done to track your work visually.' },
                 { icon: '🗂️', title: 'Projects', desc: 'See all projects you are part of. View milestones, progress, and collaborate with your team within a structured workflow.' },
-                { icon: '⏱️', title: 'Timesheets', desc: 'Log your daily working hours per project or task — only required if the project or task has a paid timesheet. These hours feed directly into payroll calculations.' },
+                { icon: '⏱️', title: 'Timesheets', desc: 'Log your daily working hours per project or task — only required if the project or task has a paid timesheet.' },
                 { icon: '📄', title: 'Contracts & Payslips', desc: 'View your employment contract and download monthly payslips as PDF, all stored securely in the platform.' },
                 { icon: '🏖️', title: 'Leave Requests', desc: 'Submit leave applications online, check your leave balance, and track approval status in real time.' },
                 { icon: '🔔', title: 'Notifications', desc: 'Receive instant alerts for new task assignments, approvals, deadlines, and announcements — in-app and via WhatsApp.' },
@@ -698,7 +914,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── PRIORITY CHECKLIST ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">✅</div>
@@ -709,9 +924,7 @@ export default function StaffOnboarding() {
           </div>
           <div className="ob-card-body">
             <div className="ob-priority">
-              <div className="ob-priority-title">
-                <span>📌</span> Your Immediate Action List
-              </div>
+              <div className="ob-priority-title"><span>📌</span> Your Immediate Action List</div>
               <ul>
                 <li>Register at <strong>app.pactorg.com</strong> using your official PACT email</li>
                 <li>Select role <strong>Employee</strong> during registration</li>
@@ -725,7 +938,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── FOR MANAGERS ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">🏢</div>
@@ -737,10 +949,10 @@ export default function StaffOnboarding() {
           <div className="ob-card-body">
             <div className="ob-feat-grid">
               {[
-                { icon: '👥', title: 'Team Monitor', desc: 'Real-time dashboard of your team\'s task load, completion rates, and daily activity. Identify overloaded or underperforming staff instantly.' },
-                { icon: '✅', title: 'Approvals Hub', desc: 'Approve leave, timesheets, expense submissions, and procurement — all in one place with a full digital audit trail.' },
+                { icon: '👥', title: 'Team Monitor', desc: "Real-time dashboard of your team's task load, completion rates, and daily activity." },
+                { icon: '✅', title: 'Approvals Hub', desc: 'Approve leave, timesheets, expense submissions, and procurement — all in one place.' },
                 { icon: '💰', title: 'Payroll & Contracts', desc: 'Run payroll cycles, generate payslips, manage salary changes and EOSB calculations automatically.' },
-                { icon: '📈', title: 'Portfolio Dashboard', desc: 'Cross-project KPIs, budget utilization, milestone tracking, and project health matrix for full management visibility.' },
+                { icon: '📈', title: 'Portfolio Dashboard', desc: 'Cross-project KPIs, budget utilization, milestone tracking, and project health matrix.' },
               ].map(f => (
                 <div className="ob-feat" key={f.title}>
                   <div className="ob-feat-top">
@@ -754,7 +966,6 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── ROLES TABLE ── */}
         <div className="ob-card">
           <div className="ob-card-header">
             <div className="ob-card-header-icon">🔐</div>
@@ -766,11 +977,7 @@ export default function StaffOnboarding() {
           <div className="ob-card-body" style={{ padding: '0' }}>
             <table className="ob-ref">
               <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>Who Gets It</th>
-                  <th>Key Permissions</th>
-                </tr>
+                <tr><th>Role</th><th>Who Gets It</th><th>Key Permissions</th></tr>
               </thead>
               <tbody>
                 {[
@@ -792,19 +999,12 @@ export default function StaffOnboarding() {
           </div>
         </div>
 
-        {/* ── CTA ── */}
         <div className="ob-cta-wrap">
           <h2>Ready? Register Now</h2>
-          <p>
-            Open your browser, go to the link below, and complete registration in under 3 minutes.<br />
-            Then send your WhatsApp message to <strong style={{ color: '#fff' }}>+256 751 900 013</strong> to enable notifications.
-          </p>
-          <a className="ob-cta-btn" href="https://app.pactorg.com" target="_blank" rel="noreferrer">
-            🌐 &nbsp; app.pactorg.com
-          </a>
+          <p>Open your browser, go to the link below, and complete registration in under 3 minutes.<br />Then send your WhatsApp message to <strong style={{ color: '#fff' }}>+256 751 900 013</strong> to enable notifications.</p>
+          <a className="ob-cta-btn" href="https://app.pactorg.com" target="_blank" rel="noreferrer">🌐 &nbsp; app.pactorg.com</a>
         </div>
 
-        {/* ── FOOTER ── */}
         <div className="ob-footer">
           <p>
             <strong style={{ color: '#475569' }}>PACT Sudan — Command Center</strong><br />
@@ -813,9 +1013,7 @@ export default function StaffOnboarding() {
             &nbsp;·&nbsp; WhatsApp Support: <strong style={{ color: '#16a34a' }}>+256 751 900 013</strong>
             &nbsp;·&nbsp; IT Help Desk
           </p>
-          <p style={{ marginTop: '8px', color: '#94a3b8', fontSize: '13px' }}>
-            © 2026 PACT — All rights reserved.
-          </p>
+          <p style={{ marginTop: '8px', color: '#94a3b8', fontSize: '13px' }}>© 2026 PACT — All rights reserved.</p>
         </div>
 
       </div>

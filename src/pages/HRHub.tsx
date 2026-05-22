@@ -547,6 +547,103 @@ function LeaveEntitlementsPanel() {
   );
 }
 
+// ── Quick Actions Card ─────────────────────────────────────────────────────────
+interface QAStats { total: number; missingBank: number; expiring30: number; expired: number; incompleteCount: number; }
+interface QACost  { noSalaryConfig: number; }
+
+function QuickActionsCard({ stats, costSummary }: { stats: QAStats; costSummary: QACost }) {
+  const navigate = useNavigate();
+  const actions = [
+    {
+      icon: '⚙️',
+      label: 'Configure Missing Salaries',
+      sub: `${costSummary.noSalaryConfig} staff unconfigured`,
+      badge: costSummary.noSalaryConfig,
+      color: costSummary.noSalaryConfig > 0 ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30' : 'border-border bg-muted/20',
+      badgeColor: 'bg-orange-500',
+      onClick: () => navigate('/hr?tab=payroll-admin'),
+    },
+    {
+      icon: '📋',
+      label: 'Process Retainer Payments',
+      sub: 'Run monthly retainer cycle',
+      badge: null,
+      color: 'border-border bg-muted/20',
+      badgeColor: '',
+      onClick: () => navigate('/hr?tab=retainer'),
+    },
+    {
+      icon: '⚠️',
+      label: 'Expiring Contracts',
+      sub: `${stats.expiring30} expiring in 30 days`,
+      badge: stats.expiring30 + stats.expired,
+      color: (stats.expiring30 + stats.expired) > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30' : 'border-border bg-muted/20',
+      badgeColor: 'bg-amber-500',
+      onClick: () => navigate('/employees'),
+    },
+    {
+      icon: '🏦',
+      label: 'Missing Bank Accounts',
+      sub: `${stats.missingBank} staff without bank`,
+      badge: stats.missingBank,
+      color: stats.missingBank > 0 ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30' : 'border-border bg-muted/20',
+      badgeColor: 'bg-red-500',
+      onClick: () => navigate('/employees'),
+    },
+    {
+      icon: '💰',
+      label: 'Run Payroll',
+      sub: 'Generate this month\'s payroll',
+      badge: null,
+      color: 'border-border bg-muted/20',
+      badgeColor: '',
+      onClick: () => navigate('/hr?tab=payroll'),
+    },
+    {
+      icon: '📊',
+      label: 'Staff Onboarding Tracker',
+      sub: `${stats.incompleteCount} incomplete setups`,
+      badge: stats.incompleteCount,
+      color: stats.incompleteCount > 0 ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30' : 'border-border bg-muted/20',
+      badgeColor: 'bg-blue-500',
+      onClick: () => navigate('/staff-onboarding'),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 pt-4 px-4">
+        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quick Actions</p>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {actions.map(a => (
+            <button
+              key={a.label}
+              onClick={a.onClick}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0',
+                a.color,
+              )}
+            >
+              <span className="text-xl leading-none mt-0.5 shrink-0">{a.icon}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-xs font-semibold text-foreground leading-snug">{a.label}</p>
+                  {a.badge != null && a.badge > 0 && (
+                    <span className={cn('text-[10px] font-bold text-white px-1.5 py-0.5 rounded-full shrink-0', a.badgeColor)}>{a.badge}</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{a.sub}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── HR Overview Panel ──────────────────────────────────────────────────────────
 function HROverviewPanel() {
   const { data: profiles = [], isLoading } = useQuery({
@@ -757,6 +854,9 @@ function HROverviewPanel() {
           </CardContent>
         </Card>
       )}
+
+      {/* Quick Actions */}
+      <QuickActionsCard stats={stats} costSummary={costSummary} />
 
       {/* Leave Balance Summary */}
       <LeaveBalanceSummaryCard />

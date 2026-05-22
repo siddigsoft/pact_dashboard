@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -21,6 +23,7 @@ import {
   TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle,
   Landmark, LayoutGrid, List, Shield, Layers, Briefcase,
   Download, FileSpreadsheet, Wand2,
+  User, CalendarDays, CreditCard, History, DollarSign, ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -424,18 +427,71 @@ function EmployeeDetail({
     amountSDG: Math.round(withdrawalRows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
   }), [withdrawalRows]);
 
+  /* ── 360 Drawer tabs ── */
+  const [drawerTab, setDrawerTab] = useState<'overview' | 'compensation' | 'leave' | 'advances' | 'contract'>('overview');
+
+  /* ── Leave data (loaded on demand) ── */
+  const [leaveEnt, setLeaveEnt]     = useState<any[] | null>(null);
+  const [leaveReqs, setLeaveReqs]   = useState<any[] | null>(null);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+
+  useEffect(() => {
+    if (drawerTab !== 'leave' || leaveEnt !== null || leaveLoading) return;
+    const go = async () => {
+      setLeaveLoading(true);
+      const yr = new Date().getFullYear();
+      const [eRes, rRes] = await Promise.all([
+        supabase.from('leave_entitlements').select('*').eq('user_id', profile.id).eq('year', yr),
+        supabase.from('leave_requests')
+          .select('id,leave_type,start_date,end_date,status,reason,duration_days')
+          .eq('user_id', profile.id).order('start_date', { ascending: false }).limit(30),
+      ]);
+      setLeaveEnt(eRes.data ?? []);
+      setLeaveReqs(rRes.data ?? []);
+      setLeaveLoading(false);
+    };
+    go();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerTab]);
+
+  /* ── Salary advances data (loaded on demand) ── */
+  const [salAdv, setSalAdv]         = useState<any[] | null>(null);
+  const [salAdvLoading, setSalAdvLoading] = useState(false);
+
+  useEffect(() => {
+    if (drawerTab !== 'advances' || salAdv !== null || salAdvLoading) return;
+    const go = async () => {
+      setSalAdvLoading(true);
+      const { data } = await supabase.from('hr_salary_advances')
+        .select('id,amount,currency,status,issued_at,reason,recovered_amount')
+        .eq('user_id', profile.id).order('issued_at', { ascending: false });
+      setSalAdv(data ?? []);
+      setSalAdvLoading(false);
+    };
+    go();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerTab]);
+
+  const DRAWER_TABS = [
+    { id: 'overview'     as const, label: 'Overview',     Icon: User        },
+    { id: 'compensation' as const, label: 'Compensation', Icon: DollarSign  },
+    { id: 'leave'        as const, label: 'Leave',        Icon: CalendarDays},
+    { id: 'advances'     as const, label: 'Advances',     Icon: CreditCard  },
+    { id: 'contract'     as const, label: 'History',      Icon: History     },
+  ];
+
   return (
-    <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl w-full max-h-[92vh] overflow-y-auto p-0 gap-0">
-        {/* ── Header ── */}
-        <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-6 rounded-t-lg">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
+    <Sheet open onOpenChange={() => onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col overflow-hidden gap-0">
+        {/* ── Gradient header with avatar + tab strip ── */}
+        <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 pt-5 pb-0 shrink-0">
+          <SheetHeader className="mb-3">
+            <div className="flex items-start gap-4 pr-8">
               <Avatar name={profile.full_name} size="lg" availability={profile.presence} />
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-white text-lg font-bold leading-tight truncate">
+                <SheetTitle className="text-white text-lg font-bold leading-tight truncate">
                   {profile.full_name || 'Unknown'}
-                </DialogTitle>
+                </SheetTitle>
                 <p className="text-white/60 text-xs truncate mt-0.5">{profile.email}</p>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <RoleBadge role={profile.role} />
@@ -452,9 +508,32 @@ function EmployeeDetail({
                 </div>
               </div>
             </div>
-          </DialogHeader>
+          </SheetHeader>
+
+          {/* Tab strip pinned inside header */}
+          <div className="flex gap-0 overflow-x-auto scrollbar-hide -mb-px">
+            {DRAWER_TABS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setDrawerTab(id)}
+                className={cn(
+                  'flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap shrink-0 transition-all',
+                  drawerTab === id
+                    ? 'border-white text-white'
+                    : 'border-transparent text-blue-200/60 hover:text-blue-100 hover:border-blue-300/40',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />{label}
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto">
+
+        {/* ═══ OVERVIEW TAB ═══ */}
+        {drawerTab === 'overview' && (
         <div className="divide-y divide-border">
           {/* ── Role & Department — always visible ── */}
           <div className="px-6 py-4 bg-[#0F2041]/5 dark:bg-[#1D3461]/10">
@@ -1103,8 +1182,403 @@ function EmployeeDetail({
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        )} {/* end overview tab */}
+
+        {/* ═══ COMPENSATION TAB ═══ */}
+        {drawerTab === 'compensation' && (
+          <div className="p-6 space-y-5">
+            {/* Profile completeness */}
+            {(() => {
+              const pct = getCompleteness(profile);
+              return (
+                <div className="rounded-xl border bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-900 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Profile Completeness</p>
+                    <span className={`text-sm font-bold ${pct === 100 ? 'text-emerald-600' : pct >= 75 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : pct >= 75 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-1.5">
+                    {completenessItems(profile).map(item => (
+                      <div key={item.label} className="flex items-center gap-1.5 text-xs">
+                        {item.ok
+                          ? <CheckCircle className="h-3 w-3 text-emerald-500 shrink-0" />
+                          : <XCircle className="h-3 w-3 text-red-400 shrink-0" />}
+                        <span className={item.ok ? 'text-foreground' : 'text-muted-foreground'}>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Salary */}
+            {(!profile.contract_type || profile.contract_type === 'salary' || profile.contract_type === 'both') && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <Banknote className="h-3 w-3" />Salary Compensation
+                </p>
+                {salaryConfig ? (
+                  <div className="rounded-xl border bg-gradient-to-br from-blue-50/60 to-transparent dark:from-blue-950/20 dark:to-transparent p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Base Salary</p>
+                        <p className="font-bold text-lg text-[#0F2041] dark:text-blue-300">{fmtMoney(salaryConfig.base_salary, salaryConfig.currency)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Gross Monthly</p>
+                        <p className="font-bold text-lg text-emerald-700 dark:text-emerald-400">{fmtMoney(computeGross(salaryConfig), salaryConfig.currency)}</p>
+                      </div>
+                    </div>
+                    {(salaryConfig.allowances ?? []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-2">Allowances</p>
+                        <div className="space-y-1.5">
+                          {(salaryConfig.allowances ?? []).map((a: any, i: number) => (
+                            <div key={i} className="flex justify-between text-xs rounded bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5">
+                              <span className="text-muted-foreground">{a.name}</span>
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                {a.type === 'percent' ? `+${a.amount}%` : `+${fmtMoney(a.amount, salaryConfig.currency)}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(salaryConfig.deductions ?? []).length > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-2">Deductions</p>
+                        <div className="space-y-1.5">
+                          {(salaryConfig.deductions ?? []).map((d: any, i: number) => (
+                            <div key={i} className="flex justify-between text-xs rounded bg-red-50 dark:bg-red-900/20 px-3 py-1.5">
+                              <span className="text-muted-foreground">{d.name}</span>
+                              <span className="font-semibold text-red-600 dark:text-red-400">
+                                {d.type === 'percent' ? `-${d.amount}%` : `-${fmtMoney(d.amount, salaryConfig.currency)}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="border-t pt-3 flex justify-between text-sm font-bold">
+                      <span>Net Estimated</span>
+                      <span className="text-blue-700 dark:text-blue-300">
+                        {fmtMoney(
+                          computeGross(salaryConfig) - (salaryConfig.deductions ?? []).reduce((s: number, d: any) =>
+                            s + (d.type === 'percent' ? salaryConfig.base_salary * d.amount / 100 : Number(d.amount) || 0), 0),
+                          salaryConfig.currency,
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-4">
+                    <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">No salary configured</p>
+                      <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-0.5">Configure in Payroll Admin → Employee Salaries.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Retainer */}
+            {(profile.contract_type === 'retainer' || profile.contract_type === 'both') && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <FileDown className="h-3 w-3" />Retainer / Field Team
+                </p>
+                {retainerConfig ? (
+                  <div className="rounded-xl border bg-gradient-to-br from-violet-50/60 to-transparent dark:from-violet-950/20 dark:to-transparent p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Classification</p>
+                        <ClassificationBadge level={retainerConfig.classification_level} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Monthly Retainer</p>
+                        <p className="font-bold text-lg text-violet-700 dark:text-violet-300">{fmtMoney(retainerConfig.amount_cents / 100, retainerConfig.currency)}</p>
+                      </div>
+                      {retainerConfig.role_scope && (
+                        <div className="col-span-2">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">Scope</p>
+                          <p className="text-sm font-medium">{retainerConfig.role_scope}</p>
+                        </div>
+                      )}
+                      {lastRetainerPayment && (
+                        <div className="col-span-2">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">Last Payment</p>
+                          <p className="text-sm font-semibold">{format(new Date(lastRetainerPayment), 'dd MMM yyyy')}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-4">
+                    <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">No retainer configured</p>
+                      <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-0.5">Configure in Retainer Management → Eligible Users.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!profile.contract_type && (
+              <div className="flex items-center gap-3 rounded-xl border border-dashed px-4 py-5 text-center">
+                <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mx-auto" />
+                <p className="text-sm text-muted-foreground">No contract type set. Assign one in the Overview tab first.</p>
+              </div>
+            )}
+
+            {/* Link to full profile */}
+            <a
+              href={`/users/${profile.id}`}
+              className="flex items-center justify-center gap-2 text-xs font-semibold text-[#0F2041] dark:text-blue-400 border border-[#0F2041]/30 dark:border-blue-800 rounded-lg py-3 hover:bg-[#0F2041]/5 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />View Full Profile in User Management
+            </a>
+          </div>
+        )}
+
+        {/* ═══ LEAVE TAB ═══ */}
+        {drawerTab === 'leave' && (
+          <div className="p-6 space-y-5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Leave Balance — {new Date().getFullYear()}</p>
+            {leaveLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full rounded-xl" />
+                <Skeleton className="h-40 w-full rounded-xl" />
+              </div>
+            ) : (
+              <>
+                {/* Entitlement grid */}
+                {leaveEnt && leaveEnt.length > 0 ? (
+                  <div className="rounded-xl border overflow-hidden">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-y sm:divide-y-0">
+                      {([
+                        ['Annual',    leaveEnt[0]?.annual_days    ?? 0],
+                        ['Sick',      leaveEnt[0]?.sick_days      ?? 0],
+                        ['Emergency', leaveEnt[0]?.emergency_days ?? 0],
+                        ['Maternity', leaveEnt[0]?.maternity_days ?? 0],
+                        ['Paternity', leaveEnt[0]?.paternity_days ?? 0],
+                        ['Unpaid',    leaveEnt[0]?.unpaid_days    ?? 0],
+                      ] as [string, number][]).map(([label, days]) => (
+                        <div key={label} className="p-3 text-center bg-muted/20">
+                          <p className="text-lg font-bold">{days}</p>
+                          <p className="text-[10px] text-muted-foreground">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed p-6 text-center">
+                    <CalendarDays className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                    <p className="text-sm text-muted-foreground">No leave entitlements for {new Date().getFullYear()}.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Set them up in HR Hub → HR Tools → Leave Entitlements.</p>
+                  </div>
+                )}
+
+                {/* Leave requests */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Leave Requests</p>
+                  {!leaveReqs || leaveReqs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No leave requests found.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {leaveReqs.map((r: any) => (
+                        <div key={r.id} className="flex items-center justify-between rounded-xl border px-4 py-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-semibold capitalize">{(r.leave_type ?? '').replace(/_/g, ' ')}</span>
+                              <span className={cn(
+                                'text-[10px] font-semibold px-1.5 py-0.5 rounded',
+                                r.status === 'approved' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                                  : r.status === 'pending' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                                  : 'bg-red-100 dark:bg-red-900/40 text-red-600',
+                              )}>
+                                {r.status}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {r.start_date ? format(new Date(r.start_date), 'dd MMM yy') : '—'}
+                              {r.end_date && r.end_date !== r.start_date ? ` – ${format(new Date(r.end_date), 'dd MMM yy')}` : ''}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold shrink-0 ml-3">{r.duration_days ?? 1}d</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ═══ ADVANCES TAB ═══ */}
+        {drawerTab === 'advances' && (
+          <div className="p-6 space-y-5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Salary Advances</p>
+            {salAdvLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+            ) : !salAdv || salAdv.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-10 text-center">
+                <CreditCard className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                <p className="text-sm text-muted-foreground">No salary advances on record.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Summary row */}
+                {(() => {
+                  const total = salAdv.reduce((s: number, a: any) => s + Number(a.amount || 0), 0);
+                  const recovered = salAdv.reduce((s: number, a: any) => s + Number(a.recovered_amount || 0), 0);
+                  const outstanding = Math.max(0, total - recovered);
+                  return (
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: 'Total Issued',  value: `SDG ${Math.round(total).toLocaleString()}`,       color: 'text-foreground'   },
+                        { label: 'Recovered',     value: `SDG ${Math.round(recovered).toLocaleString()}`,   color: 'text-emerald-600'  },
+                        { label: 'Outstanding',   value: `SDG ${Math.round(outstanding).toLocaleString()}`, color: outstanding > 0 ? 'text-red-600' : 'text-emerald-600' },
+                      ].map(k => (
+                        <div key={k.label} className="rounded-xl border bg-muted/30 p-3 text-center">
+                          <p className="text-[10px] text-muted-foreground">{k.label}</p>
+                          <p className={`text-sm font-bold ${k.color}`}>{k.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Individual advances */}
+                <div className="space-y-3">
+                  {salAdv.map((a: any) => {
+                    const amount = Number(a.amount || 0);
+                    const recovered = Number(a.recovered_amount || 0);
+                    const pct = amount > 0 ? Math.min(100, Math.round(recovered / amount * 100)) : 0;
+                    const done = pct >= 100;
+                    return (
+                      <div key={a.id} className="rounded-xl border p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold">SDG {Math.round(amount).toLocaleString()}</p>
+                            {a.reason && <p className="text-[10px] text-muted-foreground mt-0.5">{a.reason}</p>}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', done ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400')}>
+                              {done ? 'Fully Recovered' : a.status ?? 'Active'}
+                            </span>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{a.issued_at ? format(new Date(a.issued_at), 'dd MMM yyyy') : '—'}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                            <span>Recovery progress</span><span>{pct}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ CONTRACT HISTORY TAB ═══ */}
+        {drawerTab === 'contract' && (
+          <div className="p-6 space-y-5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Contract Information</p>
+
+            {/* Current contract */}
+            <div className="rounded-xl border overflow-hidden">
+              <div className="bg-[#0F2041]/5 dark:bg-[#1D3461]/10 px-4 py-3 border-b">
+                <p className="text-xs font-bold text-[#1D3461] dark:text-blue-300">Current Contract</p>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Contract Type</p>
+                    <ContractBadge type={profile.contract_type} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Employee ID</p>
+                    <p className="text-sm font-mono font-semibold">{profile.employee_id || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Start Date</p>
+                    <p className="text-sm font-semibold">{profile.contract_start_date ? format(new Date(profile.contract_start_date), 'dd MMM yyyy') : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">End Date</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-semibold">{profile.contract_end_date ? format(new Date(profile.contract_end_date), 'dd MMM yyyy') : '—'}</p>
+                      {profile.contract_end_date && <ExpiryBadge endDate={profile.contract_end_date} />}
+                    </div>
+                  </div>
+                </div>
+                {profile.contract_start_date && profile.contract_end_date && (() => {
+                  const months = Math.round((new Date(profile.contract_end_date).getTime() - new Date(profile.contract_start_date).getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+                  return (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Duration</p>
+                      <p className="text-sm font-medium">{months > 0 ? `${months} months` : 'Less than a month'}</p>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Setup checklist */}
+            <div className="rounded-xl border p-4">
+              <p className="text-xs font-bold text-muted-foreground mb-3">Profile Setup Checklist</p>
+              <div className="space-y-2.5">
+                {completenessItems(profile).map((item, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className={cn('w-5 h-5 rounded-full flex items-center justify-center shrink-0', item.ok ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-muted')}>
+                      {item.ok
+                        ? <CheckCircle className="h-3 w-3 text-emerald-600" />
+                        : <XCircle className="h-3 w-3 text-muted-foreground" />}
+                    </div>
+                    <span className={cn('text-xs', item.ok ? 'text-foreground font-medium' : 'text-muted-foreground')}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Account metadata */}
+            <div className="rounded-xl border p-4">
+              <p className="text-xs font-bold text-muted-foreground mb-3">Account Information</p>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div><p className="text-[10px] text-muted-foreground">Registered</p><p className="font-medium">{profile.created_at ? format(parseISO(profile.created_at), 'dd MMM yyyy') : '—'}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">Last Updated</p><p className="font-medium">{profile.updated_at ? format(parseISO(profile.updated_at), 'dd MMM yyyy') : '—'}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">Employment Type</p><p className="font-medium capitalize">{profile.employment_type?.replace(/-/g, ' ') || '—'}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">Profile ID</p><p className="font-mono text-xs">{profile.id.slice(0, 12)}…</p></div>
+              </div>
+            </div>
+
+            {/* Full profile link */}
+            <a
+              href={`/users/${profile.id}`}
+              className="flex items-center justify-center gap-2 text-xs font-semibold text-[#0F2041] dark:text-blue-400 border border-[#0F2041]/30 dark:border-blue-800 rounded-xl py-3 hover:bg-[#0F2041]/5 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />Open Full Profile
+            </a>
+          </div>
+        )}
+
+        </div>{/* end scrollable body */}
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1960,8 +2434,8 @@ export default function Employees() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-5">
         <PageInfoBanner
           title="Employees"
-          description="Manage employment details including bank accounts and financial records. The Roster tab shows all employees with bank account status. Bank Accounts shows the full account registry. Financial Overview shows monthly activity across transportation advances, cost submissions, and withdrawal requests."
-          descriptionAr="إدارة تفاصيل التوظيف بما في ذلك الحسابات البنكية والسجلات المالية. يعرض قسم القائمة جميع الموظفين مع حالة الحساب البنكي. الحسابات البنكية تعرض سجل الحسابات الكامل."
+          description="Your full workforce registry, split into two tracks. Staff tab shows salary employees with their base salary, gross pay, and payroll account — sourced live from Payroll Admin. Field Team tab shows retainer-based field workers with classification level, monthly retainer amount, and last payment date — sourced live from Retainer Management. Both tabs share the same filters. Click any row to open the employee detail panel, which includes a Compensation section showing the full salary breakdown or retainer configuration. The workforce cost cards at the top show your live monthly salary commitment, retainer commitment, and combined cost. Bank Accounts tab shows the full account registry for payment processing. Financial Overview shows monthly activity across transportation advances, cost submissions, and withdrawal requests."
+          descriptionAr="سجل القوى العاملة الكامل، مقسم إلى مسارين: الموظفون (براتب) وفريق الميدان (مكافأة). انقر على أي صف لعرض تفاصيل الموظف وقسم التعويضات. بطاقات التكلفة أعلاه تعرض الالتزامات الشهرية الحية."
         />
 
         {/* ── Stats ── */}
