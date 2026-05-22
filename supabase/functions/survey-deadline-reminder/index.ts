@@ -44,8 +44,16 @@ function normalizePhone(raw: string): string {
   const p = raw.trim().replace(/[\s\-\(\)\.]/g, '')
   if (!p) return p
   if (p.startsWith('+')) return p
+  // Has country code digits but missing leading +
+  if (p.startsWith('249') && p.length >= 12) return '+' + p
+  if (p.startsWith('256') && p.length >= 12) return '+' + p
+  // Sudan local formats: 09x / 01x
   if (p.startsWith('09') || p.startsWith('01')) return '+249' + p.slice(1)
+  // Uganda local format: 07x
   if (p.startsWith('07')) return '+256' + p.slice(1)
+  // Sudan numbers stored without leading 0 (9 digits starting with 9 or 1)
+  if (/^9\d{8}$/.test(p)) return '+249' + p
+  if (/^1\d{8}$/.test(p)) return '+249' + p
   return p
 }
 
