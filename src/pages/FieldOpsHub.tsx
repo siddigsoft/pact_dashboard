@@ -4,7 +4,7 @@ import {
   Loader2, ClipboardList, ClipboardCheck, Shield, AlertTriangle,
   Package, Activity, Map, MapPin, Compass, Info,
 } from 'lucide-react';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
+import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
 
 const SiteVisitsPanel         = lazy(() => import('./SiteVisits'));
@@ -124,75 +124,21 @@ export default function FieldOpsHub() {
   const Panel = PanelMap[activeTab];
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      {/* ── Sticky header ── */}
-      <div className="sticky top-0 z-30 bg-gray-900 text-white shadow-lg">
-        <div className="px-4 pt-4 pb-0">
-          {/* Title row */}
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Field Operations Hub</h1>
-              <p className="text-gray-400 text-xs mt-0.5">Monitoring · Safety · Teams & Maps</p>
-            </div>
-            <ConnectedPagesBar pages={['dashboard', 'mmp', 'my-tasks', 'reports']} className="hidden md:flex" />
-          </div>
-
-          {/* Section pills */}
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            {SECTIONS.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setTab(s.tabs[0].id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
-                  activeSection.id === s.id
-                    ? 'text-white shadow-md'
-                    : 'bg-white/10 text-gray-300 hover:bg-white/20',
-                )}
-                style={activeSection.id === s.id ? { backgroundColor: s.color } : undefined}
-              >
-                <s.icon className="h-3 w-3" />
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Sub-tab strip */}
-          <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-none">
-            {activeSection.tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setTab(tab.id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-all',
-                  activeTab === tab.id
-                    ? 'border-white text-white'
-                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500',
-                )}
-              >
-                <tab.icon className="h-3.5 w-3.5" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Description banner ── */}
-      <div
-        className="px-4 py-2.5 flex items-start gap-2 text-white text-xs border-b"
-        style={{ backgroundColor: activeSection.color + 'dd' }}
-      >
-        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 opacity-80" />
-        <span className="opacity-90">{activeTabDef.description}</span>
-      </div>
-
-      {/* ── Panel ── */}
-      <div className="flex-1">
-        <Suspense fallback={<Spinner />}>
-          <Panel />
-        </Suspense>
-      </div>
-    </div>
+    <HubLayout
+      title="Field Operations Hub"
+      subtitle="Monitoring · Safety · Teams & Maps"
+      hubIcon={Compass}
+      sections={SECTIONS}
+      activeSectionId={activeSection.id}
+      activeTabId={activeTab}
+      activeTabDescription={activeTabDef.description}
+      quickLinks={['dashboard', 'mmp', 'my-tasks', 'reports']}
+      onSectionClick={id => setTab(id as FOTab)}
+      onTabClick={id => setTab(id as FOTab)}
+    >
+      <Suspense fallback={<Spinner />}>
+        <Panel />
+      </Suspense>
+    </HubLayout>
   );
 }
