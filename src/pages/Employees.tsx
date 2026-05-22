@@ -50,6 +50,25 @@ function normalizeBA(raw: any): BankAccount | null {
   return (ba.accountName || ba.accountNumber || ba.bankName || ba.branch) ? ba : null;
 }
 
+interface SalaryConfigSummary {
+  user_id: string; base_salary: number; currency: string;
+  allowances: Array<{ name: string; amount: number; type: 'fixed' | 'percent' }>;
+  deductions: Array<{ name: string; amount: number; type: 'fixed' | 'percent' }>;
+}
+interface RetainerConfigSummary {
+  user_id: string; classification_level: string | null; role_scope: string | null;
+  amount_cents: number; currency: string;
+}
+function fmtMoney(amount: number, currency = 'SDG') {
+  return `${currency} ${Math.round(amount).toLocaleString()}`;
+}
+function computeGross(cfg: SalaryConfigSummary | undefined): number {
+  if (!cfg) return 0;
+  let g = cfg.base_salary;
+  (cfg.allowances ?? []).forEach((a: any) => { g += a.type === 'percent' ? cfg.base_salary * a.amount / 100 : (Number(a.amount) || 0); });
+  return g;
+}
+
 interface EmployeeProfile {
   id: string; full_name: string | null; email: string | null; phone: string | null;
   role: string | null; employee_id: string | null; hub_id: string | null;
@@ -105,6 +124,30 @@ function ContractBadge({ type }: { type: string | null }) {
     <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${cfg.color}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
+    </span>
+  );
+}
+
+function ExpiryBadge({ endDate }: { endDate: string | null }) {
+  const days = daysUntilExpiry(endDate);
+  if (days === null) return <span className="text-xs text-muted-foreground">—</span>;
+  if (days <= 0)  return <span className="inline-flex items-center rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-400">Expired</span>;
+  if (days <= 30) return <span className="inline-flex items-center rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-400">{days}d left</span>;
+  if (days <= 60) return <span className="inline-flex items-center rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">{days}d left</span>;
+  if (days <= 90) return <span className="inline-flex items-center rounded-full border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 px-2 py-0.5 text-[10px] font-bold text-yellow-700 dark:text-yellow-400">{days}d left</span>;
+  try { return <span className="text-xs text-muted-foreground">{format(new Date(endDate!), 'dd MMM yy')}</span>; } catch { return <span className="text-xs text-muted-foreground">—</span>; }
+}
+
+function ClassificationBadge({ level }: { level: string | null }) {
+  if (!level) return <span className="text-xs text-muted-foreground italic">Not set</span>;
+  const COLORS: Record<string, string> = {
+    A: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-800',
+    B: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-800',
+    C: 'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:border-violet-800',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${COLORS[level.toUpperCase()] ?? 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`}>
+      Level {level}
     </span>
   );
 }
@@ -203,6 +246,7 @@ function RoleBadge({ role }: { role: string | null }) {
 /* ─── Employee Detail Modal ──────────────────────────────── */
 function EmployeeDetail({
   profile, onClose, dbHubs, departments, onUpdate, onEmploymentChange, onRoleDeptChange, canEdit,
+  salaryConfig, retainerConfig, lastRetainerPayment,
 }: {
   profile: EmployeeProfile;
   onClose: () => void;
@@ -212,6 +256,9 @@ function EmployeeDetail({
   onEmploymentChange: (id: string, updates: { is_employee: boolean; employee_id: string | null }) => void;
   onRoleDeptChange: (id: string, updates: { role?: string | null; department_id?: string | null }) => void;
   canEdit: boolean;
+  salaryConfig?: SalaryConfigSummary;
+  retainerConfig?: RetainerConfigSummary;
+  lastRetainerPayment?: string;
 }) {
   const { toast } = useToast();
   const hub      = dbHubs.find(h => h.id === profile.hub_id);
@@ -784,6 +831,108 @@ function EmployeeDetail({
             )}
           </div>
 
+          {/* ── Compensation ── */}
+          {(!profile.contract_type || profile.contract_type === 'salary' || profile.contract_type === 'both') && (
+            <div className="px-6 py-4 border-t">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+                <Banknote className="h-3 w-3" />Salary Compensation
+              </p>
+              {salaryConfig ? (
+                <div className="rounded-md border bg-gradient-to-br from-blue-50/60 to-transparent dark:from-blue-950/20 dark:to-transparent p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Base Salary</p>
+                      <p className="font-bold text-base text-[#0F2041] dark:text-blue-300">{fmtMoney(salaryConfig.base_salary, salaryConfig.currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Gross Monthly</p>
+                      <p className="font-bold text-base text-emerald-700 dark:text-emerald-400">{fmtMoney(computeGross(salaryConfig), salaryConfig.currency)}</p>
+                    </div>
+                  </div>
+                  {(salaryConfig.allowances ?? []).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1.5">Allowances</p>
+                      <div className="space-y-1">
+                        {(salaryConfig.allowances ?? []).map((a: any, i: number) => (
+                          <div key={i} className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">{a.name}</span>
+                            <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                              {a.type === 'percent' ? `+${a.amount}%` : `+${fmtMoney(a.amount, salaryConfig.currency)}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(salaryConfig.deductions ?? []).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1.5">Deductions</p>
+                      <div className="space-y-1">
+                        {(salaryConfig.deductions ?? []).map((d: any, i: number) => (
+                          <div key={i} className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">{d.name}</span>
+                            <span className="font-medium text-red-600 dark:text-red-400">
+                              {d.type === 'percent' ? `-${d.amount}%` : `-${fmtMoney(d.amount, salaryConfig.currency)}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No salary configured</p>
+                    <p className="text-xs text-amber-600/70 dark:text-amber-400/70">Configure in Payroll Admin → Employee Salaries.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {(profile.contract_type === 'retainer' || profile.contract_type === 'both') && (
+            <div className="px-6 py-4 border-t">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+                <FileDown className="h-3 w-3" />Retainer / Field Team
+              </p>
+              {retainerConfig ? (
+                <div className="rounded-md border bg-gradient-to-br from-violet-50/60 to-transparent dark:from-violet-950/20 dark:to-transparent p-4">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Classification</p>
+                      <ClassificationBadge level={retainerConfig.classification_level} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Monthly Retainer</p>
+                      <p className="font-bold text-base text-violet-700 dark:text-violet-300">{fmtMoney(retainerConfig.amount_cents / 100, retainerConfig.currency)}</p>
+                    </div>
+                    {retainerConfig.role_scope && (
+                      <div className="col-span-2">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Scope</p>
+                        <p className="text-sm font-medium">{retainerConfig.role_scope}</p>
+                      </div>
+                    )}
+                    {lastRetainerPayment && (
+                      <div className="col-span-2">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Last Payment</p>
+                        <p className="text-sm font-medium">{format(new Date(lastRetainerPayment), 'dd MMM yyyy')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No retainer configured</p>
+                    <p className="text-xs text-amber-600/70 dark:text-amber-400/70">Configure in Retainer Management → Eligible Users.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Activity & Device ── */}
           <div className="px-6 py-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
@@ -1292,7 +1441,10 @@ export default function Employees() {
   const overrideCanEdit = usePageManageOverride('employees', roleCanEdit);
   const canEdit = roleCanEdit || overrideCanEdit;
 
-  const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
+  const [profiles, setProfiles]               = useState<EmployeeProfile[]>([]);
+  const [salaryConfigMap, setSalaryConfigMap]     = useState<Record<string, SalaryConfigSummary>>({});
+  const [retainerConfigMap, setRetainerConfigMap] = useState<Record<string, RetainerConfigSummary>>({});
+  const [lastRetainerMap, setLastRetainerMap]     = useState<Record<string, string>>({});
   const [dbHubs, setDbHubs]     = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1353,7 +1505,7 @@ export default function Employees() {
   };
 
   /* ── Active tab — declared here so the financial useEffect can reference it ── */
-  const [activeTab, setActiveTab]   = useState('roster');
+  const [activeTab, setActiveTab]   = useState('staff');
 
   /* ── Financial summary state — lazy: only fetched when tab is first opened ── */
   const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
@@ -1448,6 +1600,29 @@ export default function Employees() {
             const presence      = isUserOnline(p.id) ? 'online' : presenceFromActivity(last_activity, p.updated_at);
             return { ...p, bank_account: ba, last_activity, device_info, app_version, presence, is_employee: !!p.is_employee };
           }));
+
+      // ── Compensation data (non-blocking, fire-and-forget) ──
+      Promise.all([
+        (supabase as any).from('employee_salary_config').select('user_id, base_salary, currency, allowances, deductions'),
+        (supabase as any).from('current_user_classifications').select('user_id, classification_level, role_scope, amount_cents, currency').eq('is_active', true),
+        (supabase as any).from('wallet_transactions').select('user_id, created_at').filter('metadata->>type', 'eq', 'retainer').order('created_at', { ascending: false }).limit(500),
+      ]).then(([salaryRes, retainerRes, lastPayRes]: any[]) => {
+        if (salaryRes.data) {
+          const m: Record<string, SalaryConfigSummary> = {};
+          salaryRes.data.forEach((s: any) => { m[s.user_id] = s; });
+          setSalaryConfigMap(m);
+        }
+        if (retainerRes.data) {
+          const m: Record<string, RetainerConfigSummary> = {};
+          retainerRes.data.forEach((r: any) => { m[r.user_id] = r; });
+          setRetainerConfigMap(m);
+        }
+        if (lastPayRes.data) {
+          const m: Record<string, string> = {};
+          lastPayRes.data.forEach((t: any) => { if (!m[t.user_id]) m[t.user_id] = t.created_at; });
+          setLastRetainerMap(m);
+        }
+      }).catch(() => {/* non-critical */});
       }
     } catch (err: any) {
       toast({ title: 'Failed to load employees', description: err?.message, variant: 'destructive' });
@@ -1548,6 +1723,31 @@ export default function Employees() {
     expiringContracts: registeredEmployees.filter(p => { const d = daysUntilExpiry(p.contract_end_date); return d !== null && d > 0 && d <= 30; }).length,
     incompleteProfiles: registeredEmployees.filter(p => (completenessMap.get(p.id)?.pct ?? 0) < 100).length,
   }), [registeredEmployees, completenessMap]);
+
+  /* ── Per-tab filtered lists ── */
+  const staffFiltered = useMemo(
+    () => filtered.filter(p => !p.contract_type || p.contract_type === 'salary' || p.contract_type === 'both'),
+    [filtered]
+  );
+  const fieldTeamFiltered = useMemo(
+    () => filtered.filter(p => p.contract_type === 'retainer' || p.contract_type === 'both'),
+    [filtered]
+  );
+
+  /* ── Workforce cost summary ── */
+  const workforceCost = useMemo(() => {
+    let salaryTotal = 0; let retainerTotal = 0;
+    registeredEmployees.forEach(p => {
+      if (!p.contract_type || p.contract_type === 'salary' || p.contract_type === 'both') {
+        salaryTotal += computeGross(salaryConfigMap[p.id]);
+      }
+      if (p.contract_type === 'retainer' || p.contract_type === 'both') {
+        const rc = retainerConfigMap[p.id];
+        if (rc) retainerTotal += rc.amount_cents / 100;
+      }
+    });
+    return { salaryTotal, retainerTotal, combined: salaryTotal + retainerTotal };
+  }, [registeredEmployees, salaryConfigMap, retainerConfigMap]);
 
   /* ── Stat Card ── */
   function StatCard({ label, value, icon: Icon, accent, onClick }: {
@@ -1782,6 +1982,45 @@ export default function Employees() {
             onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }} />
         </div>
 
+        {/* ── Workforce Cost Summary ── */}
+        {!loading && workforceCost.combined > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-blue-500" />
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-medium text-muted-foreground">Monthly Salary Commitment</p>
+                  <Banknote className="h-4 w-4 text-blue-500" />
+                </div>
+                <p className="text-2xl font-extrabold text-blue-700 dark:text-blue-400">{fmtMoney(workforceCost.salaryTotal)}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{stats.salary + stats.both} salary staff</p>
+              </CardContent>
+            </Card>
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-violet-500" />
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-medium text-muted-foreground">Monthly Retainer Commitment</p>
+                  <FileDown className="h-4 w-4 text-violet-500" />
+                </div>
+                <p className="text-2xl font-extrabold text-violet-700 dark:text-violet-400">{fmtMoney(workforceCost.retainerTotal)}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{stats.retainer + stats.both} field team members</p>
+              </CardContent>
+            </Card>
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-teal-500" />
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-medium text-muted-foreground">Combined Monthly Cost</p>
+                  <Layers className="h-4 w-4 text-teal-500" />
+                </div>
+                <p className="text-2xl font-extrabold text-teal-700 dark:text-teal-400">{fmtMoney(workforceCost.combined)}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{stats.total} total registered</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* ── Contract Expiry / Completeness Alerts Banner ── */}
         {!loading && (stats.expiredContracts > 0 || stats.expiringContracts > 0 || stats.incompleteProfiles > 0) && (
           <div className="flex flex-wrap gap-2 px-1 pb-1">
@@ -1829,9 +2068,13 @@ export default function Employees() {
         {/* ── Tabs ── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1 p-1 bg-muted/60 border rounded-lg">
-            <TabsTrigger value="roster" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
-              <Shield className="h-3.5 w-3.5" />Employee Roster
-              {!loading && <span className="ml-0.5 rounded-full bg-current/10 px-1.5 py-0 text-[10px] font-bold data-[state=active]:bg-white/20">{filtered.length}</span>}
+            <TabsTrigger value="staff" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+              <Briefcase className="h-3.5 w-3.5" />Staff
+              {!loading && <span className="ml-0.5 rounded-full bg-current/10 px-1.5 py-0 text-[10px] font-bold data-[state=active]:bg-white/20">{staffFiltered.length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="field_team" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+              <Users className="h-3.5 w-3.5" />Field Team
+              {!loading && <span className="ml-0.5 rounded-full bg-current/10 px-1.5 py-0 text-[10px] font-bold data-[state=active]:bg-white/20">{fieldTeamFiltered.length}</span>}
             </TabsTrigger>
             <TabsTrigger value="bank_accounts" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
               <Landmark className="h-3.5 w-3.5" />Bank Accounts
@@ -1847,77 +2090,58 @@ export default function Employees() {
           {/* ── Shared Filter Bar ── */}
           {FilterBar}
 
-          {/* ── Roster tab ── */}
-          <TabsContent value="roster" className="mt-0">
+          {/* ── Staff tab (salary / both) ── */}
+          <TabsContent value="staff" className="mt-0">
             {loading ? (
-              viewMode === 'cards' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {Array(8).fill(0).map((_, i) => <Skeleton key={i} className="h-40" />)}
-                </div>
-              ) : (
-                <Card className="overflow-hidden">
-                  <div className="space-y-2 p-4">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                </Card>
-              )
-            ) : filtered.length === 0 ? (
+              <Card className="overflow-hidden"><div className="space-y-2 p-4">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div></Card>
+            ) : staffFiltered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
-                <div className="rounded-full bg-muted p-4"><Users className="h-8 w-8" /></div>
-                {!showUnregistered && registeredEmployees.length === 0 ? (
+                <div className="rounded-full bg-blue-50 dark:bg-blue-950/30 p-4"><Briefcase className="h-8 w-8 text-blue-400" /></div>
+                {registeredEmployees.length === 0 ? (
                   <>
                     <p className="text-sm font-medium">No employees registered yet</p>
                     <p className="text-xs text-center max-w-xs">Open any user profile and click <span className="font-semibold text-emerald-600">Register as Employee</span> to add them here.</p>
-                    {canEdit && unregisteredCount > 0 && (
-                      <button type="button" onClick={() => setShowUnregistered(true)} className="text-xs font-semibold text-[#0F2041] underline underline-offset-2">
-                        Browse {unregisteredCount} system profiles →
-                      </button>
-                    )}
                   </>
                 ) : (
-                  <p className="text-sm font-medium">No employees match your filters</p>
+                  <>
+                    <p className="text-sm font-medium">No salary staff match your filters</p>
+                    <p className="text-xs text-muted-foreground">Staff have contract type "Salary" or "Salary + Retainer".</p>
+                  </>
                 )}
               </div>
             ) : viewMode === 'cards' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filtered.map(p => {
-                  const hub   = dbHubs.find(h => h.id === p.hub_id);
-                  const state = sudanStates.find(s => s.id === p.state_id);
+                {staffFiltered.map(p => {
+                  const hub = dbHubs.find(h => h.id === p.hub_id);
                   const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
+                  const sc = salaryConfigMap[p.id];
                   return (
                     <Card key={p.id} className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 border hover:border-blue-200 dark:hover:border-blue-800 overflow-hidden"
-                      onClick={() => setSelected(p)} data-testid={`card-employee-${p.id}`}>
+                      onClick={() => setSelected(p)} data-testid={`card-staff-${p.id}`}>
                       <CardContent className="p-0">
                         <div className={`h-1 w-full ${p.presence === 'online' ? 'bg-green-500' : p.presence === 'away' ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
                         <div className="p-4 space-y-3">
                           <div className="flex items-start gap-3">
                             <Avatar name={p.full_name} size="md" availability={p.presence} />
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-1">
-                                <p className="font-semibold text-sm text-foreground truncate">{p.full_name || 'Unknown'}</p>
-                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              </div>
+                              <p className="font-semibold text-sm truncate">{p.full_name || 'Unknown'}</p>
                               <p className="text-[11px] text-muted-foreground truncate">{p.email}</p>
+                              <RoleBadge role={p.role} />
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <RoleBadge role={p.role} />
-                            <ContractBadge type={p.contract_type} />
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div className="rounded bg-blue-50 dark:bg-blue-950/30 px-2 py-1.5">
+                              <p className="text-[10px] text-muted-foreground">Base Salary</p>
+                              <p className="text-xs font-bold text-blue-700 dark:text-blue-400 truncate">{sc ? fmtMoney(sc.base_salary, sc.currency) : '—'}</p>
+                            </div>
+                            <div className="rounded bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1.5">
+                              <p className="text-[10px] text-muted-foreground">Gross</p>
+                              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 truncate">{sc ? fmtMoney(computeGross(sc), sc.currency) : '—'}</p>
+                            </div>
                           </div>
-                          {(hub || state) && (
-                            <div className="space-y-0.5">
-                              {hub && <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Building2 className="h-3 w-3 shrink-0" /><span className="font-medium text-foreground">{hub.name}</span></div>}
-                              {state && <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3 w-3 shrink-0" /><span>{state.name}</span></div>}
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between pt-1 border-t">
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <Landmark className="h-3 w-3 text-muted-foreground shrink-0" />
-                              {hasBank
-                                ? <span className="font-mono text-foreground">{maskAcc(p.bank_account?.accountNumber)}</span>
-                                : <span className="text-red-500 font-medium">No account</span>}
-                            </div>
-                            {hasBank
-                              ? <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                              : <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+                          <div className="flex items-center justify-between pt-1 border-t text-xs">
+                            <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3 text-muted-foreground" />{hasBank ? <span className="font-mono text-[10px]">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-red-500 font-medium">No account</span>}</div>
+                            {hub && <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{hub.name}</span>}
                           </div>
                         </div>
                       </CardContent>
@@ -1933,25 +2157,26 @@ export default function Employees() {
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableHead className="w-[200px]">Name</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Contract</TableHead>
+                        <TableHead>Base Salary</TableHead>
+                        <TableHead>Gross</TableHead>
                         <TableHead>Hub</TableHead>
-                        <TableHead>State</TableHead>
-                        <TableHead>Bank Account</TableHead>
+                        <TableHead>Payroll Account</TableHead>
+                        <TableHead>Contract</TableHead>
+                        <TableHead>Expiry</TableHead>
                         <TableHead>Profile</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Last Active</TableHead>
                         <TableHead className="w-24 text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filtered.map(p => {
-                        const hub   = dbHubs.find(h => h.id === p.hub_id);
-                        const state = sudanStates.find(s => s.id === p.state_id);
+                      {staffFiltered.map(p => {
+                        const hub = dbHubs.find(h => h.id === p.hub_id);
                         const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
-                        const av    = avBadge(p.presence);
+                        const av = avBadge(p.presence);
+                        const sc = salaryConfigMap[p.id];
                         return (
                           <TableRow key={p.id} className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-                            onClick={() => setSelected(p)} data-testid={`row-employee-${p.id}`}>
+                            onClick={() => setSelected(p)} data-testid={`row-staff-${p.id}`}>
                             <TableCell>
                               <div className="flex items-center gap-2.5">
                                 <Avatar name={p.full_name} size="sm" availability={p.presence} />
@@ -1962,25 +2187,31 @@ export default function Employees() {
                               </div>
                             </TableCell>
                             <TableCell><RoleBadge role={p.role} /></TableCell>
-                            <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
-                            <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
-                            <TableCell className="text-xs">{state?.name || '—'}</TableCell>
                             <TableCell>
-                              {hasBank
-                                ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
-                                : <span className="text-xs text-red-500 font-medium">Missing</span>}
+                              {sc ? <span className="text-sm font-bold text-blue-700 dark:text-blue-400">{fmtMoney(sc.base_salary, sc.currency)}</span>
+                                  : <span className="text-xs text-amber-600 italic">Not configured</span>}
                             </TableCell>
+                            <TableCell>
+                              {sc ? <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{fmtMoney(computeGross(sc), sc.currency)}</span>
+                                  : <span className="text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                            <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
+                            <TableCell>
+                              {hasBank ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
+                                       : <span className="text-xs text-red-500 font-medium">Missing</span>}
+                            </TableCell>
+                            <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
+                            <TableCell><ExpiryBadge endDate={p.contract_end_date} /></TableCell>
                             <TableCell>
                               {(() => {
                                 const { pct = 0, missing = [] } = completenessMap.get(p.id) ?? {};
                                 const color = pct === 100 ? 'text-green-600 dark:text-green-400' : pct >= 75 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
                                 return (
-                                  <div className="flex items-center gap-1.5 group relative" title={missing.length ? `Missing: ${missing.join(', ')}` : 'Profile complete'}>
-                                    <div className="w-6 h-6 shrink-0 relative">
+                                  <div className="flex items-center gap-1.5" title={missing.length ? `Missing: ${missing.join(', ')}` : 'Complete'}>
+                                    <div className="w-6 h-6 shrink-0">
                                       <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
                                         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-muted-foreground/20" />
-                                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5"
-                                          className={color} strokeDasharray={`${pct * 0.565} 56.5`} strokeLinecap="round" />
+                                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" className={color} strokeDasharray={`${pct * 0.565} 56.5`} strokeLinecap="round" />
                                       </svg>
                                     </div>
                                     <span className={`text-[11px] font-semibold ${color}`}>{pct}%</span>
@@ -1994,14 +2225,136 @@ export default function Employees() {
                                 <span className={`text-xs font-medium ${av.labelColor}`}>{av.label}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{lastActive(p.last_activity, p.updated_at)}</TableCell>
                             <TableCell className="text-right">
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); setSelected(p); }}
+                              <button type="button" onClick={e => { e.stopPropagation(); setSelected(p); }}
                                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0F2041] dark:text-blue-400 border border-[#0F2041]/20 dark:border-blue-800 rounded-md px-2.5 py-1 hover:bg-[#0F2041] hover:text-white dark:hover:bg-blue-900/40 transition-colors"
-                                data-testid={`button-manage-${p.id}`}
-                              >
+                                data-testid={`button-manage-staff-${p.id}`}>
+                                <Pencil className="h-3 w-3" />Manage
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ── Field Team tab (retainer / both) ── */}
+          <TabsContent value="field_team" className="mt-0">
+            {loading ? (
+              <Card className="overflow-hidden"><div className="space-y-2 p-4">{Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div></Card>
+            ) : fieldTeamFiltered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
+                <div className="rounded-full bg-violet-50 dark:bg-violet-950/30 p-4"><Users className="h-8 w-8 text-violet-400" /></div>
+                <p className="text-sm font-medium">No field team members match your filters</p>
+                <p className="text-xs text-muted-foreground text-center max-w-xs">Field team members have contract type "Retainer-Only" or "Salary + Retainer".</p>
+              </div>
+            ) : viewMode === 'cards' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {fieldTeamFiltered.map(p => {
+                  const hub = dbHubs.find(h => h.id === p.hub_id);
+                  const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
+                  const rc = retainerConfigMap[p.id];
+                  const lastPay = lastRetainerMap[p.id];
+                  return (
+                    <Card key={p.id} className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 border hover:border-violet-200 dark:hover:border-violet-800 overflow-hidden"
+                      onClick={() => setSelected(p)} data-testid={`card-field-${p.id}`}>
+                      <CardContent className="p-0">
+                        <div className={`h-1 w-full ${p.presence === 'online' ? 'bg-green-500' : p.presence === 'away' ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <Avatar name={p.full_name} size="md" availability={p.presence} />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm truncate">{p.full_name || 'Unknown'}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">{p.email}</p>
+                              <div className="flex items-center gap-1 mt-0.5 flex-wrap"><RoleBadge role={p.role} />{rc && <ClassificationBadge level={rc.classification_level} />}</div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div className="rounded bg-violet-50 dark:bg-violet-950/30 px-2 py-1.5">
+                              <p className="text-[10px] text-muted-foreground">Retainer / mo</p>
+                              <p className="text-xs font-bold text-violet-700 dark:text-violet-400 truncate">{rc ? fmtMoney(rc.amount_cents / 100, rc.currency) : '—'}</p>
+                            </div>
+                            <div className="rounded bg-slate-50 dark:bg-slate-800/50 px-2 py-1.5">
+                              <p className="text-[10px] text-muted-foreground">Last Payment</p>
+                              <p className="text-xs font-medium truncate">{lastPay ? format(new Date(lastPay), 'dd MMM yy') : '—'}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t text-xs">
+                            <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3 text-muted-foreground" />{hasBank ? <span className="font-mono text-[10px]">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-amber-500 font-medium">No cash-out account</span>}</div>
+                            {hub && <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{hub.name}</span>}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableHead className="w-[200px]">Name</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Classification</TableHead>
+                        <TableHead>Retainer / Month</TableHead>
+                        <TableHead>Last Payment</TableHead>
+                        <TableHead>Cash-out Account</TableHead>
+                        <TableHead>Contract</TableHead>
+                        <TableHead>Expiry</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-24 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fieldTeamFiltered.map(p => {
+                        const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
+                        const av = avBadge(p.presence);
+                        const rc = retainerConfigMap[p.id];
+                        const lastPay = lastRetainerMap[p.id];
+                        return (
+                          <TableRow key={p.id} className="cursor-pointer hover:bg-violet-50/50 dark:hover:bg-violet-950/20"
+                            onClick={() => setSelected(p)} data-testid={`row-field-${p.id}`}>
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <Avatar name={p.full_name} size="sm" availability={p.presence} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell><RoleBadge role={p.role} /></TableCell>
+                            <TableCell><ClassificationBadge level={rc?.classification_level ?? null} /></TableCell>
+                            <TableCell>
+                              {rc ? <span className="text-sm font-bold text-violet-700 dark:text-violet-400">{fmtMoney(rc.amount_cents / 100, rc.currency)}</span>
+                                  : <span className="text-xs text-amber-600 italic">Not configured</span>}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {lastPay ? format(new Date(lastPay), 'dd MMM yyyy') : '—'}
+                            </TableCell>
+                            <TableCell>
+                              {hasBank
+                                ? <div className="flex flex-col gap-0"><span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span><span className="text-[10px] text-muted-foreground">Cash-out</span></div>
+                                : <span className="text-xs text-amber-600 italic">Not registered</span>}
+                            </TableCell>
+                            <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
+                            <TableCell><ExpiryBadge endDate={p.contract_end_date} /></TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full ${av.dot}`} />
+                                <span className={`text-xs font-medium ${av.labelColor}`}>{av.label}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <button type="button" onClick={e => { e.stopPropagation(); setSelected(p); }}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded-md px-2.5 py-1 hover:bg-violet-600 hover:text-white dark:hover:bg-violet-900/40 transition-colors"
+                                data-testid={`button-manage-field-${p.id}`}>
                                 <Pencil className="h-3 w-3" />Manage
                               </button>
                             </TableCell>
@@ -2134,7 +2487,19 @@ export default function Employees() {
 
       {/* ── Employee Detail Modal ── */}
       {selected && (
-        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} departments={departments} onUpdate={handleUpdate} onEmploymentChange={handleEmploymentChange} onRoleDeptChange={handleRoleDeptChange} canEdit={canEdit} />
+        <EmployeeDetail
+          profile={selected}
+          onClose={() => setSelected(null)}
+          dbHubs={dbHubs}
+          departments={departments}
+          onUpdate={handleUpdate}
+          onEmploymentChange={handleEmploymentChange}
+          onRoleDeptChange={handleRoleDeptChange}
+          canEdit={canEdit}
+          salaryConfig={salaryConfigMap[selected.id]}
+          retainerConfig={retainerConfigMap[selected.id]}
+          lastRetainerPayment={lastRetainerMap[selected.id]}
+        />
       )}
 
       {/* ── Bulk Contract Dialog ── */}

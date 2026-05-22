@@ -570,6 +570,22 @@ function HROverviewPanel() {
     },
   });
 
+  const { data: salaryConfigs = [] } = useQuery({
+    queryKey: ['hr-overview-salary-configs'],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from('employee_salary_config').select('user_id, base_salary, currency, allowances, deductions');
+      return data ?? [];
+    },
+  });
+
+  const { data: retainerConfigs = [] } = useQuery({
+    queryKey: ['hr-overview-retainer-configs'],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from('current_user_classifications').select('user_id, amount_cents, currency').eq('is_active', true);
+      return data ?? [];
+    },
+  });
+
   const stats = useMemo(() => {
     const total = profiles.length;
     const contractCounts: Record<string, number> = {};
@@ -594,11 +610,36 @@ function HROverviewPanel() {
       }
       const deptId = (p as any).department_id ?? '__none__';
       deptCounts[deptId] = (deptCounts[deptId] ?? 0) + 1;
-      // incomplete if missing role or department
       if (!(p as any).role || !(p as any).department_id) incompleteCount++;
     }
     return { total, contractCounts, roleCounts, missingBank, expiring30, expired, incompleteCount, deptCounts };
   }, [profiles]);
+
+  const costSummary = useMemo(() => {
+    const salaryMap = new Map<string, any>();
+    salaryConfigs.forEach((s: any) => salaryMap.set(s.user_id, s));
+    const retainerMap = new Map<string, number>();
+    retainerConfigs.forEach((r: any) => retainerMap.set(r.user_id, (r.amount_cents ?? 0) / 100));
+
+    let salaryTotal = 0; let retainerTotal = 0; let noSalaryConfig = 0;
+    profiles.forEach((p: any) => {
+      const ct = p.contract_type;
+      if (!ct || ct === 'salary' || ct === 'both') {
+        const sc = salaryMap.get(p.id);
+        if (sc) {
+          let g = sc.base_salary ?? 0;
+          (sc.allowances ?? []).forEach((a: any) => { g += a.type === 'percent' ? sc.base_salary * a.amount / 100 : (Number(a.amount) || 0); });
+          salaryTotal += g;
+        } else { noSalaryConfig++; }
+      }
+      if (ct === 'retainer' || ct === 'both') {
+        retainerTotal += retainerMap.get(p.id) ?? 0;
+      }
+    });
+    return { salaryTotal, retainerTotal, combined: salaryTotal + retainerTotal, noSalaryConfig };
+  }, [profiles, salaryConfigs, retainerConfigs]);
+
+  const fmtM = (n: number) => `SDG ${Math.round(n).toLocaleString()}`;
 
   const CT_LABEL: Record<string, string> = { salary: 'Salary', retainer: 'Retainer-Only', both: 'Salary + Retainer', __none__: 'Unset' };
   const CT_COLOR: Record<string, string> = { salary: '#3b82f6', retainer: '#8b5cf6', both: '#14b8a6', __none__: '#94a3b8' };
@@ -614,27 +655,40 @@ function HROverviewPanel() {
     .map(([name, count]) => ({ name, count }));
 
   const deptChartData = departments
-    .map(d => ({ name: d.name, count: stats.deptCounts[d.id] ?? 0 }))
-    .filter(d => d.count > 0)
-    .sort((a, b) => b.count - a.count);
+    .map((d: any) => ({ name: d.name, count: stats.deptCounts[d.id] ?? 0 }))
+    .filter((d: any) => d.count > 0)
+    .sort((a: any, b: any) => b.count - a.count);
 
-  const Kpi = ({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color?: string }) => (
-    <div className="rounded-xl border bg-card p-4 space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={`text-3xl font-bold ${color ?? 'text-foreground'}`}>{isLoading ? '—' : value}</p>
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+  const Kpi = ({ label, value, sub, color, accent }: { label: string; value: number | string; sub?: string; color?: string; accent?: string }) => (
+    <div className={`rounded-xl border bg-card overflow-hidden`}>
+      {accent && <div className={`h-1 w-full ${accent}`} />}
+      <div className="p-4 space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className={`text-2xl font-bold ${color ?? 'text-foreground'}`}>{isLoading ? '—' : value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+      </div>
     </div>
   );
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* ── Workforce Cost Row ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Kpi label="Monthly Salary Commitment" value={isLoading ? '—' : fmtM(costSummary.salaryTotal)} accent="bg-blue-500"
+          color="text-blue-700 dark:text-blue-400" sub={`${stats.contractCounts['salary'] ?? 0} salary + ${stats.contractCounts['both'] ?? 0} both`} />
+        <Kpi label="Monthly Retainer Commitment" value={isLoading ? '—' : fmtM(costSummary.retainerTotal)} accent="bg-violet-500"
+          color="text-violet-700 dark:text-violet-400" sub={`${stats.contractCounts['retainer'] ?? 0} retainer-only + ${stats.contractCounts['both'] ?? 0} both`} />
+        <Kpi label="Combined Monthly Cost" value={isLoading ? '—' : fmtM(costSummary.combined)} accent="bg-teal-500"
+          color="text-teal-700 dark:text-teal-400" sub={`${stats.total} total registered employees`} />
+      </div>
+
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Kpi label="Total Employees" value={stats.total} />
         <Kpi label="Missing Bank Account" value={stats.missingBank} color={stats.missingBank > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
         <Kpi label="Expired Contracts" value={stats.expired} color={stats.expired > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
         <Kpi label="Expiring (30 days)" value={stats.expiring30} color={stats.expiring30 > 0 ? 'text-amber-600 dark:text-amber-400' : undefined} />
-        <Kpi label="Incomplete Profiles" value={stats.incompleteCount} sub="Missing role or dept" color={stats.incompleteCount > 0 ? 'text-orange-600 dark:text-orange-400' : undefined} />
+        <Kpi label="No Salary Config" value={costSummary.noSalaryConfig} sub="Salary staff unconfigured" color={costSummary.noSalaryConfig > 0 ? 'text-orange-600 dark:text-orange-400' : undefined} />
       </div>
 
       {/* Charts Row */}
