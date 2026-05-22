@@ -25,8 +25,14 @@ const TimesheetPanel    = lazy(() => import('./Timesheet'));
 const PerformancePanel  = lazy(() => import('./PerformanceReviews'));
 const SalaryIncrPanel   = lazy(() => import('./SalaryIncrements'));
 const TrainingPanel     = lazy(() => import('@/components/hr/TrainingCertifications'));
+const LeaveCalendarPanel   = lazy(() => import('@/components/hr/LeaveCalendar'));
+const ContractRenewalPanel = lazy(() => import('@/components/hr/ContractRenewal'));
+const PayrollReportPanel   = lazy(() => import('@/components/hr/PayrollSummaryReport'));
+const HRAnalyticsPanel     = lazy(() => import('@/components/hr/HRAnalytics'));
+const FieldWalletPanel     = lazy(() => import('@/components/hr/FieldWallet'));
+const HRBroadcastPanel     = lazy(() => import('@/components/hr/HRBroadcast'));
 
-type HRTab = 'overview' | 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training' | 'eosb' | 'salary-advances';
+type HRTab = 'overview' | 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training' | 'eosb' | 'salary-advances' | 'leave-calendar' | 'contracts' | 'payroll-summary' | 'hr-analytics' | 'field-wallet' | 'wa-broadcast';
 
 const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: string; bg: string; adminOnly: boolean }[] = [
   { id: 'overview',          label: 'HR Overview',         icon: BarChart2,  accent: '#6366f1', bg: 'rgba(99,102,241,0.12)',  adminOnly: true  },
@@ -40,6 +46,12 @@ const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: strin
   { id: 'hr-tools',          label: 'HR Analytics',         icon: GitBranch,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
   { id: 'eosb',              label: 'EOSB / Gratuity',      icon: ShieldCheck, accent: '#0d9488', bg: 'rgba(13,148,136,0.12)', adminOnly: true  },
   { id: 'salary-advances',   label: 'Salary Advances',      icon: CreditCard, accent: '#e11d48', bg: 'rgba(225,29,72,0.12)',  adminOnly: true  },
+  { id: 'leave-calendar',    label: 'Leave Calendar',       icon: CreditCard, accent: '#3b82f6', bg: 'rgba(59,130,246,0.12)', adminOnly: true  },
+  { id: 'contracts',         label: 'Contract Renewals',    icon: FileText,   accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)', adminOnly: true  },
+  { id: 'payroll-summary',   label: 'Payroll Report',       icon: Download,   accent: '#22c55e', bg: 'rgba(34,197,94,0.12)',  adminOnly: true  },
+  { id: 'hr-analytics',      label: 'HR Analytics',         icon: BarChart2,  accent: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', adminOnly: true  },
+  { id: 'field-wallet',      label: 'Field Wallet',         icon: CreditCard, accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)',adminOnly: true  },
+  { id: 'wa-broadcast',      label: 'HR Broadcast',         icon: ExternalLink, accent: '#10b981', bg: 'rgba(16,185,129,0.12)',adminOnly: true },
 ];
 
 const ADMIN_ROLES = [
@@ -183,6 +195,24 @@ export default function HRHub() {
         {tab === 'overview' && isAdmin && <HROverviewPanel />}
         {tab === 'eosb' && isAdmin && <EOSBPanel />}
         {tab === 'salary-advances' && isAdmin && <SalaryAdvancesPanel />}
+        {tab === 'leave-calendar' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}><LeaveCalendarPanel /></Suspense>
+        )}
+        {tab === 'contracts' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}><ContractRenewalPanel /></Suspense>
+        )}
+        {tab === 'payroll-summary' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>
+        )}
+        {tab === 'hr-analytics' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>
+        )}
+        {tab === 'field-wallet' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>
+        )}
+        {tab === 'wa-broadcast' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>
+        )}
       </div>
     </div>
   );
