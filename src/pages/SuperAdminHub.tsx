@@ -164,6 +164,7 @@ export default function SuperAdminHub() {
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;
 
   const setTab = (tab: SATab) => {
+    localStorage.setItem('hub_last_tab_super_admin', tab);
     const next = new URLSearchParams(params);
     next.set('tab', tab);
     setParams(next, { replace: true });

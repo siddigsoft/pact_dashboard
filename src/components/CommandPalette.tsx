@@ -46,23 +46,27 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Workspace Hub', url: '/workspace', icon: FolderOpen, group: 'My Workspace', keywords: ['workspace', 'hub'] },
 
   // ── Communication ──────────────────────────────────────────────────────────
-  { title: 'Chat', url: '/chat', icon: MessageSquare, group: 'Communication', keywords: ['message', 'talk'] },
-  { title: 'Calls', url: '/calls', icon: Phone, group: 'Communication', keywords: ['phone', 'voice', 'video'] },
+  { title: 'Communication Hub', url: '/communication-hub', icon: MessageSquare, group: 'Communication', keywords: ['communication', 'hub', 'messaging'] },
+  { title: 'Chat', url: '/communication-hub?tab=chat', icon: MessageSquare, group: 'Communication', keywords: ['message', 'talk', 'chat'] },
+  { title: 'Calls', url: '/communication-hub?tab=calls', icon: Phone, group: 'Communication', keywords: ['phone', 'voice', 'video', 'calls'] },
+  { title: 'Signatures', url: '/communication-hub?tab=signatures', icon: FileSignature, group: 'Communication', keywords: ['sign', 'digital', 'document'] },
+  { title: 'Broadcast Center', url: '/communication-hub?tab=broadcast', icon: Megaphone, group: 'Communication', keywords: ['broadcast', 'announce', 'push'] },
+  { title: 'WhatsApp Admin', url: '/communication-hub?tab=whatsapp', icon: Smartphone, group: 'Communication', keywords: ['whatsapp', 'wa', 'sms'] },
   { title: 'Notifications', url: '/notifications', icon: Bell, group: 'Communication', keywords: ['alerts', 'bell'] },
   { title: 'Notification History', url: '/notification-history', icon: ScrollText, group: 'Communication', keywords: ['history', 'past', 'log'] },
-  { title: 'Broadcast Center', url: '/admin/broadcast', icon: Megaphone, group: 'Communication', keywords: ['broadcast', 'announce', 'push'] },
-  { title: 'WhatsApp Admin', url: '/admin/whatsapp', icon: Smartphone, group: 'Communication', keywords: ['whatsapp', 'wa', 'sms'] },
   { title: 'Call Analytics', url: '/call-analytics', icon: Phone, group: 'Communication', keywords: ['call', 'analytics', 'stats'] },
 
   // ── Planning & Setup ───────────────────────────────────────────────────────
-  { title: 'Projects', url: '/projects', icon: FolderKanban, group: 'Planning & Setup', keywords: ['project'] },
+  { title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, group: 'Planning & Setup', keywords: ['programme', 'planning', 'hub'] },
+  { title: 'Projects', url: '/programme-hub?tab=projects', icon: FolderKanban, group: 'Planning & Setup', keywords: ['project'] },
   { title: 'Create Project', url: '/projects/create', icon: FolderKanban, group: 'Planning & Setup', keywords: ['new project', 'create'] },
-  { title: 'Project Analytics', url: '/projects/analytics', icon: BarChart3, group: 'Planning & Setup', keywords: ['project', 'analytics', 'cross'] },
-  { title: 'Portfolio Dashboard', url: '/portfolio', icon: LayoutDashboard, group: 'Planning & Setup', keywords: ['portfolio', 'director', 'overview'] },
-  { title: 'MMP Management', url: '/mmp', icon: Database, group: 'Planning & Setup', keywords: ['monthly monitoring', 'plan'] },
+  { title: 'Project Analytics', url: '/programme-hub?tab=analytics', icon: BarChart3, group: 'Planning & Setup', keywords: ['project', 'analytics', 'cross'] },
+  { title: 'Portfolio Dashboard', url: '/programme-hub?tab=portfolio', icon: LayoutDashboard, group: 'Planning & Setup', keywords: ['portfolio', 'director', 'overview'] },
+  { title: 'MMP Management', url: '/programme-hub?tab=mmp', icon: Database, group: 'Planning & Setup', keywords: ['monthly monitoring', 'plan'] },
   { title: 'MMP Upload', url: '/mmp/upload', icon: Database, group: 'Planning & Setup', keywords: ['upload', 'csv'] },
-  { title: 'Hub Operations', url: '/hub-operations', icon: Building2, group: 'Planning & Setup', keywords: ['hub'] },
-  { title: 'Hub Management', url: '/hub-management', icon: Building2, group: 'Planning & Setup', keywords: ['hub'] },
+  { title: 'Hub Operations', url: '/programme-hub?tab=hub-ops', icon: Building2, group: 'Planning & Setup', keywords: ['hub', 'operations'] },
+  { title: 'Hub Management', url: '/hub-management', icon: Building2, group: 'Planning & Setup', keywords: ['hub', 'management'] },
+  { title: 'Tracker Preparation', url: '/programme-hub?tab=tracker-prep', icon: BarChart3, group: 'Planning & Setup', keywords: ['tracker', 'preparation', 'plan'] },
   { title: 'Monitoring Plan', url: '/monitoring-plan', icon: ClipboardList, group: 'Planning & Setup', keywords: ['monitor'] },
   { title: 'Surveys', url: '/surveys', icon: ClipboardList, group: 'Planning & Setup', keywords: ['survey', 'questionnaire', 'form'] },
 
@@ -167,11 +171,12 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Accounting Settings', url: '/accounting/settings', icon: Settings, group: 'Accounting', keywords: ['accounting', 'settings', 'config'] },
 
   // ── CRM ────────────────────────────────────────────────────────────────────
-  { title: 'CRM Overview', url: '/crm', icon: Handshake, group: 'CRM', keywords: ['crm', 'partner', 'donor', 'relationship'] },
-  { title: 'Partners & Donors', url: '/crm/partners', icon: Building2, group: 'CRM', keywords: ['partner', 'donor', 'organisation'] },
-  { title: 'Contacts', url: '/crm/contacts', icon: Users, group: 'CRM', keywords: ['contact', 'person'] },
-  { title: 'Engagements', url: '/crm/engagements', icon: MessageSquare, group: 'CRM', keywords: ['engagement', 'meeting', 'activity'] },
-  { title: 'Pipeline', url: '/crm/opportunities', icon: TrendingUp, group: 'CRM', keywords: ['pipeline', 'opportunity', 'deal'] },
+  { title: 'CRM', url: '/crm', icon: Handshake, group: 'CRM', keywords: ['crm', 'partner', 'donor', 'relationship', 'hub'] },
+  { title: 'CRM Dashboard', url: '/crm?tab=dashboard', icon: Handshake, group: 'CRM', keywords: ['crm', 'overview', 'dashboard'] },
+  { title: 'Partners & Donors', url: '/crm?tab=partners', icon: Building2, group: 'CRM', keywords: ['partner', 'donor', 'organisation'] },
+  { title: 'Contacts', url: '/crm?tab=contacts', icon: Users, group: 'CRM', keywords: ['contact', 'person'] },
+  { title: 'Engagements', url: '/crm?tab=engagements', icon: MessageSquare, group: 'CRM', keywords: ['engagement', 'meeting', 'activity'] },
+  { title: 'Pipeline', url: '/crm?tab=pipeline', icon: TrendingUp, group: 'CRM', keywords: ['pipeline', 'opportunity', 'deal'] },
 
   // ── Administration ─────────────────────────────────────────────────────────
   { title: 'User Management', url: '/users', icon: Users, group: 'Administration', keywords: ['user', 'team', 'people'] },

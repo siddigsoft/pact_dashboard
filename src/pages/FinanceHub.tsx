@@ -114,7 +114,7 @@ export default function FinanceHub() {
   const tabDef = allTabs.find(t => t.id === rawTab);
   const tab: FinTab = tabDef ? (rawTab as FinTab) : 'budget';
 
-  const setTab = (t: FinTab) => setParams({ tab: t }, { replace: true });
+  const setTab = (t: FinTab) => { localStorage.setItem('hub_last_tab_finance', t); setParams({ tab: t }, { replace: true }); };
 
   useEffect(() => {
     if (rawTab && tab !== rawTab) setParams({ tab }, { replace: true });

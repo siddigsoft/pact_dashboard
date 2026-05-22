@@ -100,6 +100,7 @@ export default function AnalyticsHub() {
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;
 
   const setTab = (tab: ATab) => {
+    localStorage.setItem('hub_last_tab_analytics', tab);
     const next = new URLSearchParams(params);
     next.set('tab', tab);
     setParams(next, { replace: true });

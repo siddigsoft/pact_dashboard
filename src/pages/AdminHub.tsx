@@ -131,6 +131,7 @@ export default function AdminHub() {
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;
 
   const setTab = (tab: AdminTab) => {
+    localStorage.setItem('hub_last_tab_admin', tab);
     const next = new URLSearchParams(params);
     next.set('tab', tab);
     setParams(next, { replace: true });

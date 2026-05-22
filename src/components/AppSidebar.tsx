@@ -369,43 +369,20 @@
 
     // â”€â”€ 2. Communication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const communicationItems: MenuGroup['items'] = [];
-    if (!isHidden('/chat')) {
-      communicationItems.push({ id: 'chat', title: "Chat", url: "/chat", icon: MessageSquare, priority: 1, isPinned: isPinned('/chat') });
-    }
-    if (!isHidden('/calls')) {
-      communicationItems.push({ id: 'calls', title: "Calls", url: "/calls", icon: Phone, priority: 2, isPinned: isPinned('/calls') });
-    }
-    if (!isHidden('/signatures')) {
-      communicationItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 3, isPinned: isPinned('/signatures') });
-    }
-    if (!isHidden('/admin/broadcast') && canSeePath('/admin/broadcast', defaultRole)) {
-      communicationItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 4, isPinned: isPinned('/admin/broadcast') });
-    }
-    if (!isHidden('/admin/whatsapp') && canSeePath('/admin/whatsapp', defaultRole)) {
-      communicationItems.push({ id: 'admin-whatsapp', title: "WhatsApp Admin", url: "/admin/whatsapp", icon: Smartphone, priority: 5, isPinned: isPinned('/admin/whatsapp') });
+    if (!isHidden('/communication-hub')) {
+      communicationItems.push({ id: 'communication-hub', title: "Communication", url: "/communication-hub", icon: MessageSquare, priority: 1, isPinned: isPinned('/communication-hub') });
     }
     if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 3, items: communicationItems });
 
     // â”€â”€ 2. Programme Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const planningItems: MenuGroup['items'] = [];
-    if (!isHidden('/projects') && canSeePath('/projects', defaultRole)) {
-      planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
+    const canSeeProgrammeHub = isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager || isCountryDirector || isDataTeam || perms.projects;
+    if (canSeeProgrammeHub && !isHidden('/programme-hub')) {
+      planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
-    if (!isHidden('/projects/analytics') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
-      planningItems.push({ id: 'project-analytics', title: "Project Analytics", url: "/projects/analytics", icon: BarChart3, priority: 2, isPinned: isPinned('/projects/analytics') });
-    }
-    if (!isHidden('/portfolio') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
-      planningItems.push({ id: 'portfolio', title: "Portfolio Dashboard", url: "/portfolio", icon: LayoutDashboard, priority: 3, isPinned: isPinned('/portfolio') });
-    }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector)) {
-      const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
-      planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 4, isPinned: isPinned('/mmp') });
-    }
-    if (!isHidden('/hub-operations') && canSeePath('/hub-operations', defaultRole)) {
-      planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 4, isPinned: isPinned('/hub-operations') });
-    }
-    if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager)) {
-      planningItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: ClipboardList, priority: 5, isPinned: isPinned('/tracker-preparation-plan') });
+    if (!isHidden('/mmp') && (isDataCollector || isSupervisor || isCoordinator) && !(isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector)) {
+      const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
+      planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
@@ -517,22 +494,8 @@
     // â”€â”€ 8. CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const crmItems: MenuGroup['items'] = [];
     const hasCrmAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector;
-    if (hasCrmAccess) {
-      if (!isHidden('/crm')) {
-        crmItems.push({ id: 'crm-overview', title: 'CRM Overview', url: '/crm', icon: Handshake, priority: 1, isPinned: isPinned('/crm') });
-      }
-      if (!isHidden('/crm/partners')) {
-        crmItems.push({ id: 'crm-partners', title: 'Partners & Donors', url: '/crm/partners', icon: Building2, priority: 2, isPinned: isPinned('/crm/partners') });
-      }
-      if (!isHidden('/crm/contacts')) {
-        crmItems.push({ id: 'crm-contacts', title: 'Contacts', url: '/crm/contacts', icon: Users, priority: 3, isPinned: isPinned('/crm/contacts') });
-      }
-      if (!isHidden('/crm/engagements')) {
-        crmItems.push({ id: 'crm-engagements', title: 'Engagements', url: '/crm/engagements', icon: MessageSquare, priority: 4, isPinned: isPinned('/crm/engagements') });
-      }
-      if (!isHidden('/crm/opportunities')) {
-        crmItems.push({ id: 'crm-opportunities', title: 'Pipeline', url: '/crm/opportunities', icon: TrendingUp, priority: 5, isPinned: isPinned('/crm/opportunities') });
-      }
+    if (hasCrmAccess && !isHidden('/crm')) {
+      crmItems.push({ id: 'crm-hub', title: 'CRM', url: '/crm', icon: Handshake, priority: 1, isPinned: isPinned('/crm') });
     }
     if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 

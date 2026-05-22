@@ -140,7 +140,7 @@ export default function HRHub() {
   const tabDef = allTabs.find(t => t.id === resolvedTab);
   const tab: HRTab = tabDef && (!tabDef.adminOnly || isAdmin) ? resolvedTab : defaultTab;
 
-  const setTab = (t: HRTab) => setParams({ tab: t }, { replace: true });
+  const setTab = (t: HRTab) => { localStorage.setItem('hub_last_tab_hr', t); setParams({ tab: t }, { replace: true }); };
 
   // If URL had a legacy/invalid tab, fix it silently
   useEffect(() => {

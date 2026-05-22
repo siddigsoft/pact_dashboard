@@ -113,6 +113,7 @@ export default function FieldOpsHub() {
   const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;
 
   const setTab = (tab: FOTab) => {
+    localStorage.setItem('hub_last_tab_field_ops', tab);
     const next = new URLSearchParams(params);
     next.set('tab', tab);
     setParams(next, { replace: true });

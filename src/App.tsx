@@ -172,6 +172,9 @@ const FieldOpsHub = lazy(() => import('./pages/FieldOpsHub'));
 const AnalyticsHub = lazy(() => import('./pages/AnalyticsHub'));
 const AdminHub = lazy(() => import('./pages/AdminHub'));
 const SuperAdminHub = lazy(() => import('./pages/SuperAdminHub'));
+const CRMHub = lazy(() => import('./pages/CRMHub'));
+const ProgrammeHub = lazy(() => import('./pages/ProgrammeHub'));
+const CommunicationHub = lazy(() => import('./pages/CommunicationHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
 const AccountingJournals = lazy(() => import('./pages/AccountingJournals'));
 const AccountingTrialBalance = lazy(() => import('./pages/AccountingTrialBalance'));
@@ -404,19 +407,21 @@ const AppRoutes = () => {
         {/* ── Analytics Hub ── */}
         <Route path="/analytics" element={<AnalyticsHub />} />
         <Route path="/data-export-center" element={<Navigate to="/analytics?tab=data-export-center" replace />} />
-        <Route path="/calls" element={<Calls />} />
+        <Route path="/calls" element={<Navigate to="/communication-hub?tab=calls" replace />} />
+        <Route path="/communication-hub" element={<CommunicationHub />} />
         <Route path="/call-analytics" element={<CallAnalytics />} />
         <Route path="/field-team" element={<Navigate to="/field-ops?tab=field-team" replace />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/financial-operations" element={<Navigate to="/finance-hub?tab=financial-ops" replace />} />
         <Route path="/data-visibility" element={<Navigate to="/analytics?tab=data-visibility" replace />} />
-        <Route path="/chat" element={<Chat />} />
+        <Route path="/chat" element={<Navigate to="/communication-hub?tab=chat" replace />} />
         <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
         <Route path="/tasks/:id" element={<PageWrapper><TaskDetail /></PageWrapper>} />
         <Route path="/team-tasks" element={<PageWrapper><TeamTaskMonitor /></PageWrapper>} />
         <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
-        <Route path="/projects/analytics" element={<PageWrapper><ProjectAnalytics /></PageWrapper>} />
-        <Route path="/portfolio" element={<PageWrapper><PortfolioDashboard /></PageWrapper>} />
+        <Route path="/programme-hub" element={<ProgrammeHub />} />
+        <Route path="/projects/analytics" element={<Navigate to="/programme-hub?tab=analytics" replace />} />
+        <Route path="/portfolio" element={<Navigate to="/programme-hub?tab=portfolio" replace />} />
         <Route path="/projects/create" element={<PageWrapper><CreateProject /></PageWrapper>} />
         <Route path="/projects/:id" element={<PageWrapper><ProjectDetail /></PageWrapper>} />
         <Route path="/projects/:id/edit" element={<PageWrapper><EditProject /></PageWrapper>} />
@@ -493,10 +498,10 @@ const AppRoutes = () => {
   {/* Supervisor: dedicated My Site Management page — same component as CoordinatorSites */}
   <Route path="/supervisor/sites" element={<CoordinatorSites />} />
   <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
-  <Route path="/hub-operations" element={<HubOperations />} />
+  <Route path="/hub-operations" element={<Navigate to="/programme-hub?tab=hub-ops" replace />} />
   <Route path="/hub-management" element={<Navigate to="/admin-hub?tab=hub-management" replace />} />
-        <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
-        <Route path="/signatures" element={<SignaturesPage />} />
+        <Route path="/tracker-preparation-plan" element={<Navigate to="/programme-hub?tab=tracker-prep" replace />} />
+        <Route path="/signatures" element={<Navigate to="/communication-hub?tab=signatures" replace />} />
         <Route path="/approvals" element={<ApprovalsHub />} />
         <Route path="/approval-dashboard" element={<Navigate to="/super-admin-hub?tab=approval-dashboard" replace />} />
         <Route path="/admin/monitoring" element={<Navigate to="/super-admin-hub?tab=system-monitoring" replace />} />
@@ -504,8 +509,8 @@ const AppRoutes = () => {
         <Route path="/login-analytics" element={<LoginAnalytics />} />
         <Route path="/email-tracking" element={<Navigate to="/super-admin-hub?tab=email-tracking" replace />} />
         <Route path="/email-management" element={<Navigate to="/super-admin-hub?tab=email-management" replace />} />
-        <Route path="/admin/broadcast" element={<AdminBroadcast />} />
-        <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
+        <Route path="/admin/broadcast" element={<Navigate to="/communication-hub?tab=broadcast" replace />} />
+        <Route path="/admin/whatsapp" element={<Navigate to="/communication-hub?tab=whatsapp" replace />} />
         <Route path="/admin/cycle-health" element={<Navigate to="/super-admin-hub?tab=cycle-health" replace />} />
         <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
         <Route path="/employees" element={<Employees />} />
@@ -529,11 +534,11 @@ const AppRoutes = () => {
         <Route path="/coverage-map" element={<Navigate to="/field-ops?tab=coverage-map" replace />} />
         <Route path="/field-operation-manager" element={<Navigate to="/field-ops?tab=field-operation-manager" replace />} />
         <Route path="/helpline" element={<Helpline />} />
-        <Route path="/crm" element={<CRMDashboard />} />
-        <Route path="/crm/partners" element={<CRMPartners />} />
-        <Route path="/crm/contacts" element={<CRMContacts />} />
-        <Route path="/crm/engagements" element={<CRMEngagements />} />
-        <Route path="/crm/opportunities" element={<CRMOpportunities />} />
+        <Route path="/crm" element={<CRMHub />} />
+        <Route path="/crm/partners" element={<Navigate to="/crm?tab=partners" replace />} />
+        <Route path="/crm/contacts" element={<Navigate to="/crm?tab=contacts" replace />} />
+        <Route path="/crm/engagements" element={<Navigate to="/crm?tab=engagements" replace />} />
+        <Route path="/crm/opportunities" element={<Navigate to="/crm?tab=pipeline" replace />} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
         <Route path="/workspace" element={<WorkspaceHub />} />

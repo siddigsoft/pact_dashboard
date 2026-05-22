@@ -134,32 +134,19 @@ const getWorkflowMenuGroups = (
 
   // 2. Communication
   const communicationItems: MenuGroup["items"] = [];
-  if (!isHidden("/chat"))
-    communicationItems.push({ id: "chat", title: "Chat", url: "/chat", icon: MessageSquare, priority: 1 });
-  if (!isHidden("/calls"))
-    communicationItems.push({ id: "calls", title: "Calls", url: "/calls", icon: Phone, priority: 2 });
-  if (!isHidden("/signatures"))
-    communicationItems.push({ id: "signatures", title: "Signatures", url: "/signatures", icon: FileSignature, priority: 3 });
-  if (!isHidden("/admin/broadcast") && canSeePath("/admin/broadcast", defaultRole))
-    communicationItems.push({ id: "admin-broadcast", title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 4 });
-  if (!isHidden("/admin/whatsapp") && canSeePath("/admin/whatsapp", defaultRole))
-    communicationItems.push({ id: "admin-whatsapp", title: "WhatsApp Admin", url: "/admin/whatsapp", icon: Smartphone, priority: 5 });
+  if (!isHidden("/communication-hub"))
+    communicationItems.push({ id: "communication-hub", title: "Communication", url: "/communication-hub", icon: MessageSquare, priority: 1 });
   if (communicationItems.length) groups.push({ id: "communication", label: "Communication", order: 3, items: communicationItems });
 
   // 3. Programme Management
   const planningItems: MenuGroup["items"] = [];
-  if (!isHidden("/projects") && canSeePath("/projects", defaultRole))
-    planningItems.push({ id: "projects", title: "Projects", url: "/projects", icon: FolderKanban, priority: 1 });
-  if (!isHidden("/projects/analytics") && (isSuperAdmin || isAdmin || isFOM || perms.projects))
-    planningItems.push({ id: "project-analytics", title: "Project Analytics", url: "/projects/analytics", icon: BarChart3, priority: 2 });
-  if (!isHidden("/portfolio") && (isSuperAdmin || isAdmin || isFOM || perms.projects))
-    planningItems.push({ id: "portfolio", title: "Portfolio Dashboard", url: "/portfolio", icon: LayoutDashboard, priority: 3 });
-  if (!isHidden("/mmp") && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM))
-    planningItems.push({ id: "mmp-management", title: (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management", url: "/mmp", icon: Database, priority: 4 });
-  if (!isHidden("/hub-operations") && canSeePath("/hub-operations", defaultRole))
-    planningItems.push({ id: "hub-operations", title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 4 });
-  if (!isHidden("/tracker-preparation-plan") && (isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager))
-    planningItems.push({ id: "tracker-plan", title: "Tracker Prep", url: "/tracker-preparation-plan", icon: ClipboardList, priority: 5 });
+  const canSeeProgrammeHub = isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager || isCountryDirector || isDataTeam || perms.projects;
+  if (canSeeProgrammeHub && !isHidden("/programme-hub"))
+    planningItems.push({ id: "programme-hub", title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1 });
+  if (!isHidden("/mmp") && (isDataCollector || isSupervisor || isCoordinator) && !(isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector)) {
+    const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
+    planningItems.push({ id: "mmp-management", title: mmpTitle, url: "/mmp", icon: Database, priority: 2 });
+  }
   if (planningItems.length) groups.push({ id: "programme-management", label: "Programme Mgmt", order: 2, items: planningItems });
 
   // 4. Field Operations
@@ -262,12 +249,8 @@ const getWorkflowMenuGroups = (
 
   // 9. CRM
   const crmItems: MenuGroup["items"] = [];
-  if (!isHidden("/crm/partners") && (isSuperAdmin || isAdmin || isFOM))
-    crmItems.push({ id: "crm-partners", title: "Partners", url: "/crm/partners", icon: Handshake, priority: 1 });
-  if (!isHidden("/crm/engagements") && (isSuperAdmin || isAdmin || isFOM))
-    crmItems.push({ id: "crm-engagements", title: "Engagements", url: "/crm/engagements", icon: MessageSquare, priority: 2 });
-  if (!isHidden("/crm/contacts") && (isSuperAdmin || isAdmin || isFOM))
-    crmItems.push({ id: "crm-contacts", title: "Contacts", url: "/crm/contacts", icon: Phone, priority: 3 });
+  if (!isHidden("/crm") && (isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector))
+    crmItems.push({ id: "crm-hub", title: "CRM", url: "/crm", icon: Handshake, priority: 1 });
   if (crmItems.length) groups.push({ id: "crm", label: "CRM", order: 7, items: crmItems });
 
   // 10. Surveys

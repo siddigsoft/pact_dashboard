@@ -271,7 +271,7 @@ export default function AccountingHub() {
   const tabDef = allTabs.find(t => t.id === rawTab);
   const tab: AcctTab = tabDef ? (rawTab as AcctTab) : 'finance-dashboard';
 
-  const setTab = (t: AcctTab) => setParams({ tab: t }, { replace: true });
+  const setTab = (t: AcctTab) => { localStorage.setItem('hub_last_tab_accounting', t); setParams({ tab: t }, { replace: true }); };
 
   useEffect(() => {
     if (rawTab && tab !== rawTab) setParams({ tab }, { replace: true });
