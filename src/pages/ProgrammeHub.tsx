@@ -114,7 +114,7 @@ export default function ProgrammeHub() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
           <div className="pt-3 pb-1 opacity-90">
-            <ConnectedPagesBar exclude="programme-hub" />
+            <ConnectedPagesBar pages={['dashboard', 'field-ops', 'analytics-hub', 'my-tasks']} />
           </div>
 
           <div className="flex items-center justify-between pt-3 pb-2 gap-4 flex-wrap">

@@ -183,7 +183,7 @@ export default function SuperAdminHub() {
               <h1 className="text-xl font-bold tracking-tight">Super Admin Hub</h1>
               <p className="text-gray-400 text-xs mt-0.5">Monitoring · Permissions · Email · Mobile · Data</p>
             </div>
-            <ConnectedPagesBar currentPath="/super-admin" className="hidden md:flex" />
+            <ConnectedPagesBar pages={['dashboard', 'admin', 'my-tasks']} className="hidden md:flex" />
           </div>
 
           <div className="flex items-center gap-2 mb-3 flex-wrap">

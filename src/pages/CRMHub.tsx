@@ -108,7 +108,7 @@ export default function CRMHub() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
           <div className="pt-3 pb-1 opacity-90">
-            <ConnectedPagesBar exclude="crm" />
+            <ConnectedPagesBar pages={['dashboard', 'projects', 'communication', 'my-tasks']} />
           </div>
 
           {/* Title + section pills */}

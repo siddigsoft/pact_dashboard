@@ -183,7 +183,7 @@ export default function HRHub() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
           <div className="pt-3 pb-1 opacity-90">
-            <ConnectedPagesBar exclude="hr" />
+            <ConnectedPagesBar pages={['dashboard', 'my-tasks', 'accounting', 'admin']} />
           </div>
 
           {/* Title + section pills row */}

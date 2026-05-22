@@ -108,7 +108,7 @@ export default function CommunicationHub() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
           <div className="pt-3 pb-1 opacity-90">
-            <ConnectedPagesBar exclude="communication-hub" />
+            <ConnectedPagesBar pages={['dashboard', 'my-tasks', 'admin', 'projects']} />
           </div>
 
           <div className="flex items-center justify-between pt-3 pb-2 gap-4 flex-wrap">

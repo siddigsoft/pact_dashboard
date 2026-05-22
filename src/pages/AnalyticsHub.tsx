@@ -119,7 +119,7 @@ export default function AnalyticsHub() {
               <h1 className="text-xl font-bold tracking-tight">Analytics Hub</h1>
               <p className="text-gray-400 text-xs mt-0.5">Data & Reports · Dashboards</p>
             </div>
-            <ConnectedPagesBar currentPath="/analytics" className="hidden md:flex" />
+            <ConnectedPagesBar pages={['dashboard', 'projects', 'portfolio', 'reports']} className="hidden md:flex" />
           </div>
 
           <div className="flex items-center gap-2 mb-3 flex-wrap">

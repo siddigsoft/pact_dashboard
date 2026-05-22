@@ -134,7 +134,7 @@ export default function FieldOpsHub() {
               <h1 className="text-xl font-bold tracking-tight">Field Operations Hub</h1>
               <p className="text-gray-400 text-xs mt-0.5">Monitoring · Safety · Teams & Maps</p>
             </div>
-            <ConnectedPagesBar currentPath="/field-ops" className="hidden md:flex" />
+            <ConnectedPagesBar pages={['dashboard', 'mmp', 'my-tasks', 'reports']} className="hidden md:flex" />
           </div>
 
           {/* Section pills */}

@@ -150,7 +150,7 @@ export default function AdminHub() {
             </div>
           </div>
           <div className="hidden md:block shrink-0">
-            <ConnectedPagesBar currentPath="/admin" />
+            <ConnectedPagesBar pages={['dashboard', 'my-tasks', 'hr', 'projects']} />
           </div>
         </div>
 

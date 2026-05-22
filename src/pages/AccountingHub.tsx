@@ -297,7 +297,7 @@ export default function AccountingHub() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
           <div className="pt-3 pb-1 opacity-90">
-            <ConnectedPagesBar exclude="accounting" />
+            <ConnectedPagesBar pages={['dashboard', 'finance', 'reports', 'my-tasks']} />
           </div>
 
           {/* Title + section pills */}

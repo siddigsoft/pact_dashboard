@@ -140,7 +140,7 @@ export default function FinanceHub() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
           <div className="pt-3 pb-1 opacity-90">
-            <ConnectedPagesBar exclude="finance-hub" />
+            <ConnectedPagesBar pages={['dashboard', 'accounting', 'reports', 'my-tasks']} />
           </div>
 
           {/* Title + section pills */}
