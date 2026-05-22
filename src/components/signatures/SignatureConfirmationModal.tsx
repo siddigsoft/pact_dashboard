@@ -256,8 +256,9 @@ export function SignatureConfirmationModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[440px] max-h-[90vh] overflow-y-auto p-4 sm:p-5">
-        <DialogHeader className="space-y-1 pr-6">
+      <DialogContent className="w-[95vw] max-w-[440px] flex flex-col max-h-[90dvh] p-0 gap-0 overflow-hidden">
+        {/* ── Sticky header ── */}
+        <DialogHeader className="flex-none space-y-1 px-4 pt-4 pb-3 border-b pr-10">
           <DialogTitle className="flex items-center gap-2 text-sm leading-tight">
             <Shield className="h-4 w-4 text-primary flex-shrink-0" />
             <span>Confirm Receipt with Signature</span>
@@ -269,7 +270,8 @@ export function SignatureConfirmationModal({
           <p className="text-[11px] text-muted-foreground" dir="rtl">يرجى المراجعة والتوقيع لتأكيد هذه المعاملة.</p>
         </DialogHeader>
 
-        <div className="space-y-3">
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
           <Card className="bg-muted/30 overflow-hidden">
             <CardContent className="p-3 space-y-2">
               <div className="flex items-start justify-between gap-2">
@@ -418,7 +420,8 @@ export function SignatureConfirmationModal({
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        {/* ── Sticky footer ── */}
+        <DialogFooter className="flex-none gap-2 px-4 py-3 border-t bg-background">
           <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
             Cancel / <span dir="rtl">إلغاء</span>
           </Button>

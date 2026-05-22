@@ -4193,7 +4193,7 @@ const CostSubmission = () => {
                               <span>Needs Attention — Submission rejected. Review and resubmit if needed.</span>
                             </div>
                           )}
-                          {canMarkAsPaid(oc) && (
+                          {canMarkAsPaid(oc) ? (
                             <div className="flex items-center gap-2 mb-1">
                               <Checkbox
                                 id={`select-cost-${oc.id}`}
@@ -4203,7 +4203,14 @@ const CostSubmission = () => {
                               />
                               <label htmlFor={`select-cost-${oc.id}`} className="text-xs text-muted-foreground cursor-pointer">Select for batch payment</label>
                             </div>
-                          )}
+                          ) : !['rejected', 'cancelled', 'reconciled', 'paid'].includes(derivedStatus) && (isSuperAdmin || isAdmin || isFinanceAdmin) ? (
+                            <div className="flex items-center gap-1.5 mb-1 text-[11px] text-muted-foreground/70 select-none" title="Cannot select — awaiting approval before payment">
+                              <Checkbox id={`select-cost-disabled-${oc.id}`} checked={false} disabled className="opacity-30 cursor-not-allowed" data-testid={`checkbox-select-cost-${oc.id}`} />
+                              <span className="italic">
+                                {derivedStatus === 'pending' ? 'Pending Tier 1 approval' : derivedStatus === 'under_review' ? 'Pending Tier 2 approval' : 'Awaiting approval'} — cannot select for payment yet
+                              </span>
+                            </div>
+                          ) : null}
                           <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
