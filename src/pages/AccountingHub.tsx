@@ -1,6 +1,12 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Loader2, BookOpen, ShoppingCart, Shield, TrendingUp, LayoutDashboard, BarChart3, Receipt, FileText, Landmark, BarChart, Package, Zap, Lock, ArrowLeftRight, Wallet, Heart, ShieldAlert, RotateCcw, Building2, PiggyBank, Activity, Search, Settings2, Clock, CreditCard, Award, CalendarDays } from 'lucide-react';
+import {
+  Loader2, BookOpen, ShoppingCart, Shield, TrendingUp, LayoutDashboard,
+  BarChart3, Receipt, FileText, Landmark, BarChart, Package, Zap, Lock,
+  ArrowLeftRight, Wallet, Heart, ShieldAlert, RotateCcw, Building2,
+  PiggyBank, Activity, Search, Settings2, Clock, CreditCard, Award,
+  CalendarDays, Info,
+} from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 
@@ -52,66 +58,184 @@ type AcctTab =
   | 'period-close' | 'tax' | 'multi-currency' | 'budget-encumbrance' | 'donor-reports' | 'sod' | 'aml' | 'intercompany' | 'funds'
   | 'cash-flow-forecast' | 'grants' | 'cost-allocation' | 'depreciation-run' | 'consolidation' | 'gl-audit' | 'finance-audit-trail' | 'settings';
 
-interface TabDef { id: AcctTab; label: string; icon: React.ElementType }
-interface SectionDef { id: AcctSection; label: string; icon: React.ElementType; color: string; tabs: TabDef[] }
+interface TabDef { id: AcctTab; label: string; icon: React.ElementType; description: string }
+interface SectionDef { id: AcctSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
 
 const SECTIONS: SectionDef[] = [
   {
     id: 'core', label: 'Core Ledger', icon: BookOpen, color: '#6366f1',
+    description: 'Foundational accounting records — accounts, entries, balances, and official financial reports.',
     tabs: [
-      { id: 'finance-dashboard',    label: 'Finance Dashboard',    icon: LayoutDashboard },
-      { id: 'coa',                  label: 'Chart of Accounts',    icon: BarChart3       },
-      { id: 'journals',             label: 'Journal Entries',      icon: Receipt         },
-      { id: 'trial-balance',        label: 'Trial Balance',        icon: TrendingUp      },
-      { id: 'ledger',               label: 'General Ledger',       icon: BookOpen        },
-      { id: 'reports',              label: 'Financial Statements', icon: FileText        },
-      { id: 'fiscal-years',         label: 'Fiscal Years',         icon: CalendarDays    },
-      { id: 'search',               label: 'Accounting Search',    icon: Search          },
+      {
+        id: 'finance-dashboard', label: 'Finance Dashboard', icon: LayoutDashboard,
+        description: 'Real-time overview of key financial KPIs: income vs. expenses, fund balances, budget utilization, and recent transaction activity across all cost centers.',
+      },
+      {
+        id: 'coa', label: 'Chart of Accounts', icon: BarChart3,
+        description: 'Define and manage the full chart of accounts — account codes, types (asset, liability, equity, income, expense), hierarchies, and active status.',
+      },
+      {
+        id: 'journals', label: 'Journal Entries', icon: Receipt,
+        description: 'Create, review, and post manual journal entries with debit/credit lines, narrative descriptions, and supporting document attachments.',
+      },
+      {
+        id: 'trial-balance', label: 'Trial Balance', icon: TrendingUp,
+        description: 'View all account balances as of any date to verify that total debits equal total credits before period-end closing.',
+      },
+      {
+        id: 'ledger', label: 'General Ledger', icon: BookOpen,
+        description: 'Drill into every posted transaction for any account over a selected date range, with full source references and running balance.',
+      },
+      {
+        id: 'reports', label: 'Financial Statements', icon: FileText,
+        description: 'Generate standard financial statements — income statement, balance sheet, and statement of cash flows — for any fiscal period or custom date range.',
+      },
+      {
+        id: 'fiscal-years', label: 'Fiscal Years', icon: CalendarDays,
+        description: 'Configure fiscal years and accounting periods, control which periods are open or closed for posting, and view period-end status.',
+      },
+      {
+        id: 'search', label: 'Accounting Search', icon: Search,
+        description: 'Search across all transactions, journal entries, and accounts simultaneously by keyword, amount, date, or reference number.',
+      },
     ],
   },
   {
     id: 'operations', label: 'Operations & P2P', icon: ShoppingCart, color: '#0284c7',
+    description: 'End-to-end procure-to-pay cycle — vendors, purchasing, goods receipt, invoicing, payments, and asset management.',
     tabs: [
-      { id: 'bank-recon',           label: 'Bank Reconciliation',  icon: Landmark        },
-      { id: 'budget-variance',      label: 'Budget vs Actual',     icon: BarChart        },
-      { id: 'cash-flow',            label: 'Cash Flow',            icon: Activity        },
-      { id: 'vendors',              label: 'Vendor Registry',      icon: Building2       },
-      { id: 'purchase-requisitions',label: 'Purchase Requisitions',icon: Receipt         },
-      { id: 'purchase-orders',      label: 'Purchase Orders',      icon: ShoppingCart    },
-      { id: 'grn',                  label: 'Goods Receipt Notes',  icon: Package         },
-      { id: 'ap-invoices',          label: 'AP Invoices',          icon: FileText        },
-      { id: 'cheque-register',      label: 'Cheque Register',      icon: CreditCard      },
-      { id: 'ap-aging',             label: 'AP Aging',             icon: Clock           },
-      { id: 'fixed-assets',         label: 'Fixed Assets',         icon: Package         },
-      { id: 'gl-bridge',            label: 'GL Bridge Engine',     icon: Zap             },
-      { id: 'budget-planning',      label: 'Budget Planning',      icon: PiggyBank       },
+      {
+        id: 'bank-recon', label: 'Bank Reconciliation', icon: Landmark,
+        description: 'Match bank statement lines against GL entries, clear outstanding items, and identify unreconciled differences for each bank account.',
+      },
+      {
+        id: 'budget-variance', label: 'Budget vs Actual', icon: BarChart,
+        description: 'Compare actual spending to approved budgets by project, department, or cost center — with variance amounts and percentage deviation.',
+      },
+      {
+        id: 'cash-flow', label: 'Cash Flow', icon: Activity,
+        description: 'Track money in and out across all accounts in real time to monitor liquidity, identify cash gaps, and manage operating reserves.',
+      },
+      {
+        id: 'vendors', label: 'Vendor Registry', icon: Building2,
+        description: 'Maintain the vendor master record — contact details, bank account info, payment terms, tax identifiers, and compliance/blacklist status.',
+      },
+      {
+        id: 'purchase-requisitions', label: 'Purchase Requisitions', icon: Receipt,
+        description: 'Initiate and route internal requests to purchase goods or services through the configured approval workflow before a PO is issued.',
+      },
+      {
+        id: 'purchase-orders', label: 'Purchase Orders', icon: ShoppingCart,
+        description: 'Issue formal purchase orders to approved vendors after requisition sign-off, with line-item details, delivery terms, and budget encumbrance.',
+      },
+      {
+        id: 'grn', label: 'Goods Receipt Notes', icon: Package,
+        description: 'Record the physical delivery of goods against an open purchase order, confirm quantities received, and trigger the three-way AP invoice match.',
+      },
+      {
+        id: 'ap-invoices', label: 'AP Invoices', icon: FileText,
+        description: 'Capture, match to PO/GRN, and approve vendor invoices for payment — with duplicate detection, tax coding, and two-tier sign-off.',
+      },
+      {
+        id: 'cheque-register', label: 'Cheque Register', icon: CreditCard,
+        description: 'Log all issued cheques, track their clearing status against bank records, and void or reissue stale or lost cheques.',
+      },
+      {
+        id: 'ap-aging', label: 'AP Aging', icon: Clock,
+        description: 'View outstanding payables grouped by due-date buckets (current, 30, 60, 90+ days) to prioritize payments and avoid late penalties.',
+      },
+      {
+        id: 'fixed-assets', label: 'Fixed Assets', icon: Package,
+        description: 'Manage the full asset lifecycle — acquisition, depreciation schedule, revaluation, disposal, and write-off — with an asset register.',
+      },
+      {
+        id: 'gl-bridge', label: 'GL Bridge Engine', icon: Zap,
+        description: 'Automatically generate and post journal entries from operational modules (payroll, advances, P2P) into the General Ledger without manual re-entry.',
+      },
+      {
+        id: 'budget-planning', label: 'Budget Planning', icon: PiggyBank,
+        description: 'Build and submit annual or project budgets, route them through multi-level approval workflows, track revisions, and maintain a full audit log.',
+      },
     ],
   },
   {
     id: 'controls', label: 'Controls & Compliance', icon: Shield, color: '#dc2626',
+    description: 'Financial governance, regulatory compliance, and internal controls to protect organisational funds.',
     tabs: [
-      { id: 'period-close',         label: 'Period Close',         icon: Lock            },
-      { id: 'tax',                  label: 'Tax Management',       icon: Receipt         },
-      { id: 'multi-currency',       label: 'Multi-Currency',       icon: ArrowLeftRight  },
-      { id: 'budget-encumbrance',   label: 'Budget Encumbrance',   icon: Wallet          },
-      { id: 'donor-reports',        label: 'Donor Fund Reports',   icon: Heart           },
-      { id: 'sod',                  label: 'Segregation of Duties',icon: ShieldAlert     },
-      { id: 'aml',                  label: 'AML & Compliance',     icon: Shield          },
-      { id: 'intercompany',         label: 'Intercompany',         icon: ArrowLeftRight  },
-      { id: 'funds',                label: 'Funds',                icon: Landmark        },
+      {
+        id: 'period-close', label: 'Period Close', icon: Lock,
+        description: 'Lock completed accounting periods to prevent further posting, run close checklists, and certify that reconciliations are complete before sign-off.',
+      },
+      {
+        id: 'tax', label: 'Tax Management', icon: Receipt,
+        description: 'Configure applicable tax rates and codes, assign them to transaction types, and generate tax liability summaries for filing and compliance.',
+      },
+      {
+        id: 'multi-currency', label: 'Multi-Currency', icon: ArrowLeftRight,
+        description: 'Set exchange rates for each currency, revalue foreign-currency balances at period end, and automatically post foreign exchange gain/loss entries.',
+      },
+      {
+        id: 'budget-encumbrance', label: 'Budget Encumbrance', icon: Wallet,
+        description: 'Reserve budget funds the moment a purchase order is raised, ensuring available balance is always accurate and preventing over-spending.',
+      },
+      {
+        id: 'donor-reports', label: 'Donor Fund Reports', icon: Heart,
+        description: 'Generate fund utilisation reports segmented by donor, grant, or restriction type for external reporting and donor accountability.',
+      },
+      {
+        id: 'sod', label: 'Segregation of Duties', icon: ShieldAlert,
+        description: 'Define and enforce SOD rules so no single user can both initiate and approve a transaction — reducing fraud and internal control risk.',
+      },
+      {
+        id: 'aml', label: 'AML & Compliance', icon: Shield,
+        description: 'Monitor transactions for anti-money-laundering flags, screen against watchlists, and maintain a full compliance audit trail for regulators.',
+      },
+      {
+        id: 'intercompany', label: 'Intercompany', icon: ArrowLeftRight,
+        description: 'Record and eliminate intercompany transactions between legal entities or country offices, ensuring consolidated financials are free from double-counting.',
+      },
+      {
+        id: 'funds', label: 'Funds', icon: Landmark,
+        description: 'Define restricted and unrestricted fund accounts, track balances by funding source, and enforce that spending stays within each fund\'s rules.',
+      },
     ],
   },
   {
     id: 'advanced', label: 'Advanced & Reporting', icon: TrendingUp, color: '#059669',
+    description: 'Forecasting, grant management, cost allocation, consolidation, and full audit trails.',
     tabs: [
-      { id: 'cash-flow-forecast',   label: 'Cash Flow Forecast',   icon: TrendingUp      },
-      { id: 'grants',               label: 'Grant Tracking',       icon: Award           },
-      { id: 'cost-allocation',      label: 'Cost Allocation',      icon: Zap             },
-      { id: 'depreciation-run',     label: 'Depreciation Run',     icon: RotateCcw       },
-      { id: 'consolidation',        label: 'Consolidation',        icon: Building2       },
-      { id: 'gl-audit',             label: 'GL Bridge Audit',      icon: Activity        },
-      { id: 'finance-audit-trail',  label: 'Finance Audit Trail',  icon: FileText        },
-      { id: 'settings',             label: 'Accounting Settings',  icon: Settings2       },
+      {
+        id: 'cash-flow-forecast', label: 'Cash Flow Forecast', icon: TrendingUp,
+        description: 'Project future cash positions based on committed expenditures, open purchase orders, approved budgets, and expected incoming receipts.',
+      },
+      {
+        id: 'grants', label: 'Grant Tracking', icon: Award,
+        description: 'Track grant budgets line by line, record expenses against each grant, and monitor milestone delivery and burn rate against donor commitments.',
+      },
+      {
+        id: 'cost-allocation', label: 'Cost Allocation', icon: Zap,
+        description: 'Distribute shared overhead costs across projects or departments using configurable weight percentages, with automatic GL journal postings to target accounts.',
+      },
+      {
+        id: 'depreciation-run', label: 'Depreciation Run', icon: RotateCcw,
+        description: 'Execute monthly or annual depreciation calculations for all fixed assets and automatically post the resulting journal entries to the GL.',
+      },
+      {
+        id: 'consolidation', label: 'Consolidation', icon: Building2,
+        description: 'Aggregate and reconcile financial data from multiple country offices or legal entities into a single consolidated financial view for management reporting.',
+      },
+      {
+        id: 'gl-audit', label: 'GL Bridge Audit', icon: Activity,
+        description: 'Review every journal entry posted automatically by the GL Bridge Engine, with full source traceability back to the originating operational record.',
+      },
+      {
+        id: 'finance-audit-trail', label: 'Finance Audit Trail', icon: FileText,
+        description: 'Immutable log of every change made to any financial record — who changed what, when, from which module, and what the previous value was.',
+      },
+      {
+        id: 'settings', label: 'Accounting Settings', icon: Settings2,
+        description: 'Configure accounting defaults including posting rules, default account mappings, approval thresholds, rounding rules, and notification preferences.',
+      },
     ],
   },
 ];
@@ -235,8 +359,24 @@ export default function AccountingHub() {
         </div>
       </div>
 
+      {/* ── Page description banner ──────────────────────────────── */}
+      <div
+        className="border-b"
+        style={{
+          background: accent + '0d',
+          borderColor: accent + '25',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-start gap-2.5">
+          <Info className="h-4 w-4 mt-0.5 shrink-0 opacity-60" style={{ color: accent }} />
+          <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">
+            {activeTabDef.description}
+          </p>
+        </div>
+      </div>
+
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="min-h-[calc(100vh-140px)]">
+      <div className="min-h-[calc(100vh-160px)]">
 
         {/* Core Ledger */}
         {tab === 'finance-dashboard'    && <Suspense fallback={<PanelLoader />}><FinanceDashboard /></Suspense>}
