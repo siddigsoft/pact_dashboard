@@ -124,8 +124,17 @@ const DataVisibility: FC = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [hubFilter, setHubFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showMap, setShowMap] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
   const navigate = useNavigate();
 
@@ -218,17 +227,19 @@ const DataVisibility: FC = () => {
   }, [siteVisitsList]);
 
   const filteredSiteVisits = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
     return siteVisitsList.filter(visit => {
-      const matchesSearch = visit.siteName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           visit.location?.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           visit.hub?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           visit.state?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = !q ||
+                           visit.siteName?.toLowerCase().includes(q) ||
+                           visit.location?.address?.toLowerCase().includes(q) ||
+                           visit.hub?.toLowerCase().includes(q) ||
+                           visit.state?.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "all" || visit.status === statusFilter;
       const matchesHub = hubFilter === "all" || visit.hub === hubFilter;
       const matchesRegion = regionFilter === "all" || visit.state === regionFilter;
       return matchesSearch && matchesStatus && matchesHub && matchesRegion;
     });
-  }, [siteVisitsList, searchTerm, statusFilter, hubFilter, regionFilter]);
+  }, [siteVisitsList, debouncedSearch, statusFilter, hubFilter, regionFilter]);
 
   const paginatedVisits = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;

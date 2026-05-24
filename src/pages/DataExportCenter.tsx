@@ -29,7 +29,11 @@ const DataExportCenter = () => {
   const { mmpFiles } = useMMP();
   const { toast } = useToast();
 
-  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
+  const isAdmin = hasAnyRole([
+    'admin', 'Admin', 'super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin',
+    'country_director', 'countryDirector', 'CountryDirector',
+    'fom', 'FOM', 'ict', 'ICT', 'financialAdmin',
+  ]);
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');

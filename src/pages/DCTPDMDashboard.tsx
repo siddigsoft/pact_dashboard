@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSafeAppContext } from '@/context/AppContext';
+import { useToast } from '@/hooks/use-toast';
 
 // ── Types & Config ──────────────────────────────────────────────────────────
 
@@ -683,6 +684,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
    * would silently hide all upload controls for every user regardless of role.
    */
   const userRole = currentUser?.role ?? '';
+  const { toast } = useToast();
 
   /**
    * canUpload  — full data management (file upload, planned numbers).
@@ -967,7 +969,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      alert('Please upload an Excel file (.xlsx or .xls)');
+      toast({ title: 'Invalid file', description: 'Please upload an Excel file (.xlsx or .xls)', variant: 'destructive' });
       return;
     }
     setUploading(true);
@@ -977,7 +979,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       const wb  = XLSXLib.read(buf, { type: 'array' });
       const parsed = processWorkbook(wb, XLSXLib);
       if (parsed.length === 0) {
-        alert('No data rows found. Make sure this is the PDM exported data file (not the XLSform).');
+        toast({ title: 'No data found', description: 'No data rows found. Make sure this is the PDM exported data file (not the XLSform).', variant: 'destructive' });
         return;
       }
       const ds: DataSource = { name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length };
@@ -988,7 +990,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
       if (delErr) {
-        alert(`⚠️ Server save failed (clear): ${delErr.message}\nData will only be visible on this browser.`);
+        toast({ title: 'Server sync warning', description: `Could not clear old upload: ${delErr.message}. Data will only be visible on this browser.`, variant: 'destructive' });
       } else {
         const { error: insErr } = await supabase.from('pdm_uploads').insert({
           filename: file.name,
@@ -996,7 +998,9 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           records: parsed as any,
         });
         if (insErr) {
-          alert(`⚠️ Server save failed (insert): ${insErr.message}\nData will only be visible on this browser.`);
+          toast({ title: 'Server sync warning', description: `Could not save to server: ${insErr.message}. Data will only be visible on this browser.`, variant: 'destructive' });
+        } else {
+          toast({ title: 'Upload saved', description: `${parsed.length.toLocaleString()} records loaded and synced to server.` });
         }
       }
       // Update local state and cache
@@ -1009,11 +1013,11 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         localStorage.setItem('pact-pdm-datasource', JSON.stringify(ds));
       } catch { /* quota exceeded */ }
     } catch (err) {
-      alert('Could not read the file. Please check it is a valid Excel export.');
+      toast({ title: 'File read error', description: 'Could not read the file. Please check it is a valid Excel export.', variant: 'destructive' });
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [toast]);
 
   const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1469,7 +1473,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       });
 
       if (Object.keys(plannedMap).length === 0) {
-        alert('No green-highlighted rows found. Make sure you are uploading the correct DCT Sample Excel file.');
+        toast({ title: 'No matching rows', description: 'No green-highlighted rows found. Make sure you are uploading the correct DCT Sample Excel file.', variant: 'destructive' });
         return;
       }
 
@@ -1508,15 +1512,12 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       setLocalityRows(newRows);
       saveRows(newRows);
       localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
-      alert(
-        `DCT Sample imported successfully!\n\n` +
-        details.join('\n') +
-        `\n\n${totalGreen} green (planned) rows counted across all sheets.\n` +
-        `${totalSkipped} yellow/backup rows excluded.\n` +
-        (addedCount > 0 ? `Note: ${addedCount} new locality row(s) were added. If a name doesn't match an existing row, use Edit Table to correct it then re-upload.` : '')
-      );
+      toast({
+        title: 'DCT Sample imported',
+        description: `${totalGreen} green rows counted. ${updatedCount} updated, ${addedCount} added. ${totalSkipped} yellow/backup rows excluded.${addedCount > 0 ? ' Use Edit Table to correct any name mismatches.' : ''}`,
+      });
     } catch {
-      alert('Could not read the file. Please upload a valid DCT Sample Excel file.');
+      toast({ title: 'File read error', description: 'Could not read the file. Please upload a valid DCT Sample Excel file.', variant: 'destructive' });
     }
   };
 
@@ -1755,7 +1756,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       a.click();
     } catch (err) {
       console.error('Progress export error:', err);
-      alert('Export failed. Please try again.');
+      toast({ title: 'Export failed', description: 'Could not generate the progress export. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -2245,7 +2246,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Report export error:', err);
-      alert('Could not generate report. Please try again.');
+      toast({ title: 'Report failed', description: 'Could not generate report. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -2358,7 +2359,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       a.click();
     } catch (err) {
       console.error('Export error:', err);
-      alert('Export failed. Please try again.');
+      toast({ title: 'Export failed', description: 'Could not export survey data. Please try again.', variant: 'destructive' });
     }
   };
 

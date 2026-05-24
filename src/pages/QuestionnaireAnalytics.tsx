@@ -12,7 +12,6 @@ import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, Chevro
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format, parse, isValid } from 'date-fns';
@@ -841,6 +840,7 @@ const QuestionnaireAnalytics = () => {
 
   const downloadReviewExcel = useCallback(async () => {
     if (!cleanResults) return;
+    const ExcelJS = (await import('exceljs')).default;
     const safe = (v: string | undefined | null) => (v || '').trim();
 
     const dupRowIndices = new Set<number>();
@@ -874,21 +874,21 @@ const QuestionnaireAnalytics = () => {
       cell.border = { bottom: { style: 'thin', color: { argb: 'FF374151' } } };
     });
 
-    const redFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
-    const orangeFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } };
-    const blueFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
-    const purpleFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };
-    const greenFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+    const redFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+    const orangeFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } };
+    const blueFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+    const purpleFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };
+    const greenFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
 
-    const redFont: Partial<ExcelJS.Font> = { color: { argb: 'FFDC2626' } };
-    const orangeFont: Partial<ExcelJS.Font> = { color: { argb: 'FFEA580C' } };
-    const blueFont: Partial<ExcelJS.Font> = { color: { argb: 'FF2563EB' } };
-    const purpleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF9333EA' } };
+    const redFont: any = { color: { argb: 'FFDC2626' } };
+    const orangeFont: any = { color: { argb: 'FFEA580C' } };
+    const blueFont: any = { color: { argb: 'FF2563EB' } };
+    const purpleFont: any = { color: { argb: 'FF9333EA' } };
 
     data.forEach((row, idx) => {
       const issues: string[] = [];
-      let rowFill: ExcelJS.FillPattern | null = null;
-      let issueFont: Partial<ExcelJS.Font> = {};
+      let rowFill: any = null;
+      let issueFont: any = {};
 
       const isDuplicate = dupRowIndices.has(idx);
       const isEmpty = emptyRowIndices.has(idx);
@@ -1974,17 +1974,18 @@ const QuestionnaireAnalytics = () => {
 
   const generateExcelBase64 = useCallback(async (type: 'cleaned' | 'review'): Promise<string | null> => {
     if (!cleanResults) return null;
+    const ExcelJS = (await import('exceljs')).default;
     try {
       if (type === 'cleaned') {
         const finalData = getCustomCleanedData();
         const reportSummary = computeSummaryFromData(finalData, data, fileName, cleanResults);
         const wb = new ExcelJS.Workbook();
         wb.creator = 'PACT Command Center';
-        const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
-        const hFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
-        const bFont: Partial<ExcelJS.Font> = { size: 10, name: 'Calibri' };
-        const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFC8CDD7' } }, bottom: { style: 'thin', color: { argb: 'FFC8CDD7' } }, left: { style: 'thin', color: { argb: 'FFC8CDD7' } }, right: { style: 'thin', color: { argb: 'FFC8CDD7' } } };
-        const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+        const hFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+        const hFont: any = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
+        const bFont: any = { size: 10, name: 'Calibri' };
+        const border: any = { top: { style: 'thin', color: { argb: 'FFC8CDD7' } }, bottom: { style: 'thin', color: { argb: 'FFC8CDD7' } }, left: { style: 'thin', color: { argb: 'FFC8CDD7' } }, right: { style: 'thin', color: { argb: 'FFC8CDD7' } } };
+        const altBg: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
 
         const ws = wb.addWorksheet('Cleaned Data');
         const headers = ['Hub', 'State', 'Locality', 'Activity Site', 'Activity', 'Sub Activity', 'Data Collector', 'Device ID', 'Supervisor', 'Date', 'Site ID', 'Partner'];
@@ -2068,19 +2069,19 @@ const QuestionnaireAnalytics = () => {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
           cell.border = { bottom: { style: 'thin', color: { argb: 'FF374151' } } };
         });
-        const redFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
-        const orangeFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } };
-        const blueFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
-        const purpleFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };
-        const greenFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
-        const redFont: Partial<ExcelJS.Font> = { color: { argb: 'FFDC2626' } };
-        const orangeFont: Partial<ExcelJS.Font> = { color: { argb: 'FFEA580C' } };
-        const blueFont: Partial<ExcelJS.Font> = { color: { argb: 'FF2563EB' } };
-        const purpleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF9333EA' } };
+        const redFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        const orangeFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } };
+        const blueFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+        const purpleFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };
+        const greenFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+        const redFont: any = { color: { argb: 'FFDC2626' } };
+        const orangeFont: any = { color: { argb: 'FFEA580C' } };
+        const blueFont: any = { color: { argb: 'FF2563EB' } };
+        const purpleFont: any = { color: { argb: 'FF9333EA' } };
         data.forEach((row, idx) => {
           const issues: string[] = [];
-          let rowFill: ExcelJS.FillPattern | null = null;
-          let issueFont: Partial<ExcelJS.Font> = {};
+          let rowFill: any = null;
+          let issueFont: any = {};
           const isDuplicate = dupRowIndices.has(idx);
           const isEmpty = emptyRowIndices.has(idx);
           const hasNameChange = nameMap.has(idx);
@@ -2396,12 +2397,12 @@ const QuestionnaireAnalytics = () => {
     try {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
-      const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
-      const hFont: ExcelJS.Font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-      const bFont: ExcelJS.Font = { size: 9 };
-      const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFD0D5DD' } }, bottom: { style: 'thin', color: { argb: 'FFD0D5DD' } }, left: { style: 'thin', color: { argb: 'FFD0D5DD' } }, right: { style: 'thin', color: { argb: 'FFD0D5DD' } } };
-      const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
-      const totalFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EBF0' } };
+      const hFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      const hFont: any = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      const bFont: any = { size: 9 };
+      const border: any = { top: { style: 'thin', color: { argb: 'FFD0D5DD' } }, bottom: { style: 'thin', color: { argb: 'FFD0D5DD' } }, left: { style: 'thin', color: { argb: 'FFD0D5DD' } }, right: { style: 'thin', color: { argb: 'FFD0D5DD' } } };
+      const altBg: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+      const totalFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EBF0' } };
 
       const addSheet = (name: string, headers: string[], rows: (string | number)[][]) => {
         const ws = wb.addWorksheet(name);
@@ -2643,12 +2644,12 @@ const QuestionnaireAnalytics = () => {
     try {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
-      const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
-      const hFont: ExcelJS.Font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-      const bFont: ExcelJS.Font = { size: 9 };
-      const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFD0D5DD' } }, bottom: { style: 'thin', color: { argb: 'FFD0D5DD' } }, left: { style: 'thin', color: { argb: 'FFD0D5DD' } }, right: { style: 'thin', color: { argb: 'FFD0D5DD' } } };
-      const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
-      const totalFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EBF0' } };
+      const hFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      const hFont: any = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      const bFont: any = { size: 9 };
+      const border: any = { top: { style: 'thin', color: { argb: 'FFD0D5DD' } }, bottom: { style: 'thin', color: { argb: 'FFD0D5DD' } }, left: { style: 'thin', color: { argb: 'FFD0D5DD' } }, right: { style: 'thin', color: { argb: 'FFD0D5DD' } } };
+      const altBg: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+      const totalFill: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EBF0' } };
 
       const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown, hubTrackers, stateTrackers } = trackerData;
 
@@ -2818,12 +2819,12 @@ const QuestionnaireAnalytics = () => {
       const wb = new ExcelJSM.Workbook();
       wb.creator = 'PACT Command Center'; wb.created = new Date();
       const XNAVY = 'FF0F2041', XWHITE = 'FFFFFFFF', XLIGHT = 'FFF5F7FC', XBORDER = 'FFC8CDD7';
-      const hFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
-      const hFontA: ExcelJS.Font = { bold: true, color: { argb: XWHITE }, size: 10, name: 'Calibri' };
-      const bFontA: ExcelJS.Font = { size: 9, name: 'Calibri' };
-      const altFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLIGHT } };
-      const totFillA: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-      const bdrA = (): Partial<ExcelJS.Borders> => { const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: XBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+      const hFillA: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+      const hFontA: any = { bold: true, color: { argb: XWHITE }, size: 10, name: 'Calibri' };
+      const bFontA: any = { size: 9, name: 'Calibri' };
+      const altFillA: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLIGHT } };
+      const totFillA: any = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      const bdrA = (): any => { const s: any = { style: 'thin', color: { argb: XBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
 
       const ws1 = wb.addWorksheet(summaryName.replace(/[\\/*?[\]:]/g, '-').slice(0, 31));
       const s1Cols = ['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total PDM', 'Total DC'];
@@ -3985,8 +3986,9 @@ const QuestionnaireAnalytics = () => {
 
     const XNAVY = 'FF0F2041', XWHITE = 'FFFFFFFF', XLIGHT = 'FFF5F7FC', XBORDER = 'FFC8CDD7';
     const COL_BG = 'FFFFF8F0', COL_FG = 'FF78603A';
-    const xBorder = (): Partial<ExcelJS.Borders> => {
-      const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: XBORDER } };
+    const ExcelJS = (await import('exceljs')).default;
+    const xBorder = (): any => {
+      const s: any = { style: 'thin', color: { argb: XBORDER } };
       return { top: s, bottom: s, left: s, right: s };
     };
 
@@ -4216,7 +4218,7 @@ const QuestionnaireAnalytics = () => {
 
     if (costPerSite > 0) {
       const PNAVY = 'FF0F2041', PWHITE = 'FFFFFFFF', PBORDER = 'FFC8CDD7';
-      const pBorder = (): Partial<ExcelJS.Borders> => { const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+      const pBorder = (): any => { const s: any = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
       const payWs = wb.addWorksheet('Payment');
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
       payWs.mergeCells(ptitle.number, 1, ptitle.number, 9);
@@ -4328,6 +4330,7 @@ const QuestionnaireAnalytics = () => {
 
   const exportReportExcel = useCallback(async () => {
     if (!computeReportSummary) return;
+    const ExcelJS = (await import('exceljs')).default;
     const rpt = computeReportSummary;
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PACT Command Center';
@@ -4341,9 +4344,9 @@ const QuestionnaireAnalytics = () => {
       r.getCell(2).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Calibri' };
       r.height = 22;
     };
-    const bFont = (sz = 10, color = 'FF14141E'): Partial<ExcelJS.Font> => ({ size: sz, name: 'Calibri', color: { argb: color } });
-    const tBorder = (): Partial<ExcelJS.Borders> => {
-      const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FFC8CDD7' } };
+    const bFont = (sz = 10, color = 'FF14141E'): any => ({ size: sz, name: 'Calibri', color: { argb: color } });
+    const tBorder = (): any => {
+      const s: any = { style: 'thin', color: { argb: 'FFC8CDD7' } };
       return { top: s, bottom: s, left: s, right: s };
     };
     const addPair = (ws: any, label: string, value: string | number) => {
