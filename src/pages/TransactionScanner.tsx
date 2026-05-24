@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
-  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX, Filter, UserCheck
+  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX, Filter, UserCheck, Pencil
 } from 'lucide-react';
 import * as _XLSXStyleNS from 'xlsx-js-style';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +30,7 @@ type TxRow = {
   mobile_number: string;
   comment: string;
   amount: number | string;
+  amount_confidence?: number;
 };
 
 type SavedSession = {
@@ -62,7 +63,7 @@ function amountNum(v: number | string): number {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 8;
 
 function compressImage(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve) => {
@@ -99,6 +100,7 @@ function parseTxResult(x: any): Partial<TxRow> {
     mobile_number: x?.mobile_number || 'N/A',
     comment: x?.comment || 'N/A',
     amount: x?.amount ?? 0,
+    amount_confidence: typeof x?.amount_confidence === 'number' ? x.amount_confidence : undefined,
   };
 }
 
@@ -401,6 +403,8 @@ export default function TransactionScanner() {
   const [filterExportSessionName, setFilterExportSessionName] = useState<string | undefined>();
   const [saveMode, setSaveMode] = useState<'new' | 'append'>('new');
   const [appendTargetId, setAppendTargetId] = useState<string>('');
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editingAmountValue, setEditingAmountValue] = useState<string>('');
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -591,11 +595,10 @@ export default function TransactionScanner() {
     }
   }, [doneRows.length, rows.length, errorRows.length, autoSaved, processing]);
 
-  const processBatch = useCallback(async (batchRowIds: string[], batchFiles: File[]): Promise<boolean> => {
+  const processBatch = useCallback(async (batchRowIds: string[], images: Array<{ base64: string; mimeType: string }>): Promise<boolean> => {
     batchRowIds.forEach(id => updateRow(id, { status: 'processing', error: undefined }));
     const onStatus = (msg: string) => batchRowIds.forEach(id => updateRow(id, { error: msg }));
     try {
-      const images = await Promise.all(batchFiles.map(compressImage));
       const results = await extractBatch(images, onStatus);
       batchRowIds.forEach((id, i) => {
         const r = results[i];
@@ -616,7 +619,10 @@ export default function TransactionScanner() {
 
   const retryRow = useCallback(async (rowId: string) => {
     const file = fileMapRef.current.get(rowId);
-    if (file) await processBatch([rowId], [file]);
+    if (file) {
+      const img = await compressImage(file);
+      await processBatch([rowId], [img]);
+    }
   }, [processBatch]);
 
   const processFiles = useCallback(async (files: File[]) => {
@@ -631,22 +637,41 @@ export default function TransactionScanner() {
     newRows.forEach((r, i) => fileMapRef.current.set(r.id, files[i]));
     setRows(prev => [...prev, ...newRows]);
 
+    // Pre-compress all images upfront in parallel before any API calls
+    const allImages = await Promise.all(files.map(compressImage));
+
+    // Build batch list (8 images each)
+    const CONCURRENCY = 2;
+    const batches: Array<{ rowIds: string[]; imgs: Array<{ base64: string; mimeType: string }> }> = [];
     for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
-      const batchRows = newRows.slice(i, i + BATCH_SIZE);
-      const batchFiles = files.slice(i, i + BATCH_SIZE);
-      const canContinue = await processBatch(batchRows.map(r => r.id), batchFiles);
-      if (!canContinue) {
-        const remaining = newRows.slice(i + BATCH_SIZE);
+      batches.push({
+        rowIds: newRows.slice(i, i + BATCH_SIZE).map(r => r.id),
+        imgs: allImages.slice(i, i + BATCH_SIZE),
+      });
+    }
+
+    // Run up to 2 batches concurrently; 1 s gap between rounds
+    let aborted = false;
+    for (let i = 0; i < batches.length; i += CONCURRENCY) {
+      if (aborted) break;
+      const chunk = batches.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(chunk.map(b => processBatch(b.rowIds, b.imgs)));
+      if (results.some(r => !r)) {
+        aborted = true;
+        const processedSet = new Set(chunk.flatMap(b => b.rowIds));
+        const remaining = newRows.filter(r =>
+          !processedSet.has(r.id) && batches.slice(i + CONCURRENCY).some(b => b.rowIds.includes(r.id))
+        );
         if (remaining.length > 0) {
           setRows(prev => prev.map(r =>
-            remaining.some(nr => nr.id === r.id && r.status === 'pending')
+            remaining.some(nr => nr.id === r.id) && r.status === 'pending'
               ? { ...r, status: 'error', error: 'Quota exhausted — will work tomorrow after midnight Pacific time' }
               : r
           ));
         }
         break;
       }
-      if (i + BATCH_SIZE < newRows.length) await sleep(3000);
+      if (i + CONCURRENCY < batches.length) await sleep(1000);
     }
   }, [processBatch]);
 
@@ -667,10 +692,11 @@ export default function TransactionScanner() {
     const failed = rows.filter(r => r.status === 'error');
     for (let i = 0; i < failed.length; i += BATCH_SIZE) {
       const batch = failed.slice(i, i + BATCH_SIZE);
-      const files = batch.map(r => fileMapRef.current.get(r.id)!).filter(Boolean);
-      const canContinue = await processBatch(batch.map(r => r.id), files);
+      const batchFiles = batch.map(r => fileMapRef.current.get(r.id)!).filter(Boolean);
+      const imgs = await Promise.all(batchFiles.map(compressImage));
+      const canContinue = await processBatch(batch.map(r => r.id), imgs);
       if (!canContinue) break;
-      if (i + BATCH_SIZE < failed.length) await sleep(3000);
+      if (i + BATCH_SIZE < failed.length) await sleep(1000);
     }
   }, [rows, processBatch]);
 
@@ -846,16 +872,18 @@ export default function TransactionScanner() {
                     const isPending = row.status === 'pending';
                     const isProcessing = row.status === 'processing';
                     const isDuplicate = isDone && !!row.transaction_id && duplicateIds.has(row.transaction_id);
+                    const isLowConfidence = isDone && !isDuplicate && row.amount_confidence !== undefined && row.amount_confidence < 90;
 
                     return (
                       <tr
                         key={row.id}
                         className={`transition-colors ${
                           isDuplicate ? 'bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30' :
-                          isDone ? 'hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10' :
                           isErr ? 'bg-red-50/60 dark:bg-red-950/10 hover:bg-red-50 dark:hover:bg-red-950/20' :
                           isProcessing ? 'bg-blue-50/40 dark:bg-blue-950/10' :
-                          'bg-muted/20'
+                          isPending ? 'bg-muted/20' :
+                          isLowConfidence ? 'bg-yellow-50/70 dark:bg-yellow-950/15 hover:bg-yellow-50 dark:hover:bg-yellow-950/25' :
+                          'hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10'
                         }`}
                       >
                         <td className={`px-3 py-2 text-muted-foreground font-mono${isDuplicate ? ' border-l-2 border-amber-400' : ''}`}>{idx + 1}</td>
@@ -888,7 +916,54 @@ export default function TransactionScanner() {
                         <td className="px-3 py-2" dir="auto">{isDone ? row.recipient_name : ''}</td>
                         <td className="px-3 py-2 text-muted-foreground" dir="auto">{isDone && row.comment !== 'N/A' ? row.comment : ''}</td>
                         <td className="px-3 py-2 text-right font-mono font-semibold">
-                          {isDone ? amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 }) : ''}
+                          {isDone ? (
+                            editingAmountId === row.id ? (
+                              <input
+                                type="text"
+                                className="w-28 text-right font-mono text-xs border border-[#1D3461]/40 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1D3461] bg-white dark:bg-background"
+                                value={editingAmountValue}
+                                autoFocus
+                                onChange={e => setEditingAmountValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    const n = parseFloat(editingAmountValue.replace(/,/g, ''));
+                                    if (!isNaN(n)) updateRow(row.id, { amount: n, amount_confidence: 100 });
+                                    setEditingAmountId(null);
+                                  }
+                                  if (e.key === 'Escape') setEditingAmountId(null);
+                                }}
+                                onBlur={() => {
+                                  const n = parseFloat(editingAmountValue.replace(/,/g, ''));
+                                  if (!isNaN(n)) updateRow(row.id, { amount: n, amount_confidence: 100 });
+                                  setEditingAmountId(null);
+                                }}
+                              />
+                            ) : (
+                              <div className="flex items-center justify-end gap-1 group/amt">
+                                {isLowConfidence && (
+                                  <span
+                                    title={`AI confidence: ${row.amount_confidence}% — amount may be incorrect, please verify`}
+                                    className="text-amber-500 shrink-0 cursor-help"
+                                  >
+                                    <AlertCircle className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
+                                <span className={isLowConfidence ? 'text-amber-700 dark:text-amber-400' : ''}>
+                                  {amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setEditingAmountId(row.id);
+                                    setEditingAmountValue(String(amountNum(row.amount)));
+                                  }}
+                                  className="opacity-0 group-hover/amt:opacity-100 transition-opacity text-muted-foreground hover:text-[#1D3461] p-0.5 rounded shrink-0"
+                                  title="Edit amount"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )
+                          ) : ''}
                         </td>
                         <td className="px-2 py-2 text-center">
                           <button
