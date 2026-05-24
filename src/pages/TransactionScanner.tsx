@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
-  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX, Filter, UserCheck, Pencil
+  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX, Filter, UserCheck, Pencil,
+  Search, Eye, Check, Copy, ChevronUp, ChevronDown, ChevronsUpDown, RotateCcw, X, FileText
 } from 'lucide-react';
 import * as _XLSXStyleNS from 'xlsx-js-style';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,6 +32,8 @@ type TxRow = {
   comment: string;
   amount: number | string;
   amount_confidence?: number;
+  verified?: boolean;
+  note?: string;
 };
 
 type SavedSession = {
@@ -405,6 +408,16 @@ export default function TransactionScanner() {
   const [appendTargetId, setAppendTargetId] = useState<string>('');
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [editingAmountValue, setEditingAmountValue] = useState<string>('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteValue, setEditingNoteValue] = useState<string>('');
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [filterRecipient, setFilterRecipient] = useState('');
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set(['note']));
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewRow, setPreviewRow] = useState<TxRow | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -438,6 +451,49 @@ export default function TransactionScanner() {
   const progressPct = rows.length > 0 ? (doneRows.length / rows.length) * 100 : 0;
   const doneCount = doneRows.length;
   const totalCount = rows.length;
+
+  // Search / filter / sort
+  const filteredRows = useMemo(() => {
+    let r = rows;
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      r = r.filter(row =>
+        row.recipient_name?.toLowerCase().includes(q) ||
+        row.transaction_id?.toLowerCase().includes(q) ||
+        row.to_account?.includes(q) ||
+        row.from_account?.includes(q) ||
+        (row.comment && row.comment !== 'N/A' && row.comment.toLowerCase().includes(q))
+      );
+    }
+    if (filterRecipient) {
+      r = r.filter(row => row.recipient_name === filterRecipient);
+    }
+    if (sortColumn) {
+      r = [...r].sort((a: any, b: any) => {
+        const av = sortColumn === 'amount' ? amountNum(a.amount) : (a[sortColumn] ?? '');
+        const bv = sortColumn === 'amount' ? amountNum(b.amount) : (b[sortColumn] ?? '');
+        const cmp = typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+    }
+    return r;
+  }, [rows, searchText, filterRecipient, sortColumn, sortDir]);
+
+  const uniqueRecipients = useMemo(() =>
+    [...new Set(doneRows.map(r => r.recipient_name).filter(Boolean))].sort() as string[],
+    [doneRows]);
+
+  const dateRange = useMemo(() => {
+    const dates = doneRows.map(r => r.transaction_date).filter(Boolean).sort();
+    if (!dates.length) return null;
+    if (dates[0] === dates[dates.length - 1]) return fmtDate(dates[0]);
+    return `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1])}`;
+  }, [doneRows]);
+
+  const verifiedCount = doneRows.filter(r => r.verified).length;
+  const visibleToggleCount = ['date', 'time', 'from', 'to', 'comment', 'note'].filter(c => !hiddenCols.has(c)).length;
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -595,6 +651,26 @@ export default function TransactionScanner() {
     }
   }, [doneRows.length, rows.length, errorRows.length, autoSaved, processing]);
 
+  // Keyboard shortcut: E = edit amount of selected row
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!selectedRowId) return;
+      if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+        const row = rows.find(r => r.id === selectedRowId);
+        if (row?.status === 'done' && editingAmountId !== selectedRowId) {
+          e.preventDefault();
+          setEditingAmountId(selectedRowId);
+          setEditingAmountValue(String(amountNum(row.amount)));
+        }
+      }
+      if (e.key === 'Escape') setSelectedRowId(null);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedRowId, rows, editingAmountId]);
+
   const processBatch = useCallback(async (batchRowIds: string[], images: Array<{ base64: string; mimeType: string }>): Promise<boolean> => {
     batchRowIds.forEach(id => updateRow(id, { status: 'processing', error: undefined }));
     const onStatus = (msg: string) => batchRowIds.forEach(id => updateRow(id, { error: msg }));
@@ -700,7 +776,78 @@ export default function TransactionScanner() {
     }
   }, [rows, processBatch]);
 
-  const clearAll = () => { setRows([]); fileMapRef.current.clear(); setQuotaError(null); setAutoSaved(false); };
+  const toggleCol = useCallback((col: string) => {
+    setHiddenCols(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+  }, []);
+
+  const copyRow = useCallback((row: TxRow) => {
+    const text = [row.transaction_id, fmtDate(row.transaction_date), row.transaction_time,
+      row.recipient_name, row.to_account, amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 })
+    ].join('\t');
+    navigator.clipboard.writeText(text)
+      .then(() => toast({ title: 'Copied', description: 'Transaction details copied to clipboard.' }))
+      .catch(() => toast({ title: 'Copy failed', variant: 'destructive' }));
+  }, [toast]);
+
+  const openPreview = useCallback((row: TxRow) => {
+    const file = fileMapRef.current.get(row.id);
+    if (!file) { toast({ title: 'Image not available', description: 'Original image is no longer in memory.', variant: 'destructive' }); return; }
+    setPreviewUrl(URL.createObjectURL(file));
+    setPreviewRow(row);
+  }, [toast]);
+
+  const closePreview = useCallback(() => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null); setPreviewRow(null);
+  }, [previewUrl]);
+
+  const exportToPdf = useCallback(async () => {
+    if (!doneRows.length) return;
+    try {
+      const jsPDFMod = await import('jspdf');
+      const jsPDF = (jsPDFMod as any).jsPDF || jsPDFMod.default;
+      const { default: autoTable } = await import('jspdf-autotable');
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setFontSize(13); doc.setTextColor(15, 32, 65);
+      doc.text('Bank Transfer Scan Report', 14, 14);
+      doc.setFontSize(8); doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}  |  ${doneRows.length} transactions  |  Total: ${grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG`, 14, 20);
+      if (dateRange) doc.text(`Date range: ${dateRange}`, 14, 25);
+      autoTable(doc, {
+        head: [['#', 'Tx ID', 'Date', 'Time', 'Recipient', 'To Account', 'Amount (SDG)', 'Comment', 'Notes', 'Verified']],
+        body: doneRows.map((r, i) => [
+          i + 1, r.transaction_id, fmtDate(r.transaction_date), r.transaction_time,
+          r.recipient_name || '', r.to_account || '',
+          amountNum(r.amount).toLocaleString('en', { minimumFractionDigits: 2 }),
+          r.comment !== 'N/A' ? (r.comment || '') : '', r.note || '', r.verified ? '✓' : '',
+        ]),
+        startY: dateRange ? 30 : 26,
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [15, 32, 65], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [242, 246, 255] },
+        columnStyles: { 6: { halign: 'right', fontStyle: 'bold' }, 9: { halign: 'center' } },
+      });
+      doc.save(`PACT_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+    } catch (err: any) {
+      toast({ title: 'PDF Export Failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    }
+  }, [doneRows, grandTotal, dateRange, toast]);
+
+  const clearAll = () => { setRows([]); fileMapRef.current.clear(); setQuotaError(null); setAutoSaved(false); setSearchText(''); setFilterRecipient(''); setSortColumn(null); };
+
+  const SortTh = ({ col, label, align = 'left' }: { col: string; label: string; align?: string }) => (
+    <th
+      onClick={() => { if (sortColumn === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortColumn(col); setSortDir('asc'); } }}
+      className={`px-3 py-2.5 font-medium cursor-pointer select-none hover:bg-white/10 transition-colors text-${align}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortColumn === col
+          ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)
+          : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
+      </span>
+    </th>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -753,6 +900,10 @@ export default function TransactionScanner() {
               <Button onClick={() => handleExportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
                 <Download className="h-4 w-4" />
                 All ({doneCount})
+              </Button>
+              <Button onClick={exportToPdf} variant="outline" className="gap-2 h-8 text-sm border-[#1D3461]/30 text-[#1D3461]">
+                <FileText className="h-3.5 w-3.5" />
+                PDF
               </Button>
             </>
           )}
@@ -845,39 +996,117 @@ export default function TransactionScanner() {
           </div>
         )}
 
-        {/* Receipts table — all rows, live status */}
+        {/* Receipts table */}
         {rows.length > 0 && (
           <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+
+            {/* Search + filter + stats bar */}
+            {doneRows.length > 0 && (
+              <div className="px-4 py-2.5 border-b bg-muted/20 flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-1 min-w-[180px] bg-background border rounded-lg px-2.5 py-1.5">
+                  <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search recipient, Tx ID, account…"
+                    value={searchText}
+                    onChange={e => setSearchText(e.target.value)}
+                    className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground min-w-0"
+                  />
+                  {searchText && (
+                    <button onClick={() => setSearchText('')} className="text-muted-foreground hover:text-foreground shrink-0">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {uniqueRecipients.length > 1 && (
+                  <select
+                    value={filterRecipient}
+                    onChange={e => setFilterRecipient(e.target.value)}
+                    className="text-xs border rounded-lg px-2 py-1.5 bg-background max-w-[200px]"
+                    dir="auto"
+                  >
+                    <option value="">All recipients</option>
+                    {uniqueRecipients.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                )}
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                  {dateRange && <span>📅 {dateRange}</span>}
+                  {verifiedCount > 0 && <span className="text-emerald-600 font-medium">✓ {verifiedCount} verified</span>}
+                  {(searchText || filterRecipient) && (
+                    <span className="font-medium text-[#1D3461]">{filteredRows.length} of {rows.length} shown</span>
+                  )}
+                  {(searchText || filterRecipient) && (
+                    <button onClick={() => { setSearchText(''); setFilterRecipient(''); }} className="text-muted-foreground hover:text-foreground underline">
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Column visibility toggles */}
+            {doneRows.length > 0 && (
+              <div className="px-4 py-1.5 border-b bg-muted/10 flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0">Columns:</span>
+                {([
+                  { key: 'date', label: 'Date' },
+                  { key: 'time', label: 'Time' },
+                  { key: 'from', label: 'From Acct' },
+                  { key: 'to', label: 'To Acct' },
+                  { key: 'comment', label: 'Comment' },
+                  { key: 'note', label: 'Notes' },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => toggleCol(key)}
+                    className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                      hiddenCols.has(key)
+                        ? 'border-border text-muted-foreground/60 hover:border-[#1D3461]/40'
+                        : 'border-[#1D3461]/40 bg-[#1D3461]/5 text-[#1D3461]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-[#0F2041] text-white">
                     <th className="px-3 py-2.5 text-left font-medium w-8">#</th>
                     <th className="px-3 py-2.5 text-left font-medium w-24">Status</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Transaction ID</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Date</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Time</th>
-                    <th className="px-3 py-2.5 text-left font-medium">From Account</th>
-                    <th className="px-3 py-2.5 text-left font-medium">To Account</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Recipient</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Comment</th>
-                    <th className="px-3 py-2.5 text-right font-medium">Amount (SDG)</th>
-                    <th className="px-2 py-2.5 w-8"></th>
+                    <SortTh col="transaction_id" label="Transaction ID" />
+                    {!hiddenCols.has('date') && <SortTh col="transaction_date" label="Date" />}
+                    {!hiddenCols.has('time') && <th className="px-3 py-2.5 text-left font-medium">Time</th>}
+                    {!hiddenCols.has('from') && <th className="px-3 py-2.5 text-left font-medium">From Account</th>}
+                    {!hiddenCols.has('to') && <th className="px-3 py-2.5 text-left font-medium">To Account</th>}
+                    <SortTh col="recipient_name" label="Recipient" />
+                    {!hiddenCols.has('comment') && <th className="px-3 py-2.5 text-left font-medium">Comment</th>}
+                    {!hiddenCols.has('note') && <th className="px-3 py-2.5 text-left font-medium">Notes</th>}
+                    <SortTh col="amount" label="Amount (SDG)" align="right" />
+                    <th className="px-2 py-2.5 text-center font-medium w-28">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {rows.map((row, idx) => {
+                  {filteredRows.map((row, idx) => {
                     const isDone = row.status === 'done';
                     const isErr = row.status === 'error';
                     const isPending = row.status === 'pending';
                     const isProcessing = row.status === 'processing';
                     const isDuplicate = isDone && !!row.transaction_id && duplicateIds.has(row.transaction_id);
                     const isLowConfidence = isDone && !isDuplicate && row.amount_confidence !== undefined && row.amount_confidence < 90;
+                    const isSelected = selectedRowId === row.id;
+                    const hasFile = fileMapRef.current.has(row.id);
 
                     return (
                       <tr
                         key={row.id}
-                        className={`transition-colors ${
+                        onClick={() => setSelectedRowId(row.id === selectedRowId ? null : row.id)}
+                        className={`transition-colors cursor-pointer ${
+                          isSelected ? 'outline outline-1 outline-[#1D3461]/30 outline-offset-[-1px]' : ''
+                        } ${
                           isDuplicate ? 'bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30' :
                           isErr ? 'bg-red-50/60 dark:bg-red-950/10 hover:bg-red-50 dark:hover:bg-red-950/20' :
                           isProcessing ? 'bg-blue-50/40 dark:bg-blue-950/10' :
@@ -886,9 +1115,10 @@ export default function TransactionScanner() {
                           'hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10'
                         }`}
                       >
-                        <td className={`px-3 py-2 text-muted-foreground font-mono${isDuplicate ? ' border-l-2 border-amber-400' : ''}`}>{idx + 1}</td>
+                        <td className={`px-3 py-2 text-muted-foreground font-mono${isDuplicate ? ' border-l-2 border-amber-400' : isSelected ? ' border-l-2 border-[#1D3461]' : ''}`}>{idx + 1}</td>
                         <td className="px-3 py-2">
-                          {isDone && !isDuplicate && <span className="inline-flex items-center gap-1 text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Done</span>}
+                          {isDone && !isDuplicate && !row.verified && <span className="inline-flex items-center gap-1 text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Done</span>}
+                          {isDone && row.verified && <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold"><Check className="h-3.5 w-3.5" /> Verified</span>}
                           {isDuplicate && (
                             <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
                               <CopyX className="h-3.5 w-3.5" /> Duplicate
@@ -897,25 +1127,66 @@ export default function TransactionScanner() {
                           {isProcessing && <span className="inline-flex items-center gap-1 text-blue-600"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…</span>}
                           {isPending && <span className="inline-flex items-center gap-1 text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Waiting</span>}
                           {isErr && (
-                            <button onClick={() => retryRow(row.id)} className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium" title={row.error}>
+                            <button onClick={e => { e.stopPropagation(); retryRow(row.id); }} className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium" title={row.error}>
                               <RefreshCw className="h-3.5 w-3.5" /> Retry
                             </button>
                           )}
                         </td>
                         <td className="px-3 py-2 font-mono">
-                          {isDone ? <span>{row.transaction_id}</span> : (
+                          {isDone ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); if (hasFile) openPreview(row); }}
+                              className={`inline-flex items-center gap-1 ${hasFile ? 'hover:text-[#1D3461] cursor-pointer' : 'cursor-default'}`}
+                              title={hasFile ? 'Click to preview image' : row.transaction_id}
+                            >
+                              {hasFile && <Eye className="h-3 w-3 text-muted-foreground/50" />}
+                              {row.transaction_id}
+                            </button>
+                          ) : (
                             <span className="text-muted-foreground italic truncate max-w-[120px] block" title={row.fileName}>
                               {isErr ? row.error?.slice(0, 40) + (row.error && row.error.length > 40 ? '…' : '') : row.fileName.replace(/\.[^.]+$/, '')}
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">{isDone ? fmtDate(row.transaction_date) : ''}</td>
-                        <td className="px-3 py-2 font-mono whitespace-nowrap">{isDone ? row.transaction_time : ''}</td>
-                        <td className="px-3 py-2 font-mono" title={row.from_account}>{isDone ? fmtAcct(row.from_account) : ''}</td>
-                        <td className="px-3 py-2 font-mono" title={row.to_account}>{isDone ? fmtAcct(row.to_account) : ''}</td>
+                        {!hiddenCols.has('date') && <td className="px-3 py-2 whitespace-nowrap">{isDone ? fmtDate(row.transaction_date) : ''}</td>}
+                        {!hiddenCols.has('time') && <td className="px-3 py-2 font-mono whitespace-nowrap">{isDone ? row.transaction_time : ''}</td>}
+                        {!hiddenCols.has('from') && <td className="px-3 py-2 font-mono" title={row.from_account}>{isDone ? fmtAcct(row.from_account) : ''}</td>}
+                        {!hiddenCols.has('to') && <td className="px-3 py-2 font-mono" title={row.to_account}>{isDone ? fmtAcct(row.to_account) : ''}</td>}
                         <td className="px-3 py-2" dir="auto">{isDone ? row.recipient_name : ''}</td>
-                        <td className="px-3 py-2 text-muted-foreground" dir="auto">{isDone && row.comment !== 'N/A' ? row.comment : ''}</td>
-                        <td className="px-3 py-2 text-right font-mono font-semibold">
+                        {!hiddenCols.has('comment') && <td className="px-3 py-2 text-muted-foreground" dir="auto">{isDone && row.comment !== 'N/A' ? row.comment : ''}</td>}
+                        {!hiddenCols.has('note') && (
+                          <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                            {isDone ? (
+                              editingNoteId === row.id ? (
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  placeholder="Add note…"
+                                  value={editingNoteValue}
+                                  onChange={e => setEditingNoteValue(e.target.value)}
+                                  className="w-32 text-xs border border-[#1D3461]/40 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1D3461] bg-white dark:bg-background"
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === 'Escape') {
+                                      if (e.key === 'Enter') updateRow(row.id, { note: editingNoteValue.trim() || undefined });
+                                      setEditingNoteId(null);
+                                    }
+                                  }}
+                                  onBlur={() => { updateRow(row.id, { note: editingNoteValue.trim() || undefined }); setEditingNoteId(null); }}
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingNoteId(row.id); setEditingNoteValue(row.note || ''); }}
+                                  className="text-left text-xs w-full min-w-[80px]"
+                                >
+                                  {row.note
+                                    ? <span className="text-foreground">{row.note}</span>
+                                    : <span className="text-muted-foreground/40 italic">Add note…</span>}
+                                </button>
+                              )
+                            ) : ''}
+                          </td>
+                        )}
+                        <td className="px-3 py-2 text-right font-mono font-semibold" onClick={e => e.stopPropagation()}>
                           {isDone ? (
                             editingAmountId === row.id ? (
                               <input
@@ -941,10 +1212,7 @@ export default function TransactionScanner() {
                             ) : (
                               <div className="flex items-center justify-end gap-1 group/amt">
                                 {isLowConfidence && (
-                                  <span
-                                    title={`AI confidence: ${row.amount_confidence}% — amount may be incorrect, please verify`}
-                                    className="text-amber-500 shrink-0 cursor-help"
-                                  >
+                                  <span title={`AI confidence: ${row.amount_confidence}% — please verify`} className="text-amber-500 shrink-0 cursor-help">
                                     <AlertCircle className="h-3.5 w-3.5" />
                                   </span>
                                 )}
@@ -952,12 +1220,9 @@ export default function TransactionScanner() {
                                   {amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
                                 </span>
                                 <button
-                                  onClick={() => {
-                                    setEditingAmountId(row.id);
-                                    setEditingAmountValue(String(amountNum(row.amount)));
-                                  }}
+                                  onClick={() => { setEditingAmountId(row.id); setEditingAmountValue(String(amountNum(row.amount))); }}
                                   className="opacity-0 group-hover/amt:opacity-100 transition-opacity text-muted-foreground hover:text-[#1D3461] p-0.5 rounded shrink-0"
-                                  title="Edit amount"
+                                  title="Edit amount (or select row and press E)"
                                 >
                                   <Pencil className="h-3 w-3" />
                                 </button>
@@ -965,14 +1230,52 @@ export default function TransactionScanner() {
                             )
                           ) : ''}
                         </td>
-                        <td className="px-2 py-2 text-center">
-                          <button
-                            onClick={() => removeRow(row.id)}
-                            title="Remove this receipt"
-                            className="text-muted-foreground/40 hover:text-red-500 transition-colors rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/20"
-                          >
-                            ×
-                          </button>
+                        <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-0.5">
+                            {isDone && (
+                              <button
+                                onClick={() => updateRow(row.id, { verified: !row.verified })}
+                                title={row.verified ? 'Unmark verified' : 'Mark as verified'}
+                                className={`p-1 rounded transition-colors ${row.verified ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' : 'text-muted-foreground/40 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20'}`}
+                              >
+                                <Check className="h-3 w-3" />
+                              </button>
+                            )}
+                            {isDone && (
+                              <button
+                                onClick={() => copyRow(row)}
+                                title="Copy to clipboard"
+                                className="p-1 rounded text-muted-foreground/40 hover:text-[#1D3461] hover:bg-[#1D3461]/10 transition-colors"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            )}
+                            {isDone && hasFile && (
+                              <button
+                                onClick={() => openPreview(row)}
+                                title="Preview image"
+                                className="p-1 rounded text-muted-foreground/40 hover:text-[#1D3461] hover:bg-[#1D3461]/10 transition-colors"
+                              >
+                                <Eye className="h-3 w-3" />
+                              </button>
+                            )}
+                            {isDone && hasFile && (
+                              <button
+                                onClick={() => retryRow(row.id)}
+                                title="Re-scan this image"
+                                className="p-1 rounded text-muted-foreground/40 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => removeRow(row.id)}
+                              title="Remove"
+                              className="p-1 rounded text-muted-foreground/40 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -982,8 +1285,9 @@ export default function TransactionScanner() {
                   <tfoot>
                     <tr className="bg-[#0F2041] text-white">
                       <td colSpan={2} className="px-3 py-2.5 font-bold text-sm">TOTAL</td>
-                      <td colSpan={6} className="px-3 py-2.5 text-white/60 text-xs">
+                      <td colSpan={2 + visibleToggleCount} className="px-3 py-2.5 text-white/60 text-xs">
                         {doneCount} transaction{doneCount !== 1 ? 's' : ''}
+                        {verifiedCount > 0 && <span className="ml-3 text-emerald-300">· {verifiedCount} verified</span>}
                         {errorRows.length > 0 && (
                           <span className="ml-3 text-red-300">
                             · {errorRows.length} failed —{' '}
@@ -1355,6 +1659,51 @@ export default function TransactionScanner() {
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {saveMode === 'new' ? 'Save' : 'Add Receipts'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!previewUrl} onOpenChange={open => { if (!open) closePreview(); }}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#1D3461]">
+              <Eye className="h-4 w-4" />
+              Receipt Preview
+              {previewRow && <span className="text-sm font-normal text-muted-foreground">— {previewRow.transaction_id}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt="Receipt"
+                className="w-full max-h-[60vh] object-contain rounded-lg border bg-muted/20"
+              />
+            )}
+            {previewRow && (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs bg-muted/20 rounded-lg p-3">
+                <div className="flex gap-2"><span className="text-muted-foreground w-20 shrink-0">Recipient</span><span className="font-medium" dir="auto">{previewRow.recipient_name}</span></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-20 shrink-0">Amount</span><span className="font-semibold font-mono">{amountNum(previewRow.amount).toLocaleString('en', { minimumFractionDigits: 2 })} SDG</span></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-20 shrink-0">Date / Time</span><span>{fmtDate(previewRow.transaction_date)} {previewRow.transaction_time}</span></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-20 shrink-0">To Account</span><span className="font-mono">{previewRow.to_account}</span></div>
+                {previewRow.comment && previewRow.comment !== 'N/A' && (
+                  <div className="flex gap-2 col-span-2"><span className="text-muted-foreground w-20 shrink-0">Comment</span><span dir="auto">{previewRow.comment}</span></div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closePreview}>Close</Button>
+            {previewRow && (
+              <Button
+                variant="outline"
+                className="gap-2 border-[#1D3461]/30 text-[#1D3461]"
+                onClick={() => { copyRow(previewRow!); closePreview(); }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy Details
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
