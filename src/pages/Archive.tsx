@@ -15,12 +15,14 @@ import ArchiveCalendarView from "@/components/archive/ArchiveCalendarView";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 const ArchivePage = () => {
   const navigate = useNavigate();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { currentUser } = useAppContext();
   const { checkPermission, hasAnyRole } = useAuthorization();
+  const { toast } = useToast();
   const canAccess = checkPermission('reports', 'read') || hasAnyRole(['admin']);
   if (!canAccess) {
     return (
@@ -56,8 +58,10 @@ const ArchivePage = () => {
     } else if (type === 'siteVisit') {
       navigate(`/site-visits/${id}`);
     } else if (type === 'document') {
-      // For now, just show a modal or toast notification
-      // This could be implemented with a document viewer component
+      toast({
+        title: 'Document Selected',
+        description: `Document ID: ${id} — switch to the Documents tab to view or download this file.`,
+      });
     }
   };
 

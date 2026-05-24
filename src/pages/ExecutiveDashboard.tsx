@@ -114,8 +114,11 @@ export default function ExecutiveDashboard() {
       const now = new Date();
       const todayStr = format(now, 'yyyy-MM-dd');
 
+      const sixMonthsAgo = startOfMonth(subMonths(now, 5)).toISOString();
+
       const [
         profilesRes, projectsRes, budgetRes, tbRes, siteRes, visitRes, cycleRes,
+        costRes, leaveRes,
       ] = await Promise.all([
         supabase.from('profiles').select('id, is_active, role, hub_id').limit(2000),
         supabase.from('projects').select('id, status, health_score').limit(1000),
@@ -124,6 +127,8 @@ export default function ExecutiveDashboard() {
         supabase.from('master_sites').select('id, latitude, longitude').limit(3000),
         supabase.from('site_visits').select('id, site_id, status').limit(5000),
         supabase.from('mmp_files').select('id, status').limit(100),
+        supabase.from('site_visit_cost_submissions').select('total_amount, submitted_at, created_at').in('status', ['approved', 'paid']).gte('created_at', sixMonthsAgo).limit(5000),
+        supabase.from('hr_leave_requests').select('id, status, from_date, to_date').in('status', ['pending', 'approved']).limit(500),
       ]);
 
       // Org KPIs
@@ -156,15 +161,21 @@ export default function ExecutiveDashboard() {
         .reduce((s: number, r: any) => s + Math.abs(Number(r.net_balance ?? 0)), 0);
       const utilizationPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
-      const monthlyTrend = await (async () => {
-        const months = [];
-        for (let i = 5; i >= 0; i--) {
-          const mo = subMonths(now, i);
-          const monthLabel = format(mo, 'MMM');
-          months.push({ month: monthLabel, spent: 0, budget: totalBudget / 6 });
-        }
-        return months;
-      })();
+      // Build monthly spend trend from approved cost submissions
+      const costRows: any[] = costRes.data ?? [];
+      const monthlyTrend = [];
+      for (let i = 5; i >= 0; i--) {
+        const mo = subMonths(now, i);
+        const moLabel = format(mo, 'MMM');
+        const moKey = format(mo, 'yyyy-MM');
+        const moSpent = costRows
+          .filter((c: any) => {
+            const d = c.submitted_at || c.created_at || '';
+            return d.startsWith(moKey);
+          })
+          .reduce((s: number, c: any) => s + Number(c.total_amount ?? 0), 0);
+        monthlyTrend.push({ month: moLabel, spent: moSpent, budget: totalBudget / 6 });
+      }
 
       setFin({ totalBudget, totalSpent, utilizationPct, overBudgetCount: 0, monthlyTrend });
 
@@ -186,8 +197,16 @@ export default function ExecutiveDashboard() {
         pendingVisits,
       });
 
-      // HR KPIs (simple)
-      setHR({ pendingLeave: 0, onLeaveToday: 0, pendingContracts: 0, openPositions: 0 });
+      // HR KPIs from live leave requests
+      const leaveRows: any[] = leaveRes.data ?? [];
+      const pendingLeave = leaveRows.filter((l: any) => l.status === 'pending').length;
+      const onLeaveToday = leaveRows.filter((l: any) => {
+        if (l.status !== 'approved') return false;
+        const from = l.from_date ?? '';
+        const to = l.to_date ?? '';
+        return from <= todayStr && todayStr <= to;
+      }).length;
+      setHR({ pendingLeave, onLeaveToday, pendingContracts: 0, openPositions: 0 });
 
       setLastRefresh(new Date());
     } catch (err) {
@@ -401,6 +420,11 @@ export default function ExecutiveDashboard() {
                 label: 'Workforce', value: `${org?.activeStaff ?? 0} active`,
                 status: 'ok',
                 sub: `${org?.fieldStaff ?? 0} field · ${org?.totalStaff ?? 0} total staff`,
+              },
+              {
+                label: 'HR / Leave', value: `${hr?.pendingLeave ?? 0} pending`,
+                status: (hr?.pendingLeave ?? 0) > 0 ? 'warn' : 'ok',
+                sub: `${hr?.onLeaveToday ?? 0} staff on leave today`,
               },
             ].map(({ label, value, status, sub }) => (
               <div key={label} className="flex items-start gap-3">

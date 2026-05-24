@@ -172,7 +172,7 @@ const DataExportCenter = () => {
         filteredSites = filteredSites.filter(s => s.created_at && s.created_at >= dateFrom);
       }
       if (dateTo) {
-        filteredSites = filteredSites.filter(s => s.created_at && s.created_at <= dateTo);
+        filteredSites = filteredSites.filter(s => s.created_at && s.created_at <= dateTo + 'T23:59:59');
       }
 
       setJobStatus('visits', 'exporting', 70);
@@ -237,25 +237,38 @@ const DataExportCenter = () => {
 
       setJobStatus('analytics', 'exporting', 70);
 
-      // Dashboard logic: global stats
-      const totalSites = allSites.length;
-      const completed = allSites.filter(s => (s.status || '').toLowerCase() === 'completed').length;
-      // Uncovered: all sites not completed
-      const uncovered = allSites.filter(s => (s.status || '').toLowerCase() !== 'completed').length;
-      const uniqueMmpIds = Array.from(new Set(allSites.map(s => s.mmp_file_id).filter(Boolean)));
-      const totalMmps = uniqueMmpIds.length;
-      const coverageRate = totalSites > 0 ? `${Math.round((completed / totalSites) * 100)}%` : 'N/A';
-      const uncoveredRate = totalSites > 0 ? `${Math.round((uncovered / totalSites) * 100)}%` : 'N/A';
+      // Build per-hub breakdown
+      const hubGroups: Record<string, typeof allSites> = {};
+      for (const s of allSites) {
+        const hub = (s.hub_office as string) || 'Unknown';
+        if (!hubGroups[hub]) hubGroups[hub] = [];
+        hubGroups[hub].push(s);
+      }
 
-      const exportData = [{
-        'Hub / Project': 'All',
-        'Total MMPs': totalMmps,
-        'Total Sites': totalSites,
-        'Completed Sites': completed,
-        'Uncovered Sites': uncovered,
-        'Coverage Rate': coverageRate,
-        'Uncovered Rate': uncoveredRate,
-      }];
+      const makeRow = (label: string, sites: typeof allSites) => {
+        const total = sites.length;
+        const done = sites.filter(s => (s.status || '').toLowerCase() === 'completed').length;
+        const notDone = total - done;
+        const mmps = new Set(sites.map(s => s.mmp_file_id).filter(Boolean)).size;
+        return {
+          'Hub / Office': label,
+          'Total MMPs': mmps,
+          'Total Sites': total,
+          'Completed Sites': done,
+          'Uncovered Sites': notDone,
+          'Coverage Rate': total > 0 ? `${Math.round((done / total) * 100)}%` : 'N/A',
+          'Uncovered Rate': total > 0 ? `${Math.round((notDone / total) * 100)}%` : 'N/A',
+        };
+      };
+
+      const hubRows = Object.entries(hubGroups)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([hub, sites]) => makeRow(hub, sites));
+
+      const exportData = [
+        makeRow('All Hubs (Total)', allSites),
+        ...hubRows,
+      ];
 
       const filename = `coverage-analytics-${new Date().toISOString().slice(0, 10)}`;
       if (format === 'excel') {
@@ -497,7 +510,7 @@ const DataExportCenter = () => {
         <ExportCard
           category="analytics"
           title="Coverage Analytics"
-          description="Export hub-level performance data and coverage metrics"
+          description="Export per-hub breakdown: total sites, completion, coverage rate, and uncovered rate across all hub offices"
           icon={TrendingUp}
           onExport={exportCoverageAnalytics}
         />

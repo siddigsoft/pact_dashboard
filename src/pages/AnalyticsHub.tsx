@@ -120,7 +120,10 @@ export default function AnalyticsHub() {
       activeTabId={activeTab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'projects', 'portfolio', 'reports']}
-      onSectionClick={id => setTab(id as ATab)}
+      onSectionClick={id => {
+        const firstTab = SECTIONS.find(s => s.id === id)?.tabs[0]?.id
+        if (firstTab) setTab(firstTab as ATab)
+      }}
       onTabClick={id => setTab(id as ATab)}
     >
       <Suspense fallback={<Spinner />}>
