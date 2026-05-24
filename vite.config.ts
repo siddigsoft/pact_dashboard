@@ -284,8 +284,8 @@ async function callGroqOCR(
           results.push(null);
         }
         // Delay between calls to stay within Groq's 30K tokens-per-minute limit.
-        // At ~1200 tokens per image, 25 images/min is the safe ceiling → 2400ms gap.
-        if (i < images.length - 1) await sleep(2400);
+        // Arabic receipts ≈ 4K tokens each → max 7.5 images/min → 9 s minimum gap.
+        if (i < images.length - 1) await sleep(9000);
       }
 
       if (successCount === 0) throw new Error('Groq: all images failed to process');
@@ -299,8 +299,8 @@ async function callGroqOCR(
       if (err.message?.startsWith('GROQ_API_KEY')) throw err;
       if (err.message?.startsWith('Groq model unavailable')) continue; // try next model
       if (err.message?.startsWith('Groq: all images failed')) {
-        // Mark model as unreliable for this session
-        markModelUnavailable(unavailableGroqModels, model);
+        // Transient failure (network, TPM, invalid image) — do NOT permanently mark
+        // the model unavailable; just try the next model in this request.
         continue;
       }
       // Network or other error — re-throw

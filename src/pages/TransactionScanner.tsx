@@ -66,7 +66,7 @@ function amountNum(v: number | string): number {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-const BATCH_SIZE = 8;
+const BATCH_SIZE = 1;
 
 function compressImage(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve) => {
@@ -121,7 +121,7 @@ async function extractBatch(
       },
       body: JSON.stringify({ images }),
     });
-    const data = await res.json().catch(() => ({ error: res.statusText }));
+    const data = await res.json().catch(() => ({ error: `Server error (${res.status}) — try again or retry later` }));
 
     if (res.status === 503 && data.needsGroqKey) {
       throw new Error('__NEEDS_GROQ_KEY__');
@@ -716,8 +716,8 @@ export default function TransactionScanner() {
     // Pre-compress all images upfront in parallel before any API calls
     const allImages = await Promise.all(files.map(compressImage));
 
-    // Build batch list (8 images each)
-    const CONCURRENCY = 2;
+    // Build batch list — 1 image per batch (prevents Groq TPM rate-limit collisions)
+    const CONCURRENCY = 1;
     const batches: Array<{ rowIds: string[]; imgs: Array<{ base64: string; mimeType: string }> }> = [];
     for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
       batches.push({
@@ -726,7 +726,8 @@ export default function TransactionScanner() {
       });
     }
 
-    // Run up to 2 batches concurrently; 1 s gap between rounds
+    // Process one image at a time; 8 s gap keeps us safely within Groq's 30K TPM limit
+    // (Arabic receipts ≈ 4K tokens each → max 7.5 images/min → min 8 s between starts)
     let aborted = false;
     for (let i = 0; i < batches.length; i += CONCURRENCY) {
       if (aborted) break;
@@ -747,7 +748,7 @@ export default function TransactionScanner() {
         }
         break;
       }
-      if (i + CONCURRENCY < batches.length) await sleep(1000);
+      if (i + CONCURRENCY < batches.length) await sleep(8000);
     }
   }, [processBatch]);
 
@@ -772,7 +773,7 @@ export default function TransactionScanner() {
       const imgs = await Promise.all(batchFiles.map(compressImage));
       const canContinue = await processBatch(batch.map(r => r.id), imgs);
       if (!canContinue) break;
-      if (i + BATCH_SIZE < failed.length) await sleep(1000);
+      if (i + BATCH_SIZE < failed.length) await sleep(8000);
     }
   }, [rows, processBatch]);
 
