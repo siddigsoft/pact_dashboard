@@ -4212,12 +4212,15 @@ const QuestionnaireAnalytics = () => {
     // Hub sheets — pre-assigned
     const hubSheetNameMap = new Map<string, string>();
     trackerData.hubTrackers.forEach((ht: any) => { hubSheetNameMap.set(ht.hub, assignUnique(ht.hub)); });
-    // Per-DC sheets — pre-assigned; key = hub||state||collectorName
+    // Per-DC sheets — pre-assigned; key = hub||state||deviceId-or-name
+    // Using deviceId (when present) ensures two collectors with the same canonical
+    // name in the same hub+state never share a key and corrupt each other's sheet.
     const dcSheetNameMap = new Map<string, string>();
     csvEnumData.forEach(hg => {
       hg.states.forEach(sg => {
         sg.collectors.forEach(col => {
-          dcSheetNameMap.set(`${hg.hub}||${sg.state}||${col.name}`, assignUnique(col.name));
+          const dcKey = `${hg.hub}||${sg.state}||${col.deviceId || col.name}`;
+          dcSheetNameMap.set(dcKey, assignUnique(col.name));
         });
       });
     });
@@ -4495,7 +4498,7 @@ const QuestionnaireAnalytics = () => {
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
           sg.collectors.forEach(col => {
-            const dcWs = wb.addWorksheet(dcSheetNameMap.get(`${hg.hub}||${sg.state}||${col.name}`)!);
+            const dcWs = wb.addWorksheet(dcSheetNameMap.get(`${hg.hub}||${sg.state}||${col.deviceId || col.name}`)!);
 
             const dcTitle = dcWs.addRow([col.name]);
             dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 8);
