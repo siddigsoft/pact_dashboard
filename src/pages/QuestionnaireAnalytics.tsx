@@ -4491,15 +4491,15 @@ const QuestionnaireAnalytics = () => {
       const pBorder = (): any => { const s: any = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
       const payWs = wb.addWorksheet('Payment');
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
-      payWs.mergeCells(ptitle.number, 1, ptitle.number, 13);
+      payWs.mergeCells(ptitle.number, 1, ptitle.number, 14);
       ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
       payWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
       payWs.addRow([]);
-      // Cols: 1=# 2=Data Collector 3=Device ID 4=Account Number 5=Account Name 6=Hub 7=State 8=Sites 9=Cost/Site 10=Total(USD) 11=Rate 12=Total(SDG) 13=Notes
-      const phdr = payWs.addRow(['#', 'Data Collector', 'Device ID', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)', 'Notes']);
+      // Cols: 1=# 2=DC 3=DeviceID 4=AcctNo 5=AcctName 6=Hub 7=State 8=Sites 9=Cost/Site(USD) 10=Cost/Site(SDG) 11=Total(USD) 12=Rate 13=Total(SDG) 14=Notes
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Device ID', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Cost/Site (SDG)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)', 'Notes']);
       phdr.height = 22;
       phdr.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
@@ -4590,14 +4590,15 @@ const QuestionnaireAnalytics = () => {
         const stateCell = col.states.join(', ');
         const devCount  = nameDeviceCount.get(key);
         const noteText  = devCount ? `⚠ ${devCount} device IDs — verify before payment` : '';
-        const pdr = payWs.addRow([pSeq, col.name, col.deviceId || '—', acctNo, acctName, hubCell, stateCell, sites, costPerSite, totalUsd, exchangeRate, totalSdg, noteText]);
+        const costSdg = costPerSite * exchangeRate;
+        const pdr = payWs.addRow([pSeq, col.name, col.deviceId || '—', acctNo, acctName, hubCell, stateCell, sites, costPerSite, costSdg, totalUsd, exchangeRate, totalSdg, noteText]);
         pdr.height = noteText ? 24 : 20;
         pdr.eachCell((cell, ci) => {
           cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-          cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 13 };
+          cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 14 };
           if (noteText) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PAMBER } };
-            if (ci === 13) {
+            if (ci === 14) {
               cell.font = { size: 9, name: 'Calibri', color: { argb: PAMBERBORDER }, bold: true, italic: true };
               cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
             }
@@ -4605,26 +4606,33 @@ const QuestionnaireAnalytics = () => {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
           }
         });
-        pdr.getCell(9).numFmt  = '#,##0.00'; pdr.getCell(10).numFmt = '#,##0.00';
-        pdr.getCell(11).numFmt = '#,##0.00'; pdr.getCell(12).numFmt = '#,##0.00';
+        pdr.getCell(9).numFmt  = '#,##0.00';   // Cost/Site USD
+        pdr.getCell(10).numFmt = '#,##0';       // Cost/Site SDG (whole number)
+        pdr.getCell(11).numFmt = '#,##0.00';    // Total USD
+        pdr.getCell(12).numFmt = '#,##0.00';    // Rate
+        pdr.getCell(13).numFmt = '#,##0';       // Total SDG (whole number)
       });
       const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
-      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      const grandCostSdg = costPerSite * exchangeRate;
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', '', '', authGrandPaySites, costPerSite, grandCostSdg, grandPayUsd, exchangeRate, grandPaySdg]);
       ptot.height = 24;
       ptot.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: PWHITE } };
         cell.border = pBorder(); cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle' };
       });
-      ptot.getCell(9).numFmt  = '#,##0.00'; ptot.getCell(10).numFmt = '#,##0.00';
-      ptot.getCell(11).numFmt = '#,##0.00'; ptot.getCell(12).numFmt = '#,##0.00';
-      // Fixed column widths matching DC-sheet style
-      // 1=# 2=DataCollector 3=DeviceID 4=AcctNo 5=AcctName 6=Hub 7=State 8=Sites 9=Cost/Site 10=TotalUSD 11=Rate 12=TotalSDG 13=Notes
-      const payColWidths = [5, 30, 22, 18, 30, 16, 16, 14, 16, 16, 18, 16, 32];
+      ptot.getCell(9).numFmt  = '#,##0.00';
+      ptot.getCell(10).numFmt = '#,##0';
+      ptot.getCell(11).numFmt = '#,##0.00';
+      ptot.getCell(12).numFmt = '#,##0.00';
+      ptot.getCell(13).numFmt = '#,##0';
+      // Fixed column widths: 14 cols
+      // 1=# 2=DC 3=DeviceID 4=AcctNo 5=AcctName 6=Hub 7=State 8=Sites 9=Cost/Site(USD) 10=Cost/Site(SDG) 11=TotalUSD 12=Rate 13=TotalSDG 14=Notes
+      const payColWidths = [5, 30, 22, 18, 30, 16, 16, 14, 16, 16, 16, 18, 16, 32];
       payWs.columns.forEach((c, i) => { c.width = payColWidths[i] ?? 14; });
-      // Wrap text on Data Collector (2) and Account Name (5) and Notes (13)
-      [2, 5, 13].forEach(colIdx => {
+      // Wrap text on Data Collector (2), Account Name (5), and Notes (14)
+      [2, 5, 14].forEach(colIdx => {
         payWs.getColumn(colIdx).eachCell({ includeEmpty: false }, cell => {
           cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
         });
