@@ -1627,13 +1627,20 @@ const QuestionnaireAnalytics = () => {
       const pidToNum       = new Map<string, string>();
       const pidToName      = new Map<string, string>();
       const pidToFullName  = new Map<string, string>(); // profile id → full_name lowercase
+      const profNmToNum    = new Map<string, string>(); // profile full_name → acct number
+      const profNmToName   = new Map<string, string>(); // profile full_name → acct name
 
       (profiles || []).forEach((p: any) => {
         const { number, name } = parseAcct(p.bank_account);
         if (!number && !name) return;
         if (number) pidToNum.set(p.id, number);
         if (name)   pidToName.set(p.id, name);
-        if (p.full_name) pidToFullName.set(p.id, p.full_name.trim().toLowerCase());
+        if (p.full_name) {
+          const fl = p.full_name.trim().toLowerCase();
+          pidToFullName.set(p.id, fl);
+          if (number) profNmToNum.set(fl, number);
+          if (name)   profNmToName.set(fl, name);
+        }
         [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
           const k = n.trim().toLowerCase();
           if (number) numMap.set(k, number);
@@ -1641,7 +1648,26 @@ const QuestionnaireAnalytics = () => {
         });
       });
 
-      // Step 2: site bridge
+      // Step 1b: word-overlap fallback — handles "Abdalla Adam Abdalla" (CSV) vs
+      // "Abdalla Adam Abdalla Mansoor" (DB).  Only runs for collectors still missing.
+      csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+        const csvKey = col.name.trim().toLowerCase();
+        if (numMap.has(csvKey) && nameMap.has(csvKey)) return;
+        const words = csvKey.split(/\s+/).filter(w => w.length >= 3);
+        if (words.length === 0) return;
+        for (const [profName, num] of profNmToNum) {
+          const profWords = profName.split(/\s+/).filter(w => w.length >= 3);
+          if (words.every(w => profName.includes(w)) || (profWords.length > 0 && profWords.every(w => csvKey.includes(w)))) {
+            if (!numMap.has(csvKey) && num)                       numMap.set(csvKey, num);
+            const an = profNmToName.get(profName);
+            if (!nameMap.has(csvKey) && an)                       nameMap.set(csvKey, an);
+            break;
+          }
+        }
+      })));
+
+      // Step 2: site bridge — only fills gaps left after Steps 1 + 1b.
+      // IMPORTANT: only assigns if a name-matched uid is found; never guesses from an unrelated user.
       if (csvEnumData.length > 0) {
         const allSites = new Set<string>();
         csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col =>
@@ -1672,15 +1698,11 @@ const QuestionnaireAnalytics = () => {
               const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
               siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
             });
-            // Prefer uid whose profile full_name matches the CSV collector name — prevents
-            // cross-collector contamination when multiple users share the same sites across cycles.
+            // Only use a uid whose profile name exactly matches — never guess from an unrelated user.
             const nameMatchUid = [...userIds].find(uid => pidToFullName.get(uid) === nameKey);
-            const orderedIds   = nameMatchUid ? [nameMatchUid, ...[...userIds].filter(u => u !== nameMatchUid)] : [...userIds];
-            for (const uid of orderedIds) {
-              if (needsNum  && pidToNum.has(uid))  numMap.set(nameKey, pidToNum.get(uid)!);
-              if (needsName && pidToName.has(uid)) nameMap.set(nameKey, pidToName.get(uid)!);
-              if (numMap.has(nameKey) && nameMap.has(nameKey)) break;
-            }
+            if (!nameMatchUid) return;
+            if (needsNum  && pidToNum.has(nameMatchUid))  numMap.set(nameKey, pidToNum.get(nameMatchUid)!);
+            if (needsName && pidToName.has(nameMatchUid)) nameMap.set(nameKey, pidToName.get(nameMatchUid)!);
           })));
         }
       }
@@ -4137,7 +4159,7 @@ const QuestionnaireAnalytics = () => {
       return { number: '', name: '' };
     };
 
-    // ── Step 1: name-based map (fast, works when names match exactly) ─────────
+    // ── Step 1: name-based map (exact match on full_name / username / email) ────
     const liveAccountMap     = new Map<string, string>(); // collector key → account number
     const liveAccountNameMap = new Map<string, string>(); // collector key → account name
     bankAccountByName.forEach((acct, name) => {
@@ -4150,18 +4172,54 @@ const QuestionnaireAnalytics = () => {
     const profileIdToAcct      = new Map<string, string>();
     const profileIdToAcctName  = new Map<string, string>();
     const profileIdToFullName  = new Map<string, string>(); // id → full_name lowercase
+    // profNameToAcct: profile full_name (lower) → {acct, acctName} — used for word-overlap below
+    const profNameToAcct     = new Map<string, string>();
+    const profNameToAcctName = new Map<string, string>();
     (profileRows || []).forEach((p: any) => {
       const { number: acct, name: acctName } = extractAcct(p.bank_account);
       if (!acct && !acctName) return;
       profileIdToAcct.set(p.id, acct);
       profileIdToAcctName.set(p.id, acctName);
-      if (p.full_name) profileIdToFullName.set(p.id, p.full_name.trim().toLowerCase());
+      if (p.full_name) {
+        const fl = p.full_name.trim().toLowerCase();
+        profileIdToFullName.set(p.id, fl);
+        if (acct)     profNameToAcct.set(fl, acct);
+        if (acctName) profNameToAcctName.set(fl, acctName);
+      }
       [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
         const k = n.trim().toLowerCase();
         if (acct)     liveAccountMap.set(k, acct);
         if (acctName) liveAccountNameMap.set(k, acctName);
       });
     });
+
+    // ── Step 1b: word-overlap fallback ──────────────────────────────────────────
+    // Handles mismatches like CSV "Abdalla Adam Abdalla" vs DB "Abdalla Adam Abdalla Mansoor".
+    // For each CSV collector still missing an account, find a profile whose name contains
+    // ALL words (≥3 chars) from the CSV name, or vice-versa.
+    const allCsvCollectorKeys = new Set<string>();
+    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+      allCsvCollectorKeys.add(col.name.trim().toLowerCase());
+    })));
+    for (const csvKey of allCsvCollectorKeys) {
+      const needsNo   = !liveAccountMap.has(csvKey);
+      const needsName = !liveAccountNameMap.has(csvKey);
+      if (!needsNo && !needsName) continue;
+      const words = csvKey.split(/\s+/).filter(w => w.length >= 3);
+      if (words.length === 0) continue;
+      for (const [profName, acct] of profNameToAcct) {
+        // Match if all CSV words appear in profile name, OR all profile words appear in CSV name
+        const profWords = profName.split(/\s+/).filter(w => w.length >= 3);
+        const csvInProf  = words.every(w => profName.includes(w));
+        const profInCsv  = profWords.length > 0 && profWords.every(w => csvKey.includes(w));
+        if (csvInProf || profInCsv) {
+          if (needsNo && acct) liveAccountMap.set(csvKey, acct);
+          const an = profNameToAcctName.get(profName);
+          if (needsName && an) liveAccountNameMap.set(csvKey, an);
+          break;
+        }
+      }
+    }
 
     // ── Step 2: site-based bridge (reliable even when names differ) ───────────
     // Collect every unique site name across all collectors in the CSV data.
@@ -4200,21 +4258,17 @@ const QuestionnaireAnalytics = () => {
           const k = siteKey(site, hg.hub, sg.state);
           siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
         });
-        // Put the name-matching uid first so it wins over any other user
+        // Only assign if a uid's profile name exactly matches the CSV collector name.
+        // If no uid matches, leave blank — never assign a wrong account from an unrelated user.
         const nameMatchUid = [...userIds].find(uid => profileIdToFullName.get(uid) === nameKey);
-        const orderedIds   = nameMatchUid
-          ? [nameMatchUid, ...[...userIds].filter(u => u !== nameMatchUid)]
-          : [...userIds];
-        for (const uid of orderedIds) {
-          if (!alreadyHasNo) {
-            const acct = profileIdToAcct.get(uid);
-            if (acct) liveAccountMap.set(nameKey, acct);
-          }
-          if (!alreadyHasName) {
-            const an = profileIdToAcctName.get(uid);
-            if (an) liveAccountNameMap.set(nameKey, an);
-          }
-          if (liveAccountMap.has(nameKey) && liveAccountNameMap.has(nameKey)) break;
+        if (!nameMatchUid) return; // no name match → skip to avoid contamination
+        if (!alreadyHasNo) {
+          const acct = profileIdToAcct.get(nameMatchUid);
+          if (acct) liveAccountMap.set(nameKey, acct);
+        }
+        if (!alreadyHasName) {
+          const an = profileIdToAcctName.get(nameMatchUid);
+          if (an) liveAccountNameMap.set(nameKey, an);
         }
       })));
     }
