@@ -4021,8 +4021,32 @@ const QuestionnaireAnalytics = () => {
     wb.creator = 'PACT Command Center';
     wb.created = new Date();
 
-    // Global sheet-name guard — prevents duplicate worksheet errors
-    const allSheetNames = new Set<string>(['Summary', 'Payment']);
+    // Pre-assign ALL sheet names before creating any worksheet.
+    // ExcelJS uses case-insensitive comparison; we do the same here.
+    const assignedNamesLower = new Set<string>(['summary', 'payment']);
+    function assignUnique(base: string): string {
+      const sanitized = base.replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Sheet';
+      let candidate = sanitized;
+      let c = 2;
+      while (assignedNamesLower.has(candidate.toLowerCase())) {
+        const suffix = ` ${c++}`;
+        candidate = sanitized.slice(0, 31 - suffix.length) + suffix;
+      }
+      assignedNamesLower.add(candidate.toLowerCase());
+      return candidate;
+    }
+    // Hub sheets — pre-assigned
+    const hubSheetNameMap = new Map<string, string>();
+    trackerData.hubTrackers.forEach((ht: any) => { hubSheetNameMap.set(ht.hub, assignUnique(ht.hub)); });
+    // Per-DC sheets — pre-assigned; key = hub||state||collectorName
+    const dcSheetNameMap = new Map<string, string>();
+    csvEnumData.forEach(hg => {
+      hg.states.forEach(sg => {
+        sg.collectors.forEach(col => {
+          dcSheetNameMap.set(`${hg.hub}||${sg.state}||${col.name}`, assignUnique(col.name));
+        });
+      });
+    });
 
     // ── Summary sheet (Activity × Hub, with collector sub-rows) ──────────
     {
@@ -4126,12 +4150,7 @@ const QuestionnaireAnalytics = () => {
     }
 
     for (const ht of trackerData.hubTrackers) {
-      let hubSheetName = ht.hub.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
-      if (allSheetNames.has(hubSheetName)) {
-        hubSheetName = (ht.hub.slice(0, 27) + '_hub').replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
-      }
-      allSheetNames.add(hubSheetName);
-      const ws = wb.addWorksheet(hubSheetName);
+      const ws = wb.addWorksheet(hubSheetNameMap.get(ht.hub)!);
       const numStates = ht.states.length;
       const totalCols = 1 + numStates * 4 + 4;
       ws.getColumn(1).width = 36;
@@ -4299,18 +4318,7 @@ const QuestionnaireAnalytics = () => {
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
           sg.collectors.forEach(col => {
-            let sheetName = col.name.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 28);
-            if (allSheetNames.has(sheetName)) {
-              sheetName = (col.name.slice(0, 22) + ' ' + hg.hub.slice(0, 5)).replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
-            }
-            // If still a duplicate, add a counter suffix
-            let dedupName = sheetName;
-            let counter = 2;
-            while (allSheetNames.has(dedupName)) {
-              dedupName = sheetName.slice(0, 28) + ' ' + counter++;
-            }
-            allSheetNames.add(dedupName);
-            const dcWs = wb.addWorksheet(dedupName);
+            const dcWs = wb.addWorksheet(dcSheetNameMap.get(`${hg.hub}||${sg.state}||${col.name}`)!);
             dcWs.getColumn(1).width = 6;
             dcWs.getColumn(2).width = 36;
             dcWs.getColumn(3).width = 20;
