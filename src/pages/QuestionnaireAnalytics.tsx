@@ -8596,22 +8596,22 @@ const QuestionnaireAnalytics = () => {
 
       {/* ── Payment Parameters Dialog ─────────────────────────── */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[480px] w-full">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Banknote className="h-5 w-5 text-primary" />
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+              <Banknote className="h-4 w-4 text-primary shrink-0" />
               Payment Parameters
             </DialogTitle>
-            <p className="text-sm text-muted-foreground pt-0.5">Set the payment rates before exporting the tracker</p>
+            <p className="text-xs text-muted-foreground">Set the rates before exporting</p>
           </DialogHeader>
 
-          <div className="space-y-5 py-1">
-            {/* Cost per site */}
+          <div className="space-y-4 py-1">
+            {/* Cost per site — border-joined addon group */}
             <div className="space-y-1.5">
-              <Label htmlFor="pay-cost" className="font-medium">Cost per Site Visit</Label>
-              <div className="relative flex items-center">
-                <span className="absolute left-3 text-sm font-semibold text-muted-foreground select-none">$</span>
-                <Input
+              <Label htmlFor="pay-cost" className="text-sm font-medium">Cost per Site Visit</Label>
+              <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                <span className="flex items-center px-3 bg-muted text-sm font-semibold text-muted-foreground border-r border-input select-none shrink-0">$</span>
+                <input
                   id="pay-cost"
                   type="number"
                   min="0"
@@ -8619,18 +8619,18 @@ const QuestionnaireAnalytics = () => {
                   placeholder="0.00"
                   value={paymentCostPerSite}
                   onChange={e => setPaymentCostPerSite(e.target.value)}
-                  className="pl-7 pr-16"
+                  className="flex-1 min-w-0 px-3 py-2 text-sm bg-background text-foreground outline-none"
                   data-testid="input-payment-cost-usd"
                 />
-                <span className="absolute right-3 text-xs font-medium text-muted-foreground select-none">USD</span>
+                <span className="flex items-center px-3 bg-muted text-xs font-medium text-muted-foreground border-l border-input select-none shrink-0">USD</span>
               </div>
             </div>
 
-            {/* Exchange rate */}
+            {/* Exchange rate — border-joined addon group */}
             <div className="space-y-1.5">
-              <Label htmlFor="pay-rate" className="font-medium">Exchange Rate</Label>
-              <div className="relative flex items-center">
-                <Input
+              <Label htmlFor="pay-rate" className="text-sm font-medium">Exchange Rate</Label>
+              <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                <input
                   id="pay-rate"
                   type="number"
                   min="0"
@@ -8638,52 +8638,52 @@ const QuestionnaireAnalytics = () => {
                   placeholder="e.g. 4100"
                   value={paymentExchangeRate}
                   onChange={e => setPaymentExchangeRate(e.target.value)}
-                  className="pr-28"
+                  className="flex-1 min-w-0 px-3 py-2 text-sm bg-background text-foreground outline-none"
                   data-testid="input-payment-exchange-rate"
                 />
-                <span className="absolute right-3 text-xs font-medium text-muted-foreground select-none whitespace-nowrap">SDG / 1 USD</span>
+                <span className="flex items-center px-3 bg-muted text-xs font-medium text-muted-foreground border-l border-input select-none shrink-0 whitespace-nowrap">SDG / 1 USD</span>
               </div>
             </div>
 
             {/* Live preview */}
             {Number(paymentCostPerSite) > 0 && Number(paymentExchangeRate) > 0 && (
-              <div className="rounded-lg border bg-primary/5 dark:bg-primary/10 p-4 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-primary">Live Preview</p>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border bg-primary/5 dark:bg-primary/10 p-3 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">Live Preview</p>
+                <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-md bg-background border px-3 py-2">
-                    <p className="text-[11px] text-muted-foreground mb-0.5">Per site (USD)</p>
-                    <p className="text-base font-bold text-foreground">${Number(paymentCostPerSite).toFixed(2)}</p>
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Per site (USD)</p>
+                    <p className="text-sm font-bold text-foreground">${Number(paymentCostPerSite).toFixed(2)}</p>
                   </div>
                   <div className="rounded-md bg-background border px-3 py-2">
-                    <p className="text-[11px] text-muted-foreground mb-0.5">Per site (SDG)</p>
-                    <p className="text-base font-bold text-foreground">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Per site (SDG)</p>
+                    <p className="text-sm font-bold text-foreground">
                       {Math.round(Number(paymentCostPerSite) * Number(paymentExchangeRate)).toLocaleString()}
                     </p>
                   </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground text-center">
-                  Rate: 1 USD = {Number(paymentExchangeRate).toLocaleString()} SDG
+                <p className="text-[10px] text-muted-foreground text-center">
+                  1 USD = {Number(paymentExchangeRate).toLocaleString()} SDG
                 </p>
               </div>
             )}
           </div>
 
-          <DialogFooter className="flex-col gap-2 pt-2">
+          {/* Footer — plain div so layout is fully controlled (DialogFooter forces sm:flex-row) */}
+          <div className="flex flex-col gap-2 pt-2">
             {paymentExportType === 'csvEnum' && (
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => {
-                  setPaymentDialogOpen(false);
-                  exportCsvEnumTableFormattedExcel(0, 0);
-                }}
+                onClick={() => { setPaymentDialogOpen(false); exportCsvEnumTableFormattedExcel(0, 0); }}
                 data-testid="button-payment-export-no-payment"
               >
                 Export without Payment Sheet
               </Button>
             )}
-            <div className="flex gap-2 w-full">
-              <Button variant="ghost" className="flex-1" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setPaymentDialogOpen(false)}>
+                Cancel
+              </Button>
               <Button
                 className="flex-[2]"
                 disabled={!paymentCostPerSite || !paymentExchangeRate || Number(paymentCostPerSite) <= 0 || Number(paymentExchangeRate) <= 0}
@@ -8708,7 +8708,7 @@ const QuestionnaireAnalytics = () => {
                 Export with Payment
               </Button>
             </div>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
