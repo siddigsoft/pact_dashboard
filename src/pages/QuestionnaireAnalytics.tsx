@@ -355,6 +355,7 @@ const QuestionnaireAnalytics = () => {
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
   const [bankAccountByName, setBankAccountByName] = useState<Map<string, string>>(new Map());
+  const [csvAccountMap, setCsvAccountMap] = useState<Map<string, string>>(new Map());
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -489,6 +490,32 @@ const QuestionnaireAnalytics = () => {
       fetchEnumTrackerData();
     }
   }, [activeTab]);
+
+  // Fetch all profiles with bank accounts once, build a case-insensitive name→accountNumber map
+  // used to show account status indicators in the CSV Enumerator hierarchy view.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, username, email, bank_account')
+        .not('bank_account', 'is', null);
+      if (cancelled) return;
+      const m = new Map<string, string>();
+      (data || []).forEach((p: any) => {
+        let raw: any = p.bank_account;
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
+        if (!raw || typeof raw !== 'object') return;
+        const acct = String(raw.accountNumber || raw.account_number || raw.accountName || raw.account_name || '').trim();
+        if (!acct) return;
+        [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
+          m.set(n.trim().toLowerCase(), acct);
+        });
+      });
+      setCsvAccountMap(m);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     try {
@@ -6680,6 +6707,12 @@ const QuestionnaireAnalytics = () => {
                                                       <div className="flex items-center gap-2 min-w-0">
                                                         <Users className="h-3.5 w-3.5 text-primary shrink-0" />
                                                         <span className="text-sm font-medium truncate">{col.name}</span>
+                                                        {(() => {
+                                                          const acct = csvAccountMap.get(col.name.trim().toLowerCase());
+                                                          return acct
+                                                            ? <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 shrink-0" title={`Account: ${acct}`}>✓ {acct}</span>
+                                                            : <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 shrink-0" title="No bank account registered">No Account</span>;
+                                                        })()}
                                                       </div>
                                                       <div className="flex items-center gap-2 shrink-0 ml-2">
                                                         <Badge variant="outline" className="font-mono text-blue-600 text-xs">{col.questionnaires} Q</Badge>
