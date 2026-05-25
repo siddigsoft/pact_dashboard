@@ -1698,11 +1698,18 @@ const QuestionnaireAnalytics = () => {
               const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
               siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
             });
-            // Only use a uid whose profile name exactly matches — never guess from an unrelated user.
-            const nameMatchUid = [...userIds].find(uid => pidToFullName.get(uid) === nameKey);
-            if (!nameMatchUid) return;
-            if (needsNum  && pidToNum.has(nameMatchUid))  numMap.set(nameKey, pidToNum.get(nameMatchUid)!);
-            if (needsName && pidToName.has(nameMatchUid)) nameMap.set(nameKey, pidToName.get(nameMatchUid)!);
+            // Rank candidates by site-vote count; exact name match always wins.
+            const uidVotes = new Map<string, number>();
+            col.sites.forEach(site => {
+              const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
+              siteToUsers.get(k)?.forEach(uid => uidVotes.set(uid, (uidVotes.get(uid) || 0) + 1));
+            });
+            const nameMatchUid = [...uidVotes.keys()].find(uid => pidToFullName.get(uid) === nameKey);
+            const topVotedUid  = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+            const resolvedUid  = nameMatchUid ?? topVotedUid;
+            if (!resolvedUid) return;
+            if (needsNum  && pidToNum.has(resolvedUid))  numMap.set(nameKey, pidToNum.get(resolvedUid)!);
+            if (needsName && pidToName.has(resolvedUid)) nameMap.set(nameKey, pidToName.get(resolvedUid)!);
           })));
         }
       }
@@ -4258,16 +4265,25 @@ const QuestionnaireAnalytics = () => {
           const k = siteKey(site, hg.hub, sg.state);
           siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
         });
-        // Only assign if a uid's profile name exactly matches the CSV collector name.
-        // If no uid matches, leave blank — never assign a wrong account from an unrelated user.
-        const nameMatchUid = [...userIds].find(uid => profileIdToFullName.get(uid) === nameKey);
-        if (!nameMatchUid) return; // no name match → skip to avoid contamination
+        // Rank candidates by how many of the collector's sites they appear in.
+        // Name-exact-match always wins; otherwise the uid with the highest site-vote count
+        // is most likely the actual collector. This avoids cross-contamination when two users
+        // share just a handful of sites, while still resolving collectors whose DB name differs.
+        const uidVotes = new Map<string, number>();
+        col.sites.forEach(site => {
+          const k = siteKey(site, hg.hub, sg.state);
+          siteToUsers.get(k)?.forEach(uid => uidVotes.set(uid, (uidVotes.get(uid) || 0) + 1));
+        });
+        const nameMatchUid  = [...uidVotes.keys()].find(uid => profileIdToFullName.get(uid) === nameKey);
+        const topVotedUid   = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const resolvedUid   = nameMatchUid ?? topVotedUid;
+        if (!resolvedUid) return;
         if (!alreadyHasNo) {
-          const acct = profileIdToAcct.get(nameMatchUid);
+          const acct = profileIdToAcct.get(resolvedUid);
           if (acct) liveAccountMap.set(nameKey, acct);
         }
         if (!alreadyHasName) {
-          const an = profileIdToAcctName.get(nameMatchUid);
+          const an = profileIdToAcctName.get(resolvedUid);
           if (an) liveAccountNameMap.set(nameKey, an);
         }
       })));
