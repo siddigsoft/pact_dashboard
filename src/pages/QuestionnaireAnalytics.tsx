@@ -4636,10 +4636,11 @@ const QuestionnaireAnalytics = () => {
               const act = r.activity || '(Unknown)';
               actSiteCount.set(act, (actSiteCount.get(act) || 0) + 1);
             });
-            const actBreakSubHdr = dcWs.addRow(['Activity', 'Site Visits', '', '', '', '']);
+            // Activity name → col 2, count → col 3 (col 1 is narrow "#" column)
+            const actBreakSubHdr = dcWs.addRow(['', 'Activity', 'Site Visits', '', '', '']);
             actBreakSubHdr.height = 18;
             actBreakSubHdr.eachCell((cell, ci) => {
-              if (ci <= 2) {
+              if (ci === 2 || ci === 3) {
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
                 cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCWHITE } };
                 cell.border = dcBorder();
@@ -4648,14 +4649,15 @@ const QuestionnaireAnalytics = () => {
             });
             let actRowIdx = 0;
             [...actSiteCount.entries()].sort((a, b) => b[1] - a[1]).forEach(([act, cnt]) => {
-              const aRow = dcWs.addRow([act, cnt, '', '', '', '']);
+              const aRow = dcWs.addRow(['', act, cnt, '', '', '']);
               aRow.height = 17;
-              aRow.getCell(1).border = dcBorder(); aRow.getCell(1).font = { size: 9, name: 'Calibri' };
-              aRow.getCell(2).border = dcBorder(); aRow.getCell(2).font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCNAVY } };
-              aRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+              aRow.getCell(2).border = dcBorder(); aRow.getCell(2).font = { size: 9, name: 'Calibri' };
+              aRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+              aRow.getCell(3).border = dcBorder(); aRow.getCell(3).font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCNAVY } };
+              aRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
               if (actRowIdx % 2 === 1) {
-                aRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
                 aRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+                aRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
               }
               actRowIdx++;
             });
@@ -4677,14 +4679,15 @@ const QuestionnaireAnalytics = () => {
             payBlockHdr.getCell(1).border = dcBorder();
             payBlockHdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
 
+            // Label → col 2, value → col 3  (col 1 is the narrow "#" column)
             const addPayLine = (label: string, value: string | number, isBold = false) => {
-              const r = dcWs.addRow([label, value, '', '', '', '']);
+              const r = dcWs.addRow(['', label, value, '', '', '']);
               r.height = 18;
-              r.getCell(1).font = { size: 10, name: 'Calibri', color: { argb: 'FF6B7280' } };
-              r.getCell(1).border = dcBorder(); r.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
-              r.getCell(2).font = { bold: isBold, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+              r.getCell(2).font = { size: 10, name: 'Calibri', color: { argb: 'FF6B7280' } };
               r.getCell(2).border = dcBorder(); r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
-              r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFBFC' } };
+              r.getCell(3).font = { bold: isBold, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+              r.getCell(3).border = dcBorder(); r.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+              r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFBFC' } };
             };
 
             addPayLine('Account Number:', dcAcctNo);
@@ -4699,12 +4702,15 @@ const QuestionnaireAnalytics = () => {
               }
             }
 
-            // Fixed compact column widths — activity col wraps rather than blowing out the sheet
-            const dcColWidths = [5, 22, 16, 28, 18, 13];
+            // Col 1 = narrow # | Col 2 = Site Name / activity label (wrap) |
+            // Col 3 = Locality / value | Col 4 = Activity (wrap) | Col 5 = Sub-Activity | Col 6 = Date
+            const dcColWidths = [5, 28, 20, 28, 18, 13];
             dcWs.columns.forEach((c, i) => { c.width = dcColWidths[i] ?? 12; });
-            // Enable wrap on Activity column (col 4) so long names stay readable
-            dcWs.getColumn(4).eachCell({ includeEmpty: false }, cell => {
-              cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+            // Wrap text on both wide content columns (activity in main table + activity names in summary)
+            [2, 4].forEach(colIdx => {
+              dcWs.getColumn(colIdx).eachCell({ includeEmpty: false }, cell => {
+                cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+              });
             });
           });
         });
