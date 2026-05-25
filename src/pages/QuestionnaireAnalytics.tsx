@@ -4503,6 +4503,27 @@ const QuestionnaireAnalytics = () => {
               cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
             });
 
+            if (costPerSite > 0) {
+              const dcPaySites = col.pdmSites;
+              const dcTotalUsd = dcPaySites * costPerSite;
+              const dcTotalSdg = dcTotalUsd * exchangeRate;
+              const dcPay = dcWs.addRow([
+                '',
+                `Sites (payment): ${dcPaySites}`,
+                `Cost/Site: $${costPerSite.toFixed(2)}`,
+                `Total (USD): $${dcTotalUsd.toFixed(2)}`,
+                exchangeRate > 0 ? `Rate: ${exchangeRate.toLocaleString()} SDG/USD` : '',
+                exchangeRate > 0 ? `Total (SDG): ${Math.round(dcTotalSdg).toLocaleString()}` : '',
+              ]);
+              dcPay.height = 20;
+              dcPay.eachCell((cell) => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
+                cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FFFFFFFF' } };
+                cell.border = dcBorder();
+                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+              });
+            }
+
             // Auto-fit column widths based on actual content
             dcWs.columns.forEach((c, i) => {
               let max = i === 0 ? 4 : 8;
