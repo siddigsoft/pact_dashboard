@@ -390,9 +390,12 @@ const QuestionnaireAnalytics = () => {
           const name = p.full_name || p.username || p.email || p.id;
           profileMap.set(p.id, name);
           if (p.bank_account) {
-            const ba2 = typeof p.bank_account === 'object' ? p.bank_account : {};
-            const acct2 = ba2.accountNumber || ba2.accountName || String(p.bank_account);
-            if (acct2 && acct2 !== '[object Object]') bankMap.set(name, acct2);
+            let raw2: any = p.bank_account;
+            if (typeof raw2 === 'string') { try { raw2 = JSON.parse(raw2); } catch { raw2 = null; } }
+            if (raw2 && typeof raw2 === 'object') {
+              const acct2 = String(raw2.accountNumber || raw2.account_number || raw2.accountName || raw2.account_name || '').trim();
+              if (acct2) bankMap.set(name, acct2);
+            }
           }
         });
         setBankAccountByName(bankMap);
@@ -3996,12 +3999,17 @@ const QuestionnaireAnalytics = () => {
       .not('bank_account', 'is', null);
     (profileRows || []).forEach((p: any) => {
       if (!p.bank_account) return;
-      const ba = typeof p.bank_account === 'object' ? p.bank_account : {};
-      const acct = ba.accountNumber || ba.accountName || String(p.bank_account);
-      if (!acct || acct === '[object Object]') return;
+      // bank_account may be a JSON string (text col) or already a parsed object (jsonb col)
+      let raw: any = p.bank_account;
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
+      if (!raw || typeof raw !== 'object') return;
+      const acct = raw.accountNumber || raw.account_number || raw.accountName || raw.account_name;
+      if (!acct) return;
+      const acctStr = String(acct).trim();
+      if (!acctStr) return;
       // Store under every name variant, all normalized to lowercase+trimmed
       [p.full_name, p.username, p.email].filter(Boolean).forEach((name: string) => {
-        liveAccountMap.set(name.trim().toLowerCase(), acct);
+        liveAccountMap.set(name.trim().toLowerCase(), acctStr);
       });
     });
 
@@ -4347,12 +4355,6 @@ const QuestionnaireAnalytics = () => {
         hg.states.forEach(sg => {
           sg.collectors.forEach(col => {
             const dcWs = wb.addWorksheet(dcSheetNameMap.get(`${hg.hub}||${sg.state}||${col.name}`)!);
-            dcWs.getColumn(1).width = 6;
-            dcWs.getColumn(2).width = 36;
-            dcWs.getColumn(3).width = 20;
-            dcWs.getColumn(4).width = 22;
-            dcWs.getColumn(5).width = 22;
-            dcWs.getColumn(6).width = 16;
 
             const dcTitle = dcWs.addRow([col.name]);
             dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 6);
@@ -4393,6 +4395,16 @@ const QuestionnaireAnalytics = () => {
               cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
               cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
               cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            });
+
+            // Auto-fit column widths based on actual content
+            dcWs.columns.forEach((c, i) => {
+              let max = i === 0 ? 4 : 8;
+              c.eachCell?.({ includeEmpty: false }, cell => {
+                const v = cell.value;
+                if (v !== null && v !== undefined) max = Math.max(max, String(v).length + 2);
+              });
+              c.width = Math.min(max, 50);
             });
           });
         });
