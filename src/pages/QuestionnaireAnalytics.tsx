@@ -4442,8 +4442,8 @@ const QuestionnaireAnalytics = () => {
       const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
       payWs.addRow([]);
-      // Cols: 1=# 2=Data Collector 3=Account Number 4=Account Name 5=Hub 6=State 7=Sites 8=Cost/Site 9=Total(USD) 10=Rate 11=Total(SDG)
-      const phdr = payWs.addRow(['#', 'Data Collector', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
+      // Cols: 1=# 2=Data Collector 3=Account Number 4=Account Name 5=Hub 6=State 7=Sites 8=Cost/Site 9=Total(USD) 10=Rate 11=Total(SDG) 12=Notes
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)', 'Notes']);
       phdr.height = 22;
       phdr.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
@@ -4476,6 +4476,21 @@ const QuestionnaireAnalytics = () => {
         return hubCmp !== 0 ? hubCmp : a.name.localeCompare(b.name);
       });
 
+      // Detect same-name / different-deviceId collisions (same person, multiple devices)
+      // normName → array of payKeys that share that name
+      const nameToPayKeys = new Map<string, string[]>();
+      payCollMap.forEach((entry, payKey) => {
+        const norm = entry.name.trim().toLowerCase();
+        if (!nameToPayKeys.has(norm)) nameToPayKeys.set(norm, []);
+        nameToPayKeys.get(norm)!.push(payKey);
+      });
+      // normName → total device count for that name (only names with >1 device are flagged)
+      const nameDeviceCount = new Map<string, number>();
+      nameToPayKeys.forEach((keys, norm) => { if (keys.length > 1) nameDeviceCount.set(norm, keys.length); });
+
+      const PAMBER = 'FFFFF3CD'; // amber fill for flagged rows
+      const PAMBERBORDER = 'FFD97706';
+
       // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
       const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
         a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
@@ -4490,12 +4505,22 @@ const QuestionnaireAnalytics = () => {
         const acctName = liveAccountNameMap.get(key) || '—';
         const hubCell   = col.hubs.join(', ');
         const stateCell = col.states.join(', ');
-        const pdr = payWs.addRow([pSeq, col.name, acctNo, acctName, hubCell, stateCell, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
-        pdr.height = 20;
+        const devCount  = nameDeviceCount.get(key);
+        const noteText  = devCount ? `⚠ ${devCount} device IDs — verify before payment` : '';
+        const pdr = payWs.addRow([pSeq, col.name, acctNo, acctName, hubCell, stateCell, sites, costPerSite, totalUsd, exchangeRate, totalSdg, noteText]);
+        pdr.height = noteText ? 24 : 20;
         pdr.eachCell((cell, ci) => {
           cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-          cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
-          if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+          cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 12 };
+          if (noteText) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PAMBER } };
+            if (ci === 12) {
+              cell.font = { size: 9, name: 'Calibri', color: { argb: PAMBERBORDER }, bold: true, italic: true };
+              cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+            }
+          } else if (pSeq % 2 === 0) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+          }
         });
         pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
         pdr.getCell(10).numFmt = '#,##0.00'; pdr.getCell(11).numFmt = '#,##0.00';
