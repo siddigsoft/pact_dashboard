@@ -493,45 +493,100 @@ const QuestionnaireAnalytics = () => {
     }
   }, [activeTab]);
 
-  // Fetch all profiles with bank accounts once, build a case-insensitive name→accountNumber map
-  // used to show account status indicators in the CSV Enumerator hierarchy view.
+  // Rebuild the account maps every time csvEnumData changes (new CSV uploaded).
+  // Uses the same two-step lookup as the export:
+  //   Step 1: profile full_name / username / email → account (fast, rarely matches ODK names)
+  //   Step 2: site bridge via mmp_site_entries → accepted_by userId → profile bank_account
+  //           (reliable because it links the actual site visit record to a registered profile)
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, username, email, bank_account')
-        .not('bank_account', 'is', null);
-      if (cancelled) return;
+      // ── Helper ──────────────────────────────────────────────────────────────
       const parseAcct = (raw: any): { number: string; name: string } => {
         if (!raw) return { number: '', name: '' };
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return { number: '', name: '' }; } }
         if (typeof raw !== 'object') return { number: '', name: '' };
         const number = String(raw.accountNumber ?? raw.account_number ?? '').trim();
-        const name   = String(raw.accountName   ?? raw.account_name   ?? '').trim();
-        // Fallback: if neither keyed field found, pick first two string values
-        if (!number && !name) {
-          const vals = Object.values(raw).filter(v => typeof v === 'string' || typeof v === 'number').map(v => String(v).trim()).filter(Boolean);
-          return { number: vals[0] || '', name: vals[1] || '' };
-        }
-        return { number, name };
+        const acctName = String(raw.accountName ?? raw.account_name ?? '').trim();
+        if (number || acctName) return { number, name: acctName };
+        const vals = Object.values(raw).filter(v => typeof v === 'string' || typeof v === 'number').map(v => String(v).trim()).filter(Boolean);
+        return { number: vals[0] || '', name: '' };
       };
-      const numMap  = new Map<string, string>();
-      const nameMap = new Map<string, string>();
-      (data || []).forEach((p: any) => {
+
+      // ── Step 1: fetch all profiles with bank accounts ───────────────────────
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, username, email, bank_account')
+        .not('bank_account', 'is', null);
+      if (cancelled) return;
+
+      const numMap  = new Map<string, string>(); // collectorKey → account number
+      const nameMap = new Map<string, string>(); // collectorKey → account holder name
+      const pidToNum  = new Map<string, string>(); // profileId → account number
+      const pidToName = new Map<string, string>(); // profileId → account holder name
+
+      (profiles || []).forEach((p: any) => {
         const { number, name } = parseAcct(p.bank_account);
         if (!number && !name) return;
+        if (number) pidToNum.set(p.id, number);
+        if (name)   pidToName.set(p.id, name);
+        // Also index by profile display names for the rare exact-match case
         [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
           const k = n.trim().toLowerCase();
           if (number) numMap.set(k, number);
           if (name)   nameMap.set(k, name);
         });
       });
+
+      // ── Step 2: site bridge via mmp_site_entries ───────────────────────────
+      if (csvEnumData.length > 0) {
+        const allSites = new Set<string>();
+        csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col =>
+          col.sites.forEach(s => { if (s) allSites.add(s.trim()); })
+        )));
+
+        if (allSites.size > 0) {
+          const { data: mmpRows } = await supabase
+            .from('mmp_site_entries')
+            .select('site_name, hub_office, state, accepted_by')
+            .in('site_name', [...allSites].slice(0, 400))
+            .not('accepted_by', 'is', null);
+          if (cancelled) return;
+
+          // site||hub||state → Set<userId>
+          const siteToUsers = new Map<string, Set<string>>();
+          (mmpRows || []).forEach((e: any) => {
+            const k = `${(e.site_name||'').trim().toLowerCase()}||${(e.hub_office||'').trim().toLowerCase()}||${(e.state||'').trim().toLowerCase()}`;
+            if (!siteToUsers.has(k)) siteToUsers.set(k, new Set());
+            siteToUsers.get(k)!.add(e.accepted_by);
+          });
+
+          // For each collector, find their account via the site bridge
+          csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+            const nameKey = col.name.trim().toLowerCase();
+            const needsNum  = !numMap.has(nameKey);
+            const needsName = !nameMap.has(nameKey);
+            if (!needsNum && !needsName) return;
+
+            const userIds = new Set<string>();
+            col.sites.forEach(site => {
+              const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
+              siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
+            });
+            for (const uid of userIds) {
+              if (needsNum  && pidToNum.has(uid))  numMap.set(nameKey, pidToNum.get(uid)!);
+              if (needsName && pidToName.has(uid)) nameMap.set(nameKey, pidToName.get(uid)!);
+              if (numMap.has(nameKey) && nameMap.has(nameKey)) break;
+            }
+          })));
+        }
+      }
+
       setCsvAccountMap(numMap);
       setCsvAccountNameMap(nameMap);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [csvEnumData]);
 
 
   useEffect(() => {
