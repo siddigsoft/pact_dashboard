@@ -3971,7 +3971,11 @@ const QuestionnaireAnalytics = () => {
   }, [trackerData]);
 
   const exportCsvEnumTableFormattedExcel = useCallback(async (costPerSite = 0, exchangeRate = 0) => {
-    if (trackerData.hubTrackers.length === 0) return;
+    if (trackerData.hubTrackers.length === 0) {
+      toast({ title: 'No data to export', description: 'Load a CSV file first.', variant: 'destructive' });
+      return;
+    }
+    try {
 
     // Build: hub → activity → state → [{name, count}]
     const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
@@ -4016,6 +4020,9 @@ const QuestionnaireAnalytics = () => {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PACT Command Center';
     wb.created = new Date();
+
+    // Global sheet-name guard — prevents duplicate worksheet errors
+    const allSheetNames = new Set<string>(['Summary', 'Payment']);
 
     // ── Summary sheet (Activity × Hub, with collector sub-rows) ──────────
     {
@@ -4119,7 +4126,12 @@ const QuestionnaireAnalytics = () => {
     }
 
     for (const ht of trackerData.hubTrackers) {
-      const ws = wb.addWorksheet(ht.hub.slice(0, 31));
+      let hubSheetName = ht.hub.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
+      if (allSheetNames.has(hubSheetName)) {
+        hubSheetName = (ht.hub.slice(0, 27) + '_hub').replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
+      }
+      allSheetNames.add(hubSheetName);
+      const ws = wb.addWorksheet(hubSheetName);
       const numStates = ht.states.length;
       const totalCols = 1 + numStates * 4 + 4;
       ws.getColumn(1).width = 36;
@@ -4284,16 +4296,21 @@ const QuestionnaireAnalytics = () => {
     {
       const DCNAVY = 'FF0F2041', DCWHITE = 'FFFFFFFF', DCBORDER = 'FFC8CDD7';
       const dcBorder = (): any => { const s: any = { style: 'thin', color: { argb: DCBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
-      const usedSheetNames = new Set<string>();
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
           sg.collectors.forEach(col => {
             let sheetName = col.name.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 28);
-            if (usedSheetNames.has(sheetName)) {
-              sheetName = (col.name.slice(0, 24) + ' ' + hg.hub.slice(0, 3)).replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
+            if (allSheetNames.has(sheetName)) {
+              sheetName = (col.name.slice(0, 22) + ' ' + hg.hub.slice(0, 5)).replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
             }
-            usedSheetNames.add(sheetName);
-            const dcWs = wb.addWorksheet(sheetName);
+            // If still a duplicate, add a counter suffix
+            let dedupName = sheetName;
+            let counter = 2;
+            while (allSheetNames.has(dedupName)) {
+              dedupName = sheetName.slice(0, 28) + ' ' + counter++;
+            }
+            allSheetNames.add(dedupName);
+            const dcWs = wb.addWorksheet(dedupName);
             dcWs.getColumn(1).width = 6;
             dcWs.getColumn(2).width = 36;
             dcWs.getColumn(3).width = 20;
@@ -4352,9 +4369,14 @@ const QuestionnaireAnalytics = () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `csv_enum_tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [trackerData, csvEnumData, bankAccountByName, filteredData]);
+    } catch (err: any) {
+      toast({ title: 'Export failed', description: err?.message || 'Unknown error', variant: 'destructive' });
+    }
+  }, [trackerData, csvEnumData, bankAccountByName, filteredData, toast]);
 
   const exportTrackerPerStateFormattedExcel = useCallback(async () => {
     const sheets = trackerData.stateTrackers.map((st: any) => {
