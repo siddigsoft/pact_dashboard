@@ -4416,7 +4416,7 @@ const QuestionnaireAnalytics = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `csv_enum_tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    a.download = `Tracker - Enumerators (CSV) ${format(new Date(), 'MMMM dd yyyy HH-mm')}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
