@@ -389,7 +389,11 @@ const QuestionnaireAnalytics = () => {
         (profiles || []).forEach((p: any) => {
           const name = p.full_name || p.username || p.email || p.id;
           profileMap.set(p.id, name);
-          if (p.bank_account) bankMap.set(name, String(p.bank_account));
+          if (p.bank_account) {
+            const ba2 = typeof p.bank_account === 'object' ? p.bank_account : {};
+            const acct2 = ba2.accountNumber || ba2.accountName || String(p.bank_account);
+            if (acct2 && acct2 !== '[object Object]') bankMap.set(name, acct2);
+          }
         });
         setBankAccountByName(bankMap);
       }
@@ -3992,7 +3996,9 @@ const QuestionnaireAnalytics = () => {
         .not('bank_account', 'is', null);
       (profileRows || []).forEach((p: any) => {
         if (!p.bank_account) return;
-        const acct = String(p.bank_account);
+        const ba = typeof p.bank_account === 'object' ? p.bank_account : {};
+        const acct = ba.accountNumber || ba.accountName || String(p.bank_account);
+        if (!acct || acct === '[object Object]') return;
         [p.full_name, p.username, p.email].filter(Boolean).forEach((name: string) => {
           if (allCollectorNames.has(name)) liveAccountMap.set(name, acct);
         });
