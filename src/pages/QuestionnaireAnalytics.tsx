@@ -3977,6 +3977,28 @@ const QuestionnaireAnalytics = () => {
     }
     try {
 
+    // ── Live bank-account lookup from profiles ──────────────────────────────
+    // bankAccountByName is populated only when the Enumerator Tracker tab is
+    // visited, and it matches via mmp_site_entries accepted_by IDs — which may
+    // not align with the CSV dataCollector names. Query profiles directly here
+    // so we always get fresh data regardless of tab navigation.
+    const allCollectorNames = new Set<string>();
+    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => allCollectorNames.add(col.name))));
+    const liveAccountMap = new Map<string, string>(bankAccountByName); // start with pre-fetched data as fallback
+    if (allCollectorNames.size > 0) {
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('full_name, username, email, bank_account')
+        .not('bank_account', 'is', null);
+      (profileRows || []).forEach((p: any) => {
+        if (!p.bank_account) return;
+        const acct = String(p.bank_account);
+        [p.full_name, p.username, p.email].filter(Boolean).forEach((name: string) => {
+          if (allCollectorNames.has(name)) liveAccountMap.set(name, acct);
+        });
+      });
+    }
+
     // Build: hub → activity → state → [{name, count}]
     const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
     csvEnumData.forEach(hg => {
@@ -4283,7 +4305,7 @@ const QuestionnaireAnalytics = () => {
             const sites = col.pdmSites;
             const totalUsd = sites * costPerSite;
             const totalSdg = totalUsd * exchangeRate;
-            const acctNo = bankAccountByName.get(col.name) || '—';
+            const acctNo = liveAccountMap.get(col.name) || '—';
             const pdr = payWs.addRow([pSeq, col.name, acctNo, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
             pdr.height = 20;
             pdr.eachCell((cell, ci) => {
@@ -4331,7 +4353,7 @@ const QuestionnaireAnalytics = () => {
             dcTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: DCNAVY } }; dcTitle.height = 28;
             dcWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
             dcWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', bankAccountByName.get(col.name) || '—']);
+            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', liveAccountMap.get(col.name) || '—']);
             dcInfo.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } }; dcInfo.height = 20;
             dcWs.addRow([]);
 
