@@ -1622,16 +1622,18 @@ const QuestionnaireAnalytics = () => {
         .not('bank_account', 'is', null);
       if (cancelled) return;
 
-      const numMap    = new Map<string, string>();
-      const nameMap   = new Map<string, string>();
-      const pidToNum  = new Map<string, string>();
-      const pidToName = new Map<string, string>();
+      const numMap         = new Map<string, string>();
+      const nameMap        = new Map<string, string>();
+      const pidToNum       = new Map<string, string>();
+      const pidToName      = new Map<string, string>();
+      const pidToFullName  = new Map<string, string>(); // profile id → full_name lowercase
 
       (profiles || []).forEach((p: any) => {
         const { number, name } = parseAcct(p.bank_account);
         if (!number && !name) return;
         if (number) pidToNum.set(p.id, number);
         if (name)   pidToName.set(p.id, name);
+        if (p.full_name) pidToFullName.set(p.id, p.full_name.trim().toLowerCase());
         [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
           const k = n.trim().toLowerCase();
           if (number) numMap.set(k, number);
@@ -1670,7 +1672,11 @@ const QuestionnaireAnalytics = () => {
               const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
               siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
             });
-            for (const uid of userIds) {
+            // Prefer uid whose profile full_name matches the CSV collector name — prevents
+            // cross-collector contamination when multiple users share the same sites across cycles.
+            const nameMatchUid = [...userIds].find(uid => pidToFullName.get(uid) === nameKey);
+            const orderedIds   = nameMatchUid ? [nameMatchUid, ...[...userIds].filter(u => u !== nameMatchUid)] : [...userIds];
+            for (const uid of orderedIds) {
               if (needsNum  && pidToNum.has(uid))  numMap.set(nameKey, pidToNum.get(uid)!);
               if (needsName && pidToName.has(uid)) nameMap.set(nameKey, pidToName.get(uid)!);
               if (numMap.has(nameKey) && nameMap.has(nameKey)) break;
@@ -4141,13 +4147,15 @@ const QuestionnaireAnalytics = () => {
       .from('profiles')
       .select('id, full_name, username, email, bank_account')
       .not('bank_account', 'is', null);
-    const profileIdToAcct     = new Map<string, string>();
-    const profileIdToAcctName = new Map<string, string>();
+    const profileIdToAcct      = new Map<string, string>();
+    const profileIdToAcctName  = new Map<string, string>();
+    const profileIdToFullName  = new Map<string, string>(); // id → full_name lowercase
     (profileRows || []).forEach((p: any) => {
       const { number: acct, name: acctName } = extractAcct(p.bank_account);
       if (!acct && !acctName) return;
       profileIdToAcct.set(p.id, acct);
       profileIdToAcctName.set(p.id, acctName);
+      if (p.full_name) profileIdToFullName.set(p.id, p.full_name.trim().toLowerCase());
       [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
         const k = n.trim().toLowerCase();
         if (acct)     liveAccountMap.set(k, acct);
@@ -4179,7 +4187,9 @@ const QuestionnaireAnalytics = () => {
         siteToUsers.get(k)!.add(e.accepted_by);
       });
 
-      // For each collector, collect user IDs via site bridge, then resolve bank account + name
+      // For each collector, collect user IDs via site bridge, then resolve bank account + name.
+      // Prefer the uid whose profile full_name matches the CSV collector name to prevent
+      // cross-collector contamination (multiple users visiting the same sites in different cycles).
       csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
         const nameKey = col.name.trim().toLowerCase();
         const alreadyHasNo   = liveAccountMap.has(nameKey);
@@ -4190,7 +4200,12 @@ const QuestionnaireAnalytics = () => {
           const k = siteKey(site, hg.hub, sg.state);
           siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
         });
-        for (const uid of userIds) {
+        // Put the name-matching uid first so it wins over any other user
+        const nameMatchUid = [...userIds].find(uid => profileIdToFullName.get(uid) === nameKey);
+        const orderedIds   = nameMatchUid
+          ? [nameMatchUid, ...[...userIds].filter(u => u !== nameMatchUid)]
+          : [...userIds];
+        for (const uid of orderedIds) {
           if (!alreadyHasNo) {
             const acct = profileIdToAcct.get(uid);
             if (acct) liveAccountMap.set(nameKey, acct);
