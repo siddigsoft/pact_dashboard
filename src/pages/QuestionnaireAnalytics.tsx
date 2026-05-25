@@ -4023,25 +4023,25 @@ const QuestionnaireAnalytics = () => {
     // ── Live bank-account lookup from profiles ──────────────────────────────
     // Build a case-insensitive account lookup from ALL profiles with bank accounts.
     // Keys are lowercased+trimmed so col.name (from CSV) matches even when casing differs.
-    // ── Helper: extract account number from any bank_account shape ────────────
-    const extractAcct = (raw: any): string => {
-      if (!raw) return '';
-      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return ''; } }
-      if (typeof raw !== 'object') return '';
-      // Try all known key variants (camelCase from web, snake_case from Flutter)
-      const v = raw.accountNumber ?? raw.account_number ?? raw.accountName ?? raw.account_name;
-      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
-      // Fallback: first non-empty string/number value in the object
+    // ── Helper: extract { number, name } from any bank_account shape ─────────
+    const extractAcct = (raw: any): { number: string; name: string } => {
+      if (!raw) return { number: '', name: '' };
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return { number: '', name: '' }; } }
+      if (typeof raw !== 'object') return { number: '', name: '' };
+      const num = String(raw.accountNumber ?? raw.account_number ?? '').trim();
+      const nam = String(raw.accountName  ?? raw.account_name  ?? '').trim();
+      if (num || nam) return { number: num, name: nam };
+      // Fallback: first non-empty string/number value as the number
       for (const val of Object.values(raw)) {
-        if ((typeof val === 'string' || typeof val === 'number') && String(val).trim()) {
-          return String(val).trim();
-        }
+        if ((typeof val === 'string' || typeof val === 'number') && String(val).trim())
+          return { number: String(val).trim(), name: '' };
       }
-      return '';
+      return { number: '', name: '' };
     };
 
     // ── Step 1: name-based map (fast, works when names match exactly) ─────────
-    const liveAccountMap = new Map<string, string>();
+    const liveAccountMap     = new Map<string, string>(); // collector key → account number
+    const liveAccountNameMap = new Map<string, string>(); // collector key → account name
     bankAccountByName.forEach((acct, name) => {
       if (acct) liveAccountMap.set(name.trim().toLowerCase(), acct);
     });
@@ -4049,13 +4049,17 @@ const QuestionnaireAnalytics = () => {
       .from('profiles')
       .select('id, full_name, username, email, bank_account')
       .not('bank_account', 'is', null);
-    const profileIdToAcct = new Map<string, string>();
+    const profileIdToAcct     = new Map<string, string>();
+    const profileIdToAcctName = new Map<string, string>();
     (profileRows || []).forEach((p: any) => {
-      const acct = extractAcct(p.bank_account);
-      if (!acct) return;
+      const { number: acct, name: acctName } = extractAcct(p.bank_account);
+      if (!acct && !acctName) return;
       profileIdToAcct.set(p.id, acct);
+      profileIdToAcctName.set(p.id, acctName);
       [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
-        liveAccountMap.set(n.trim().toLowerCase(), acct);
+        const k = n.trim().toLowerCase();
+        if (acct)     liveAccountMap.set(k, acct);
+        if (acctName) liveAccountNameMap.set(k, acctName);
       });
     });
 
@@ -4083,24 +4087,33 @@ const QuestionnaireAnalytics = () => {
         siteToUsers.get(k)!.add(e.accepted_by);
       });
 
-      // For each collector, collect user IDs via site bridge, then resolve bank account
+      // For each collector, collect user IDs via site bridge, then resolve bank account + name
       csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
         const nameKey = col.name.trim().toLowerCase();
-        if (liveAccountMap.has(nameKey)) return; // already resolved by name match
+        const alreadyHasNo   = liveAccountMap.has(nameKey);
+        const alreadyHasName = liveAccountNameMap.has(nameKey);
+        if (alreadyHasNo && alreadyHasName) return;
         const userIds = new Set<string>();
         col.sites.forEach(site => {
           const k = siteKey(site, hg.hub, sg.state);
           siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
         });
         for (const uid of userIds) {
-          const acct = profileIdToAcct.get(uid);
-          if (acct) { liveAccountMap.set(nameKey, acct); break; }
+          if (!alreadyHasNo) {
+            const acct = profileIdToAcct.get(uid);
+            if (acct) liveAccountMap.set(nameKey, acct);
+          }
+          if (!alreadyHasName) {
+            const an = profileIdToAcctName.get(uid);
+            if (an) liveAccountNameMap.set(nameKey, an);
+          }
+          if (liveAccountMap.has(nameKey) && liveAccountNameMap.has(nameKey)) break;
         }
       })));
     }
 
-    console.log(`[CSV Enum Export] liveAccountMap: ${liveAccountMap.size} entries, profiles fetched: ${(profileRows||[]).length}`);
-    console.log(`[CSV Enum Export] Sample entries:`, [...liveAccountMap.entries()].slice(0, 5));
+    console.log(`[CSV Enum Export] liveAccountMap: ${liveAccountMap.size}, liveAccountNameMap: ${liveAccountNameMap.size}, profiles: ${(profileRows||[]).length}`);
+    console.log(`[CSV Enum Export] Sample:`, [...liveAccountMap.entries()].slice(0, 5));
 
     // Build: hub → activity → state → [{name, count}]
     const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
@@ -4383,19 +4396,20 @@ const QuestionnaireAnalytics = () => {
       const pBorder = (): any => { const s: any = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
       const payWs = wb.addWorksheet('Payment');
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
-      payWs.mergeCells(ptitle.number, 1, ptitle.number, 10);
+      payWs.mergeCells(ptitle.number, 1, ptitle.number, 11);
       ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
       payWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
+      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
       payWs.addRow([]);
-      const phdr = payWs.addRow(['#', 'Data Collector', 'Account Number', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
+      // Cols: 1=# 2=Data Collector 3=Account Number 4=Account Name 5=Hub 6=State 7=Sites 8=Cost/Site 9=Total(USD) 10=Rate 11=Total(SDG)
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
       phdr.height = 22;
       phdr.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, color: { argb: PWHITE }, size: 10, name: 'Calibri' }; cell.border = pBorder();
-        cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+        cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle', wrapText: true };
       });
       // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
       const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
@@ -4408,30 +4422,32 @@ const QuestionnaireAnalytics = () => {
             const sites = col.pdmSites;
             const totalUsd = sites * costPerSite;
             const totalSdg = totalUsd * exchangeRate;
-            const acctNo = liveAccountMap.get(col.name.trim().toLowerCase()) || '—';
-            const pdr = payWs.addRow([pSeq, col.name, acctNo, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
+            const key = col.name.trim().toLowerCase();
+            const acctNo   = liveAccountMap.get(key)     || '—';
+            const acctName = liveAccountNameMap.get(key) || '—';
+            const pdr = payWs.addRow([pSeq, col.name, acctNo, acctName, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
             pdr.height = 20;
             pdr.eachCell((cell, ci) => {
               cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-              cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
+              cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
               if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
             });
-            pdr.getCell(7).numFmt = '#,##0.00'; pdr.getCell(8).numFmt = '#,##0.00';
-            pdr.getCell(9).numFmt = '#,##0.00'; pdr.getCell(10).numFmt = '#,##0.00';
+            pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
+            pdr.getCell(10).numFmt = '#,##0.00'; pdr.getCell(11).numFmt = '#,##0.00';
           });
         });
       });
       const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
-      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
       ptot.height = 24;
       ptot.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: PWHITE } };
-        cell.border = pBorder(); cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
+        cell.border = pBorder(); cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
       });
-      ptot.getCell(7).numFmt = '#,##0.00'; ptot.getCell(8).numFmt = '#,##0.00';
-      ptot.getCell(9).numFmt = '#,##0.00'; ptot.getCell(10).numFmt = '#,##0.00';
+      ptot.getCell(8).numFmt = '#,##0.00'; ptot.getCell(9).numFmt = '#,##0.00';
+      ptot.getCell(10).numFmt = '#,##0.00'; ptot.getCell(11).numFmt = '#,##0.00';
       payWs.columns.forEach(col => { let max = 10; col.eachCell?.({ includeEmpty: false }, c => { max = Math.max(max, (c.value?.toString() || '').length + 2); }); col.width = Math.min(max, 40); });
 
     }
@@ -4446,11 +4462,12 @@ const QuestionnaireAnalytics = () => {
             const dcWs = wb.addWorksheet(dcSheetNameMap.get(`${hg.hub}||${sg.state}||${col.name}`)!);
 
             const dcTitle = dcWs.addRow([col.name]);
-            dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 6);
+            dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 8);
             dcTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: DCNAVY } }; dcTitle.height = 28;
             dcWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
             dcWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', liveAccountMap.get(col.name.trim().toLowerCase()) || '—']);
+            const _dcKey = col.name.trim().toLowerCase();
+            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', liveAccountMap.get(_dcKey) || '—', 'Account Name:', liveAccountNameMap.get(_dcKey) || '—']);
             dcInfo.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } }; dcInfo.height = 20;
             dcWs.addRow([]);
 
