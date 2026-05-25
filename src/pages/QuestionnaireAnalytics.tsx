@@ -4450,31 +4450,55 @@ const QuestionnaireAnalytics = () => {
         cell.font = { bold: true, color: { argb: PWHITE }, size: 10, name: 'Calibri' }; cell.border = pBorder();
         cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle', wrapText: true };
       });
+      // ── Deduplicate collectors globally by deviceId for the Payment sheet ──────
+      // csvEnumData keeps one entry per deviceId PER hub+state (correct for detail
+      // sheets). The Payment sheet needs ONE row per physical person — aggregate
+      // pdmSites across all hub+state appearances so the same device never shows up
+      // twice.
+      type PayColl = { name: string; deviceId: string; hubs: string[]; states: string[]; sites: number };
+      const payCollMap = new Map<string, PayColl>();
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach(col => {
+            const payKey = col.deviceId || col.name.trim().toLowerCase();
+            if (!payCollMap.has(payKey)) {
+              payCollMap.set(payKey, { name: col.name, deviceId: col.deviceId, hubs: [], states: [], sites: 0 });
+            }
+            const entry = payCollMap.get(payKey)!;
+            if (!entry.hubs.includes(hg.hub))   entry.hubs.push(hg.hub);
+            if (!entry.states.includes(sg.state)) entry.states.push(sg.state);
+            entry.sites += col.pdmSites;
+          });
+        });
+      });
+      const payCollList = [...payCollMap.values()].sort((a, b) => {
+        const hubCmp = a.hubs[0].localeCompare(b.hubs[0]);
+        return hubCmp !== 0 ? hubCmp : a.name.localeCompare(b.name);
+      });
+
       // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
       const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
         a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       let pSeq = 0;
-      csvEnumData.forEach(hg => {
-        hg.states.forEach(sg => {
-          sg.collectors.forEach((col) => {
-            pSeq++;
-            const sites = col.pdmSites;
-            const totalUsd = sites * costPerSite;
-            const totalSdg = totalUsd * exchangeRate;
-            const key = col.name.trim().toLowerCase();
-            const acctNo   = liveAccountMap.get(key)     || '—';
-            const acctName = liveAccountNameMap.get(key) || '—';
-            const pdr = payWs.addRow([pSeq, col.name, acctNo, acctName, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
-            pdr.height = 20;
-            pdr.eachCell((cell, ci) => {
-              cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-              cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
-              if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
-            });
-            pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
-            pdr.getCell(10).numFmt = '#,##0.00'; pdr.getCell(11).numFmt = '#,##0.00';
-          });
+      payCollList.forEach(col => {
+        pSeq++;
+        const sites = col.sites;
+        const totalUsd = sites * costPerSite;
+        const totalSdg = totalUsd * exchangeRate;
+        const key = col.name.trim().toLowerCase();
+        const acctNo   = liveAccountMap.get(key)     || '—';
+        const acctName = liveAccountNameMap.get(key) || '—';
+        const hubCell   = col.hubs.join(', ');
+        const stateCell = col.states.join(', ');
+        const pdr = payWs.addRow([pSeq, col.name, acctNo, acctName, hubCell, stateCell, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
+        pdr.height = 20;
+        pdr.eachCell((cell, ci) => {
+          cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+          cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
+          if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
         });
+        pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
+        pdr.getCell(10).numFmt = '#,##0.00'; pdr.getCell(11).numFmt = '#,##0.00';
       });
       const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
