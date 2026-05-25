@@ -4491,15 +4491,15 @@ const QuestionnaireAnalytics = () => {
       const pBorder = (): any => { const s: any = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
       const payWs = wb.addWorksheet('Payment');
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
-      payWs.mergeCells(ptitle.number, 1, ptitle.number, 11);
+      payWs.mergeCells(ptitle.number, 1, ptitle.number, 13);
       ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
       payWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
       payWs.addRow([]);
-      // Cols: 1=# 2=Data Collector 3=Account Number 4=Account Name 5=Hub 6=State 7=Sites 8=Cost/Site 9=Total(USD) 10=Rate 11=Total(SDG) 12=Notes
-      const phdr = payWs.addRow(['#', 'Data Collector', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)', 'Notes']);
+      // Cols: 1=# 2=Data Collector 3=Device ID 4=Account Number 5=Account Name 6=Hub 7=State 8=Sites 9=Cost/Site 10=Total(USD) 11=Rate 12=Total(SDG) 13=Notes
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Device ID', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)', 'Notes']);
       phdr.height = 22;
       phdr.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
@@ -4590,14 +4590,14 @@ const QuestionnaireAnalytics = () => {
         const stateCell = col.states.join(', ');
         const devCount  = nameDeviceCount.get(key);
         const noteText  = devCount ? `⚠ ${devCount} device IDs — verify before payment` : '';
-        const pdr = payWs.addRow([pSeq, col.name, acctNo, acctName, hubCell, stateCell, sites, costPerSite, totalUsd, exchangeRate, totalSdg, noteText]);
+        const pdr = payWs.addRow([pSeq, col.name, col.deviceId || '—', acctNo, acctName, hubCell, stateCell, sites, costPerSite, totalUsd, exchangeRate, totalSdg, noteText]);
         pdr.height = noteText ? 24 : 20;
         pdr.eachCell((cell, ci) => {
           cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-          cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 12 };
+          cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 13 };
           if (noteText) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PAMBER } };
-            if (ci === 12) {
+            if (ci === 13) {
               cell.font = { size: 9, name: 'Calibri', color: { argb: PAMBERBORDER }, bold: true, italic: true };
               cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
             }
@@ -4605,20 +4605,20 @@ const QuestionnaireAnalytics = () => {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
           }
         });
-        pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
-        pdr.getCell(10).numFmt = '#,##0.00'; pdr.getCell(11).numFmt = '#,##0.00';
+        pdr.getCell(9).numFmt  = '#,##0.00'; pdr.getCell(10).numFmt = '#,##0.00';
+        pdr.getCell(11).numFmt = '#,##0.00'; pdr.getCell(12).numFmt = '#,##0.00';
       });
       const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
-      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
       ptot.height = 24;
       ptot.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: PWHITE } };
-        cell.border = pBorder(); cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle' };
+        cell.border = pBorder(); cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle' };
       });
-      ptot.getCell(8).numFmt = '#,##0.00'; ptot.getCell(9).numFmt = '#,##0.00';
-      ptot.getCell(10).numFmt = '#,##0.00'; ptot.getCell(11).numFmt = '#,##0.00';
+      ptot.getCell(9).numFmt  = '#,##0.00'; ptot.getCell(10).numFmt = '#,##0.00';
+      ptot.getCell(11).numFmt = '#,##0.00'; ptot.getCell(12).numFmt = '#,##0.00';
       payWs.columns.forEach(col => { let max = 10; col.eachCell?.({ includeEmpty: false }, c => { max = Math.max(max, (c.value?.toString() || '').length + 2); }); col.width = Math.min(max, 40); });
 
     }
@@ -4638,7 +4638,7 @@ const QuestionnaireAnalytics = () => {
             dcWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
             dcWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
             const _dcKey = col.name.trim().toLowerCase();
-            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', liveAccountMap.get(_dcKey) || '—', 'Account Name:', liveAccountNameMap.get(_dcKey) || '—']);
+            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Device ID:', col.deviceId || '—', 'Account No:', liveAccountMap.get(_dcKey) || '—', 'Account Name:', liveAccountNameMap.get(_dcKey) || '—']);
             dcInfo.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } }; dcInfo.height = 20;
             dcWs.addRow([]);
 
