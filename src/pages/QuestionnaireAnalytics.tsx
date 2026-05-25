@@ -391,11 +391,12 @@ const QuestionnaireAnalytics = () => {
           const name = p.full_name || p.username || p.email || p.id;
           profileMap.set(p.id, name);
           if (p.bank_account) {
-            let raw2: any = p.bank_account;
-            if (typeof raw2 === 'string') { try { raw2 = JSON.parse(raw2); } catch { raw2 = null; } }
-            if (raw2 && typeof raw2 === 'object') {
-              const acct2 = String(raw2.accountNumber || raw2.account_number || raw2.accountName || raw2.account_name || '').trim();
-              if (acct2) bankMap.set(name, acct2);
+            let rr: any = p.bank_account;
+            if (typeof rr === 'string') { try { rr = JSON.parse(rr); } catch { rr = null; } }
+            if (rr && typeof rr === 'object') {
+              let a = String(rr.accountNumber ?? rr.account_number ?? rr.accountName ?? rr.account_name ?? '').trim();
+              if (!a) { for (const v of Object.values(rr)) { if ((typeof v === 'string' || typeof v === 'number') && String(v).trim()) { a = String(v).trim(); break; } } }
+              if (a) bankMap.set(name, a);
             }
           }
         });
@@ -501,12 +502,20 @@ const QuestionnaireAnalytics = () => {
         .select('full_name, username, email, bank_account')
         .not('bank_account', 'is', null);
       if (cancelled) return;
+      const extractA = (raw: any): string => {
+        if (!raw) return '';
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return ''; } }
+        if (typeof raw !== 'object') return '';
+        const v = raw.accountNumber ?? raw.account_number ?? raw.accountName ?? raw.account_name;
+        if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+        for (const val of Object.values(raw)) {
+          if ((typeof val === 'string' || typeof val === 'number') && String(val).trim()) return String(val).trim();
+        }
+        return '';
+      };
       const m = new Map<string, string>();
       (data || []).forEach((p: any) => {
-        let raw: any = p.bank_account;
-        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
-        if (!raw || typeof raw !== 'object') return;
-        const acct = String(raw.accountNumber || raw.account_number || raw.accountName || raw.account_name || '').trim();
+        const acct = extractA(p.bank_account);
         if (!acct) return;
         [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
           m.set(n.trim().toLowerCase(), acct);
@@ -4014,31 +4023,84 @@ const QuestionnaireAnalytics = () => {
     // ── Live bank-account lookup from profiles ──────────────────────────────
     // Build a case-insensitive account lookup from ALL profiles with bank accounts.
     // Keys are lowercased+trimmed so col.name (from CSV) matches even when casing differs.
+    // ── Helper: extract account number from any bank_account shape ────────────
+    const extractAcct = (raw: any): string => {
+      if (!raw) return '';
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return ''; } }
+      if (typeof raw !== 'object') return '';
+      // Try all known key variants (camelCase from web, snake_case from Flutter)
+      const v = raw.accountNumber ?? raw.account_number ?? raw.accountName ?? raw.account_name;
+      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+      // Fallback: first non-empty string/number value in the object
+      for (const val of Object.values(raw)) {
+        if ((typeof val === 'string' || typeof val === 'number') && String(val).trim()) {
+          return String(val).trim();
+        }
+      }
+      return '';
+    };
+
+    // ── Step 1: name-based map (fast, works when names match exactly) ─────────
     const liveAccountMap = new Map<string, string>();
-    // Seed from pre-fetched bankAccountByName (keyed by display name from mmp_site_entries)
     bankAccountByName.forEach((acct, name) => {
-      liveAccountMap.set(name.trim().toLowerCase(), acct);
+      if (acct) liveAccountMap.set(name.trim().toLowerCase(), acct);
     });
-    // Always re-query profiles so export works even if the tracker tab was never visited
     const { data: profileRows } = await supabase
       .from('profiles')
-      .select('full_name, username, email, bank_account')
+      .select('id, full_name, username, email, bank_account')
       .not('bank_account', 'is', null);
+    const profileIdToAcct = new Map<string, string>();
     (profileRows || []).forEach((p: any) => {
-      if (!p.bank_account) return;
-      // bank_account may be a JSON string (text col) or already a parsed object (jsonb col)
-      let raw: any = p.bank_account;
-      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
-      if (!raw || typeof raw !== 'object') return;
-      const acct = raw.accountNumber || raw.account_number || raw.accountName || raw.account_name;
+      const acct = extractAcct(p.bank_account);
       if (!acct) return;
-      const acctStr = String(acct).trim();
-      if (!acctStr) return;
-      // Store under every name variant, all normalized to lowercase+trimmed
-      [p.full_name, p.username, p.email].filter(Boolean).forEach((name: string) => {
-        liveAccountMap.set(name.trim().toLowerCase(), acctStr);
+      profileIdToAcct.set(p.id, acct);
+      [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
+        liveAccountMap.set(n.trim().toLowerCase(), acct);
       });
     });
+
+    // ── Step 2: site-based bridge (reliable even when names differ) ───────────
+    // Collect every unique site name across all collectors in the CSV data.
+    const allSiteNames = new Set<string>();
+    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col =>
+      col.sites.forEach(s => { if (s) allSiteNames.add(s.trim()); })
+    )));
+    if (allSiteNames.size > 0) {
+      // Query mmp_site_entries for those sites → get accepted_by user IDs
+      const { data: mmpRows } = await supabase
+        .from('mmp_site_entries')
+        .select('site_name, hub_office, state, accepted_by')
+        .in('site_name', [...allSiteNames].slice(0, 400))
+        .not('accepted_by', 'is', null);
+
+      // Build: "site||hub||state" → Set<userId>
+      const siteKey = (site: string, hub: string, state: string) =>
+        `${site.trim().toLowerCase()}||${hub.trim().toLowerCase()}||${state.trim().toLowerCase()}`;
+      const siteToUsers = new Map<string, Set<string>>();
+      (mmpRows || []).forEach((e: any) => {
+        const k = siteKey(e.site_name || '', e.hub_office || '', e.state || '');
+        if (!siteToUsers.has(k)) siteToUsers.set(k, new Set());
+        siteToUsers.get(k)!.add(e.accepted_by);
+      });
+
+      // For each collector, collect user IDs via site bridge, then resolve bank account
+      csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+        const nameKey = col.name.trim().toLowerCase();
+        if (liveAccountMap.has(nameKey)) return; // already resolved by name match
+        const userIds = new Set<string>();
+        col.sites.forEach(site => {
+          const k = siteKey(site, hg.hub, sg.state);
+          siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
+        });
+        for (const uid of userIds) {
+          const acct = profileIdToAcct.get(uid);
+          if (acct) { liveAccountMap.set(nameKey, acct); break; }
+        }
+      })));
+    }
+
+    console.log(`[CSV Enum Export] liveAccountMap: ${liveAccountMap.size} entries, profiles fetched: ${(profileRows||[]).length}`);
+    console.log(`[CSV Enum Export] Sample entries:`, [...liveAccountMap.entries()].slice(0, 5));
 
     // Build: hub → activity → state → [{name, count}]
     const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
