@@ -354,6 +354,7 @@ const QuestionnaireAnalytics = () => {
   const [enumSearch, setEnumSearch] = useState('');
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
+  const [bankAccountByName, setBankAccountByName] = useState<Map<string, string>>(new Map());
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -382,11 +383,15 @@ const QuestionnaireAnalytics = () => {
       if (collectorIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name, email, username')
+          .select('id, full_name, email, username, bank_account')
           .in('id', collectorIds);
+        const bankMap = new Map<string, string>();
         (profiles || []).forEach((p: any) => {
-          profileMap.set(p.id, p.full_name || p.username || p.email || p.id);
+          const name = p.full_name || p.username || p.email || p.id;
+          profileMap.set(p.id, name);
+          if (p.bank_account) bankMap.set(name, String(p.bank_account));
         });
+        setBankAccountByName(bankMap);
       }
       const mmpFileIds = [...new Set((entries || []).map((e: any) => e.mmp_file_id).filter(Boolean))];
       const mmpNameMap = new Map<string, string>();
@@ -4221,18 +4226,18 @@ const QuestionnaireAnalytics = () => {
       const pBorder = (): any => { const s: any = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
       const payWs = wb.addWorksheet('Payment');
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
-      payWs.mergeCells(ptitle.number, 1, ptitle.number, 9);
+      payWs.mergeCells(ptitle.number, 1, ptitle.number, 10);
       ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
       payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
+      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
       payWs.addRow([]);
-      const phdr = payWs.addRow(['#', 'Data Collector', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Account Number', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
       phdr.height = 22;
       phdr.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, color: { argb: PWHITE }, size: 10, name: 'Calibri' }; cell.border = pBorder();
-        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+        cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle', wrapText: true };
       });
       // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
       const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
@@ -4240,35 +4245,102 @@ const QuestionnaireAnalytics = () => {
       let pSeq = 0;
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
-          sg.collectors.forEach((col, i) => {
+          sg.collectors.forEach((col) => {
             pSeq++;
             const sites = col.pdmSites;
             const totalUsd = sites * costPerSite;
             const totalSdg = totalUsd * exchangeRate;
-            const pdr = payWs.addRow([pSeq, col.name, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
+            const acctNo = bankAccountByName.get(col.name) || '—';
+            const pdr = payWs.addRow([pSeq, col.name, acctNo, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
             pdr.height = 20;
             pdr.eachCell((cell, ci) => {
               cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-              cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+              cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
               if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
             });
-            pdr.getCell(6).numFmt = '#,##0.00'; pdr.getCell(7).numFmt = '#,##0.00';
-            pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
+            pdr.getCell(7).numFmt = '#,##0.00'; pdr.getCell(8).numFmt = '#,##0.00';
+            pdr.getCell(9).numFmt = '#,##0.00'; pdr.getCell(10).numFmt = '#,##0.00';
           });
         });
       });
       const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
-      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
       ptot.height = 24;
       ptot.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: PWHITE } };
-        cell.border = pBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+        cell.border = pBorder(); cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
       });
-      ptot.getCell(6).numFmt = '#,##0.00'; ptot.getCell(7).numFmt = '#,##0.00';
-      ptot.getCell(8).numFmt = '#,##0.00'; ptot.getCell(9).numFmt = '#,##0.00';
+      ptot.getCell(7).numFmt = '#,##0.00'; ptot.getCell(8).numFmt = '#,##0.00';
+      ptot.getCell(9).numFmt = '#,##0.00'; ptot.getCell(10).numFmt = '#,##0.00';
       payWs.columns.forEach(col => { let max = 10; col.eachCell?.({ includeEmpty: false }, c => { max = Math.max(max, (c.value?.toString() || '').length + 2); }); col.width = Math.min(max, 40); });
+
+    }
+
+    // ── Per Data Collector sheets (always included) ───────────────────────────
+    {
+      const DCNAVY = 'FF0F2041', DCWHITE = 'FFFFFFFF', DCBORDER = 'FFC8CDD7';
+      const dcBorder = (): any => { const s: any = { style: 'thin', color: { argb: DCBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+      const usedSheetNames = new Set<string>();
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach(col => {
+            let sheetName = col.name.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 28);
+            if (usedSheetNames.has(sheetName)) {
+              sheetName = (col.name.slice(0, 24) + ' ' + hg.hub.slice(0, 3)).replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31);
+            }
+            usedSheetNames.add(sheetName);
+            const dcWs = wb.addWorksheet(sheetName);
+            dcWs.getColumn(1).width = 6;
+            dcWs.getColumn(2).width = 36;
+            dcWs.getColumn(3).width = 20;
+            dcWs.getColumn(4).width = 22;
+            dcWs.getColumn(5).width = 22;
+            dcWs.getColumn(6).width = 16;
+
+            const dcTitle = dcWs.addRow([col.name]);
+            dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 6);
+            dcTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: DCNAVY } }; dcTitle.height = 28;
+            dcWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', bankAccountByName.get(col.name) || '—']);
+            dcInfo.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } }; dcInfo.height = 20;
+            dcWs.addRow([]);
+
+            const dcHdr = dcWs.addRow(['#', 'Site Name', 'Locality', 'Activity', 'Sub-Activity', 'Date']);
+            dcHdr.height = 22;
+            dcHdr.eachCell((cell) => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
+              cell.font = { bold: true, color: { argb: DCWHITE }, size: 10, name: 'Calibri' };
+              cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            });
+
+            const dcSites = filteredData.filter(r =>
+              r.dataCollector === col.name &&
+              (r.hub || '—') === hg.hub &&
+              (r.state || '—') === sg.state
+            );
+            dcSites.forEach((r, idx) => {
+              const dcRow = dcWs.addRow([idx + 1, r.activitySite || '—', r.locality || '—', r.activity || '—', r.subActivity || '—', r.date || '—']);
+              dcRow.height = 18;
+              dcRow.eachCell((cell) => {
+                cell.border = dcBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+              });
+            });
+
+            const dcSum = dcWs.addRow(['', `Total: ${dcSites.length} site visits`, '', '', '', '']);
+            dcWs.mergeCells(dcSum.number, 2, dcSum.number, 6);
+            dcSum.height = 20;
+            dcSum.eachCell((cell) => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+              cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+              cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            });
+          });
+        });
+      });
     }
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -4279,7 +4351,7 @@ const QuestionnaireAnalytics = () => {
     a.download = `csv_enum_tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [trackerData, csvEnumData]);
+  }, [trackerData, csvEnumData, bankAccountByName, filteredData]);
 
   const exportTrackerPerStateFormattedExcel = useCallback(async () => {
     const sheets = trackerData.stateTrackers.map((st: any) => {
