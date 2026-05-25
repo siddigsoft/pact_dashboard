@@ -356,8 +356,6 @@ const QuestionnaireAnalytics = () => {
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
   const [bankAccountByName, setBankAccountByName] = useState<Map<string, string>>(new Map());
   const [csvAccountMap, setCsvAccountMap] = useState<Map<string, string>>(new Map());
-  // rawName → { uid, canonicalName } — built async from site bridge; used to merge name variants
-  const [csvNameToUid, setCsvNameToUid] = useState<Map<string, { uid: string; canonicalName: string }>>(new Map());
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -528,76 +526,6 @@ const QuestionnaireAnalytics = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // Build deduplication map: CSV rawName → { uid, canonicalName }
-  // Uses site bridge: (site + hub + state) → mmp_site_entries.accepted_by → profile name
-  // When two raw name variants share sites that all point to the same UUID, they're merged.
-  useEffect(() => {
-    if (filteredData.length === 0) { setCsvNameToUid(new Map()); return; }
-    let cancelled = false;
-    (async () => {
-      // Step 1: rawName → Set<"site||hub||state">
-      const nameToSiteKeys = new Map<string, Set<string>>();
-      filteredData.forEach(row => {
-        const name = (row.dataCollector || '').trim();
-        if (!name) return;
-        const sk = `${(row.activitySite || '').trim()}||${(row.hub || '').trim()}||${(row.state || '').trim()}`;
-        if (!nameToSiteKeys.has(name)) nameToSiteKeys.set(name, new Set());
-        nameToSiteKeys.get(name)!.add(sk);
-      });
-
-      // Step 2: fetch mmp_site_entries for all site names that appear in CSV
-      const allSiteNames = [...new Set([...nameToSiteKeys.values()].flatMap(s => [...s].map(k => k.split('||')[0])))].filter(Boolean);
-      const siteKeyToUids = new Map<string, Set<string>>();
-      if (allSiteNames.length > 0) {
-        const { data: mmpRows } = await supabase
-          .from('mmp_site_entries')
-          .select('site_name, hub_office, state, accepted_by')
-          .in('site_name', allSiteNames.slice(0, 400))
-          .not('accepted_by', 'is', null);
-        (mmpRows || []).forEach((e: any) => {
-          const sk = `${(e.site_name || '').trim()}||${(e.hub_office || '').trim()}||${(e.state || '').trim()}`;
-          if (!siteKeyToUids.has(sk)) siteKeyToUids.set(sk, new Set());
-          siteKeyToUids.get(sk)!.add(e.accepted_by);
-        });
-      }
-
-      // Step 3: for each raw name, collect all UIDs from all their sites
-      const nameToUids = new Map<string, Set<string>>();
-      nameToSiteKeys.forEach((siteKeys, name) => {
-        const uids = new Set<string>();
-        siteKeys.forEach(sk => siteKeyToUids.get(sk)?.forEach(uid => uids.add(uid)));
-        nameToUids.set(name, uids);
-      });
-
-      // Step 4: fetch canonical names for resolved UIDs
-      const allUids = [...new Set([...nameToUids.values()].flatMap(s => [...s]))];
-      const uidToCanonical = new Map<string, string>();
-      if (allUids.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, email')
-          .in('id', allUids);
-        (profiles || []).forEach((p: any) => {
-          uidToCanonical.set(p.id, p.full_name || p.username || p.email || p.id);
-        });
-      }
-
-      // Step 5: build dedup map — only assign when ALL sites for this name point to ONE uid
-      // (avoids false merges when a site had multiple visitors)
-      const dedup = new Map<string, { uid: string; canonicalName: string }>();
-      nameToUids.forEach((uids, name) => {
-        if (uids.size === 1) {
-          const uid = [...uids][0];
-          const canon = uidToCanonical.get(uid);
-          if (canon) dedup.set(name, { uid, canonicalName: canon });
-        }
-      });
-
-      console.log(`[CSV Dedup] ${nameToSiteKeys.size} raw names → ${dedup.size} resolved to UUID`);
-      if (!cancelled) setCsvNameToUid(dedup);
-    })();
-    return () => { cancelled = true; };
-  }, [filteredData]);
 
   useEffect(() => {
     try {
@@ -1629,47 +1557,65 @@ const QuestionnaireAnalytics = () => {
   };
 
   const csvEnumData = useMemo(() => {
-    // uid (when resolved) or rawName is the group key — merges spelling variants into one row
     type CsvColl = {
-      name: string;          // canonical display name (profile name when resolved, raw otherwise)
-      uid: string | null;    // profile UUID when resolved via site bridge
-      rawNames: Set<string>; // all raw CSV name variants merged into this entry
+      name: string;          // most-frequent name seen for this deviceId (or raw name if no deviceId)
+      deviceId: string;      // from the CSV — the actual unique ID column
+      rawNames: Set<string>; // all name variants written by this collector
       questionnaires: number; pdmCount: number;
       sites: Set<string>; activities: Map<string, number>;
     };
+
+    // ── Pass 1: deviceId → most-frequent name ────────────────────────────────
+    // Group by deviceId first (within hub+state scope) so the canonical display
+    // name is the one the collector writes most often — purely from the CSV file.
+    const didNameFreq = new Map<string, Map<string, number>>(); // deviceId → name → count
+    filteredData.forEach(row => {
+      const did  = (row.deviceId || '').trim();
+      if (!did) return;
+      const name = (row.dataCollector || '').trim();
+      if (!name) return;
+      if (!didNameFreq.has(did)) didNameFreq.set(did, new Map());
+      const freq = didNameFreq.get(did)!;
+      freq.set(name, (freq.get(name) || 0) + 1);
+    });
+    const didToCanonical = new Map<string, string>(); // deviceId → canonical name
+    didNameFreq.forEach((freq, did) => {
+      let best = '', bestCount = 0;
+      freq.forEach((count, name) => { if (count > bestCount) { bestCount = count; best = name; } });
+      if (best) didToCanonical.set(did, best);
+    });
+
+    // ── Pass 2: build hub → state → collector groups ─────────────────────────
     const hubMap = new Map<string, Map<string, Map<string, CsvColl>>>();
     filteredData.forEach(row => {
-      const hub      = row.hub || '—';
-      const state    = row.state || '—';
-      const rawName  = (row.dataCollector || '(Unknown)').trim();
-      // Resolve via dedup map: same UUID = same person regardless of how they wrote their name
-      const resolved  = csvNameToUid.get(rawName);
-      const groupKey  = resolved?.uid || rawName;   // stable merge key
-      const dispName  = resolved?.canonicalName || rawName;
-      const uid       = resolved?.uid || null;
+      const hub     = row.hub || '—';
+      const state   = row.state || '—';
+      const rawName = (row.dataCollector || '(Unknown)').trim();
+      const did     = (row.deviceId || '').trim();
+      // Group key: deviceId when present (merges variants), raw name otherwise
+      const groupKey = did || rawName;
+      const dispName = (did && didToCanonical.get(did)) || rawName;
 
       if (!hubMap.has(hub)) hubMap.set(hub, new Map());
       if (!hubMap.get(hub)!.has(state)) hubMap.get(hub)!.set(state, new Map());
       const collMap = hubMap.get(hub)!.get(state)!;
       if (!collMap.has(groupKey)) {
-        collMap.set(groupKey, { name: dispName, uid, rawNames: new Set(), questionnaires: 0, pdmCount: 0, sites: new Set(), activities: new Map() });
+        collMap.set(groupKey, { name: dispName, deviceId: did, rawNames: new Set(), questionnaires: 0, pdmCount: 0, sites: new Set(), activities: new Map() });
       }
       const entry = collMap.get(groupKey)!;
       entry.rawNames.add(rawName);
-      // Prefer the canonical name once resolved (first raw encounter may be unresolved)
-      if (resolved?.canonicalName) entry.name = resolved.canonicalName;
       entry.questionnaires++;
       if (isPdmActivity(row.monitoringType || row.activity)) entry.pdmCount++;
       if (row.activitySite) entry.sites.add(row.activitySite.trim());
       if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
     });
+
     return [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hub, sm]) => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
         const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => {
           const activities = [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count);
           const pdmSites   = Math.floor(c.pdmCount / 7) + (c.questionnaires - c.pdmCount);
-          // rawNames array used by the export to filter filteredData correctly even after merging
-          return { name: c.name, uid: c.uid, rawNames: [...c.rawNames], questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
+          return { name: c.name, deviceId: c.deviceId, rawNames: [...c.rawNames], questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
         });
         const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
         const totalSites = new Set(collectors.flatMap(c => c.sites)).size;
@@ -1681,7 +1627,7 @@ const QuestionnaireAnalytics = () => {
       const hubTotalPdm   = states.reduce((s, sg) => s + sg.totalPdm, 0);
       return { hub, states, totalQ: hubTotalQ, totalSites: hubTotalSites, totalPdm: hubTotalPdm };
     });
-  }, [filteredData, csvNameToUid]);
+  }, [filteredData]);
 
   const trackerData = useMemo(() => {
     const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
