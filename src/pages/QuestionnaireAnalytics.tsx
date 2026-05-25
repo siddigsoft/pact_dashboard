@@ -4699,14 +4699,12 @@ const QuestionnaireAnalytics = () => {
               }
             }
 
-            // Auto-fit column widths based on actual content
-            dcWs.columns.forEach((c, i) => {
-              let max = i === 0 ? 4 : 8;
-              c.eachCell?.({ includeEmpty: false }, cell => {
-                const v = cell.value;
-                if (v !== null && v !== undefined) max = Math.max(max, String(v).length + 2);
-              });
-              c.width = Math.min(max, 50);
+            // Fixed compact column widths — activity col wraps rather than blowing out the sheet
+            const dcColWidths = [5, 22, 16, 28, 18, 13];
+            dcWs.columns.forEach((c, i) => { c.width = dcColWidths[i] ?? 12; });
+            // Enable wrap on Activity column (col 4) so long names stay readable
+            dcWs.getColumn(4).eachCell({ includeEmpty: false }, cell => {
+              cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
             });
           });
         });
