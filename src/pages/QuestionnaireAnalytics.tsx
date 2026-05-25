@@ -4619,7 +4619,16 @@ const QuestionnaireAnalytics = () => {
       });
       ptot.getCell(9).numFmt  = '#,##0.00'; ptot.getCell(10).numFmt = '#,##0.00';
       ptot.getCell(11).numFmt = '#,##0.00'; ptot.getCell(12).numFmt = '#,##0.00';
-      payWs.columns.forEach(col => { let max = 10; col.eachCell?.({ includeEmpty: false }, c => { max = Math.max(max, (c.value?.toString() || '').length + 2); }); col.width = Math.min(max, 40); });
+      // Fixed column widths matching DC-sheet style
+      // 1=# 2=DataCollector 3=DeviceID 4=AcctNo 5=AcctName 6=Hub 7=State 8=Sites 9=Cost/Site 10=TotalUSD 11=Rate 12=TotalSDG 13=Notes
+      const payColWidths = [5, 30, 22, 18, 30, 16, 16, 14, 16, 16, 18, 16, 32];
+      payWs.columns.forEach((c, i) => { c.width = payColWidths[i] ?? 14; });
+      // Wrap text on Data Collector (2) and Account Name (5) and Notes (13)
+      [2, 5, 13].forEach(colIdx => {
+        payWs.getColumn(colIdx).eachCell({ includeEmpty: false }, cell => {
+          cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+        });
+      });
 
     }
 
@@ -4751,6 +4760,9 @@ const QuestionnaireAnalytics = () => {
             addPayLine('Sites (payable):', dcPaySites);
             if (costPerSite > 0) {
               addPayLine(`Cost / Site:`, `$${costPerSite.toFixed(2)} USD`);
+              if (exchangeRate > 0) {
+                addPayLine(`Cost / Site (SDG):`, `${Math.round(costPerSite * exchangeRate).toLocaleString()} SDG`);
+              }
               addPayLine('Total (USD):', `$${dcTotalUsd.toFixed(2)}`, true);
               if (exchangeRate > 0) {
                 addPayLine(`Rate:`, `${exchangeRate.toLocaleString()} SDG / 1 USD`);
