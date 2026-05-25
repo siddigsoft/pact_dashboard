@@ -355,7 +355,8 @@ const QuestionnaireAnalytics = () => {
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
   const [bankAccountByName, setBankAccountByName] = useState<Map<string, string>>(new Map());
-  const [csvAccountMap, setCsvAccountMap] = useState<Map<string, string>>(new Map());
+  const [csvAccountMap, setCsvAccountMap] = useState<Map<string, string>>(new Map());       // key → account number
+  const [csvAccountNameMap, setCsvAccountNameMap] = useState<Map<string, string>>(new Map()); // key → account holder name
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -502,26 +503,32 @@ const QuestionnaireAnalytics = () => {
         .select('full_name, username, email, bank_account')
         .not('bank_account', 'is', null);
       if (cancelled) return;
-      const extractA = (raw: any): string => {
-        if (!raw) return '';
-        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return ''; } }
-        if (typeof raw !== 'object') return '';
-        const v = raw.accountNumber ?? raw.account_number ?? raw.accountName ?? raw.account_name;
-        if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
-        for (const val of Object.values(raw)) {
-          if ((typeof val === 'string' || typeof val === 'number') && String(val).trim()) return String(val).trim();
+      const parseAcct = (raw: any): { number: string; name: string } => {
+        if (!raw) return { number: '', name: '' };
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return { number: '', name: '' }; } }
+        if (typeof raw !== 'object') return { number: '', name: '' };
+        const number = String(raw.accountNumber ?? raw.account_number ?? '').trim();
+        const name   = String(raw.accountName   ?? raw.account_name   ?? '').trim();
+        // Fallback: if neither keyed field found, pick first two string values
+        if (!number && !name) {
+          const vals = Object.values(raw).filter(v => typeof v === 'string' || typeof v === 'number').map(v => String(v).trim()).filter(Boolean);
+          return { number: vals[0] || '', name: vals[1] || '' };
         }
-        return '';
+        return { number, name };
       };
-      const m = new Map<string, string>();
+      const numMap  = new Map<string, string>();
+      const nameMap = new Map<string, string>();
       (data || []).forEach((p: any) => {
-        const acct = extractA(p.bank_account);
-        if (!acct) return;
+        const { number, name } = parseAcct(p.bank_account);
+        if (!number && !name) return;
         [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
-          m.set(n.trim().toLowerCase(), acct);
+          const k = n.trim().toLowerCase();
+          if (number) numMap.set(k, number);
+          if (name)   nameMap.set(k, name);
         });
       });
-      setCsvAccountMap(m);
+      setCsvAccountMap(numMap);
+      setCsvAccountNameMap(nameMap);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -6987,10 +6994,28 @@ const QuestionnaireAnalytics = () => {
                                                         <Users className="h-3.5 w-3.5 text-primary shrink-0" />
                                                         <span className="text-sm font-medium truncate">{col.name}</span>
                                                         {(() => {
-                                                          const acct = csvAccountMap.get(col.name.trim().toLowerCase());
-                                                          return acct
-                                                            ? <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 shrink-0" title={`Account: ${acct}`}>✓ {acct}</span>
-                                                            : <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 shrink-0" title="No bank account registered">No Account</span>;
+                                                          const k       = col.name.trim().toLowerCase();
+                                                          const acctNo  = csvAccountMap.get(k);
+                                                          const acctNm  = csvAccountNameMap.get(k);
+                                                          if (acctNo || acctNm) {
+                                                            return (
+                                                              <span className="inline-flex items-center gap-1.5 shrink-0" title={`Account No: ${acctNo || '—'}  |  Account Name: ${acctNm || '—'}`}>
+                                                                {acctNo && (
+                                                                  <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                                                    <Banknote className="h-2.5 w-2.5" />{acctNo}
+                                                                  </span>
+                                                                )}
+                                                                {acctNm && (
+                                                                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                                                                    {acctNm}
+                                                                  </span>
+                                                                )}
+                                                              </span>
+                                                            );
+                                                          }
+                                                          return (
+                                                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 shrink-0" title="No bank account registered">No Account</span>
+                                                          );
                                                         })()}
                                                       </div>
                                                       <div className="flex items-center gap-2 shrink-0 ml-2">
