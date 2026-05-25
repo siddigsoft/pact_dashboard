@@ -8159,8 +8159,20 @@ const QuestionnaireAnalytics = () => {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0">
             <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+            {paymentExportType === 'csvEnum' && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setPaymentDialogOpen(false);
+                  exportCsvEnumTableFormattedExcel(0, 0);
+                }}
+                data-testid="button-payment-export-no-payment"
+              >
+                Export without Payment
+              </Button>
+            )}
             <Button
               disabled={!paymentCostPerSite || !paymentExchangeRate || Number(paymentCostPerSite) <= 0 || Number(paymentExchangeRate) <= 0}
               onClick={() => {
