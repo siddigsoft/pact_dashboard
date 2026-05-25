@@ -4471,6 +4471,33 @@ const QuestionnaireAnalytics = () => {
           });
         });
       });
+      // ── Second-pass merge: no-deviceId rows → existing deviceId entry of same name ──
+      // Happens when the same person has some submissions with a deviceId and some
+      // without (e.g. different state combos). Both end up in payCollMap under
+      // different keys; merge the nameless one into the deviceId-keyed one.
+      const nameToDevKey = new Map<string, string>(); // normName → payKey that has deviceId
+      payCollMap.forEach((entry, payKey) => {
+        if (entry.deviceId) {
+          const norm = entry.name.trim().toLowerCase();
+          if (!nameToDevKey.has(norm)) nameToDevKey.set(norm, payKey);
+        }
+      });
+      const keysToDelete: string[] = [];
+      payCollMap.forEach((entry, payKey) => {
+        if (!entry.deviceId) {
+          const norm = entry.name.trim().toLowerCase();
+          const devPayKey = nameToDevKey.get(norm);
+          if (devPayKey && devPayKey !== payKey) {
+            const devEntry = payCollMap.get(devPayKey)!;
+            entry.hubs.forEach(h => { if (!devEntry.hubs.includes(h)) devEntry.hubs.push(h); });
+            entry.states.forEach(s => { if (!devEntry.states.includes(s)) devEntry.states.push(s); });
+            devEntry.sites += entry.sites;
+            keysToDelete.push(payKey);
+          }
+        }
+      });
+      keysToDelete.forEach(k => payCollMap.delete(k));
+
       const payCollList = [...payCollMap.values()].sort((a, b) => {
         const hubCmp = a.hubs[0].localeCompare(b.hubs[0]);
         return hubCmp !== 0 ? hubCmp : a.name.localeCompare(b.name);
@@ -4584,7 +4611,8 @@ const QuestionnaireAnalytics = () => {
               });
             });
 
-            const dcSum = dcWs.addRow(['', `Total: ${dcSites.length} site visits`, '', '', '', '']);
+            // ── Site-visits total row ────────────────────────────────────────────
+            const dcSum = dcWs.addRow(['', `Total: ${dcSites.length} site visit${dcSites.length !== 1 ? 's' : ''}`, '', '', '', '']);
             dcWs.mergeCells(dcSum.number, 2, dcSum.number, 6);
             dcSum.height = 20;
             dcSum.eachCell((cell) => {
@@ -4593,25 +4621,82 @@ const QuestionnaireAnalytics = () => {
               cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
             });
 
-            if (costPerSite > 0) {
-              const dcPaySites = col.pdmSites;
-              const dcTotalUsd = dcPaySites * costPerSite;
-              const dcTotalSdg = dcTotalUsd * exchangeRate;
-              const dcPay = dcWs.addRow([
-                '',
-                `Sites (payment): ${dcPaySites}`,
-                `Cost/Site: $${costPerSite.toFixed(2)}`,
-                `Total (USD): $${dcTotalUsd.toFixed(2)}`,
-                exchangeRate > 0 ? `Rate: ${exchangeRate.toLocaleString()} SDG/USD` : '',
-                exchangeRate > 0 ? `Total (SDG): ${Math.round(dcTotalSdg).toLocaleString()}` : '',
-              ]);
-              dcPay.height = 20;
-              dcPay.eachCell((cell) => {
+            // ── Activity breakdown ───────────────────────────────────────────────
+            dcWs.addRow([]);
+            const actBreakHdr = dcWs.addRow(['Activity Summary']);
+            dcWs.mergeCells(actBreakHdr.number, 1, actBreakHdr.number, 6);
+            actBreakHdr.height = 20;
+            actBreakHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+            actBreakHdr.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+            actBreakHdr.getCell(1).border = dcBorder();
+
+            // Count sites per activity from the raw data rows
+            const actSiteCount = new Map<string, number>();
+            dcSites.forEach(r => {
+              const act = r.activity || '(Unknown)';
+              actSiteCount.set(act, (actSiteCount.get(act) || 0) + 1);
+            });
+            const actBreakSubHdr = dcWs.addRow(['Activity', 'Site Visits', '', '', '', '']);
+            actBreakSubHdr.height = 18;
+            actBreakSubHdr.eachCell((cell, ci) => {
+              if (ci <= 2) {
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
-                cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FFFFFFFF' } };
+                cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCWHITE } };
                 cell.border = dcBorder();
                 cell.alignment = { horizontal: 'left', vertical: 'middle' };
-              });
+              }
+            });
+            let actRowIdx = 0;
+            [...actSiteCount.entries()].sort((a, b) => b[1] - a[1]).forEach(([act, cnt]) => {
+              const aRow = dcWs.addRow([act, cnt, '', '', '', '']);
+              aRow.height = 17;
+              aRow.getCell(1).border = dcBorder(); aRow.getCell(1).font = { size: 9, name: 'Calibri' };
+              aRow.getCell(2).border = dcBorder(); aRow.getCell(2).font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCNAVY } };
+              aRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+              if (actRowIdx % 2 === 1) {
+                aRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+                aRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+              }
+              actRowIdx++;
+            });
+
+            // ── Payment & bank details summary block ─────────────────────────────
+            const dcPaySites = col.pdmSites;
+            const dcTotalUsd = dcPaySites * costPerSite;
+            const dcTotalSdg = dcTotalUsd * exchangeRate;
+            const _dcKey2 = col.name.trim().toLowerCase();
+            const dcAcctNo   = liveAccountMap.get(_dcKey2)     || '—';
+            const dcAcctName = liveAccountNameMap.get(_dcKey2) || '—';
+
+            dcWs.addRow([]);
+            const payBlockHdr = dcWs.addRow(['Payment Details']);
+            dcWs.mergeCells(payBlockHdr.number, 1, payBlockHdr.number, 6);
+            payBlockHdr.height = 20;
+            payBlockHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
+            payBlockHdr.getCell(1).font = { bold: true, size: 11, name: 'Calibri', color: { argb: DCWHITE } };
+            payBlockHdr.getCell(1).border = dcBorder();
+            payBlockHdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+            const addPayLine = (label: string, value: string | number, isBold = false) => {
+              const r = dcWs.addRow([label, value, '', '', '', '']);
+              r.height = 18;
+              r.getCell(1).font = { size: 10, name: 'Calibri', color: { argb: 'FF6B7280' } };
+              r.getCell(1).border = dcBorder(); r.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+              r.getCell(2).font = { bold: isBold, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+              r.getCell(2).border = dcBorder(); r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+              r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFBFC' } };
+            };
+
+            addPayLine('Account Number:', dcAcctNo);
+            addPayLine('Account Name:', dcAcctName);
+            addPayLine('Sites (payable):', dcPaySites);
+            if (costPerSite > 0) {
+              addPayLine(`Cost / Site:`, `$${costPerSite.toFixed(2)} USD`);
+              addPayLine('Total (USD):', `$${dcTotalUsd.toFixed(2)}`, true);
+              if (exchangeRate > 0) {
+                addPayLine(`Rate:`, `${exchangeRate.toLocaleString()} SDG / 1 USD`);
+                addPayLine('Total (SDG):', `${Math.round(dcTotalSdg).toLocaleString()} SDG`, true);
+              }
             }
 
             // Auto-fit column widths based on actual content
