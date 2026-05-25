@@ -1091,6 +1091,7 @@ export async function exportEnumeratorTrackerExcel(
   const ws1 = wb.addWorksheet('Enumerator Summary');
   ws1.addRow(['Enumerator Tracker — Sites Covered per Data Collector']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   ws1.getRow(1).height = 28;
+  ws1.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
   ws1.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws1.addRow([]);
 
@@ -1133,6 +1134,7 @@ export async function exportEnumeratorTrackerExcel(
   const ws2 = wb.addWorksheet('Site Detail');
   ws2.addRow(['Enumerator Tracker — All Sites Detail']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   ws2.getRow(1).height = 28;
+  ws2.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
   ws2.addRow([]);
   const hdr2 = ws2.addRow(['#', 'Enumerator', 'Hub', 'State', 'Activity', 'Locality', 'Site Name', 'Status', 'Date']);
   hdr2.height = 22;
@@ -1161,6 +1163,7 @@ export async function exportEnumeratorTrackerExcel(
   const ws3 = wb.addWorksheet('By Activity');
   ws3.addRow(['Enumerator Tracker — Breakdown by Activity']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   ws3.getRow(1).height = 28;
+  ws3.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
   ws3.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws3.addRow([]);
 
@@ -1263,6 +1266,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
   titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   titleRow.height = 28;
   ws1.mergeCells(titleRow.number, 1, titleRow.number, COL_COUNT);
+  ws1.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
   ws1.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws1.addRow([]);
 
@@ -1373,6 +1377,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
   const ws2 = wb.addWorksheet('Site Detail');
   ws2.addRow(['Enumerator Tracker — All Sites Detail']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   ws2.getRow(1).height = 28;
+  ws2.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
   ws2.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws2.addRow([]);
 
@@ -1410,6 +1415,7 @@ export async function exportEnumeratorTrackerFormattedExcel(
   const ws3 = wb.addWorksheet('By Activity');
   ws3.addRow(['Enumerator Tracker — Breakdown by Activity']).font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   ws3.getRow(1).height = 28;
+  ws3.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
   ws3.addRow(['Generated: ' + new Date().toLocaleString()]).font = bodyFont(9, 'FF6B7280');
   ws3.addRow([]);
 

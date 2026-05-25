@@ -4129,6 +4129,7 @@ const QuestionnaireAnalytics = () => {
       const titleRow = ws.addRow([ht.hub]);
       titleRow.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
       titleRow.height = 24;
+      ws.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       ws.addRow([]);
 
       // Header row 1 — merged state group labels
@@ -4228,6 +4229,7 @@ const QuestionnaireAnalytics = () => {
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
       payWs.mergeCells(ptitle.number, 1, ptitle.number, 10);
       ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
+      payWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
@@ -4302,6 +4304,7 @@ const QuestionnaireAnalytics = () => {
             const dcTitle = dcWs.addRow([col.name]);
             dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 6);
             dcTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: DCNAVY } }; dcTitle.height = 28;
+            dcWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
             dcWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
             const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Account No:', bankAccountByName.get(col.name) || '—']);
             dcInfo.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } }; dcInfo.height = 20;
