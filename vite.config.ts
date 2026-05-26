@@ -11,6 +11,14 @@ import { ocrPostProcess } from './src/utils/ocrPostProcess';
 // wins over injected Replit secrets, which may carry stale values.
 config({ override: true });
 
+// Collect all configured Gemini API keys (GOOGLE_AI_API_KEY, GOOGLE_AI_API_KEY_2 … _10)
+const GEMINI_API_KEYS: string[] = [];
+for (let _ki = 1; _ki <= 10; _ki++) {
+  const _k = _ki === 1 ? process.env.GOOGLE_AI_API_KEY : process.env[`GOOGLE_AI_API_KEY_${_ki}`];
+  if (_k) GEMINI_API_KEYS.push(_k);
+}
+if (GEMINI_API_KEYS.length === 0) GEMINI_API_KEYS.push(''); // placeholder so errors are meaningful
+
 // ── Persistent quota cache ────────────────────────────────────────────────────
 // Model unavailability marks are written to disk so they survive server restarts.
 // Without this, a restart would immediately re-try an exhausted model, waste a
@@ -121,58 +129,62 @@ Style 2: {"transaction_id":"20090302958","date_time":"04-Mar-2026 16:24:02","fro
 }
 
 async function callGeminiWithRotation(
-  ai: any,
   images: Array<{ base64: string; mimeType: string }>,
 ): Promise<{ text: string; model: string }> {
+  const { GoogleGenAI } = await import('@google/genai');
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  // Try each model in order, skipping ones we know are unavailable
-  for (const model of GEMINI_MODELS) {
-    if (isModelUnavailable(unavailableModels, model)) {
-      console.log(`[Gemini OCR] Skipping ${model} (unavailable)`);
-      continue;
-    }
+  // Outer loop: try each API key; inner loop: try each model — exhausts key1 fully before key2
+  for (let ki = 0; ki < GEMINI_API_KEYS.length; ki++) {
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEYS[ki] });
 
-    const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
-    images.forEach((img, i) => {
-      if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
-      parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
-    });
+    for (const model of GEMINI_MODELS) {
+      const cacheKey = `${ki}:${model}`;
+      if (isModelUnavailable(unavailableModels, cacheKey)) {
+        console.log(`[Gemini OCR] Skipping key${ki + 1}/${model} (unavailable)`);
+        continue;
+      }
 
-    // Try this model up to 3 times (for per-minute rate limits)
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        console.log(`[Gemini OCR] Trying model: ${model}, batch: ${images.length}, attempt: ${attempt + 1}`);
-        const response = await ai.models.generateContent({
-          model,
-          contents: [{ role: 'user', parts }],
-        });
-        const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
-        console.log(`[Gemini OCR] Success with ${model}`);
-        return { text, model };
-      } catch (err: any) {
-        const msg = err.message || '';
-        const isModelNotFound = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
-        const isDailyExhausted = msg.includes('GenerateRequestsPerDay') && msg.includes('limit: 0');
-        const isMinuteLimit = (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && !isDailyExhausted;
+      const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
+      images.forEach((img, i) => {
+        if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
+        parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
+      });
 
-        if (isModelNotFound || isDailyExhausted) {
-          console.log(`[Gemini OCR] Model ${model} unavailable (${isModelNotFound ? '404' : 'daily exhausted'}) — rotating`);
-          markModelUnavailable(unavailableModels, model);
-          break; // try next model
+      // Try this model up to 3 times (for per-minute rate limits)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          console.log(`[Gemini OCR] Trying key${ki + 1}/${model}, batch: ${images.length}, attempt: ${attempt + 1}`);
+          const response = await ai.models.generateContent({
+            model,
+            contents: [{ role: 'user', parts }],
+          });
+          const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+          console.log(`[Gemini OCR] Success with key${ki + 1}/${model}`);
+          return { text, model: ki > 0 ? `${model} (key${ki + 1})` : model };
+        } catch (err: any) {
+          const msg = err.message || '';
+          const isModelNotFound = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
+          const isDailyExhausted = msg.includes('GenerateRequestsPerDay') && msg.includes('limit: 0');
+          const isMinuteLimit = (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && !isDailyExhausted;
+
+          if (isModelNotFound || isDailyExhausted) {
+            console.log(`[Gemini OCR] key${ki + 1}/${model} unavailable (${isModelNotFound ? '404' : 'daily exhausted'}) — rotating`);
+            markModelUnavailable(unavailableModels, cacheKey);
+            break; // try next model
+          }
+
+          if (isMinuteLimit) {
+            const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
+            const waitMs = retryMatch ? (Math.ceil(parseFloat(retryMatch[1])) + 2) * 1000 : 15000;
+            console.log(`[Gemini OCR] key${ki + 1}/${model} minute rate limit — waiting ${Math.round(waitMs / 1000)}s`);
+            await sleep(waitMs);
+            continue;
+          }
+
+          // Other error — rethrow
+          throw err;
         }
-
-        if (isMinuteLimit) {
-          // Per-minute rate limit — wait and retry same model
-          const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
-          const waitMs = retryMatch ? (Math.ceil(parseFloat(retryMatch[1])) + 2) * 1000 : 15000;
-          console.log(`[Gemini OCR] ${model} minute rate limit — waiting ${Math.round(waitMs / 1000)}s`);
-          await sleep(waitMs);
-          continue;
-        }
-
-        // Other error — rethrow
-        throw err;
       }
     }
   }
@@ -459,9 +471,7 @@ function geminiOcrPlugin() {
             let geminiExhausted = false;
 
             try {
-              const { GoogleGenAI } = await import('@google/genai');
-              const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || '' });
-              ({ text, model } = await callGeminiWithRotation(ai, images));
+              ({ text, model } = await callGeminiWithRotation(images));
             } catch (geminiErr: any) {
               geminiExhausted = geminiErr.message?.includes('All Gemini models unavailable');
               if (!geminiExhausted) throw geminiErr; // real error, not quota
@@ -570,24 +580,27 @@ Use varied question types and make each question clear and specific.`;
             let text = '';
             try {
               const { GoogleGenAI } = await import('@google/genai');
-              const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || '' });
               let tried = false;
-              for (const model of GEMINI_MODELS) {
-                if (isModelUnavailable(unavailableModels, model)) continue;
-                try {
-                  const response = await ai.models.generateContent({
-                    model,
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    config: { maxOutputTokens: 32768 },
-                  });
-                  text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
-                  tried = true;
-                  break;
-                } catch (e: any) {
-                  const msg = e.message || '';
-                  if (msg.includes('404') || msg.includes('GenerateRequestsPerDay')) {
-                    markModelUnavailable(unavailableModels, model);
-                  } else throw e;
+              outerSurvey: for (let ki = 0; ki < GEMINI_API_KEYS.length; ki++) {
+                const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEYS[ki] });
+                for (const model of GEMINI_MODELS) {
+                  const cacheKey = `${ki}:${model}`;
+                  if (isModelUnavailable(unavailableModels, cacheKey)) continue;
+                  try {
+                    const response = await ai.models.generateContent({
+                      model,
+                      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                      config: { maxOutputTokens: 32768 },
+                    });
+                    text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+                    tried = true;
+                    break outerSurvey;
+                  } catch (e: any) {
+                    const msg = e.message || '';
+                    if (msg.includes('404') || msg.includes('GenerateRequestsPerDay')) {
+                      markModelUnavailable(unavailableModels, cacheKey);
+                    } else throw e;
+                  }
                 }
               }
               if (!tried) throw new Error('Gemini exhausted');
