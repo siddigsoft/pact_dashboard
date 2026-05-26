@@ -9,6 +9,21 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash-thinking-exp-01-21',
 ];
 
+// ── Multi-key support ─────────────────────────────────────────────────────────
+// Reads GOOGLE_AI_API_KEY, GOOGLE_AI_API_KEY_2, GOOGLE_AI_API_KEY_3, … from env.
+function getGeminiApiKeys(): string[] {
+  const keys: string[] = [];
+  const base = process.env.GOOGLE_AI_API_KEY;
+  if (base) keys.push(base);
+  for (let i = 2; i <= 10; i++) {
+    const k = process.env[`GOOGLE_AI_API_KEY_${i}`];
+    if (k) keys.push(k);
+    else break;
+  }
+  return keys;
+}
+
+// Map key format: "keyIndex:modelName" — each API key tracks its own quota.
 const unavailableModels    = new Map<string, number>();
 const unavailableGroqModels = new Map<string, number>();
 const MODEL_UNAVAILABLE_TTL_MS = 23 * 60 * 60 * 1000;
@@ -136,22 +151,30 @@ Use varied question types and make each question clear and specific.`;
     let text = '';
     try {
       const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || '' });
+      const apiKeys = getGeminiApiKeys();
+      if (apiKeys.length === 0) throw new Error('Gemini exhausted');
       let tried = false;
-      for (const model of GEMINI_MODELS) {
-        if (isModelUnavailable(unavailableModels, model)) continue;
-        try {
-          const response = await ai.models.generateContent({
-            model,
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { maxOutputTokens: 32768 },
-          });
-          text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
-          tried = true;
-          break;
-        } catch (e: any) {
-          const msg = e.message || '';
-          if (msg.includes('404') || msg.includes('GenerateRequestsPerDay')) { markModelUnavailable(unavailableModels, model); } else throw e;
+
+      outer: for (let ki = 0; ki < apiKeys.length; ki++) {
+        const ai = new GoogleGenAI({ apiKey: apiKeys[ki] });
+        for (const model of GEMINI_MODELS) {
+          const mapKey = `${ki}:${model}`;
+          if (isModelUnavailable(unavailableModels, mapKey)) continue;
+          try {
+            const response = await ai.models.generateContent({
+              model,
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              config: { maxOutputTokens: 32768 },
+            });
+            text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+            tried = true;
+            break outer;
+          } catch (e: any) {
+            const msg = e.message || '';
+            if (msg.includes('404') || msg.includes('GenerateRequestsPerDay') || msg.includes('NOT_FOUND')) {
+              markModelUnavailable(unavailableModels, mapKey);
+            } else throw e;
+          }
         }
       }
       if (!tried) throw new Error('Gemini exhausted');

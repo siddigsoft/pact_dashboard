@@ -15,9 +15,25 @@ const GROQ_MODELS = [
   'meta-llama/llama-4-scout-17b-16e-instruct',
 ];
 
+// ── Multi-key support ─────────────────────────────────────────────────────────
+// Reads GOOGLE_AI_API_KEY, GOOGLE_AI_API_KEY_2, GOOGLE_AI_API_KEY_3, … from env.
+// Add more keys in Replit Secrets to extend daily quota capacity.
+function getGeminiApiKeys(): string[] {
+  const keys: string[] = [];
+  const base = process.env.GOOGLE_AI_API_KEY;
+  if (base) keys.push(base);
+  for (let i = 2; i <= 10; i++) {
+    const k = process.env[`GOOGLE_AI_API_KEY_${i}`];
+    if (k) keys.push(k);
+    else break;
+  }
+  return keys;
+}
+
 // In serverless each invocation is stateless — quota marks are in-memory only.
 // This means exhausted models may be retried on the next invocation, which is
 // acceptable: the model will quickly return 429 again and we'll skip it.
+// Map key format: "keyIndex:modelName" — each API key gets its own quota tracking.
 const unavailableModels    = new Map<string, number>();
 const unavailableGroqModels = new Map<string, number>();
 const MODEL_UNAVAILABLE_TTL_MS = 23 * 60 * 60 * 1000;
@@ -65,44 +81,66 @@ Style 2: {"transaction_id":"20090302958","date_time":"04-Mar-2026 16:24:02","fro
 }
 
 // ── Gemini ────────────────────────────────────────────────────────────────────
+// Iterates over every API key × every model until one succeeds.
+// Quota exhaustion is tracked per-key so key 2 is tried fresh after key 1 runs dry.
 async function callGeminiWithRotation(
-  ai: any,
+  apiKeys: string[],
   images: Array<{ base64: string; mimeType: string }>,
 ): Promise<{ text: string; model: string }> {
+  const { GoogleGenAI } = await import('@google/genai');
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  for (const model of GEMINI_MODELS) {
-    if (isModelUnavailable(unavailableModels, model)) continue;
+  for (let ki = 0; ki < apiKeys.length; ki++) {
+    const ai = new GoogleGenAI({ apiKey: apiKeys[ki] });
+    let allModelsExhaustedForKey = true;
 
-    const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
-    images.forEach((img, i) => {
-      if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
-      parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
-    });
+    for (const model of GEMINI_MODELS) {
+      const mapKey = `${ki}:${model}`;
+      if (isModelUnavailable(unavailableModels, mapKey)) continue;
+      allModelsExhaustedForKey = false;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: [{ role: 'user', parts }],
-        });
-        const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
-        return { text, model };
-      } catch (err: any) {
-        const msg = err.message || '';
-        const isModelNotFound   = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
-        const isDailyExhausted  = msg.includes('GenerateRequestsPerDay') && msg.includes('limit: 0');
-        const isMinuteLimit     = (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && !isDailyExhausted;
+      const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
+      images.forEach((img, i) => {
+        if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
+        parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
+      });
 
-        if (isModelNotFound || isDailyExhausted) { markModelUnavailable(unavailableModels, model); break; }
-        if (isMinuteLimit) {
-          const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
-          const waitMs = retryMatch ? (Math.ceil(parseFloat(retryMatch[1])) + 2) * 1000 : 15000;
-          await sleep(waitMs);
-          continue;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model,
+            contents: [{ role: 'user', parts }],
+          });
+          const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+          const keyLabel = ki === 0 ? '' : ` (key ${ki + 1})`;
+          console.log(`[Gemini OCR] Success: ${model}${keyLabel}`);
+          return { text, model: `${model}${keyLabel}` };
+        } catch (err: any) {
+          const msg = err.message || '';
+          const isModelNotFound  = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
+          const isDailyExhausted = msg.includes('GenerateRequestsPerDay') && msg.includes('limit: 0');
+          const isMinuteLimit    = (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && !isDailyExhausted;
+
+          if (isModelNotFound || isDailyExhausted) {
+            const reason = isDailyExhausted ? 'daily exhausted' : '404';
+            console.log(`[Gemini OCR] Model ${model} key ${ki + 1} unavailable (${reason}) — skipping`);
+            markModelUnavailable(unavailableModels, mapKey);
+            break;
+          }
+          if (isMinuteLimit) {
+            const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
+            const waitMs = retryMatch ? (Math.ceil(parseFloat(retryMatch[1])) + 2) * 1000 : 15000;
+            console.log(`[Gemini OCR] Model ${model} key ${ki + 1} minute-limit — waiting ${waitMs}ms`);
+            await sleep(waitMs);
+            continue;
+          }
+          throw err;
         }
-        throw err;
       }
+    }
+
+    if (allModelsExhaustedForKey) {
+      console.log(`[Gemini OCR] All models exhausted for key ${ki + 1} — trying next key`);
     }
   }
 
@@ -229,14 +267,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let model = '';
     let geminiExhausted = false;
 
+    const geminiKeys = getGeminiApiKeys();
     try {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || '' });
-      ({ text, model } = await callGeminiWithRotation(ai, images));
+      if (geminiKeys.length === 0) throw new Error('All Gemini models unavailable — no API keys configured');
+      ({ text, model } = await callGeminiWithRotation(geminiKeys, images));
     } catch (geminiErr: any) {
       geminiExhausted = geminiErr.message?.includes('All Gemini models unavailable');
       if (!geminiExhausted) throw geminiErr;
-      console.log('[OCR] Gemini exhausted — trying Groq fallback');
+      console.log(`[OCR] Gemini exhausted (${geminiKeys.length} key(s) tried) — trying Groq fallback`);
     }
 
     if (geminiExhausted) {
