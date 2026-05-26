@@ -4848,6 +4848,8 @@ const QuestionnaireAnalytics = () => {
               r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFBFC' } };
             };
 
+            addPayLine('Hub:', hg.hub);
+            addPayLine('State:', sg.state);
             addPayLine('Account Number:', dcAcctNo);
             addPayLine('Account Name:', dcAcctName);
             addPayLine('Sites (payable):', dcPaySites);
