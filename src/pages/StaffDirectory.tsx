@@ -22,7 +22,7 @@ import {
   Banknote, TrendingDown, ChevronDown,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState, hubs as sudanHubs } from "@/data/sudanStates";
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
@@ -759,10 +759,23 @@ export default function StaffDirectory() {
   const [activeTab, setActiveTab]        = useState('directory');
   const [bankFilter, setBankFilter]      = useState<'all' | 'has' | 'missing'>('all');
 
-  /* Derived filter options — states per hub require hub_states table join;
-     for now, when a hub is selected we show all states (the hub→state mapping
-     is stored in DB, not in the local sudanStates file's hub objects).         */
+  /* Derived filter options */
   const availableStates = sudanStates;
+
+  // Hub-state coverage map: hubId → Set<stateId> — built once from local data
+  const hubStateSet = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    sudanHubs.forEach(h => m.set(h.id, new Set(h.states)));
+    return m;
+  }, []);
+
+  // Returns true if the profile matches the selected state, including the
+  // fallback where state_id is null but the profile's hub covers that state.
+  const profileMatchesState = useCallback((p: { state_id: string | null; hub_id: string | null }, stateId: string) => {
+    if (p.state_id === stateId) return true;
+    if (!p.state_id && p.hub_id) return hubStateSet.get(p.hub_id)?.has(stateId) ?? false;
+    return false;
+  }, [hubStateSet]);
 
   const availableLocalities = useMemo(() =>
     stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter), [stateFilter]);
@@ -902,7 +915,7 @@ export default function StaffDirectory() {
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
         !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
-      if (stateFilter !== 'all' && p.state_id !== stateFilter) return false;
+      if (stateFilter !== 'all' && !profileMatchesState(p, stateFilter)) return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
       if (statusFilter === 'online'  && p.presence !== 'online')  return false;
@@ -933,7 +946,7 @@ export default function StaffDirectory() {
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
         !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all'      && p.hub_id      !== hubFilter)      return false;
-      if (stateFilter !== 'all'    && p.state_id    !== stateFilter)    return false;
+      if (stateFilter !== 'all'    && !profileMatchesState(p, stateFilter))    return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all'     && p.role        !== roleFilter)     return false;
       return true;
