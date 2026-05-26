@@ -764,20 +764,50 @@ export default function StaffDirectory() {
 
   // Hub-state coverage map: DB hub UUID → Set<stateId>
   // dbHubs has UUIDs as IDs; match to local sudanHubs by name to get the states array.
+  // Matching strategy (in order):
+  //   1. Exact name match (case-insensitive)
+  //   2. Core-word match — strip " hub" suffix then compare (handles "Kassala" == "Kassala Hub")
+  //   3. Gedaref/Gedarif spelling normalisation — treat both as 'gedarif'
   const hubStateSet = useMemo(() => {
+    const normalise = (s: string) =>
+      s.toLowerCase().trim()
+       .replace(/gedaref/g, 'gedarif')  // unify spelling variants
+       .replace(/gadarif|gadaref|qadarif/g, 'gedarif');
+    const stripHub = (s: string) => s.replace(/\s*hub\s*$/i, '').trim();
+
     const m = new Map<string, Set<string>>();
     dbHubs.forEach(dbHub => {
-      const normalised = dbHub.name.toLowerCase().trim();
-      const local = sudanHubs.find(lh => lh.name.toLowerCase().trim() === normalised);
+      const norm = normalise(dbHub.name);
+      // 1. Exact match after normalisation
+      let local = sudanHubs.find(lh => normalise(lh.name) === norm);
+      // 2. Core-word match (remove " hub" suffix from both sides)
+      if (!local) {
+        const core = stripHub(norm);
+        local = sudanHubs.find(lh => stripHub(normalise(lh.name)) === core);
+      }
+      // 3. State-name match — DB hub name is just the state name (e.g. "Gedarif")
+      if (!local) {
+        const core = stripHub(norm);
+        local = sudanHubs.find(lh => lh.states.some(sid => sid.replace(/-/g, ' ') === core));
+      }
       if (local) m.set(dbHub.id, new Set(local.states));
     });
     return m;
   }, [dbHubs]);
 
+  // Normalise state IDs so spelling variants ("gedaref" / "gedarif" / "gadarif")
+  // are treated as identical during filtering.
+  const normaliseStateId = (id: string | null) =>
+    (id ?? '').toLowerCase()
+      .replace(/gedaref/g, 'gedarif')
+      .replace(/gadarif|gadaref|qadarif/g, 'gedarif');
+
   // Returns true if the profile matches the selected state, including the
   // fallback where state_id is null but the profile's hub covers that state.
   const profileMatchesState = useCallback((p: { state_id: string | null; hub_id: string | null }, stateId: string) => {
-    if (p.state_id === stateId) return true;
+    // Direct match (with spelling normalisation)
+    if (normaliseStateId(p.state_id) === normaliseStateId(stateId)) return true;
+    // Hub fallback: if state_id is unset, check whether the profile's hub covers this state
     if (!p.state_id && p.hub_id) return hubStateSet.get(p.hub_id)?.has(stateId) ?? false;
     return false;
   }, [hubStateSet]);
