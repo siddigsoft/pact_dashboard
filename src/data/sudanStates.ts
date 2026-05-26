@@ -425,20 +425,6 @@ export const hubs: Hub[] = [
     states: ['kassala', 'gedarif', 'gezira', 'sennar', 'blue-nile'],
     coordinates: { latitude: 15.45, longitude: 36.4 }
   },
-  // Gedaref Hub — DB may store this hub separately from Kassala Hub.
-  // Both spellings (Gedaref / Gedarif) are registered so the name-match never misses.
-  {
-    id: 'gedaref-hub',
-    name: 'Gedaref Hub',
-    states: ['gedarif'],
-    coordinates: { latitude: 14.03, longitude: 35.39 }
-  },
-  {
-    id: 'gedarif-hub',
-    name: 'Gedarif Hub',
-    states: ['gedarif'],
-    coordinates: { latitude: 14.03, longitude: 35.39 }
-  },
   {
     id: 'kosti-hub',
     name: 'Kosti Hub',

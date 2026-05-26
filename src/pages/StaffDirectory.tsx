@@ -802,15 +802,30 @@ export default function StaffDirectory() {
       .replace(/gedaref/g, 'gedarif')
       .replace(/gadarif|gadaref|qadarif/g, 'gedarif');
 
-  // Returns true if the profile matches the selected state, including the
-  // fallback where state_id is null but the profile's hub covers that state.
+  // The set of known local state IDs (e.g. 'gedarif', 'kassala', …).
+  // Used to detect when a profile's state_id is a UUID or otherwise unrecognised,
+  // in which case we fall back to hub-based state coverage.
+  const knownStateIds = useMemo(
+    () => new Set(sudanStates.map(s => s.id)),
+    []
+  );
+
+  // Returns true if the profile matches the selected state.
+  // Priority order:
+  //   1. Direct state_id match (with spelling normalisation).
+  //   2. Hub fallback when state_id is absent OR is not a recognised local ID
+  //      (e.g. a Supabase UUID stored in the column) — derive the state from
+  //      which hub the profile belongs to.
   const profileMatchesState = useCallback((p: { state_id: string | null; hub_id: string | null }, stateId: string) => {
-    // Direct match (with spelling normalisation)
-    if (normaliseStateId(p.state_id) === normaliseStateId(stateId)) return true;
-    // Hub fallback: if state_id is unset, check whether the profile's hub covers this state
-    if (!p.state_id && p.hub_id) return hubStateSet.get(p.hub_id)?.has(stateId) ?? false;
+    const normSid = normaliseStateId(p.state_id);
+    const normTgt = normaliseStateId(stateId);
+    // 1. Direct match
+    if (normSid === normTgt) return true;
+    // 2. Hub fallback — use when state_id is empty/null or not a recognised local state ID
+    const stateIdIsUnknown = !p.state_id || !knownStateIds.has(p.state_id);
+    if (stateIdIsUnknown && p.hub_id) return hubStateSet.get(p.hub_id)?.has(stateId) ?? false;
     return false;
-  }, [hubStateSet]);
+  }, [hubStateSet, knownStateIds]);
 
   const availableLocalities = useMemo(() =>
     stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter), [stateFilter]);
