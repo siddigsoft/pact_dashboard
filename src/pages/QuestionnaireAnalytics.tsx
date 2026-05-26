@@ -4467,6 +4467,69 @@ const QuestionnaireAnalytics = () => {
       });
     }
 
+    // ── Collectors sheet — flat list of every collector with Hub & State ────
+    {
+      const wsC = wb.addWorksheet('Collectors');
+      const CCOLS = ['#', 'Data Collector', 'Device ID', 'Hub', 'State', 'Questionnaires', 'Sites', 'PDM Sites', 'Activities'];
+      wsC.getColumn(1).width = 5;
+      wsC.getColumn(2).width = 30;
+      wsC.getColumn(3).width = 22;
+      wsC.getColumn(4).width = 18;
+      wsC.getColumn(5).width = 18;
+      wsC.getColumn(6).width = 16;
+      wsC.getColumn(7).width = 14;
+      wsC.getColumn(8).width = 14;
+      wsC.getColumn(9).width = 40;
+
+      const cTitle = wsC.addRow(['All Data Collectors — Hub & State Breakdown']);
+      wsC.mergeCells(cTitle.number, 1, cTitle.number, CCOLS.length);
+      cTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
+      cTitle.height = 28;
+      wsC.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+      wsC.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+      wsC.addRow([]);
+
+      const cHdr = wsC.addRow(CCOLS);
+      cHdr.height = 22;
+      cHdr.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, color: { argb: XWHITE }, size: 10, name: 'Calibri' };
+        cell.border = xBorder();
+        cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 9 };
+      });
+
+      let cSeq = 0;
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach((col, ci) => {
+            cSeq++;
+            const actStr = col.activities.map(a => `${a.name} (${a.count})`).join(', ');
+            const dr = wsC.addRow([cSeq, col.name, col.deviceId || '—', hg.hub, sg.state, col.questionnaires, col.sites.length, col.pdmSites, actStr]);
+            dr.height = 18;
+            dr.eachCell((cell, idx) => {
+              cell.border = xBorder();
+              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+              cell.alignment = { horizontal: idx > 5 ? 'center' : 'left', vertical: 'middle', wrapText: idx === 9 };
+              if (cSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLIGHT } };
+            });
+          });
+        });
+      });
+
+      // Grand total row
+      const grandQ   = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.questionnaires, 0), 0), 0);
+      const grandSites = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.sites.length, 0), 0), 0);
+      const grandPdm   = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.pdmSites, 0), 0), 0);
+      const cTot = wsC.addRow(['', 'GRAND TOTAL', '', '', '', grandQ, grandSites, grandPdm, '']);
+      cTot.height = 22;
+      cTot.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: XWHITE } };
+        cell.border = xBorder();
+        cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle' };
+      });
+    }
+
     for (const ht of trackerData.hubTrackers) {
       const ws = wb.addWorksheet(hubSheetNameMap.get(ht.hub)!);
       const numStates = ht.states.length;
