@@ -762,12 +762,17 @@ export default function StaffDirectory() {
   /* Derived filter options */
   const availableStates = sudanStates;
 
-  // Hub-state coverage map: hubId → Set<stateId> — built once from local data
+  // Hub-state coverage map: DB hub UUID → Set<stateId>
+  // dbHubs has UUIDs as IDs; match to local sudanHubs by name to get the states array.
   const hubStateSet = useMemo(() => {
     const m = new Map<string, Set<string>>();
-    sudanHubs.forEach(h => m.set(h.id, new Set(h.states)));
+    dbHubs.forEach(dbHub => {
+      const normalised = dbHub.name.toLowerCase().trim();
+      const local = sudanHubs.find(lh => lh.name.toLowerCase().trim() === normalised);
+      if (local) m.set(dbHub.id, new Set(local.states));
+    });
     return m;
-  }, []);
+  }, [dbHubs]);
 
   // Returns true if the profile matches the selected state, including the
   // fallback where state_id is null but the profile's hub covers that state.
