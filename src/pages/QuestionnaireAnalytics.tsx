@@ -1688,16 +1688,20 @@ const QuestionnaireAnalytics = () => {
             siteToUsers.get(k)!.add(e.accepted_by);
           });
 
+          // Snapshot accounts already claimed by name/word-overlap — site bridge must not
+          // reassign a claimed account to a different (unmatched) collector.
+          const claimedNums  = new Set<string>(numMap.values());
+          const claimedNames = new Set<string>(nameMap.values());
+          const claimedUids  = new Set<string>();
+          numMap.forEach(acct => {
+            pidToNum.forEach((a, uid) => { if (a === acct) claimedUids.add(uid); });
+          });
+
           csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
             const nameKey   = col.name.trim().toLowerCase();
             const needsNum  = !numMap.has(nameKey);
             const needsName = !nameMap.has(nameKey);
             if (!needsNum && !needsName) return;
-            const userIds = new Set<string>();
-            col.sites.forEach(site => {
-              const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
-              siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
-            });
             // Rank candidates by site-vote count; exact name match always wins.
             const uidVotes = new Map<string, number>();
             col.sites.forEach(site => {
@@ -1706,10 +1710,13 @@ const QuestionnaireAnalytics = () => {
             });
             const nameMatchUid = [...uidVotes.keys()].find(uid => pidToFullName.get(uid) === nameKey);
             const topVotedUid  = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-            const resolvedUid  = nameMatchUid ?? topVotedUid;
+            // Only use topVotedUid if it hasn't already been claimed by another collector's name match
+            const resolvedUid  = nameMatchUid ?? (topVotedUid && !claimedUids.has(topVotedUid) ? topVotedUid : undefined);
             if (!resolvedUid) return;
-            if (needsNum  && pidToNum.has(resolvedUid))  numMap.set(nameKey, pidToNum.get(resolvedUid)!);
-            if (needsName && pidToName.has(resolvedUid)) nameMap.set(nameKey, pidToName.get(resolvedUid)!);
+            const acct = pidToNum.get(resolvedUid);
+            const an   = pidToName.get(resolvedUid);
+            if (needsNum  && acct && !claimedNums.has(acct))   numMap.set(nameKey, acct);
+            if (needsName && an   && !claimedNames.has(an))     nameMap.set(nameKey, an);
           })));
         }
       }
@@ -4252,39 +4259,48 @@ const QuestionnaireAnalytics = () => {
         siteToUsers.get(k)!.add(e.accepted_by);
       });
 
+      // Snapshot accounts already claimed by name/word-overlap BEFORE running the site bridge.
+      // The site bridge must NEVER reassign a claimed account to a different collector —
+      // this prevents Arif's account (correctly name-matched) from spilling over to
+      // Arabic-named collectors like طارق سيد whose DB name differs from the CSV name.
+      const claimedAccountNos  = new Set<string>(liveAccountMap.values());
+      const claimedAccountNames = new Set<string>(liveAccountNameMap.values());
+      // Map from profile UID → the collector nameKey that already claimed it via name match.
+      // Built so we can skip bridge UIDs that are already "owned" by someone else.
+      const claimedUids = new Set<string>();
+      liveAccountMap.forEach((acct, _nameKey) => {
+        profileIdToAcct.forEach((a, uid) => { if (a === acct) claimedUids.add(uid); });
+      });
+
       // For each collector, collect user IDs via site bridge, then resolve bank account + name.
-      // Prefer the uid whose profile full_name matches the CSV collector name to prevent
-      // cross-collector contamination (multiple users visiting the same sites in different cycles).
+      // Rules (in priority order):
+      //   1. Name-exact-match uid always wins.
+      //   2. Top-voted uid wins ONLY if its account is NOT already claimed by another collector.
+      //   3. If top-voted uid is claimed and no name match exists → leave as "—" (no bridge guess).
       csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
         const nameKey = col.name.trim().toLowerCase();
         const alreadyHasNo   = liveAccountMap.has(nameKey);
         const alreadyHasName = liveAccountNameMap.has(nameKey);
         if (alreadyHasNo && alreadyHasName) return;
-        const userIds = new Set<string>();
-        col.sites.forEach(site => {
-          const k = siteKey(site, hg.hub, sg.state);
-          siteToUsers.get(k)?.forEach(uid => userIds.add(uid));
-        });
         // Rank candidates by how many of the collector's sites they appear in.
-        // Name-exact-match always wins; otherwise the uid with the highest site-vote count
-        // is most likely the actual collector. This avoids cross-contamination when two users
-        // share just a handful of sites, while still resolving collectors whose DB name differs.
         const uidVotes = new Map<string, number>();
         col.sites.forEach(site => {
           const k = siteKey(site, hg.hub, sg.state);
           siteToUsers.get(k)?.forEach(uid => uidVotes.set(uid, (uidVotes.get(uid) || 0) + 1));
         });
-        const nameMatchUid  = [...uidVotes.keys()].find(uid => profileIdToFullName.get(uid) === nameKey);
-        const topVotedUid   = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-        const resolvedUid   = nameMatchUid ?? topVotedUid;
+        const nameMatchUid = [...uidVotes.keys()].find(uid => profileIdToFullName.get(uid) === nameKey);
+        const topVotedUid  = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+        // If no name match and the top-voted uid is already claimed by a different collector, skip.
+        const resolvedUid  = nameMatchUid ?? (topVotedUid && !claimedUids.has(topVotedUid) ? topVotedUid : undefined);
         if (!resolvedUid) return;
         if (!alreadyHasNo) {
           const acct = profileIdToAcct.get(resolvedUid);
-          if (acct) liveAccountMap.set(nameKey, acct);
+          // Extra guard: don't assign if this account number is already claimed
+          if (acct && !claimedAccountNos.has(acct)) liveAccountMap.set(nameKey, acct);
         }
         if (!alreadyHasName) {
           const an = profileIdToAcctName.get(resolvedUid);
-          if (an) liveAccountNameMap.set(nameKey, an);
+          if (an && !claimedAccountNames.has(an)) liveAccountNameMap.set(nameKey, an);
         }
       })));
     }
