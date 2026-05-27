@@ -436,17 +436,23 @@ export default function SurveyDetail() {
   } | null>(null);
 
   const REMINDER_ROLES = [
-    { id: 'admin',           label: 'Admin' },
-    { id: 'ict',             label: 'ICT' },
-    { id: 'fom',             label: 'Field Ops Manager' },
-    { id: 'coordinator',     label: 'Coordinator' },
-    { id: 'supervisor',      label: 'Supervisor' },
-    { id: 'dataCollector',   label: 'Data Collector' },
-    { id: 'projectManager',  label: 'Project Manager' },
-    { id: 'countryDirector', label: 'Country Director' },
-    { id: 'financialAdmin',  label: 'Finance Admin' },
-    { id: 'auditor',         label: 'Auditor' },
-    { id: 'employee',        label: 'Employee' },
+    { id: 'superAdmin',            label: 'Super Admin' },
+    { id: 'admin',                 label: 'Admin' },
+    { id: 'countryDirector',       label: 'Country Director' },
+    { id: 'ict',                   label: 'ICT' },
+    { id: 'fom',                   label: 'Field Ops Manager' },
+    { id: 'financialAdmin',        label: 'Finance Admin' },
+    { id: 'projectManager',        label: 'Project Manager' },
+    { id: 'seniorOperationsLead',  label: 'Senior Operations Lead' },
+    { id: 'supervisor',            label: 'Supervisor' },
+    { id: 'coordinator',           label: 'Coordinator' },
+    { id: 'dataTeam',              label: 'Data Team' },
+    { id: 'dataCollector',         label: 'Data Collector' },
+    { id: 'reviewer',              label: 'Reviewer' },
+    { id: 'hr',                    label: 'HR' },
+    { id: 'hrManager',             label: 'HR Manager' },
+    { id: 'employee',              label: 'Employee' },
+    { id: 'auditor',               label: 'Auditor' },
   ];
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({

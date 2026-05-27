@@ -1,4 +1,12 @@
 {
+  "functions": {
+    "api/extract-transaction.ts": {
+      "maxDuration": 60
+    },
+    "api/generate-survey-questions.ts": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",

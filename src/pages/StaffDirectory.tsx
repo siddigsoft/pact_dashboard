@@ -22,7 +22,7 @@ import {
   Banknote, TrendingDown, ChevronDown,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState, hubs as sudanHubs } from "@/data/sudanStates";
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
@@ -759,10 +759,73 @@ export default function StaffDirectory() {
   const [activeTab, setActiveTab]        = useState('directory');
   const [bankFilter, setBankFilter]      = useState<'all' | 'has' | 'missing'>('all');
 
-  /* Derived filter options — states per hub require hub_states table join;
-     for now, when a hub is selected we show all states (the hub→state mapping
-     is stored in DB, not in the local sudanStates file's hub objects).         */
+  /* Derived filter options */
   const availableStates = sudanStates;
+
+  // Hub-state coverage map: DB hub UUID → Set<stateId>
+  // dbHubs has UUIDs as IDs; match to local sudanHubs by name to get the states array.
+  // Matching strategy (in order):
+  //   1. Exact name match (case-insensitive)
+  //   2. Core-word match — strip " hub" suffix then compare (handles "Kassala" == "Kassala Hub")
+  //   3. Gedaref/Gedarif spelling normalisation — treat both as 'gedarif'
+  const hubStateSet = useMemo(() => {
+    const normalise = (s: string) =>
+      s.toLowerCase().trim()
+       .replace(/gedaref/g, 'gedarif')  // unify spelling variants
+       .replace(/gadarif|gadaref|qadarif/g, 'gedarif');
+    const stripHub = (s: string) => s.replace(/\s*hub\s*$/i, '').trim();
+
+    const m = new Map<string, Set<string>>();
+    dbHubs.forEach(dbHub => {
+      const norm = normalise(dbHub.name);
+      // 1. Exact match after normalisation
+      let local = sudanHubs.find(lh => normalise(lh.name) === norm);
+      // 2. Core-word match (remove " hub" suffix from both sides)
+      if (!local) {
+        const core = stripHub(norm);
+        local = sudanHubs.find(lh => stripHub(normalise(lh.name)) === core);
+      }
+      // 3. State-name match — DB hub name is just the state name (e.g. "Gedarif")
+      if (!local) {
+        const core = stripHub(norm);
+        local = sudanHubs.find(lh => lh.states.some(sid => sid.replace(/-/g, ' ') === core));
+      }
+      if (local) m.set(dbHub.id, new Set(local.states));
+    });
+    return m;
+  }, [dbHubs]);
+
+  // Normalise state IDs so spelling variants ("gedaref" / "gedarif" / "gadarif")
+  // are treated as identical during filtering.
+  const normaliseStateId = (id: string | null) =>
+    (id ?? '').toLowerCase()
+      .replace(/gedaref/g, 'gedarif')
+      .replace(/gadarif|gadaref|qadarif/g, 'gedarif');
+
+  // The set of known local state IDs (e.g. 'gedarif', 'kassala', …).
+  // Used to detect when a profile's state_id is a UUID or otherwise unrecognised,
+  // in which case we fall back to hub-based state coverage.
+  const knownStateIds = useMemo(
+    () => new Set(sudanStates.map(s => s.id)),
+    []
+  );
+
+  // Returns true if the profile matches the selected state.
+  // Priority order:
+  //   1. Direct state_id match (with spelling normalisation).
+  //   2. Hub fallback when state_id is absent OR is not a recognised local ID
+  //      (e.g. a Supabase UUID stored in the column) — derive the state from
+  //      which hub the profile belongs to.
+  const profileMatchesState = useCallback((p: { state_id: string | null; hub_id: string | null }, stateId: string) => {
+    const normSid = normaliseStateId(p.state_id);
+    const normTgt = normaliseStateId(stateId);
+    // 1. Direct match
+    if (normSid === normTgt) return true;
+    // 2. Hub fallback — use when state_id is empty/null or not a recognised local state ID
+    const stateIdIsUnknown = !p.state_id || !knownStateIds.has(p.state_id);
+    if (stateIdIsUnknown && p.hub_id) return hubStateSet.get(p.hub_id)?.has(stateId) ?? false;
+    return false;
+  }, [hubStateSet, knownStateIds]);
 
   const availableLocalities = useMemo(() =>
     stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter), [stateFilter]);
@@ -902,7 +965,7 @@ export default function StaffDirectory() {
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
         !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
-      if (stateFilter !== 'all' && p.state_id !== stateFilter) return false;
+      if (stateFilter !== 'all' && !profileMatchesState(p, stateFilter)) return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
       if (statusFilter === 'online'  && p.presence !== 'online')  return false;
@@ -933,7 +996,7 @@ export default function StaffDirectory() {
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
         !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all'      && p.hub_id      !== hubFilter)      return false;
-      if (stateFilter !== 'all'    && p.state_id    !== stateFilter)    return false;
+      if (stateFilter !== 'all'    && !profileMatchesState(p, stateFilter))    return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all'     && p.role        !== roleFilter)     return false;
       return true;

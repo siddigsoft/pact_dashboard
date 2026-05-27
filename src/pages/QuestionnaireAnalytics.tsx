@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus, RotateCcw, Table2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus, RotateCcw, Table2, Banknote } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
@@ -354,6 +354,9 @@ const QuestionnaireAnalytics = () => {
   const [enumSearch, setEnumSearch] = useState('');
   const [enumExpandedIds, setEnumExpandedIds] = useState<Set<string>>(new Set());
   const [enumTrackerFetched, setEnumTrackerFetched] = useState(false);
+  const [bankAccountByName, setBankAccountByName] = useState<Map<string, string>>(new Map());
+  const [csvAccountMap, setCsvAccountMap] = useState<Map<string, string>>(new Map());       // key → account number
+  const [csvAccountNameMap, setCsvAccountNameMap] = useState<Map<string, string>>(new Map()); // key → account holder name
   const [enumMmpFilter, setEnumMmpFilter] = useState('all');
   const [csvEnumView, setCsvEnumView] = useState<'hierarchy' | 'table'>('hierarchy');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -382,11 +385,23 @@ const QuestionnaireAnalytics = () => {
       if (collectorIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name, email, username')
+          .select('id, full_name, email, username, bank_account')
           .in('id', collectorIds);
+        const bankMap = new Map<string, string>();
         (profiles || []).forEach((p: any) => {
-          profileMap.set(p.id, p.full_name || p.username || p.email || p.id);
+          const name = p.full_name || p.username || p.email || p.id;
+          profileMap.set(p.id, name);
+          if (p.bank_account) {
+            let rr: any = p.bank_account;
+            if (typeof rr === 'string') { try { rr = JSON.parse(rr); } catch { rr = null; } }
+            if (rr && typeof rr === 'object') {
+              let a = String(rr.accountNumber ?? rr.account_number ?? rr.accountName ?? rr.account_name ?? '').trim();
+              if (!a) { for (const v of Object.values(rr)) { if ((typeof v === 'string' || typeof v === 'number') && String(v).trim()) { a = String(v).trim(); break; } } }
+              if (a) bankMap.set(name, a);
+            }
+          }
         });
+        setBankAccountByName(bankMap);
       }
       const mmpFileIds = [...new Set((entries || []).map((e: any) => e.mmp_file_id).filter(Boolean))];
       const mmpNameMap = new Map<string, string>();
@@ -477,6 +492,8 @@ const QuestionnaireAnalytics = () => {
       fetchEnumTrackerData();
     }
   }, [activeTab]);
+
+
 
   useEffect(() => {
     try {
@@ -1508,30 +1525,65 @@ const QuestionnaireAnalytics = () => {
   };
 
   const csvEnumData = useMemo(() => {
-    type CsvColl = { name: string; questionnaires: number; pdmCount: number; sites: Set<string>; activities: Map<string, number> };
+    type CsvColl = {
+      name: string;          // most-frequent name seen for this deviceId (or raw name if no deviceId)
+      deviceId: string;      // from the CSV — the actual unique ID column
+      rawNames: Set<string>; // all name variants written by this collector
+      questionnaires: number; pdmCount: number;
+      sites: Set<string>; activities: Map<string, number>;
+    };
+
+    // ── Pass 1: deviceId → most-frequent name ────────────────────────────────
+    // Group by deviceId first (within hub+state scope) so the canonical display
+    // name is the one the collector writes most often — purely from the CSV file.
+    const didNameFreq = new Map<string, Map<string, number>>(); // deviceId → name → count
+    filteredData.forEach(row => {
+      const did  = (row.deviceId || '').trim();
+      if (!did) return;
+      const name = (row.dataCollector || '').trim();
+      if (!name) return;
+      if (!didNameFreq.has(did)) didNameFreq.set(did, new Map());
+      const freq = didNameFreq.get(did)!;
+      freq.set(name, (freq.get(name) || 0) + 1);
+    });
+    const didToCanonical = new Map<string, string>(); // deviceId → canonical name
+    didNameFreq.forEach((freq, did) => {
+      let best = '', bestCount = 0;
+      freq.forEach((count, name) => { if (count > bestCount) { bestCount = count; best = name; } });
+      if (best) didToCanonical.set(did, best);
+    });
+
+    // ── Pass 2: build hub → state → collector groups ─────────────────────────
     const hubMap = new Map<string, Map<string, Map<string, CsvColl>>>();
     filteredData.forEach(row => {
-      const hub = row.hub || '—';
-      const state = row.state || '—';
-      const collector = row.dataCollector || '(Unknown)';
+      const hub     = row.hub || '—';
+      const state   = row.state || '—';
+      const rawName = (row.dataCollector || '(Unknown)').trim();
+      const did     = (row.deviceId || '').trim();
+      // Group key: deviceId when present (merges variants), raw name otherwise
+      const groupKey = did || rawName;
+      const dispName = (did && didToCanonical.get(did)) || rawName;
+
       if (!hubMap.has(hub)) hubMap.set(hub, new Map());
       if (!hubMap.get(hub)!.has(state)) hubMap.get(hub)!.set(state, new Map());
       const collMap = hubMap.get(hub)!.get(state)!;
-      if (!collMap.has(collector)) collMap.set(collector, { name: collector, questionnaires: 0, pdmCount: 0, sites: new Set(), activities: new Map() });
-      const entry = collMap.get(collector)!;
+      if (!collMap.has(groupKey)) {
+        collMap.set(groupKey, { name: dispName, deviceId: did, rawNames: new Set(), questionnaires: 0, pdmCount: 0, sites: new Set(), activities: new Map() });
+      }
+      const entry = collMap.get(groupKey)!;
+      entry.rawNames.add(rawName);
       entry.questionnaires++;
-      // Track PDM questionnaires separately using monitoringType || activity for accurate detection
       if (isPdmActivity(row.monitoringType || row.activity)) entry.pdmCount++;
       if (row.activitySite) entry.sites.add(row.activitySite.trim());
-      // Keep activity key using row.activity so Summary/CSV sheets display all activity names unchanged
       if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
     });
+
     return [...hubMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hub, sm]) => {
       const states = [...sm.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([state, collMap]) => {
         const collectors = [...collMap.values()].sort((a, b) => b.questionnaires - a.questionnaires).map(c => {
           const activities = [...c.activities.entries()].map(([n, cnt]) => ({ name: n, count: cnt })).sort((a, b) => b.count - a.count);
           const pdmSites   = Math.floor(c.pdmCount / 7) + (c.questionnaires - c.pdmCount);
-          return { name: c.name, questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
+          return { name: c.name, deviceId: c.deviceId, rawNames: [...c.rawNames], questionnaires: c.questionnaires, sites: [...c.sites], activities, pdmSites };
         });
         const totalQ     = collectors.reduce((s, c) => s + c.questionnaires, 0);
         const totalSites = new Set(collectors.flatMap(c => c.sites)).size;
@@ -1544,6 +1596,136 @@ const QuestionnaireAnalytics = () => {
       return { hub, states, totalQ: hubTotalQ, totalSites: hubTotalSites, totalPdm: hubTotalPdm };
     });
   }, [filteredData]);
+
+  // Rebuild account maps whenever csvEnumData changes (i.e. when a new CSV is uploaded).
+  // Two-step lookup mirrors the export function logic:
+  //   Step 1: profile name/email exact match  (fast but rarely hits ODK-typed names)
+  //   Step 2: site bridge via mmp_site_entries → accepted_by userId → profile bank_account
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const parseAcct = (raw: any): { number: string; name: string } => {
+        if (!raw) return { number: '', name: '' };
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return { number: '', name: '' }; } }
+        if (typeof raw !== 'object') return { number: '', name: '' };
+        const number   = String(raw.accountNumber ?? raw.account_number ?? '').trim();
+        const acctName = String(raw.accountName   ?? raw.account_name   ?? '').trim();
+        if (number || acctName) return { number, name: acctName };
+        const vals = Object.values(raw).filter(v => typeof v === 'string' || typeof v === 'number').map(v => String(v).trim()).filter(Boolean);
+        return { number: vals[0] || '', name: '' };
+      };
+
+      // Step 1: all profiles with bank_account
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, username, email, bank_account')
+        .not('bank_account', 'is', null);
+      if (cancelled) return;
+
+      const numMap         = new Map<string, string>();
+      const nameMap        = new Map<string, string>();
+      const pidToNum       = new Map<string, string>();
+      const pidToName      = new Map<string, string>();
+      const pidToFullName  = new Map<string, string>(); // profile id → full_name lowercase
+      const profNmToNum    = new Map<string, string>(); // profile full_name → acct number
+      const profNmToName   = new Map<string, string>(); // profile full_name → acct name
+
+      (profiles || []).forEach((p: any) => {
+        const { number, name } = parseAcct(p.bank_account);
+        if (!number && !name) return;
+        if (number) pidToNum.set(p.id, number);
+        if (name)   pidToName.set(p.id, name);
+        if (p.full_name) {
+          const fl = p.full_name.trim().toLowerCase();
+          pidToFullName.set(p.id, fl);
+          if (number) profNmToNum.set(fl, number);
+          if (name)   profNmToName.set(fl, name);
+        }
+        [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
+          const k = n.trim().toLowerCase();
+          if (number) numMap.set(k, number);
+          if (name)   nameMap.set(k, name);
+        });
+      });
+
+      // Step 1b: word-overlap fallback — handles "Abdalla Adam Abdalla" (CSV) vs
+      // "Abdalla Adam Abdalla Mansoor" (DB).  Only runs for collectors still missing.
+      csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+        const csvKey = col.name.trim().toLowerCase();
+        if (numMap.has(csvKey) && nameMap.has(csvKey)) return;
+        const words = csvKey.split(/\s+/).filter(w => w.length >= 3);
+        if (words.length === 0) return;
+        for (const [profName, num] of profNmToNum) {
+          const profWords = profName.split(/\s+/).filter(w => w.length >= 3);
+          if (words.every(w => profName.includes(w)) || (profWords.length > 0 && profWords.every(w => csvKey.includes(w)))) {
+            if (!numMap.has(csvKey) && num)                       numMap.set(csvKey, num);
+            const an = profNmToName.get(profName);
+            if (!nameMap.has(csvKey) && an)                       nameMap.set(csvKey, an);
+            break;
+          }
+        }
+      })));
+
+      // Step 2: site bridge — only fills gaps left after Steps 1 + 1b.
+      // IMPORTANT: only assigns if a name-matched uid is found; never guesses from an unrelated user.
+      if (csvEnumData.length > 0) {
+        const allSites = new Set<string>();
+        csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col =>
+          col.sites.forEach(s => { if (s) allSites.add(s.trim()); })
+        )));
+        if (allSites.size > 0) {
+          const { data: mmpRows } = await supabase
+            .from('mmp_site_entries')
+            .select('site_name, hub_office, state, accepted_by')
+            .in('site_name', [...allSites].slice(0, 400))
+            .not('accepted_by', 'is', null);
+          if (cancelled) return;
+
+          const siteToUsers = new Map<string, Set<string>>();
+          (mmpRows || []).forEach((e: any) => {
+            const k = `${(e.site_name||'').trim().toLowerCase()}||${(e.hub_office||'').trim().toLowerCase()}||${(e.state||'').trim().toLowerCase()}`;
+            if (!siteToUsers.has(k)) siteToUsers.set(k, new Set());
+            siteToUsers.get(k)!.add(e.accepted_by);
+          });
+
+          // Snapshot accounts already claimed by name/word-overlap — site bridge must not
+          // reassign a claimed account to a different (unmatched) collector.
+          const claimedNums  = new Set<string>(numMap.values());
+          const claimedNames = new Set<string>(nameMap.values());
+          const claimedUids  = new Set<string>();
+          numMap.forEach(acct => {
+            pidToNum.forEach((a, uid) => { if (a === acct) claimedUids.add(uid); });
+          });
+
+          csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+            const nameKey   = col.name.trim().toLowerCase();
+            const needsNum  = !numMap.has(nameKey);
+            const needsName = !nameMap.has(nameKey);
+            if (!needsNum && !needsName) return;
+            // Rank candidates by site-vote count; exact name match always wins.
+            const uidVotes = new Map<string, number>();
+            col.sites.forEach(site => {
+              const k = `${site.trim().toLowerCase()}||${hg.hub.trim().toLowerCase()}||${sg.state.trim().toLowerCase()}`;
+              siteToUsers.get(k)?.forEach(uid => uidVotes.set(uid, (uidVotes.get(uid) || 0) + 1));
+            });
+            const nameMatchUid = [...uidVotes.keys()].find(uid => pidToFullName.get(uid) === nameKey);
+            const topVotedUid  = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+            // Only use topVotedUid if it hasn't already been claimed by another collector's name match
+            const resolvedUid  = nameMatchUid ?? (topVotedUid && !claimedUids.has(topVotedUid) ? topVotedUid : undefined);
+            if (!resolvedUid) return;
+            const acct = pidToNum.get(resolvedUid);
+            const an   = pidToName.get(resolvedUid);
+            if (needsNum  && acct && !claimedNums.has(acct))   numMap.set(nameKey, acct);
+            if (needsName && an   && !claimedNames.has(an))     nameMap.set(nameKey, an);
+          })));
+        }
+      }
+
+      setCsvAccountMap(numMap);
+      setCsvAccountNameMap(nameMap);
+    })();
+    return () => { cancelled = true; };
+  }, [csvEnumData]);
 
   const trackerData = useMemo(() => {
     const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
@@ -3966,7 +4148,165 @@ const QuestionnaireAnalytics = () => {
   }, [trackerData]);
 
   const exportCsvEnumTableFormattedExcel = useCallback(async (costPerSite = 0, exchangeRate = 0) => {
-    if (trackerData.hubTrackers.length === 0) return;
+    if (trackerData.hubTrackers.length === 0) {
+      toast({ title: 'No data to export', description: 'Load a CSV file first.', variant: 'destructive' });
+      return;
+    }
+    try {
+
+    // ── Live bank-account lookup from profiles ──────────────────────────────
+    // Build a case-insensitive account lookup from ALL profiles with bank accounts.
+    // Keys are lowercased+trimmed so col.name (from CSV) matches even when casing differs.
+    // ── Helper: extract { number, name } from any bank_account shape ─────────
+    const extractAcct = (raw: any): { number: string; name: string } => {
+      if (!raw) return { number: '', name: '' };
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return { number: '', name: '' }; } }
+      if (typeof raw !== 'object') return { number: '', name: '' };
+      const num = String(raw.accountNumber ?? raw.account_number ?? '').trim();
+      const nam = String(raw.accountName  ?? raw.account_name  ?? '').trim();
+      if (num || nam) return { number: num, name: nam };
+      // Fallback: first non-empty string/number value as the number
+      for (const val of Object.values(raw)) {
+        if ((typeof val === 'string' || typeof val === 'number') && String(val).trim())
+          return { number: String(val).trim(), name: '' };
+      }
+      return { number: '', name: '' };
+    };
+
+    // ── Step 1: name-based map (exact match on full_name / username / email) ────
+    const liveAccountMap     = new Map<string, string>(); // collector key → account number
+    const liveAccountNameMap = new Map<string, string>(); // collector key → account name
+    bankAccountByName.forEach((acct, name) => {
+      if (acct) liveAccountMap.set(name.trim().toLowerCase(), acct);
+    });
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, full_name, username, email, bank_account')
+      .not('bank_account', 'is', null);
+    const profileIdToAcct      = new Map<string, string>();
+    const profileIdToAcctName  = new Map<string, string>();
+    const profileIdToFullName  = new Map<string, string>(); // id → full_name lowercase
+    // profNameToAcct: profile full_name (lower) → {acct, acctName} — used for word-overlap below
+    const profNameToAcct     = new Map<string, string>();
+    const profNameToAcctName = new Map<string, string>();
+    (profileRows || []).forEach((p: any) => {
+      const { number: acct, name: acctName } = extractAcct(p.bank_account);
+      if (!acct && !acctName) return;
+      profileIdToAcct.set(p.id, acct);
+      profileIdToAcctName.set(p.id, acctName);
+      if (p.full_name) {
+        const fl = p.full_name.trim().toLowerCase();
+        profileIdToFullName.set(p.id, fl);
+        if (acct)     profNameToAcct.set(fl, acct);
+        if (acctName) profNameToAcctName.set(fl, acctName);
+      }
+      [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
+        const k = n.trim().toLowerCase();
+        if (acct)     liveAccountMap.set(k, acct);
+        if (acctName) liveAccountNameMap.set(k, acctName);
+      });
+    });
+
+    // ── Step 1b: word-overlap fallback ──────────────────────────────────────────
+    // Handles mismatches like CSV "Abdalla Adam Abdalla" vs DB "Abdalla Adam Abdalla Mansoor".
+    // For each CSV collector still missing an account, find a profile whose name contains
+    // ALL words (≥3 chars) from the CSV name, or vice-versa.
+    const allCsvCollectorKeys = new Set<string>();
+    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+      allCsvCollectorKeys.add(col.name.trim().toLowerCase());
+    })));
+    for (const csvKey of allCsvCollectorKeys) {
+      const needsNo   = !liveAccountMap.has(csvKey);
+      const needsName = !liveAccountNameMap.has(csvKey);
+      if (!needsNo && !needsName) continue;
+      const words = csvKey.split(/\s+/).filter(w => w.length >= 3);
+      if (words.length === 0) continue;
+      for (const [profName, acct] of profNameToAcct) {
+        // Match if all CSV words appear in profile name, OR all profile words appear in CSV name
+        const profWords = profName.split(/\s+/).filter(w => w.length >= 3);
+        const csvInProf  = words.every(w => profName.includes(w));
+        const profInCsv  = profWords.length > 0 && profWords.every(w => csvKey.includes(w));
+        if (csvInProf || profInCsv) {
+          if (needsNo && acct) liveAccountMap.set(csvKey, acct);
+          const an = profNameToAcctName.get(profName);
+          if (needsName && an) liveAccountNameMap.set(csvKey, an);
+          break;
+        }
+      }
+    }
+
+    // ── Step 2: site-based bridge (reliable even when names differ) ───────────
+    // Collect every unique site name across all collectors in the CSV data.
+    const allSiteNames = new Set<string>();
+    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col =>
+      col.sites.forEach(s => { if (s) allSiteNames.add(s.trim()); })
+    )));
+    if (allSiteNames.size > 0) {
+      // Query mmp_site_entries for those sites → get accepted_by user IDs
+      const { data: mmpRows } = await supabase
+        .from('mmp_site_entries')
+        .select('site_name, hub_office, state, accepted_by')
+        .in('site_name', [...allSiteNames].slice(0, 400))
+        .not('accepted_by', 'is', null);
+
+      // Build: "site||hub||state" → Set<userId>
+      const siteKey = (site: string, hub: string, state: string) =>
+        `${site.trim().toLowerCase()}||${hub.trim().toLowerCase()}||${state.trim().toLowerCase()}`;
+      const siteToUsers = new Map<string, Set<string>>();
+      (mmpRows || []).forEach((e: any) => {
+        const k = siteKey(e.site_name || '', e.hub_office || '', e.state || '');
+        if (!siteToUsers.has(k)) siteToUsers.set(k, new Set());
+        siteToUsers.get(k)!.add(e.accepted_by);
+      });
+
+      // Snapshot accounts already claimed by name/word-overlap BEFORE running the site bridge.
+      // The site bridge must NEVER reassign a claimed account to a different collector —
+      // this prevents Arif's account (correctly name-matched) from spilling over to
+      // Arabic-named collectors like طارق سيد whose DB name differs from the CSV name.
+      const claimedAccountNos  = new Set<string>(liveAccountMap.values());
+      const claimedAccountNames = new Set<string>(liveAccountNameMap.values());
+      // Map from profile UID → the collector nameKey that already claimed it via name match.
+      // Built so we can skip bridge UIDs that are already "owned" by someone else.
+      const claimedUids = new Set<string>();
+      liveAccountMap.forEach((acct, _nameKey) => {
+        profileIdToAcct.forEach((a, uid) => { if (a === acct) claimedUids.add(uid); });
+      });
+
+      // For each collector, collect user IDs via site bridge, then resolve bank account + name.
+      // Rules (in priority order):
+      //   1. Name-exact-match uid always wins.
+      //   2. Top-voted uid wins ONLY if its account is NOT already claimed by another collector.
+      //   3. If top-voted uid is claimed and no name match exists → leave as "—" (no bridge guess).
+      csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
+        const nameKey = col.name.trim().toLowerCase();
+        const alreadyHasNo   = liveAccountMap.has(nameKey);
+        const alreadyHasName = liveAccountNameMap.has(nameKey);
+        if (alreadyHasNo && alreadyHasName) return;
+        // Rank candidates by how many of the collector's sites they appear in.
+        const uidVotes = new Map<string, number>();
+        col.sites.forEach(site => {
+          const k = siteKey(site, hg.hub, sg.state);
+          siteToUsers.get(k)?.forEach(uid => uidVotes.set(uid, (uidVotes.get(uid) || 0) + 1));
+        });
+        const nameMatchUid = [...uidVotes.keys()].find(uid => profileIdToFullName.get(uid) === nameKey);
+        const topVotedUid  = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+        // If no name match and the top-voted uid is already claimed by a different collector, skip.
+        const resolvedUid  = nameMatchUid ?? (topVotedUid && !claimedUids.has(topVotedUid) ? topVotedUid : undefined);
+        if (!resolvedUid) return;
+        if (!alreadyHasNo) {
+          const acct = profileIdToAcct.get(resolvedUid);
+          // Extra guard: don't assign if this account number is already claimed
+          if (acct && !claimedAccountNos.has(acct)) liveAccountMap.set(nameKey, acct);
+        }
+        if (!alreadyHasName) {
+          const an = profileIdToAcctName.get(resolvedUid);
+          if (an && !claimedAccountNames.has(an)) liveAccountNameMap.set(nameKey, an);
+        }
+      })));
+    }
+
+    console.log(`[CSV Enum Export] liveAccountMap: ${liveAccountMap.size}, liveAccountNameMap: ${liveAccountNameMap.size}, profiles: ${(profileRows||[]).length}`);
+    console.log(`[CSV Enum Export] Sample:`, [...liveAccountMap.entries()].slice(0, 5));
 
     // Build: hub → activity → state → [{name, count}]
     const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
@@ -4011,6 +4351,36 @@ const QuestionnaireAnalytics = () => {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PACT Command Center';
     wb.created = new Date();
+
+    // Pre-assign ALL sheet names before creating any worksheet.
+    // ExcelJS uses case-insensitive comparison; we do the same here.
+    const assignedNamesLower = new Set<string>(['summary', 'payment']);
+    function assignUnique(base: string): string {
+      const sanitized = base.replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Sheet';
+      let candidate = sanitized;
+      let c = 2;
+      while (assignedNamesLower.has(candidate.toLowerCase())) {
+        const suffix = ` ${c++}`;
+        candidate = sanitized.slice(0, 31 - suffix.length) + suffix;
+      }
+      assignedNamesLower.add(candidate.toLowerCase());
+      return candidate;
+    }
+    // Hub sheets — pre-assigned
+    const hubSheetNameMap = new Map<string, string>();
+    trackerData.hubTrackers.forEach((ht: any) => { hubSheetNameMap.set(ht.hub, assignUnique(ht.hub)); });
+    // Per-DC sheets — pre-assigned; key = hub||state||deviceId-or-name
+    // Using deviceId (when present) ensures two collectors with the same canonical
+    // name in the same hub+state never share a key and corrupt each other's sheet.
+    const dcSheetNameMap = new Map<string, string>();
+    csvEnumData.forEach(hg => {
+      hg.states.forEach(sg => {
+        sg.collectors.forEach(col => {
+          const dcKey = `${hg.hub}||${sg.state}||${col.deviceId || col.name}`;
+          dcSheetNameMap.set(dcKey, assignUnique(col.name));
+        });
+      });
+    });
 
     // ── Summary sheet (Activity × Hub, with collector sub-rows) ──────────
     {
@@ -4113,8 +4483,71 @@ const QuestionnaireAnalytics = () => {
       });
     }
 
+    // ── Collectors sheet — flat list of every collector with Hub & State ────
+    {
+      const wsC = wb.addWorksheet('Collectors');
+      const CCOLS = ['#', 'Data Collector', 'Device ID', 'Hub', 'State', 'Questionnaires', 'Sites', 'PDM Sites', 'Activities'];
+      wsC.getColumn(1).width = 5;
+      wsC.getColumn(2).width = 30;
+      wsC.getColumn(3).width = 22;
+      wsC.getColumn(4).width = 18;
+      wsC.getColumn(5).width = 18;
+      wsC.getColumn(6).width = 16;
+      wsC.getColumn(7).width = 14;
+      wsC.getColumn(8).width = 14;
+      wsC.getColumn(9).width = 40;
+
+      const cTitle = wsC.addRow(['All Data Collectors — Hub & State Breakdown']);
+      wsC.mergeCells(cTitle.number, 1, cTitle.number, CCOLS.length);
+      cTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
+      cTitle.height = 28;
+      wsC.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+      wsC.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+      wsC.addRow([]);
+
+      const cHdr = wsC.addRow(CCOLS);
+      cHdr.height = 22;
+      cHdr.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, color: { argb: XWHITE }, size: 10, name: 'Calibri' };
+        cell.border = xBorder();
+        cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 9 };
+      });
+
+      let cSeq = 0;
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach((col, ci) => {
+            cSeq++;
+            const actStr = col.activities.map(a => `${a.name} (${a.count})`).join(', ');
+            const dr = wsC.addRow([cSeq, col.name, col.deviceId || '—', hg.hub, sg.state, col.questionnaires, col.sites.length, col.pdmSites, actStr]);
+            dr.height = 18;
+            dr.eachCell((cell, idx) => {
+              cell.border = xBorder();
+              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+              cell.alignment = { horizontal: idx > 5 ? 'center' : 'left', vertical: 'middle', wrapText: idx === 9 };
+              if (cSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLIGHT } };
+            });
+          });
+        });
+      });
+
+      // Grand total row
+      const grandQ   = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.questionnaires, 0), 0), 0);
+      const grandSites = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.sites.length, 0), 0), 0);
+      const grandPdm   = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.pdmSites, 0), 0), 0);
+      const cTot = wsC.addRow(['', 'GRAND TOTAL', '', '', '', grandQ, grandSites, grandPdm, '']);
+      cTot.height = 22;
+      cTot.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
+        cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: XWHITE } };
+        cell.border = xBorder();
+        cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle' };
+      });
+    }
+
     for (const ht of trackerData.hubTrackers) {
-      const ws = wb.addWorksheet(ht.hub.slice(0, 31));
+      const ws = wb.addWorksheet(hubSheetNameMap.get(ht.hub)!);
       const numStates = ht.states.length;
       const totalCols = 1 + numStates * 4 + 4;
       ws.getColumn(1).width = 36;
@@ -4124,6 +4557,7 @@ const QuestionnaireAnalytics = () => {
       const titleRow = ws.addRow([ht.hub]);
       titleRow.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
       titleRow.height = 24;
+      ws.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       ws.addRow([]);
 
       // Header row 1 — merged state group labels
@@ -4221,54 +4655,308 @@ const QuestionnaireAnalytics = () => {
       const pBorder = (): any => { const s: any = { style: 'thin', color: { argb: PBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
       const payWs = wb.addWorksheet('Payment');
       const ptitle = payWs.addRow(['Payment Calculation — Per Data Collector']);
-      payWs.mergeCells(ptitle.number, 1, ptitle.number, 9);
+      payWs.mergeCells(ptitle.number, 1, ptitle.number, 14);
       ptitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: PNAVY } }; ptitle.height = 28;
+      payWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
       payWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
+      const pparam = payWs.addRow([`Cost per Site Visit: $${costPerSite.toFixed(2)} USD`, '', '', '', '', '', `Exchange Rate: ${exchangeRate.toLocaleString()} SDG / 1 USD`]);
       pparam.font = { bold: true, size: 10, name: 'Calibri', color: { argb: PNAVY } }; pparam.height = 20;
       payWs.addRow([]);
-      const phdr = payWs.addRow(['#', 'Data Collector', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)']);
+      // Cols: 1=# 2=DC 3=DeviceID 4=AcctNo 5=AcctName 6=Hub 7=State 8=Sites 9=Cost/Site(USD) 10=Cost/Site(SDG) 11=Total(USD) 12=Rate 13=Total(SDG) 14=Notes
+      const phdr = payWs.addRow(['#', 'Data Collector', 'Device ID', 'Account Number', 'Account Name', 'Hub', 'State', 'Sites Covered', 'Cost/Site (USD)', 'Cost/Site (SDG)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)', 'Notes']);
       phdr.height = 22;
       phdr.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, color: { argb: PWHITE }, size: 10, name: 'Calibri' }; cell.border = pBorder();
-        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle', wrapText: true };
+        cell.alignment = { horizontal: ci > 4 ? 'center' : 'left', vertical: 'middle', wrapText: true };
       });
+      // ── Deduplicate collectors globally by deviceId for the Payment sheet ──────
+      // csvEnumData keeps one entry per deviceId PER hub+state (correct for detail
+      // sheets). The Payment sheet needs ONE row per physical person — aggregate
+      // pdmSites across all hub+state appearances so the same device never shows up
+      // twice.
+      type PayColl = { name: string; deviceId: string; hubs: string[]; states: string[]; sites: number };
+      const payCollMap = new Map<string, PayColl>();
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach(col => {
+            const payKey = col.deviceId || col.name.trim().toLowerCase();
+            if (!payCollMap.has(payKey)) {
+              payCollMap.set(payKey, { name: col.name, deviceId: col.deviceId, hubs: [], states: [], sites: 0 });
+            }
+            const entry = payCollMap.get(payKey)!;
+            if (!entry.hubs.includes(hg.hub))   entry.hubs.push(hg.hub);
+            if (!entry.states.includes(sg.state)) entry.states.push(sg.state);
+            entry.sites += col.pdmSites;
+          });
+        });
+      });
+      // ── Second-pass merge: no-deviceId rows → existing deviceId entry of same name ──
+      // Happens when the same person has some submissions with a deviceId and some
+      // without (e.g. different state combos). Both end up in payCollMap under
+      // different keys; merge the nameless one into the deviceId-keyed one.
+      const nameToDevKey = new Map<string, string>(); // normName → payKey that has deviceId
+      payCollMap.forEach((entry, payKey) => {
+        if (entry.deviceId) {
+          const norm = entry.name.trim().toLowerCase();
+          if (!nameToDevKey.has(norm)) nameToDevKey.set(norm, payKey);
+        }
+      });
+      const keysToDelete: string[] = [];
+      payCollMap.forEach((entry, payKey) => {
+        if (!entry.deviceId) {
+          const norm = entry.name.trim().toLowerCase();
+          const devPayKey = nameToDevKey.get(norm);
+          if (devPayKey && devPayKey !== payKey) {
+            const devEntry = payCollMap.get(devPayKey)!;
+            entry.hubs.forEach(h => { if (!devEntry.hubs.includes(h)) devEntry.hubs.push(h); });
+            entry.states.forEach(s => { if (!devEntry.states.includes(s)) devEntry.states.push(s); });
+            devEntry.sites += entry.sites;
+            keysToDelete.push(payKey);
+          }
+        }
+      });
+      keysToDelete.forEach(k => payCollMap.delete(k));
+
+      const payCollList = [...payCollMap.values()].sort((a, b) => {
+        const hubCmp = a.hubs[0].localeCompare(b.hubs[0]);
+        return hubCmp !== 0 ? hubCmp : a.name.localeCompare(b.name);
+      });
+
+      // Detect same-name / different-deviceId collisions (same person, multiple devices)
+      // normName → array of payKeys that share that name
+      const nameToPayKeys = new Map<string, string[]>();
+      payCollMap.forEach((entry, payKey) => {
+        const norm = entry.name.trim().toLowerCase();
+        if (!nameToPayKeys.has(norm)) nameToPayKeys.set(norm, []);
+        nameToPayKeys.get(norm)!.push(payKey);
+      });
+      // normName → total device count for that name (only names with >1 device are flagged)
+      const nameDeviceCount = new Map<string, number>();
+      nameToPayKeys.forEach((keys, norm) => { if (keys.length > 1) nameDeviceCount.set(norm, keys.length); });
+
+      const PAMBER = 'FFFFF3CD'; // amber fill for flagged rows
+      const PAMBERBORDER = 'FFD97706';
+
       // Authoritative grand total = same formula used by the Summary sheet (hub-level floor for PDM)
       const authGrandPaySites = trackerData.matrix.reduce((a: number, r: any) =>
         a + (r.isPdm ? r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
       let pSeq = 0;
-      csvEnumData.forEach(hg => {
-        hg.states.forEach(sg => {
-          sg.collectors.forEach((col, i) => {
-            pSeq++;
-            const sites = col.pdmSites;
-            const totalUsd = sites * costPerSite;
-            const totalSdg = totalUsd * exchangeRate;
-            const pdr = payWs.addRow([pSeq, col.name, hg.hub, sg.state, sites, costPerSite, totalUsd, exchangeRate, totalSdg]);
-            pdr.height = 20;
-            pdr.eachCell((cell, ci) => {
-              cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-              cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
-              if (pSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
-            });
-            pdr.getCell(6).numFmt = '#,##0.00'; pdr.getCell(7).numFmt = '#,##0.00';
-            pdr.getCell(8).numFmt = '#,##0.00'; pdr.getCell(9).numFmt = '#,##0.00';
-          });
+      payCollList.forEach(col => {
+        pSeq++;
+        const sites = col.sites;
+        const totalUsd = sites * costPerSite;
+        const totalSdg = totalUsd * exchangeRate;
+        const key = col.name.trim().toLowerCase();
+        const acctNo   = liveAccountMap.get(key)     || '—';
+        const acctName = liveAccountNameMap.get(key) || '—';
+        const hubCell   = col.hubs.join(', ');
+        const stateCell = col.states.join(', ');
+        const devCount  = nameDeviceCount.get(key);
+        const noteText  = devCount ? `⚠ ${devCount} device IDs — verify before payment` : '';
+        const costSdg = costPerSite * exchangeRate;
+        const pdr = payWs.addRow([pSeq, col.name, col.deviceId || '—', acctNo, acctName, hubCell, stateCell, sites, costPerSite, costSdg, totalUsd, exchangeRate, totalSdg, noteText]);
+        pdr.height = noteText ? 24 : 20;
+        pdr.eachCell((cell, ci) => {
+          cell.border = pBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+          cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 14 };
+          if (noteText) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PAMBER } };
+            if (ci === 14) {
+              cell.font = { size: 9, name: 'Calibri', color: { argb: PAMBERBORDER }, bold: true, italic: true };
+              cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+            }
+          } else if (pSeq % 2 === 0) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+          }
         });
+        pdr.getCell(9).numFmt  = '#,##0.00';   // Cost/Site USD
+        pdr.getCell(10).numFmt = '#,##0';       // Cost/Site SDG (whole number)
+        pdr.getCell(11).numFmt = '#,##0.00';    // Total USD
+        pdr.getCell(12).numFmt = '#,##0.00';    // Rate
+        pdr.getCell(13).numFmt = '#,##0';       // Total SDG (whole number)
       });
       const grandPayUsd = authGrandPaySites * costPerSite;
       const grandPaySdg = grandPayUsd * exchangeRate;
-      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', authGrandPaySites, costPerSite, grandPayUsd, exchangeRate, grandPaySdg]);
+      const grandCostSdg = costPerSite * exchangeRate;
+      const ptot = payWs.addRow(['', 'GRAND TOTAL', '', '', '', '', '', authGrandPaySites, costPerSite, grandCostSdg, grandPayUsd, exchangeRate, grandPaySdg]);
       ptot.height = 24;
       ptot.eachCell((cell, ci) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PNAVY } };
         cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: PWHITE } };
-        cell.border = pBorder(); cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+        cell.border = pBorder(); cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle' };
       });
-      ptot.getCell(6).numFmt = '#,##0.00'; ptot.getCell(7).numFmt = '#,##0.00';
-      ptot.getCell(8).numFmt = '#,##0.00'; ptot.getCell(9).numFmt = '#,##0.00';
-      payWs.columns.forEach(col => { let max = 10; col.eachCell?.({ includeEmpty: false }, c => { max = Math.max(max, (c.value?.toString() || '').length + 2); }); col.width = Math.min(max, 40); });
+      ptot.getCell(9).numFmt  = '#,##0.00';
+      ptot.getCell(10).numFmt = '#,##0';
+      ptot.getCell(11).numFmt = '#,##0.00';
+      ptot.getCell(12).numFmt = '#,##0.00';
+      ptot.getCell(13).numFmt = '#,##0';
+      // Fixed column widths: 14 cols
+      // 1=# 2=DC 3=DeviceID 4=AcctNo 5=AcctName 6=Hub 7=State 8=Sites 9=Cost/Site(USD) 10=Cost/Site(SDG) 11=TotalUSD 12=Rate 13=TotalSDG 14=Notes
+      const payColWidths = [5, 30, 22, 18, 30, 16, 16, 14, 16, 16, 16, 18, 16, 32];
+      payWs.columns.forEach((c, i) => { c.width = payColWidths[i] ?? 14; });
+      // Wrap text on Data Collector (2), Account Name (5), and Notes (14)
+      [2, 5, 14].forEach(colIdx => {
+        payWs.getColumn(colIdx).eachCell({ includeEmpty: false }, cell => {
+          cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+        });
+      });
+
+    }
+
+    // ── Per Data Collector sheets (always included) ───────────────────────────
+    {
+      const DCNAVY = 'FF0F2041', DCWHITE = 'FFFFFFFF', DCBORDER = 'FFC8CDD7';
+      const dcBorder = (): any => { const s: any = { style: 'thin', color: { argb: DCBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+      csvEnumData.forEach(hg => {
+        hg.states.forEach(sg => {
+          sg.collectors.forEach(col => {
+            const dcWs = wb.addWorksheet(dcSheetNameMap.get(`${hg.hub}||${sg.state}||${col.deviceId || col.name}`)!);
+
+            const dcTitle = dcWs.addRow([col.name]);
+            dcWs.mergeCells(dcTitle.number, 1, dcTitle.number, 8);
+            dcTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: DCNAVY } }; dcTitle.height = 28;
+            dcWs.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+            dcWs.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
+            const _dcKey = col.name.trim().toLowerCase();
+            const dcInfo = dcWs.addRow(['Hub:', hg.hub, 'State:', sg.state, 'Device ID:', col.deviceId || '—', 'Account No:', liveAccountMap.get(_dcKey) || '—', 'Account Name:', liveAccountNameMap.get(_dcKey) || '—']);
+            dcInfo.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } }; dcInfo.height = 20;
+            dcWs.addRow([]);
+
+            const dcHdr = dcWs.addRow(['#', 'Site Name', 'Locality', 'Activity', 'Sub-Activity', 'Date']);
+            dcHdr.height = 22;
+            dcHdr.eachCell((cell) => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
+              cell.font = { bold: true, color: { argb: DCWHITE }, size: 10, name: 'Calibri' };
+              cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            });
+
+            // Match by rawNames so merged name-variants are all included in this sheet
+            const dcRawSet = new Set(col.rawNames.length > 0 ? col.rawNames : [col.name]);
+            const dcSites = filteredData.filter(r =>
+              dcRawSet.has((r.dataCollector || '').trim()) &&
+              (r.hub || '—') === hg.hub &&
+              (r.state || '—') === sg.state
+            );
+            dcSites.forEach((r, idx) => {
+              const dcRow = dcWs.addRow([idx + 1, r.activitySite || '—', r.locality || '—', r.activity || '—', r.subActivity || '—', r.date || '—']);
+              dcRow.height = 18;
+              dcRow.eachCell((cell) => {
+                cell.border = dcBorder(); cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+              });
+            });
+
+            // ── Site-visits total row ────────────────────────────────────────────
+            const dcSum = dcWs.addRow(['', `Total: ${dcSites.length} site visit${dcSites.length !== 1 ? 's' : ''}`, '', '', '', '']);
+            dcWs.mergeCells(dcSum.number, 2, dcSum.number, 6);
+            dcSum.height = 20;
+            dcSum.eachCell((cell) => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+              cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+              cell.border = dcBorder(); cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            });
+
+            // ── Activity breakdown ───────────────────────────────────────────────
+            dcWs.addRow([]);
+            const actBreakHdr = dcWs.addRow(['Activity Summary']);
+            dcWs.mergeCells(actBreakHdr.number, 1, actBreakHdr.number, 6);
+            actBreakHdr.height = 20;
+            actBreakHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+            actBreakHdr.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+            actBreakHdr.getCell(1).border = dcBorder();
+
+            // Count sites per activity from the raw data rows
+            const actSiteCount = new Map<string, number>();
+            dcSites.forEach(r => {
+              const act = r.activity || '(Unknown)';
+              actSiteCount.set(act, (actSiteCount.get(act) || 0) + 1);
+            });
+            // Activity name → col 2, count → col 3 (col 1 is narrow "#" column)
+            const actBreakSubHdr = dcWs.addRow(['', 'Activity', 'Site Visits', '', '', '']);
+            actBreakSubHdr.height = 18;
+            actBreakSubHdr.eachCell((cell, ci) => {
+              if (ci === 2 || ci === 3) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
+                cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCWHITE } };
+                cell.border = dcBorder();
+                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+              }
+            });
+            let actRowIdx = 0;
+            [...actSiteCount.entries()].sort((a, b) => b[1] - a[1]).forEach(([act, cnt]) => {
+              const aRow = dcWs.addRow(['', act, cnt, '', '', '']);
+              aRow.height = 17;
+              aRow.getCell(2).border = dcBorder(); aRow.getCell(2).font = { size: 9, name: 'Calibri' };
+              aRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+              aRow.getCell(3).border = dcBorder(); aRow.getCell(3).font = { bold: true, size: 9, name: 'Calibri', color: { argb: DCNAVY } };
+              aRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+              if (actRowIdx % 2 === 1) {
+                aRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+                aRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+              }
+              actRowIdx++;
+            });
+
+            // ── Payment & bank details summary block ─────────────────────────────
+            const dcPaySites = col.pdmSites;
+            const dcTotalUsd = dcPaySites * costPerSite;
+            const dcTotalSdg = dcTotalUsd * exchangeRate;
+            const _dcKey2 = col.name.trim().toLowerCase();
+            const dcAcctNo   = liveAccountMap.get(_dcKey2)     || '—';
+            const dcAcctName = liveAccountNameMap.get(_dcKey2) || '—';
+
+            dcWs.addRow([]);
+            const payBlockHdr = dcWs.addRow(['Payment Details']);
+            dcWs.mergeCells(payBlockHdr.number, 1, payBlockHdr.number, 6);
+            payBlockHdr.height = 20;
+            payBlockHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DCNAVY } };
+            payBlockHdr.getCell(1).font = { bold: true, size: 11, name: 'Calibri', color: { argb: DCWHITE } };
+            payBlockHdr.getCell(1).border = dcBorder();
+            payBlockHdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+            // Label → col 2, value → col 3  (col 1 is the narrow "#" column)
+            const addPayLine = (label: string, value: string | number, isBold = false) => {
+              const r = dcWs.addRow(['', label, value, '', '', '']);
+              r.height = 18;
+              r.getCell(2).font = { size: 10, name: 'Calibri', color: { argb: 'FF6B7280' } };
+              r.getCell(2).border = dcBorder(); r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+              r.getCell(3).font = { bold: isBold, size: 10, name: 'Calibri', color: { argb: DCNAVY } };
+              r.getCell(3).border = dcBorder(); r.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+              r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFBFC' } };
+            };
+
+            addPayLine('Hub:', hg.hub);
+            addPayLine('State:', sg.state);
+            addPayLine('Account Number:', dcAcctNo);
+            addPayLine('Account Name:', dcAcctName);
+            addPayLine('Sites (payable):', dcPaySites);
+            if (costPerSite > 0) {
+              addPayLine(`Cost / Site:`, `$${costPerSite.toFixed(2)} USD`);
+              if (exchangeRate > 0) {
+                addPayLine(`Cost / Site (SDG):`, `${Math.round(costPerSite * exchangeRate).toLocaleString()} SDG`);
+              }
+              addPayLine('Total (USD):', `$${dcTotalUsd.toFixed(2)}`, true);
+              if (exchangeRate > 0) {
+                addPayLine(`Rate:`, `${exchangeRate.toLocaleString()} SDG / 1 USD`);
+                addPayLine('Total (SDG):', `${Math.round(dcTotalSdg).toLocaleString()} SDG`, true);
+              }
+            }
+
+            // Col 1 = narrow # | Col 2 = Site Name / activity label (wrap) |
+            // Col 3 = Locality / value | Col 4 = Activity (wrap) | Col 5 = Sub-Activity | Col 6 = Date
+            const dcColWidths = [5, 28, 20, 28, 18, 13];
+            dcWs.columns.forEach((c, i) => { c.width = dcColWidths[i] ?? 12; });
+            // Wrap text on both wide content columns (activity in main table + activity names in summary)
+            [2, 4].forEach(colIdx => {
+              dcWs.getColumn(colIdx).eachCell({ includeEmpty: false }, cell => {
+                cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: 'middle' };
+              });
+            });
+          });
+        });
+      });
     }
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -4276,10 +4964,15 @@ const QuestionnaireAnalytics = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `csv_enum_tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    a.download = `Tracker - Enumerators (CSV) ${format(new Date(), 'MMMM dd yyyy HH-mm')}.xlsx`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [trackerData, csvEnumData]);
+    } catch (err: any) {
+      toast({ title: 'Export failed', description: err?.message || 'Unknown error', variant: 'destructive' });
+    }
+  }, [trackerData, csvEnumData, bankAccountByName, filteredData, toast]);
 
   const exportTrackerPerStateFormattedExcel = useCallback(async () => {
     const sheets = trackerData.stateTrackers.map((st: any) => {
@@ -6535,6 +7228,30 @@ const QuestionnaireAnalytics = () => {
                                                       <div className="flex items-center gap-2 min-w-0">
                                                         <Users className="h-3.5 w-3.5 text-primary shrink-0" />
                                                         <span className="text-sm font-medium truncate">{col.name}</span>
+                                                        {(() => {
+                                                          const k       = col.name.trim().toLowerCase();
+                                                          const acctNo  = csvAccountMap.get(k);
+                                                          const acctNm  = csvAccountNameMap.get(k);
+                                                          if (acctNo || acctNm) {
+                                                            return (
+                                                              <span className="inline-flex items-center gap-1.5 shrink-0" title={`Account No: ${acctNo || '—'}  |  Account Name: ${acctNm || '—'}`}>
+                                                                {acctNo && (
+                                                                  <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                                                    <Banknote className="h-2.5 w-2.5" />{acctNo}
+                                                                  </span>
+                                                                )}
+                                                                {acctNm && (
+                                                                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                                                                    {acctNm}
+                                                                  </span>
+                                                                )}
+                                                              </span>
+                                                            );
+                                                          }
+                                                          return (
+                                                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 shrink-0" title="No bank account registered">No Account</span>
+                                                          );
+                                                        })()}
                                                       </div>
                                                       <div className="flex items-center gap-2 shrink-0 ml-2">
                                                         <Badge variant="outline" className="font-mono text-blue-600 text-xs">{col.questionnaires} Q</Badge>
@@ -8045,70 +8762,119 @@ const QuestionnaireAnalytics = () => {
 
       {/* ── Payment Parameters Dialog ─────────────────────────── */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-[480px] w-full">
           <DialogHeader>
-            <DialogTitle>Payment Parameters</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+              <Banknote className="h-4 w-4 text-primary shrink-0" />
+              Payment Parameters
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">Set the rates before exporting</p>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+
+          <div className="space-y-4 py-1">
+            {/* Cost per site — border-joined addon group */}
             <div className="space-y-1.5">
-              <Label htmlFor="pay-cost">Cost per Site Visit (USD)</Label>
-              <Input
-                id="pay-cost"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 10.00"
-                value={paymentCostPerSite}
-                onChange={e => setPaymentCostPerSite(e.target.value)}
-                data-testid="input-payment-cost-usd"
-              />
+              <Label htmlFor="pay-cost" className="text-sm font-medium">Cost per Site Visit</Label>
+              <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                <span className="flex items-center px-3 bg-muted text-sm font-semibold text-muted-foreground border-r border-input select-none shrink-0">$</span>
+                <input
+                  id="pay-cost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={paymentCostPerSite}
+                  onChange={e => setPaymentCostPerSite(e.target.value)}
+                  className="flex-1 min-w-0 px-3 py-2 text-sm bg-background text-foreground outline-none"
+                  data-testid="input-payment-cost-usd"
+                />
+                <span className="flex items-center px-3 bg-muted text-xs font-medium text-muted-foreground border-l border-input select-none shrink-0">USD</span>
+              </div>
             </div>
+
+            {/* Exchange rate — border-joined addon group */}
             <div className="space-y-1.5">
-              <Label htmlFor="pay-rate">Exchange Rate (SDG per 1 USD)</Label>
-              <Input
-                id="pay-rate"
-                type="number"
-                min="0"
-                step="1"
-                placeholder="e.g. 2000"
-                value={paymentExchangeRate}
-                onChange={e => setPaymentExchangeRate(e.target.value)}
-                data-testid="input-payment-exchange-rate"
-              />
+              <Label htmlFor="pay-rate" className="text-sm font-medium">Exchange Rate</Label>
+              <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                <input
+                  id="pay-rate"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 4100"
+                  value={paymentExchangeRate}
+                  onChange={e => setPaymentExchangeRate(e.target.value)}
+                  className="flex-1 min-w-0 px-3 py-2 text-sm bg-background text-foreground outline-none"
+                  data-testid="input-payment-exchange-rate"
+                />
+                <span className="flex items-center px-3 bg-muted text-xs font-medium text-muted-foreground border-l border-input select-none shrink-0 whitespace-nowrap">SDG / 1 USD</span>
+              </div>
             </div>
-            {paymentCostPerSite && paymentExchangeRate && Number(paymentCostPerSite) > 0 && Number(paymentExchangeRate) > 0 && (
-              <div className="rounded-md bg-muted/60 border p-3 text-sm space-y-1">
-                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Preview</p>
-                <p>1 site visit = <strong>${Number(paymentCostPerSite).toFixed(2)} USD</strong></p>
-                <p>= <strong>{(Number(paymentCostPerSite) * Number(paymentExchangeRate)).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG</strong></p>
+
+            {/* Live preview */}
+            {Number(paymentCostPerSite) > 0 && Number(paymentExchangeRate) > 0 && (
+              <div className="rounded-lg border bg-primary/5 dark:bg-primary/10 p-3 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">Live Preview</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md bg-background border px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Per site (USD)</p>
+                    <p className="text-sm font-bold text-foreground">${Number(paymentCostPerSite).toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-md bg-background border px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Per site (SDG)</p>
+                    <p className="text-sm font-bold text-foreground">
+                      {Math.round(Number(paymentCostPerSite) * Number(paymentExchangeRate)).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  1 USD = {Number(paymentExchangeRate).toLocaleString()} SDG
+                </p>
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
-            <Button
-              disabled={!paymentCostPerSite || !paymentExchangeRate || Number(paymentCostPerSite) <= 0 || Number(paymentExchangeRate) <= 0}
-              onClick={() => {
-                const cost = parseFloat(paymentCostPerSite) || 0;
-                const rate = parseFloat(paymentExchangeRate) || 0;
-                setPaymentDialogOpen(false);
-                if (paymentExportType === 'standard') {
-                  exportEnumeratorTrackerExcel(paymentPendingRows, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
-                } else if (paymentExportType === 'formatted') {
-                  exportEnumeratorTrackerFormattedExcel(paymentPendingRows, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
-                } else if (paymentExportType === 'csvEnum') {
-                  exportCsvEnumTableFormattedExcel(cost, rate);
-                } else if (paymentExportType === 'perHubExcel') {
-                  exportTrackerPerHubExcel(cost, rate);
-                } else if (paymentExportType === 'perHubFormatted') {
-                  exportTrackerPerHubFormattedExcel(cost, rate);
-                }
-              }}
-              data-testid="button-payment-export-confirm"
-            >
-              Export with Payment
-            </Button>
-          </DialogFooter>
+
+          {/* Footer — plain div so layout is fully controlled (DialogFooter forces sm:flex-row) */}
+          <div className="flex flex-col gap-2 pt-2">
+            {paymentExportType === 'csvEnum' && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => { setPaymentDialogOpen(false); exportCsvEnumTableFormattedExcel(0, 0); }}
+                data-testid="button-payment-export-no-payment"
+              >
+                Export without Payment Sheet
+              </Button>
+            )}
+            <div className="flex gap-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setPaymentDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-[2]"
+                disabled={!paymentCostPerSite || !paymentExchangeRate || Number(paymentCostPerSite) <= 0 || Number(paymentExchangeRate) <= 0}
+                onClick={() => {
+                  const cost = parseFloat(paymentCostPerSite) || 0;
+                  const rate = parseFloat(paymentExchangeRate) || 0;
+                  setPaymentDialogOpen(false);
+                  if (paymentExportType === 'standard') {
+                    exportEnumeratorTrackerExcel(paymentPendingRows, `Enumerator_Tracker_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
+                  } else if (paymentExportType === 'formatted') {
+                    exportEnumeratorTrackerFormattedExcel(paymentPendingRows, `Enumerator_Tracker_Formatted_${format(new Date(), 'yyyy-MM-dd')}.xlsx`, cost, rate);
+                  } else if (paymentExportType === 'csvEnum') {
+                    exportCsvEnumTableFormattedExcel(cost, rate);
+                  } else if (paymentExportType === 'perHubExcel') {
+                    exportTrackerPerHubExcel(cost, rate);
+                  } else if (paymentExportType === 'perHubFormatted') {
+                    exportTrackerPerHubFormattedExcel(cost, rate);
+                  }
+                }}
+                data-testid="button-payment-export-confirm"
+              >
+                Export with Payment
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
