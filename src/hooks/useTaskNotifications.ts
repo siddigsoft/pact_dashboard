@@ -7,9 +7,9 @@
  *  1. In-app   — fires on EVERY change (instant feedback for all participants)
  *  2. WhatsApp — fires on EVERY change (real-time push to all participants
  *                via WasenderAPI when WASENDER_API_KEY is set)
- *  3. Email    — fires ONLY on terminal events (task_completed / task_cancelled)
- *                — keeps inboxes clean while still delivering a "final email"
- *                summary to all participants when the task closes.
+ *  3. Email    — fires on assignment (task_assigned) and terminal events
+ *                (task_completed / task_cancelled). Mid-flow status changes
+ *                (started, delayed, etc.) stay in-app + WhatsApp only.
  *
  * "All participants" = primary assignee + task creator + every co-assignee.
  * Each notify() call already excludes the actor themselves, so the actor

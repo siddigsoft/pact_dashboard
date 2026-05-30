@@ -293,16 +293,35 @@ export default function TeamTaskMonitor() {
       if (error) throw error;
       return { newTask, empId, empName };
     },
-    onSuccess: ({ empId, empName }) => {
+    onSuccess: ({ newTask, empId, empName }) => {
       qc.invalidateQueries({ queryKey: ['team-task-monitor'] });
-      // In-app notification to assignee
-      addNotification({
-        userId: empId,
-        title: 'New Task Assigned',
-        message: `${currentUser?.fullName ?? 'A manager'} assigned you: "${taskForm.title}"`,
-        type: 'info',
-        link: '/my-tasks',
-      });
+      const actorName = currentUser?.fullName ?? 'A manager';
+      const messageEn = `${actorName} assigned you: "${taskForm.title}"`;
+      const messageAr = `عيّن لك ${actorName} المهمة: "${taskForm.title}"`;
+      // Unified path: in-app + email + WhatsApp via dispatch-notification.
+      supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type: 'task_assigned',
+          entity_type: 'task',
+          entity_id: newTask?.id,
+          priority: 'normal',
+          recipient_ids: [empId],
+          title_en: 'New Task Assigned',
+          title_ar: 'تم تعيين مهمة جديدة',
+          message_en: messageEn,
+          message_ar: messageAr,
+          triggered_by: currentUser?.id,
+          triggered_by_name: actorName,
+          action_url: newTask?.id
+            ? `https://app.pactorg.com/tasks/${newTask.id}`
+            : 'https://app.pactorg.com/my-tasks',
+          metadata: {
+            task_name: taskForm.title,
+            due_date: taskForm.due_date || '',
+          },
+          send_email: isTaskEmailEvent('task_assigned'),
+        },
+      }).catch(() => { /* non-blocking */ });
       // In-app notification to self
       if (currentUser?.id) {
         addNotification({
@@ -312,29 +331,6 @@ export default function TeamTaskMonitor() {
           type: 'success',
         });
       }
-      // Email is intentionally NOT sent on task creation per the channel
-      // policy in src/lib/taskNotificationPolicy.ts — task_assigned is a
-      // mid-flow change, so it's covered by in-app + WhatsApp only. Emails
-      // are reserved for terminal events (task_completed / task_cancelled).
-      // The in-app notification above already fires; WhatsApp will fire
-      // through the unified usePersonalTasks dispatcher when the task is
-      // created via the standard create-task path. (No code here: this
-      // monitor's createTask only does an Insert without going through
-      // dispatchTaskMultiChannel, so add a WhatsApp ping for parity.)
-      supabase.functions.invoke('send-whatsapp', {
-        body: {
-          user_ids: [empId],
-          event_type: 'task_assigned',
-          data: {
-            task_title: taskForm.title,
-            actor: currentUser?.fullName ?? 'Manager',
-            due_date: taskForm.due_date || 'No due date',
-            url: 'https://app.pactorg.com/my-tasks',
-            message: `${currentUser?.fullName ?? 'Manager'} assigned you: "${taskForm.title}"`,
-            message_ar: `عيّن لك ${currentUser?.fullName ?? 'المدير'} المهمة: "${taskForm.title}"`,
-          },
-        },
-      }).catch(() => { /* non-blocking — needs WASENDER_API_KEY */ });
       toast({ title: 'Task created', description: `Assigned to ${empName}`, variant: 'success' });
       setTaskForm({ title: '', description: '', notes: '', priority: 'medium', due_date: '', category: 'daily', status: 'todo' });
       setShowCreateTask(false);
