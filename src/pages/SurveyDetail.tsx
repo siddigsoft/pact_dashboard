@@ -3600,11 +3600,18 @@ export default function SurveyDetail() {
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
               <Users className="w-4 h-4 text-indigo-600" />
               <h3 className="text-sm font-semibold text-slate-800">Target Respondents</h3>
-              {settingsForm.target_user_ids.length > 0 && (
-                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                  {settingsForm.target_user_ids.length} assigned
-                </span>
-              )}
+              <div className="ml-auto flex items-center gap-1.5">
+                {realSubmissionCount > 0 && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    {realSubmissionCount} submitted
+                  </span>
+                )}
+                {settingsForm.target_user_ids.length > 0 && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                    {settingsForm.target_user_ids.length} assigned
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Tabs */}
