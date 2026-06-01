@@ -417,6 +417,11 @@ export default function SurveyDetail() {
     reminder_days_before: '1,3,7',
     reminder_roles: [] as string[],
     reminder_user_ids: [] as string[],
+    target_user_ids: [] as string[],
+    reminder_message_en: '',
+    reminder_message_ar: '',
+    thankyou_notify_message_en: '',
+    thankyou_notify_message_ar: '',
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [waUserSearch, setWaUserSearch] = useState('');
@@ -433,6 +438,13 @@ export default function SurveyDetail() {
     emails_sent: number; emails_total: number;
     wa_sent: number; wa_total: number; wa_errors?: string[];
     phones: string[]; emails: string[];
+  } | null>(null);
+  const [targetUserSearch, setTargetUserSearch] = useState('');
+  const [targetUserDropOpen, setTargetUserDropOpen] = useState(false);
+  const [sendingManualNotif, setSendingManualNotif] = useState<'reminder' | 'thankyou' | 'all' | null>(null);
+  const [notifChannels, setNotifChannels] = useState({ email: true, whatsapp: true });
+  const [manualNotifResult, setManualNotifResult] = useState<{
+    type: string; wa_sent: number; wa_total: number; email_sent: number; email_total: number;
   } | null>(null);
 
   const REMINDER_ROLES = [
@@ -484,6 +496,11 @@ export default function SurveyDetail() {
         reminder_days_before: String(s.reminder_days_before ?? '1,3,7'),
         reminder_roles: Array.isArray(s.reminder_roles) ? (s.reminder_roles as string[]) : [],
         reminder_user_ids: Array.isArray(s.reminder_user_ids) ? (s.reminder_user_ids as string[]) : [],
+        target_user_ids: Array.isArray(s.target_user_ids) ? (s.target_user_ids as string[]) : [],
+        reminder_message_en: String(s.reminder_message_en ?? ''),
+        reminder_message_ar: String(s.reminder_message_ar ?? ''),
+        thankyou_notify_message_en: String(s.thankyou_notify_message_en ?? ''),
+        thankyou_notify_message_ar: String(s.thankyou_notify_message_ar ?? ''),
       });
       return data as Survey;
     },
@@ -498,6 +515,18 @@ export default function SurveyDetail() {
         .order('full_name');
       if (error) throw error;
       return (data ?? []).filter(u => u.phone?.trim());
+    },
+  });
+
+  const { data: allUsers = [] } = useQuery<{ id: string; full_name: string | null; role: string | null; phone: string | null; email: string | null }[]>({
+    queryKey: ['survey-all-users'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, phone, email')
+        .order('full_name');
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -532,6 +561,14 @@ export default function SurveyDetail() {
       return (data ?? []) as Answer[];
     },
   });
+
+  // ── Target respondent computed values ──────────────────────────────────────
+  const submittedUserIds = new Set(
+    responses.map(r => r.respondent_id).filter(Boolean) as string[]
+  );
+  const targetUserProfiles = allUsers.filter(u => settingsForm.target_user_ids.includes(u.id));
+  const pendingTargetUsers = targetUserProfiles.filter(u => !submittedUserIds.has(u.id));
+  const submittedTargetUsers = targetUserProfiles.filter(u => submittedUserIds.has(u.id));
 
   const saveMeta = async () => {
     if (!id || !editTitle.trim()) return;
@@ -576,6 +613,11 @@ export default function SurveyDetail() {
         reminder_user_ids: settingsForm.reminder_user_ids.length ? settingsForm.reminder_user_ids : null,
         reminder_phones: settingsForm.reminder_phones.trim() || null,
         reminder_days_before: settingsForm.reminder_days_before.trim() || '1,3,7',
+        target_user_ids: settingsForm.target_user_ids.length ? settingsForm.target_user_ids : null,
+        reminder_message_en: settingsForm.reminder_message_en.trim() || null,
+        reminder_message_ar: settingsForm.reminder_message_ar.trim() || null,
+        thankyou_notify_message_en: settingsForm.thankyou_notify_message_en.trim() || null,
+        thankyou_notify_message_ar: settingsForm.thankyou_notify_message_ar.trim() || null,
       };
       const { error } = await supabase.from('surveys').update({
         settings: updatedSettings,
@@ -658,6 +700,77 @@ export default function SurveyDetail() {
       toast({ title: 'Send failed', description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSendingReminder(false);
+    }
+  };
+
+  const sendManualNotif = async (type: 'reminder' | 'thankyou' | 'all') => {
+    if (!id) return;
+    const recipients = type === 'reminder' ? pendingTargetUsers
+      : type === 'thankyou' ? submittedTargetUsers
+      : targetUserProfiles;
+    if (!recipients.length) {
+      toast({ title: 'No recipients', description: 'No users match this notification type.', variant: 'destructive' });
+      return;
+    }
+    if (!notifChannels.email && !notifChannels.whatsapp) {
+      toast({ title: 'Select a channel', description: 'Enable at least one channel (WhatsApp or Email).', variant: 'destructive' });
+      return;
+    }
+    setSendingManualNotif(type);
+    setManualNotifResult(null);
+    let waSent = 0; let waTotal = 0; let emailSent = 0; let emailTotal = 0;
+    try {
+      const surveyUrl = `${window.location.origin}/s/${survey?.short_code ?? id}`;
+      const isThankYou = type === 'thankyou';
+      const messageEn = isThankYou
+        ? (settingsForm.thankyou_notify_message_en.trim() || `Thank you for completing "${survey?.title ?? ''}"! Your response has been recorded.`)
+        : (settingsForm.reminder_message_en.trim() || `Reminder: Please complete the survey "${survey?.title ?? ''}" — ${surveyUrl}`);
+      const messageAr = isThankYou
+        ? (settingsForm.thankyou_notify_message_ar.trim() || `شكراً لإتمامك "${(survey as any)?.title_ar ?? survey?.title ?? ''}"! تم تسجيل إجابتك.`)
+        : (settingsForm.reminder_message_ar.trim() || `تذكير: يرجى إكمال الاستبيان "${(survey as any)?.title_ar ?? survey?.title ?? ''}" — ${surveyUrl}`);
+
+      if (notifChannels.whatsapp) {
+        const waUserIds = recipients.filter(u => u.phone?.trim()).map(u => u.id);
+        waTotal = waUserIds.length;
+        if (waUserIds.length > 0) {
+          const { data: waData } = await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              user_ids: waUserIds,
+              event_type: 'broadcast',
+              data: { message: messageEn, message_ar: messageAr },
+            },
+          });
+          waSent = (waData as any)?.sent ?? 0;
+        }
+      }
+
+      if (notifChannels.email) {
+        const emailRecips = recipients.filter(u => (u.email as string | null)?.trim());
+        emailTotal = emailRecips.length;
+        for (const u of emailRecips) {
+          try {
+            await supabase.functions.invoke('send-email', {
+              body: {
+                to: u.email as string,
+                subject: isThankYou ? `Thank you: ${survey?.title ?? 'Survey'}` : `Reminder: ${survey?.title ?? 'Survey'}`,
+                html: `<p>Dear ${u.full_name ?? 'Respondent'},</p><p>${messageEn}</p>${!isThankYou ? `<p><a href="${surveyUrl}" style="background:#4f46e5;color:#fff;padding:8px 18px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px">Open Survey</a></p>` : ''}`,
+              },
+            });
+            emailSent++;
+          } catch { /* non-fatal per-email error */ }
+        }
+      }
+
+      setManualNotifResult({ type, wa_sent: waSent, wa_total: waTotal, email_sent: emailSent, email_total: emailTotal });
+      const desc = [
+        notifChannels.whatsapp ? `${waSent}/${waTotal} WhatsApp` : '',
+        notifChannels.email ? `${emailSent}/${emailTotal} email` : '',
+      ].filter(Boolean).join(' · ');
+      toast({ title: isThankYou ? 'Thank-you sent' : 'Reminder sent', description: desc });
+    } catch (e: unknown) {
+      toast({ title: 'Send failed', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setSendingManualNotif(null);
     }
   };
 
@@ -3430,6 +3543,152 @@ export default function SurveyDetail() {
             </div>
           </div>
 
+          {/* Target Respondents */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <Users className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-slate-800">Target Respondents</h3>
+              {settingsForm.target_user_ids.length > 0 && (
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                  {settingsForm.target_user_ids.length} assigned
+                </span>
+              )}
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-[11px] text-slate-400">
+                Assign staff members expected to complete this survey. Track who has submitted and send targeted notifications.
+              </p>
+
+              {/* User picker */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Add respondents</label>
+                <div className="relative">
+                  <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-200 focus-within:border-indigo-400">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Search by name…"
+                      value={targetUserSearch}
+                      onChange={e => { setTargetUserSearch(e.target.value); setTargetUserDropOpen(true); }}
+                      onFocus={() => setTargetUserDropOpen(true)}
+                      onBlur={() => setTimeout(() => setTargetUserDropOpen(false), 150)}
+                      className="flex-1 text-sm bg-transparent outline-none placeholder-slate-400"
+                      data-testid="input-target-user-search"
+                    />
+                  </div>
+                  {targetUserDropOpen && (() => {
+                    const filtered = allUsers.filter(u =>
+                      !settingsForm.target_user_ids.includes(u.id) &&
+                      (u.full_name ?? '').toLowerCase().includes(targetUserSearch.toLowerCase()),
+                    ).slice(0, 8);
+                    return filtered.length > 0 ? (
+                      <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                        {filtered.map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            data-testid={`add-target-user-${u.id}`}
+                            onMouseDown={() => {
+                              setSettingsForm(s => ({ ...s, target_user_ids: [...s.target_user_ids, u.id] }));
+                              setTargetUserSearch('');
+                              setTargetUserDropOpen(false);
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 text-left"
+                          >
+                            <span className="font-medium text-slate-800">{u.full_name ?? '—'}</span>
+                            <span className="text-[11px] text-slate-400">{u.role}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+
+              {/* Submission status table */}
+              {targetUserProfiles.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Submission Status</p>
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                        <CheckCircle2 className="w-3 h-3" />{submittedTargetUsers.length} submitted
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-600 font-medium">
+                        <Clock className="w-3 h-3" />{pendingTargetUsers.length} pending
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
+                          <th className="text-left px-3 py-2 text-slate-500 font-medium hidden sm:table-cell">Role</th>
+                          <th className="text-center px-3 py-2 text-slate-500 font-medium">Status</th>
+                          <th className="px-2 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {targetUserProfiles.map(u => {
+                          const submitted = submittedUserIds.has(u.id);
+                          const responseEntry = responses.find(r => r.respondent_id === u.id);
+                          return (
+                            <tr key={u.id} className="hover:bg-slate-50/50">
+                              <td className="px-3 py-2 font-medium text-slate-800">{u.full_name ?? '—'}</td>
+                              <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">{u.role ?? '—'}</td>
+                              <td className="px-3 py-2 text-center">
+                                {submitted ? (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                                    <CheckCircle2 className="w-2.5 h-2.5" />Submitted
+                                    {responseEntry?.submitted_at && (
+                                      <span className="text-emerald-500 font-normal">
+                                        · {new Date(responseEntry.submitted_at as string).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                                    <Clock className="w-2.5 h-2.5" />Pending
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-2">
+                                <button
+                                  type="button"
+                                  data-testid={`remove-target-user-${u.id}`}
+                                  onClick={() => setSettingsForm(s => ({ ...s, target_user_ids: s.target_user_ids.filter(x => x !== u.id) }))}
+                                  className="text-slate-300 hover:text-red-500 transition-colors"
+                                  title="Remove"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Completion progress bar */}
+                  <div className="space-y-1">
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.round((submittedTargetUsers.length / (targetUserProfiles.length || 1)) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 text-right">
+                      {Math.round((submittedTargetUsers.length / (targetUserProfiles.length || 1)) * 100)}% completion rate
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Display Settings */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
@@ -4156,6 +4415,178 @@ export default function SurveyDetail() {
               )}
             </div>
           </div>
+
+          {/* Send Notifications Now */}
+          {settingsForm.target_user_ids.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+                <BellRing className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-slate-800">Send Notifications Now</h3>
+                <span className="ml-auto text-[10px] text-slate-400">Manual — sent immediately</span>
+              </div>
+              <div className="p-5 space-y-5">
+
+                {/* Channel selector */}
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Channels</p>
+                  <div className="flex items-center gap-5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notifChannels.whatsapp}
+                        onChange={e => setNotifChannels(s => ({ ...s, whatsapp: e.target.checked }))}
+                        className="rounded border-slate-300 text-indigo-600"
+                        data-testid="toggle-notif-channel-whatsapp"
+                      />
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-sm font-medium text-slate-700">WhatsApp</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notifChannels.email}
+                        onChange={e => setNotifChannels(s => ({ ...s, email: e.target.checked }))}
+                        className="rounded border-slate-300 text-indigo-600"
+                        data-testid="toggle-notif-channel-email"
+                      />
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-sm font-medium text-slate-700">Email</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Message templates */}
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                      <BellRing className="w-3.5 h-3.5 text-amber-500" />Reminder message
+                      <span className="text-[10px] text-slate-400 font-normal">(leave blank to use default)</span>
+                    </label>
+                    <Textarea
+                      placeholder="e.g. Please complete the survey before the deadline…"
+                      value={settingsForm.reminder_message_en}
+                      onChange={e => setSettingsForm(s => ({ ...s, reminder_message_en: e.target.value }))}
+                      className="text-sm resize-none"
+                      rows={2}
+                      data-testid="input-reminder-message-en"
+                    />
+                    <Textarea
+                      placeholder="رسالة التذكير بالعربية (اختياري)"
+                      value={settingsForm.reminder_message_ar}
+                      onChange={e => setSettingsForm(s => ({ ...s, reminder_message_ar: e.target.value }))}
+                      className="text-sm resize-none"
+                      rows={2}
+                      dir="rtl"
+                      data-testid="input-reminder-message-ar"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Thank-you message
+                      <span className="text-[10px] text-slate-400 font-normal">(leave blank to use default)</span>
+                    </label>
+                    <Textarea
+                      placeholder="e.g. Thank you for completing the survey! Your response has been recorded."
+                      value={settingsForm.thankyou_notify_message_en}
+                      onChange={e => setSettingsForm(s => ({ ...s, thankyou_notify_message_en: e.target.value }))}
+                      className="text-sm resize-none"
+                      rows={2}
+                      data-testid="input-thankyou-message-en"
+                    />
+                    <Textarea
+                      placeholder="رسالة الشكر بالعربية (اختياري)"
+                      value={settingsForm.thankyou_notify_message_ar}
+                      onChange={e => setSettingsForm(s => ({ ...s, thankyou_notify_message_ar: e.target.value }))}
+                      className="text-sm resize-none"
+                      rows={2}
+                      dir="rtl"
+                      data-testid="input-thankyou-message-ar"
+                    />
+                  </div>
+                </div>
+
+                {/* Send buttons */}
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send to</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      data-testid="btn-notif-reminder"
+                      onClick={() => sendManualNotif('reminder')}
+                      disabled={!!sendingManualNotif || pendingTargetUsers.length === 0}
+                      className={cn(
+                        'flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border font-medium text-xs transition-all',
+                        sendingManualNotif === 'reminder'
+                          ? 'bg-amber-100 border-amber-200 text-amber-500 cursor-not-allowed'
+                          : pendingTargetUsers.length === 0
+                          ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
+                      )}
+                    >
+                      {sendingManualNotif === 'reminder'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <BellRing className="w-4 h-4" />}
+                      <span className="font-semibold">Remind pending</span>
+                      <span className="text-[10px] opacity-70">{pendingTargetUsers.length} user{pendingTargetUsers.length !== 1 ? 's' : ''}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid="btn-notif-thankyou"
+                      onClick={() => sendManualNotif('thankyou')}
+                      disabled={!!sendingManualNotif || submittedTargetUsers.length === 0}
+                      className={cn(
+                        'flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border font-medium text-xs transition-all',
+                        sendingManualNotif === 'thankyou'
+                          ? 'bg-emerald-100 border-emerald-200 text-emerald-500 cursor-not-allowed'
+                          : submittedTargetUsers.length === 0
+                          ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+                      )}
+                    >
+                      {sendingManualNotif === 'thankyou'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <CheckCircle2 className="w-4 h-4" />}
+                      <span className="font-semibold">Thank submitters</span>
+                      <span className="text-[10px] opacity-70">{submittedTargetUsers.length} user{submittedTargetUsers.length !== 1 ? 's' : ''}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid="btn-notif-all"
+                      onClick={() => sendManualNotif('all')}
+                      disabled={!!sendingManualNotif || targetUserProfiles.length === 0}
+                      className={cn(
+                        'flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border font-medium text-xs transition-all',
+                        sendingManualNotif === 'all'
+                          ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed'
+                          : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100',
+                      )}
+                    >
+                      {sendingManualNotif === 'all'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <Users className="w-4 h-4" />}
+                      <span className="font-semibold">Notify all</span>
+                      <span className="text-[10px] opacity-70">{targetUserProfiles.length} user{targetUserProfiles.length !== 1 ? 's' : ''}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Result banner */}
+                {manualNotifResult && (
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <p className="text-[11px] font-semibold text-indigo-700">
+                      {manualNotifResult.type === 'reminder' ? 'Reminder' : manualNotifResult.type === 'thankyou' ? 'Thank-you' : 'Notification'} sent —{' '}
+                      {notifChannels.whatsapp && `${manualNotifResult.wa_sent}/${manualNotifResult.wa_total} WhatsApp`}
+                      {notifChannels.whatsapp && notifChannels.email && ' · '}
+                      {notifChannels.email && `${manualNotifResult.email_sent}/${manualNotifResult.email_total} email`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Save */}
           <div className="flex items-center gap-3">
