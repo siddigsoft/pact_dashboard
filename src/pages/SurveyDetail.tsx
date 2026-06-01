@@ -35,7 +35,7 @@ import {
   RefreshCw, FunctionSquare, PenLine, ArrowRightLeft, Activity, AlertCircle,
   Upload, LayoutList, BookOpen, GripVertical, CheckSquare2,
   BellRing, MessageSquareMore,
-  UserCheck, BarChart3, Check,
+  UserCheck, BarChart3, Check, Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -449,6 +449,10 @@ export default function SurveyDetail() {
   const [manualNotifResult, setManualNotifResult] = useState<{
     type: string; wa_sent: number; wa_total: number; email_sent: number; email_total: number;
   } | null>(null);
+  const [notifPopoverUserId, setNotifPopoverUserId] = useState<string | null>(null);
+  const [notifPopoverAnchor, setNotifPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [notifPopoverChannel, setNotifPopoverChannel] = useState<'whatsapp' | 'email' | 'both'>('whatsapp');
+  const [sendingSingleNotif, setSendingSingleNotif] = useState<string | null>(null);
 
   const REMINDER_ROLES = [
     { id: 'superAdmin',            label: 'Super Admin' },
@@ -778,6 +782,43 @@ export default function SurveyDetail() {
       toast({ title: 'Send failed', description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSendingManualNotif(null);
+    }
+  };
+
+  const sendSingleUserNotif = async (userId: string, channel: 'whatsapp' | 'email' | 'both') => {
+    const u = allUsers.find(p => p.id === userId);
+    if (!u) return;
+    setSendingSingleNotif(userId);
+    try {
+      const surveyUrl = `${window.location.origin}/s/${survey?.short_code ?? id}`;
+      const submitted = submittedUserIds.has(userId);
+      const messageEn = submitted
+        ? (settingsForm.thankyou_notify_message_en.trim() || `Thank you for completing "${survey?.title ?? ''}"! Your response has been recorded.`)
+        : (settingsForm.reminder_message_en.trim() || `Reminder: Please complete the survey "${survey?.title ?? ''}" — ${surveyUrl}`);
+      const messageAr = submitted
+        ? (settingsForm.thankyou_notify_message_ar.trim() || `شكراً لإتمامك "${(survey as any)?.title_ar ?? survey?.title ?? ''}"! تم تسجيل إجابتك.`)
+        : (settingsForm.reminder_message_ar.trim() || `تذكير: يرجى إكمال الاستبيان "${(survey as any)?.title_ar ?? survey?.title ?? ''}" — ${surveyUrl}`);
+      if ((channel === 'whatsapp' || channel === 'both') && u.phone?.trim()) {
+        await supabase.functions.invoke('send-whatsapp', {
+          body: { user_ids: [userId], event_type: 'broadcast', data: { message: messageEn, message_ar: messageAr } },
+        });
+      }
+      if ((channel === 'email' || channel === 'both') && (u.email as string | null)?.trim()) {
+        await supabase.functions.invoke('send-email', {
+          body: {
+            to: u.email as string,
+            subject: submitted ? `Thank you: ${survey?.title ?? 'Survey'}` : `Reminder: ${survey?.title ?? 'Survey'}`,
+            html: `<p>Dear ${u.full_name ?? 'Respondent'},</p><p>${messageEn}</p>${!submitted ? `<p><a href="${surveyUrl}" style="background:#4f46e5;color:#fff;padding:8px 18px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px">Open Survey</a></p>` : ''}`,
+          },
+        });
+      }
+      toast({ title: `Notification sent to ${u.full_name ?? 'user'}` });
+    } catch (e: unknown) {
+      toast({ title: 'Send failed', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setSendingSingleNotif(null);
+      setNotifPopoverUserId(null);
+      setNotifPopoverAnchor(null);
     }
   };
 
@@ -3594,10 +3635,13 @@ export default function SurveyDetail() {
 
             {/* Tab: Select Users */}
             {targetTab === 'select' && (() => {
-              const uniqueRoles = [...new Set(allUsers.map(u => u.role).filter(Boolean) as string[])].sort();
+              // Deduplicate roles case-insensitively, preserve original display casing of first occurrence
+              const uniqueRoles = [...new Map(
+                allUsers.filter(u => u.role).map(u => [u.role!.toLowerCase(), u.role!])
+              ).values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
               const visibleUsers = allUsers.filter(u =>
                 (!targetUserSearch || (u.full_name ?? '').toLowerCase().includes(targetUserSearch.toLowerCase())) &&
-                (!targetRoleFilter || u.role === targetRoleFilter),
+                (!targetRoleFilter || (u.role ?? '').toLowerCase() === targetRoleFilter.toLowerCase()),
               );
               const visibleSelectedCount = visibleUsers.filter(u => settingsForm.target_user_ids.includes(u.id)).length;
               return (
@@ -3697,8 +3741,9 @@ export default function SurveyDetail() {
                       <thead className="bg-slate-50 sticky top-0 z-10">
                         <tr>
                           <th className="w-8 px-3 py-2"></th>
-                          <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
+                          <th className="text-left px-3 py-2 text-slate-500 font-medium">Name / Contact</th>
                           <th className="text-left px-3 py-2 text-slate-500 font-medium">Role</th>
+                          <th className="w-10 px-2 py-2 text-slate-500 font-medium text-center">Notify</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -3727,8 +3772,48 @@ export default function SurveyDetail() {
                                   {checked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                                 </div>
                               </td>
-                              <td className="px-3 py-2.5 font-medium text-slate-800">{u.full_name ?? '—'}</td>
-                              <td className="px-3 py-2.5 text-slate-500">{u.role ?? '—'}</td>
+                              <td className="px-3 py-2.5">
+                                <div className="font-medium text-slate-800 leading-tight">{u.full_name ?? '—'}</div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {(u.email as string | null) && (
+                                    <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                                      <Mail className="w-2.5 h-2.5" />{u.email as string}
+                                    </span>
+                                  )}
+                                  {u.phone && (
+                                    <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                                      <MessageSquare className="w-2.5 h-2.5" />{u.phone}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-slate-500 text-[11px]">{u.role ?? '—'}</td>
+                              <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  data-testid={`btn-notify-user-${u.id}`}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                    if (notifPopoverUserId === u.id) {
+                                      setNotifPopoverUserId(null);
+                                      setNotifPopoverAnchor(null);
+                                    } else {
+                                      setNotifPopoverUserId(u.id);
+                                      setNotifPopoverAnchor({ top: rect.bottom + 6, left: Math.max(4, rect.left - 148) });
+                                      setNotifPopoverChannel('whatsapp');
+                                    }
+                                  }}
+                                  className={cn(
+                                    'p-1.5 rounded-lg transition-colors',
+                                    notifPopoverUserId === u.id
+                                      ? 'bg-indigo-100 text-indigo-600'
+                                      : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50',
+                                  )}
+                                >
+                                  <BellRing className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -3978,6 +4063,83 @@ export default function SurveyDetail() {
               </div>
             )}
           </div>
+
+          {/* Per-user notification popover — fixed so it escapes any overflow containers */}
+          {notifPopoverUserId && notifPopoverAnchor && (() => {
+            const pu = allUsers.find(u => u.id === notifPopoverUserId);
+            const isSubmitted = submittedUserIds.has(notifPopoverUserId);
+            return (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => { setNotifPopoverUserId(null); setNotifPopoverAnchor(null); }} />
+                <div
+                  className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3.5 w-56 space-y-3"
+                  style={{ top: notifPopoverAnchor.top, left: notifPopoverAnchor.left }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* User mini-header */}
+                  <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                      <span className="text-[11px] font-bold text-indigo-600">
+                        {(pu?.full_name ?? '?').charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">{pu?.full_name ?? '—'}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{(pu?.email as string | null) ?? pu?.phone ?? pu?.role ?? ''}</p>
+                    </div>
+                    {isSubmitted && (
+                      <span className="ml-auto shrink-0 text-[9px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded-full">Done</span>
+                    )}
+                  </div>
+
+                  {/* Channel selector */}
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Send via</p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {(['whatsapp', 'email', 'both'] as const).map(ch => (
+                        <button
+                          key={ch}
+                          type="button"
+                          onClick={() => setNotifPopoverChannel(ch)}
+                          className={cn(
+                            'flex flex-col items-center gap-1 py-1.5 rounded-lg border text-[10px] font-semibold transition-colors',
+                            notifPopoverChannel === ch
+                              ? 'bg-indigo-600 border-indigo-600 text-white'
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300',
+                          )}
+                        >
+                          {ch === 'whatsapp' && <MessageSquare className="w-3 h-3" />}
+                          {ch === 'email' && <Mail className="w-3 h-3" />}
+                          {ch === 'both' && <BellRing className="w-3 h-3" />}
+                          {ch === 'whatsapp' ? 'WhatsApp' : ch === 'email' ? 'Email' : 'Both'}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Warn if contact missing */}
+                    {notifPopoverChannel !== 'email' && !pu?.phone && (
+                      <p className="text-[10px] text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />No phone on file</p>
+                    )}
+                    {notifPopoverChannel !== 'whatsapp' && !(pu?.email as string | null) && (
+                      <p className="text-[10px] text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />No email on file</p>
+                    )}
+                  </div>
+
+                  {/* Send button */}
+                  <button
+                    type="button"
+                    onClick={() => sendSingleUserNotif(notifPopoverUserId!, notifPopoverChannel)}
+                    disabled={sendingSingleNotif === notifPopoverUserId}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                    data-testid="btn-send-single-notif"
+                  >
+                    {sendingSingleNotif === notifPopoverUserId
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Sending…</>
+                      : <><Send className="w-3.5 h-3.5" />Send now</>}
+                  </button>
+                </div>
+              </>
+            );
+          })()}
 
           {/* Display Settings */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
