@@ -3706,83 +3706,111 @@ export default function SurveyDetail() {
             )}
 
             {/* Tab: Submission Status */}
-            {targetTab === 'status' && (
-              <div className="p-4 space-y-3">
-                {targetUserProfiles.length === 0 ? (
-                  <div className="py-10 flex flex-col items-center gap-2 text-slate-400">
-                    <Users className="w-7 h-7 opacity-30" />
-                    <p className="text-xs">No users assigned yet — select users in the first tab.</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Summary pills */}
-                    <div className="flex items-center gap-3 text-[11px]">
-                      <span className="flex items-center gap-1 text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
-                        <CheckCircle2 className="w-3 h-3" />{submittedTargetUsers.length} submitted
-                      </span>
-                      <span className="flex items-center gap-1 text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
-                        <Clock className="w-3 h-3" />{pendingTargetUsers.length} pending
-                      </span>
-                      <span className="ml-auto text-slate-400">{targetUserProfiles.length} total</span>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="space-y-1">
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.round((submittedTargetUsers.length / (targetUserProfiles.length || 1)) * 100)}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-slate-400 text-right">
-                        {Math.round((submittedTargetUsers.length / (targetUserProfiles.length || 1)) * 100)}% completion rate
+            {targetTab === 'status' && (() => {
+              // Merge: explicitly targeted users + anyone who has already responded
+              const statusListUsers = allUsers.filter(u =>
+                settingsForm.target_user_ids.includes(u.id) || submittedUserIds.has(u.id),
+              );
+              const statusSubmitted = statusListUsers.filter(u => submittedUserIds.has(u.id));
+              const statusPending   = statusListUsers.filter(u =>
+                settingsForm.target_user_ids.includes(u.id) && !submittedUserIds.has(u.id),
+              );
+              return (
+                <div className="p-4 space-y-3">
+                  {statusListUsers.length === 0 ? (
+                    <div className="py-10 flex flex-col items-center gap-2 text-slate-400">
+                      <Users className="w-7 h-7 opacity-30" />
+                      <p className="text-xs text-center">
+                        No responses yet and no users assigned.<br />
+                        Select target users in the first tab or wait for responses.
                       </p>
                     </div>
+                  ) : (
+                    <>
+                      {/* Summary pills */}
+                      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                        <span className="flex items-center gap-1 text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
+                          <CheckCircle2 className="w-3 h-3" />{statusSubmitted.length} submitted
+                        </span>
+                        {statusPending.length > 0 && (
+                          <span className="flex items-center gap-1 text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
+                            <Clock className="w-3 h-3" />{statusPending.length} pending
+                          </span>
+                        )}
+                        <span className="ml-auto text-slate-400">{statusListUsers.length} total</span>
+                      </div>
 
-                    {/* Status table */}
-                    <div className="border border-slate-200 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-50 sticky top-0 z-10">
-                          <tr>
-                            <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
-                            <th className="text-left px-3 py-2 text-slate-500 font-medium">Role</th>
-                            <th className="text-center px-3 py-2 text-slate-500 font-medium">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {targetUserProfiles.map(u => {
-                            const submitted = submittedUserIds.has(u.id);
-                            const responseEntry = responses.find(r => r.respondent_id === u.id);
-                            return (
-                              <tr key={u.id} className="hover:bg-slate-50/50">
-                                <td className="px-3 py-2.5 font-medium text-slate-800">{u.full_name ?? '—'}</td>
-                                <td className="px-3 py-2.5 text-slate-500">{u.role ?? '—'}</td>
-                                <td className="px-3 py-2.5 text-center">
-                                  {submitted ? (
-                                    <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
-                                      <CheckCircle2 className="w-2.5 h-2.5" />Submitted
-                                      {responseEntry?.submitted_at && (
-                                        <span className="text-emerald-500 font-normal ml-0.5">
-                                          · {new Date(responseEntry.submitted_at as string).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      {/* Progress bar — targeted users only */}
+                      {targetUserProfiles.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.round((submittedTargetUsers.length / (targetUserProfiles.length || 1)) * 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 text-right">
+                            {submittedTargetUsers.length}/{targetUserProfiles.length} targeted users completed
+                            ({Math.round((submittedTargetUsers.length / (targetUserProfiles.length || 1)) * 100)}%)
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Status table */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-50 sticky top-0 z-10">
+                            <tr>
+                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
+                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Role</th>
+                              <th className="text-center px-3 py-2 text-slate-500 font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {statusListUsers.map(u => {
+                              const submitted = submittedUserIds.has(u.id);
+                              const isTargeted = settingsForm.target_user_ids.includes(u.id);
+                              const responseEntry = responses.find(r => r.respondent_id === u.id);
+                              return (
+                                <tr key={u.id} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-medium text-slate-800">{u.full_name ?? '—'}</span>
+                                      {!isTargeted && (
+                                        <span className="text-[9px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                          Extra
                                         </span>
                                       )}
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
-                                      <Clock className="w-2.5 h-2.5" />Pending
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-slate-500">{u.role ?? '—'}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {submitted ? (
+                                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                                        <CheckCircle2 className="w-2.5 h-2.5" />Submitted
+                                        {responseEntry?.submitted_at && (
+                                          <span className="text-emerald-500 font-normal ml-0.5">
+                                            · {new Date(responseEntry.submitted_at as string).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                          </span>
+                                        )}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                                        <Clock className="w-2.5 h-2.5" />Pending
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Display Settings */}
