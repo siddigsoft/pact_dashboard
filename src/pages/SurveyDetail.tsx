@@ -3712,10 +3712,12 @@ export default function SurveyDetail() {
                         type="button"
                         onClick={() => {
                           const visibleIds = visibleUsers.map(u => u.id);
+                          const newlyAdded = visibleIds.filter(vid => !settingsForm.target_user_ids.includes(vid));
                           setSettingsForm(s => ({
                             ...s,
                             target_user_ids: [...new Set([...s.target_user_ids, ...visibleIds])],
                           }));
+                          for (const uid of newlyAdded) void sendSingleUserNotif(uid, 'both');
                         }}
                         className="text-[11px] text-indigo-600 hover:underline font-medium"
                         data-testid="btn-target-select-all"
@@ -3752,12 +3754,17 @@ export default function SurveyDetail() {
                           return (
                             <tr
                               key={u.id}
-                              onClick={() => setSettingsForm(s => ({
-                                ...s,
-                                target_user_ids: checked
-                                  ? s.target_user_ids.filter(x => x !== u.id)
-                                  : [...s.target_user_ids, u.id],
-                              }))}
+                              onClick={() => {
+                                setSettingsForm(s => ({
+                                  ...s,
+                                  target_user_ids: checked
+                                    ? s.target_user_ids.filter(x => x !== u.id)
+                                    : [...s.target_user_ids, u.id],
+                                }));
+                                if (!checked) {
+                                  void sendSingleUserNotif(u.id, 'both');
+                                }
+                              }}
                               className={cn(
                                 'cursor-pointer transition-colors',
                                 checked ? 'bg-indigo-50/60 hover:bg-indigo-50' : 'hover:bg-slate-50',

@@ -1014,6 +1014,33 @@ export default function SurveyFill() {
       if (!currentUser?.id && surveyId && !survey?.settings?.allow_multiple) {
         try { localStorage.setItem(`survey_submitted_${surveyId}`, String(Date.now())); } catch { /* ignore */ }
       }
+      // Auto thank-you notification if this user is a targeted respondent
+      if (currentUser?.id) {
+        const settings = (survey?.settings ?? {}) as Record<string, unknown>;
+        const targetIds = (settings.target_user_ids ?? []) as string[];
+        if (targetIds.includes(currentUser.id)) {
+          const messageEn = (settings.thankyou_notify_message_en as string | undefined)?.trim()
+            || `Thank you for completing "${survey?.title ?? ''}"! Your response has been recorded.`;
+          const messageAr = (settings.thankyou_notify_message_ar as string | undefined)?.trim()
+            || `شكراً لإتمامك "${(survey as any)?.title_ar ?? survey?.title ?? ''}"! تم تسجيل إجابتك.`;
+          void (async () => {
+            try {
+              await supabase.functions.invoke('send-whatsapp', {
+                body: { user_ids: [currentUser.id], event_type: 'broadcast', data: { message: messageEn, message_ar: messageAr } },
+              });
+              if (currentUser.email) {
+                await supabase.functions.invoke('send-email', {
+                  body: {
+                    to: currentUser.email,
+                    subject: `Thank you: ${survey?.title ?? 'Survey'}`,
+                    html: `<p>Dear ${currentUser.fullName ?? 'Respondent'},</p><p>${messageEn}</p>`,
+                  },
+                });
+              }
+            } catch { /* non-fatal — don't block the thank-you screen */ }
+          })();
+        }
+      }
     },
     onError: (e: Error) => {
       if (e.message !== 'Please answer all required questions') {
