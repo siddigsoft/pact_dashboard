@@ -3727,7 +3727,7 @@ export default function SurveyDetail() {
                             ...s,
                             target_user_ids: [...new Set([...s.target_user_ids, ...visibleIds])],
                           }));
-                          for (const uid of newlyAdded) void sendSingleUserNotif(uid, 'both');
+                          for (const uid of newlyAdded) void sendSingleUserNotif(uid, notifPopoverChannel);
                         }}
                         className="text-[11px] text-indigo-600 hover:underline font-medium"
                         data-testid="btn-target-select-all"
@@ -3745,6 +3745,30 @@ export default function SurveyDetail() {
                         data-testid="btn-target-clear-all"
                       >Clear shown</button>
                     </div>
+                  </div>
+
+                  {/* Notification channel selector */}
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide shrink-0">Notify via:</span>
+                    {(['whatsapp', 'email', 'both'] as const).map(ch => (
+                      <button
+                        key={ch}
+                        type="button"
+                        onClick={() => setNotifPopoverChannel(ch)}
+                        className={cn(
+                          'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors',
+                          notifPopoverChannel === ch
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600',
+                        )}
+                        data-testid={`channel-select-${ch}`}
+                      >
+                        {ch === 'whatsapp' && <MessageSquare className="w-2.5 h-2.5" />}
+                        {ch === 'email' && <Mail className="w-2.5 h-2.5" />}
+                        {ch === 'both' && <BellRing className="w-2.5 h-2.5" />}
+                        {ch === 'whatsapp' ? 'WhatsApp' : ch === 'email' ? 'Email' : 'Both'}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Full user list */}
@@ -3772,7 +3796,7 @@ export default function SurveyDetail() {
                                     : [...s.target_user_ids, u.id],
                                 }));
                                 if (!checked) {
-                                  void sendSingleUserNotif(u.id, 'both');
+                                  void sendSingleUserNotif(u.id, notifPopoverChannel);
                                 }
                               }}
                               className={cn(
@@ -3818,7 +3842,7 @@ export default function SurveyDetail() {
                                     } else {
                                       setNotifPopoverUserId(u.id);
                                       setNotifPopoverAnchor({ top: rect.bottom + 6, left: Math.max(4, rect.left - 148) });
-                                      setNotifPopoverChannel('whatsapp');
+                                      // keep last selected channel — don't reset
                                     }
                                   }}
                                   className={cn(
