@@ -565,8 +565,12 @@ export default function SurveyDetail() {
   });
 
   // ── Target respondent computed values ──────────────────────────────────────
+  // Only count rows that have a submitted_at — drafts/in-progress have null submitted_at
   const submittedUserIds = new Set(
-    responses.map(r => r.respondent_id).filter(Boolean) as string[]
+    responses
+      .filter(r => r.submitted_at != null)
+      .map(r => r.respondent_id)
+      .filter(Boolean) as string[]
   );
   const targetUserProfiles = allUsers.filter(u => settingsForm.target_user_ids.includes(u.id));
   const pendingTargetUsers = targetUserProfiles.filter(u => !submittedUserIds.has(u.id));
