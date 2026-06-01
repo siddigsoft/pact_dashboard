@@ -442,7 +442,8 @@ export default function SurveyDetail() {
   } | null>(null);
   const [targetUserSearch, setTargetUserSearch] = useState('');
   const [targetUserDropOpen, setTargetUserDropOpen] = useState(false);
-  const [targetTab, setTargetTab] = useState<'select' | 'status'>('select');
+  const [targetTab, setTargetTab] = useState<'select' | 'status' | 'notify'>('select');
+  const [targetRoleFilter, setTargetRoleFilter] = useState<string>('');
   const [sendingManualNotif, setSendingManualNotif] = useState<'reminder' | 'thankyou' | 'all' | null>(null);
   const [notifChannels, setNotifChannels] = useState({ email: true, whatsapp: true });
   const [manualNotifResult, setManualNotifResult] = useState<{
@@ -3564,109 +3565,144 @@ export default function SurveyDetail() {
 
             {/* Tabs */}
             <div className="flex border-b border-slate-100">
-              <button
-                type="button"
-                data-testid="tab-target-select"
-                onClick={() => setTargetTab('select')}
-                className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors',
-                  targetTab === 'select'
-                    ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/40'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
-                )}
-              >
-                <UserCheck className="w-3.5 h-3.5" />Select Users
-              </button>
-              <button
-                type="button"
-                data-testid="tab-target-status"
-                onClick={() => setTargetTab('status')}
-                className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors',
-                  targetTab === 'status'
-                    ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/40'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
-                )}
-              >
-                <BarChart3 className="w-3.5 h-3.5" />Submission Status
-                {settingsForm.target_user_ids.length > 0 && (
-                  <span className="ml-1 bg-slate-200 text-slate-600 rounded-full text-[10px] px-1.5 py-0.5 font-bold">
-                    {settingsForm.target_user_ids.length}
-                  </span>
-                )}
-              </button>
+              {([
+                { key: 'select',  icon: <UserCheck className="w-3.5 h-3.5" />, label: 'Select Users' },
+                { key: 'status',  icon: <BarChart3 className="w-3.5 h-3.5" />,  label: 'Submission Status' },
+                { key: 'notify',  icon: <BellRing className="w-3.5 h-3.5" />,   label: 'Notifications' },
+              ] as const).map(tab => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  data-testid={`tab-target-${tab.key}`}
+                  onClick={() => setTargetTab(tab.key)}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-semibold transition-colors',
+                    targetTab === tab.key
+                      ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/40'
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
+                  )}
+                >
+                  {tab.icon}{tab.label}
+                  {tab.key === 'status' && settingsForm.target_user_ids.length > 0 && (
+                    <span className="ml-0.5 bg-slate-200 text-slate-600 rounded-full text-[10px] px-1.5 py-0.5 font-bold">
+                      {settingsForm.target_user_ids.length}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
             {/* Tab: Select Users */}
-            {targetTab === 'select' && (
-              <div className="p-4 space-y-3">
-                <p className="text-[11px] text-slate-400">
-                  Check the staff members expected to complete this survey. Checked users will receive targeted notifications.
-                </p>
+            {targetTab === 'select' && (() => {
+              const uniqueRoles = [...new Set(allUsers.map(u => u.role).filter(Boolean) as string[])].sort();
+              const visibleUsers = allUsers.filter(u =>
+                (!targetUserSearch || (u.full_name ?? '').toLowerCase().includes(targetUserSearch.toLowerCase())) &&
+                (!targetRoleFilter || u.role === targetRoleFilter),
+              );
+              const visibleSelectedCount = visibleUsers.filter(u => settingsForm.target_user_ids.includes(u.id)).length;
+              return (
+                <div className="p-4 space-y-3">
+                  <p className="text-[11px] text-slate-400">
+                    Check the staff members expected to complete this survey. Checked users will receive targeted notifications.
+                  </p>
 
-                {/* Search */}
-                <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-200 focus-within:border-indigo-400">
-                  <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Filter by name or role…"
-                    value={targetUserSearch}
-                    onChange={e => setTargetUserSearch(e.target.value)}
-                    className="flex-1 text-sm bg-transparent outline-none placeholder-slate-400"
-                    data-testid="input-target-user-search"
-                  />
-                  {targetUserSearch && (
-                    <button type="button" onClick={() => setTargetUserSearch('')} className="text-slate-300 hover:text-slate-500">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                  {/* Name search */}
+                  <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-200 focus-within:border-indigo-400">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Filter by name…"
+                      value={targetUserSearch}
+                      onChange={e => setTargetUserSearch(e.target.value)}
+                      className="flex-1 text-sm bg-transparent outline-none placeholder-slate-400"
+                      data-testid="input-target-user-search"
+                    />
+                    {targetUserSearch && (
+                      <button type="button" onClick={() => setTargetUserSearch('')} className="text-slate-300 hover:text-slate-500">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Role filter pills */}
+                  {uniqueRoles.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setTargetRoleFilter('')}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors',
+                          !targetRoleFilter
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600',
+                        )}
+                        data-testid="role-filter-all"
+                      >All roles</button>
+                      {uniqueRoles.map(role => (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => setTargetRoleFilter(r => r === role ? '' : role)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors',
+                            targetRoleFilter === role
+                              ? 'bg-indigo-600 border-indigo-600 text-white'
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600',
+                          )}
+                          data-testid={`role-filter-${role}`}
+                        >{role}</button>
+                      ))}
+                    </div>
                   )}
-                </div>
 
-                {/* Select / deselect all row */}
-                {allUsers.length > 0 && (
+                  {/* Select / deselect row — scoped to visible users */}
                   <div className="flex items-center justify-between px-1">
                     <span className="text-[11px] text-slate-400">
-                      {settingsForm.target_user_ids.length} of {allUsers.length} selected
+                      {visibleSelectedCount} of {visibleUsers.length} shown selected
+                      {(targetUserSearch || targetRoleFilter) && (
+                        <span className="ml-1 text-slate-300">· {settingsForm.target_user_ids.length} total</span>
+                      )}
                     </span>
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => setSettingsForm(s => ({ ...s, target_user_ids: allUsers.map(u => u.id) }))}
+                        onClick={() => {
+                          const visibleIds = visibleUsers.map(u => u.id);
+                          setSettingsForm(s => ({
+                            ...s,
+                            target_user_ids: [...new Set([...s.target_user_ids, ...visibleIds])],
+                          }));
+                        }}
                         className="text-[11px] text-indigo-600 hover:underline font-medium"
                         data-testid="btn-target-select-all"
-                      >
-                        Select all
-                      </button>
+                      >Select all shown</button>
                       <button
                         type="button"
-                        onClick={() => setSettingsForm(s => ({ ...s, target_user_ids: [] }))}
+                        onClick={() => {
+                          const visibleIds = new Set(visibleUsers.map(u => u.id));
+                          setSettingsForm(s => ({
+                            ...s,
+                            target_user_ids: s.target_user_ids.filter(x => !visibleIds.has(x)),
+                          }));
+                        }}
                         className="text-[11px] text-slate-400 hover:text-red-500 hover:underline font-medium"
                         data-testid="btn-target-clear-all"
-                      >
-                        Clear all
-                      </button>
+                      >Clear shown</button>
                     </div>
                   </div>
-                )}
 
-                {/* Full user list */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-slate-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="w-8 px-3 py-2"></th>
-                        <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
-                        <th className="text-left px-3 py-2 text-slate-500 font-medium">Role</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {allUsers
-                        .filter(u =>
-                          !targetUserSearch ||
-                          (u.full_name ?? '').toLowerCase().includes(targetUserSearch.toLowerCase()) ||
-                          (u.role ?? '').toLowerCase().includes(targetUserSearch.toLowerCase()),
-                        )
-                        .map(u => {
+                  {/* Full user list */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 sticky top-0 z-10">
+                        <tr>
+                          <th className="w-8 px-3 py-2"></th>
+                          <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
+                          <th className="text-left px-3 py-2 text-slate-500 font-medium">Role</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {visibleUsers.map(u => {
                           const checked = settingsForm.target_user_ids.includes(u.id);
                           return (
                             <tr
@@ -3696,18 +3732,15 @@ export default function SurveyDetail() {
                             </tr>
                           );
                         })}
-                    </tbody>
-                  </table>
-                  {allUsers.filter(u =>
-                    !targetUserSearch ||
-                    (u.full_name ?? '').toLowerCase().includes(targetUserSearch.toLowerCase()) ||
-                    (u.role ?? '').toLowerCase().includes(targetUserSearch.toLowerCase()),
-                  ).length === 0 && (
-                    <div className="py-8 text-center text-slate-400 text-xs">No users match your search</div>
-                  )}
+                      </tbody>
+                    </table>
+                    {visibleUsers.length === 0 && (
+                      <div className="py-8 text-center text-slate-400 text-xs">No users match your filters</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Tab: Submission Status */}
             {targetTab === 'status' && (() => {
@@ -3815,6 +3848,135 @@ export default function SurveyDetail() {
                 </div>
               );
             })()}
+
+            {/* Tab: Notifications */}
+            {targetTab === 'notify' && (
+              <div className="p-4 space-y-5">
+                {settingsForm.target_user_ids.length === 0 ? (
+                  <div className="py-10 flex flex-col items-center gap-2 text-slate-400">
+                    <BellRing className="w-7 h-7 opacity-30" />
+                    <p className="text-xs text-center">
+                      No users assigned yet.<br />Go to Select Users tab and pick your target respondents first.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Channel toggles */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send via</p>
+                      <div className="flex items-center gap-5">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={notifChannels.whatsapp}
+                            onChange={e => setNotifChannels(s => ({ ...s, whatsapp: e.target.checked }))}
+                            className="rounded border-slate-300 text-indigo-600" data-testid="toggle-notif-channel-whatsapp" />
+                          <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-sm font-medium text-slate-700">WhatsApp</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={notifChannels.email}
+                            onChange={e => setNotifChannels(s => ({ ...s, email: e.target.checked }))}
+                            className="rounded border-slate-300 text-indigo-600" data-testid="toggle-notif-channel-email" />
+                          <Mail className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="text-sm font-medium text-slate-700">Email</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Message templates */}
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                          <BellRing className="w-3.5 h-3.5 text-amber-500" />Reminder message
+                          <span className="text-[10px] text-slate-400 font-normal">(leave blank for default)</span>
+                        </label>
+                        <Textarea placeholder="e.g. Please complete the survey before the deadline…"
+                          value={settingsForm.reminder_message_en}
+                          onChange={e => setSettingsForm(s => ({ ...s, reminder_message_en: e.target.value }))}
+                          className="text-sm resize-none" rows={2} data-testid="input-reminder-message-en" />
+                        <Textarea placeholder="رسالة التذكير بالعربية (اختياري)"
+                          value={settingsForm.reminder_message_ar}
+                          onChange={e => setSettingsForm(s => ({ ...s, reminder_message_ar: e.target.value }))}
+                          className="text-sm resize-none" rows={2} dir="rtl" data-testid="input-reminder-message-ar" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Thank-you message
+                          <span className="text-[10px] text-slate-400 font-normal">(sent to users who submitted)</span>
+                        </label>
+                        <Textarea placeholder="e.g. Thank you for completing the survey! Your response has been recorded."
+                          value={settingsForm.thankyou_notify_message_en}
+                          onChange={e => setSettingsForm(s => ({ ...s, thankyou_notify_message_en: e.target.value }))}
+                          className="text-sm resize-none" rows={2} data-testid="input-thankyou-message-en" />
+                        <Textarea placeholder="رسالة الشكر بالعربية (اختياري)"
+                          value={settingsForm.thankyou_notify_message_ar}
+                          onChange={e => setSettingsForm(s => ({ ...s, thankyou_notify_message_ar: e.target.value }))}
+                          className="text-sm resize-none" rows={2} dir="rtl" data-testid="input-thankyou-message-ar" />
+                      </div>
+                    </div>
+
+                    {/* Send buttons */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send now to</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button type="button" data-testid="btn-notif-reminder"
+                          onClick={() => sendManualNotif('reminder')}
+                          disabled={!!sendingManualNotif || pendingTargetUsers.length === 0}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
+                            sendingManualNotif === 'reminder' ? 'bg-amber-100 border-amber-200 text-amber-500 cursor-not-allowed'
+                              : pendingTargetUsers.length === 0 ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                              : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
+                          )}>
+                          {sendingManualNotif === 'reminder' ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellRing className="w-4 h-4" />}
+                          <span className="font-semibold">Remind pending</span>
+                          <span className="text-[10px] opacity-70">{pendingTargetUsers.length} user{pendingTargetUsers.length !== 1 ? 's' : ''}</span>
+                        </button>
+
+                        <button type="button" data-testid="btn-notif-thankyou"
+                          onClick={() => sendManualNotif('thankyou')}
+                          disabled={!!sendingManualNotif || submittedTargetUsers.length === 0}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
+                            sendingManualNotif === 'thankyou' ? 'bg-emerald-100 border-emerald-200 text-emerald-500 cursor-not-allowed'
+                              : submittedTargetUsers.length === 0 ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                              : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+                          )}>
+                          {sendingManualNotif === 'thankyou' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                          <span className="font-semibold">Thank submitters</span>
+                          <span className="text-[10px] opacity-70">{submittedTargetUsers.length} user{submittedTargetUsers.length !== 1 ? 's' : ''}</span>
+                        </button>
+
+                        <button type="button" data-testid="btn-notif-all"
+                          onClick={() => sendManualNotif('all')}
+                          disabled={!!sendingManualNotif || targetUserProfiles.length === 0}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
+                            sendingManualNotif === 'all' ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed'
+                              : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100',
+                          )}>
+                          {sendingManualNotif === 'all' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                          <span className="font-semibold">Notify all</span>
+                          <span className="text-[10px] opacity-70">{targetUserProfiles.length} user{targetUserProfiles.length !== 1 ? 's' : ''}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Result banner */}
+                    {manualNotifResult && (
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <p className="text-[11px] font-semibold text-indigo-700">
+                          {manualNotifResult.type === 'reminder' ? 'Reminder' : manualNotifResult.type === 'thankyou' ? 'Thank-you' : 'Notification'} sent —{' '}
+                          {notifChannels.whatsapp && `${manualNotifResult.wa_sent}/${manualNotifResult.wa_total} WhatsApp`}
+                          {notifChannels.whatsapp && notifChannels.email && ' · '}
+                          {notifChannels.email && `${manualNotifResult.email_sent}/${manualNotifResult.email_total} email`}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Display Settings */}
@@ -4543,178 +4705,6 @@ export default function SurveyDetail() {
               )}
             </div>
           </div>
-
-          {/* Send Notifications Now */}
-          {settingsForm.target_user_ids.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
-                <BellRing className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-semibold text-slate-800">Send Notifications Now</h3>
-                <span className="ml-auto text-[10px] text-slate-400">Manual — sent immediately</span>
-              </div>
-              <div className="p-5 space-y-5">
-
-                {/* Channel selector */}
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Channels</p>
-                  <div className="flex items-center gap-5">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={notifChannels.whatsapp}
-                        onChange={e => setNotifChannels(s => ({ ...s, whatsapp: e.target.checked }))}
-                        className="rounded border-slate-300 text-indigo-600"
-                        data-testid="toggle-notif-channel-whatsapp"
-                      />
-                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-sm font-medium text-slate-700">WhatsApp</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={notifChannels.email}
-                        onChange={e => setNotifChannels(s => ({ ...s, email: e.target.checked }))}
-                        className="rounded border-slate-300 text-indigo-600"
-                        data-testid="toggle-notif-channel-email"
-                      />
-                      <Mail className="w-3.5 h-3.5 text-blue-600" />
-                      <span className="text-sm font-medium text-slate-700">Email</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Message templates */}
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                      <BellRing className="w-3.5 h-3.5 text-amber-500" />Reminder message
-                      <span className="text-[10px] text-slate-400 font-normal">(leave blank to use default)</span>
-                    </label>
-                    <Textarea
-                      placeholder="e.g. Please complete the survey before the deadline…"
-                      value={settingsForm.reminder_message_en}
-                      onChange={e => setSettingsForm(s => ({ ...s, reminder_message_en: e.target.value }))}
-                      className="text-sm resize-none"
-                      rows={2}
-                      data-testid="input-reminder-message-en"
-                    />
-                    <Textarea
-                      placeholder="رسالة التذكير بالعربية (اختياري)"
-                      value={settingsForm.reminder_message_ar}
-                      onChange={e => setSettingsForm(s => ({ ...s, reminder_message_ar: e.target.value }))}
-                      className="text-sm resize-none"
-                      rows={2}
-                      dir="rtl"
-                      data-testid="input-reminder-message-ar"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Thank-you message
-                      <span className="text-[10px] text-slate-400 font-normal">(leave blank to use default)</span>
-                    </label>
-                    <Textarea
-                      placeholder="e.g. Thank you for completing the survey! Your response has been recorded."
-                      value={settingsForm.thankyou_notify_message_en}
-                      onChange={e => setSettingsForm(s => ({ ...s, thankyou_notify_message_en: e.target.value }))}
-                      className="text-sm resize-none"
-                      rows={2}
-                      data-testid="input-thankyou-message-en"
-                    />
-                    <Textarea
-                      placeholder="رسالة الشكر بالعربية (اختياري)"
-                      value={settingsForm.thankyou_notify_message_ar}
-                      onChange={e => setSettingsForm(s => ({ ...s, thankyou_notify_message_ar: e.target.value }))}
-                      className="text-sm resize-none"
-                      rows={2}
-                      dir="rtl"
-                      data-testid="input-thankyou-message-ar"
-                    />
-                  </div>
-                </div>
-
-                {/* Send buttons */}
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send to</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      data-testid="btn-notif-reminder"
-                      onClick={() => sendManualNotif('reminder')}
-                      disabled={!!sendingManualNotif || pendingTargetUsers.length === 0}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border font-medium text-xs transition-all',
-                        sendingManualNotif === 'reminder'
-                          ? 'bg-amber-100 border-amber-200 text-amber-500 cursor-not-allowed'
-                          : pendingTargetUsers.length === 0
-                          ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
-                      )}
-                    >
-                      {sendingManualNotif === 'reminder'
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <BellRing className="w-4 h-4" />}
-                      <span className="font-semibold">Remind pending</span>
-                      <span className="text-[10px] opacity-70">{pendingTargetUsers.length} user{pendingTargetUsers.length !== 1 ? 's' : ''}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      data-testid="btn-notif-thankyou"
-                      onClick={() => sendManualNotif('thankyou')}
-                      disabled={!!sendingManualNotif || submittedTargetUsers.length === 0}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border font-medium text-xs transition-all',
-                        sendingManualNotif === 'thankyou'
-                          ? 'bg-emerald-100 border-emerald-200 text-emerald-500 cursor-not-allowed'
-                          : submittedTargetUsers.length === 0
-                          ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
-                      )}
-                    >
-                      {sendingManualNotif === 'thankyou'
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <CheckCircle2 className="w-4 h-4" />}
-                      <span className="font-semibold">Thank submitters</span>
-                      <span className="text-[10px] opacity-70">{submittedTargetUsers.length} user{submittedTargetUsers.length !== 1 ? 's' : ''}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      data-testid="btn-notif-all"
-                      onClick={() => sendManualNotif('all')}
-                      disabled={!!sendingManualNotif || targetUserProfiles.length === 0}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border font-medium text-xs transition-all',
-                        sendingManualNotif === 'all'
-                          ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed'
-                          : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100',
-                      )}
-                    >
-                      {sendingManualNotif === 'all'
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Users className="w-4 h-4" />}
-                      <span className="font-semibold">Notify all</span>
-                      <span className="text-[10px] opacity-70">{targetUserProfiles.length} user{targetUserProfiles.length !== 1 ? 's' : ''}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Result banner */}
-                {manualNotifResult && (
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2.5 flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <p className="text-[11px] font-semibold text-indigo-700">
-                      {manualNotifResult.type === 'reminder' ? 'Reminder' : manualNotifResult.type === 'thankyou' ? 'Thank-you' : 'Notification'} sent —{' '}
-                      {notifChannels.whatsapp && `${manualNotifResult.wa_sent}/${manualNotifResult.wa_total} WhatsApp`}
-                      {notifChannels.whatsapp && notifChannels.email && ' · '}
-                      {notifChannels.email && `${manualNotifResult.email_sent}/${manualNotifResult.email_total} email`}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Save */}
           <div className="flex items-center gap-3">
