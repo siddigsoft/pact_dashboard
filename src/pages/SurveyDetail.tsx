@@ -577,6 +577,9 @@ export default function SurveyDetail() {
       .map(r => r.respondent_id)
       .filter(Boolean) as string[]
   );
+  // Real totals: includes anonymous responses (no respondent_id)
+  const realSubmissionCount = responses.filter(r => r.submitted_at != null).length;
+  const anonymousSubmissionCount = responses.filter(r => r.submitted_at != null && r.respondent_id == null).length;
   const targetUserProfiles = allUsers.filter(u => settingsForm.target_user_ids.includes(u.id));
   const pendingTargetUsers = targetUserProfiles.filter(u => !submittedUserIds.has(u.id));
   const submittedTargetUsers = targetUserProfiles.filter(u => submittedUserIds.has(u.id));
@@ -3624,9 +3627,9 @@ export default function SurveyDetail() {
                   )}
                 >
                   {tab.icon}{tab.label}
-                  {tab.key === 'status' && settingsForm.target_user_ids.length > 0 && (
-                    <span className="ml-0.5 bg-slate-200 text-slate-600 rounded-full text-[10px] px-1.5 py-0.5 font-bold">
-                      {settingsForm.target_user_ids.length}
+                  {tab.key === 'status' && realSubmissionCount > 0 && (
+                    <span className="ml-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] px-1.5 py-0.5 font-bold">
+                      {realSubmissionCount}
                     </span>
                   )}
                 </button>
@@ -3859,14 +3862,19 @@ export default function SurveyDetail() {
                       {/* Summary pills */}
                       <div className="flex items-center gap-2 flex-wrap text-[11px]">
                         <span className="flex items-center gap-1 text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
-                          <CheckCircle2 className="w-3 h-3" />{statusSubmitted.length} submitted
+                          <CheckCircle2 className="w-3 h-3" />{realSubmissionCount} submitted
                         </span>
                         {statusPending.length > 0 && (
                           <span className="flex items-center gap-1 text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
                             <Clock className="w-3 h-3" />{statusPending.length} pending
                           </span>
                         )}
-                        <span className="ml-auto text-slate-400">{statusListUsers.length} total</span>
+                        {anonymousSubmissionCount > 0 && (
+                          <span className="flex items-center gap-1 text-slate-500 font-semibold bg-slate-50 border border-slate-200 px-2 py-1 rounded-full">
+                            <Users className="w-3 h-3" />{anonymousSubmissionCount} anonymous
+                          </span>
+                        )}
+                        <span className="ml-auto text-slate-400">{realSubmissionCount} total</span>
                       </div>
 
                       {/* Progress bar — targeted users only */}
