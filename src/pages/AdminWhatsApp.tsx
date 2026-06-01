@@ -142,7 +142,7 @@ export default function AdminWhatsAppPage() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
-  const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [userNames, setUserNames] = useState<Record<string, { name: string; email: string }>>({});
   const threadEndRef = useRef<HTMLDivElement>(null);
   const [noIntegrationCount, setNoIntegrationCount] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -181,8 +181,8 @@ export default function AdminWhatsAppPage() {
           .select('id, full_name, email')
           .in('id', userIds);
         if (profiles) {
-          const map: Record<string, string> = {};
-          profiles.forEach(p => { map[p.id] = p.full_name || p.email || p.id; });
+          const map: Record<string, { name: string; email: string }> = {};
+          profiles.forEach(p => { map[p.id] = { name: p.full_name || p.id, email: p.email || '' }; });
           setUserNames(map);
         }
       }
@@ -235,7 +235,7 @@ export default function AdminWhatsAppPage() {
       const userId = messages.find(m => m.user_id)?.user_id ?? null;
       convs.push({
         phone,
-        userName: userId ? (userNames[userId] ?? null) : null,
+        userName: userId ? (userNames[userId]?.name ?? null) : null,
         userId,
         messages,
         lastMessage,
@@ -826,7 +826,12 @@ export default function AdminWhatsAppPage() {
                         >
                           {log.status === 'skipped' ? '⊘ SKIP' : log.direction === 'inbound' ? '← IN' : '→ OUT'}
                         </Badge>
-                        <span className="text-xs font-mono text-muted-foreground shrink-0">{log.phone === 'unknown' ? userNames[log.user_id ?? ''] ?? log.phone : log.phone}</span>
+                        <div className="flex flex-col min-w-0 shrink-0">
+                          {userNames[log.user_id ?? '']?.name && (
+                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-tight">{userNames[log.user_id ?? '']?.name}</span>
+                          )}
+                          <span className="text-xs font-mono text-muted-foreground leading-tight">{log.phone === 'unknown' ? '—' : log.phone}</span>
+                        </div>
                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0 hidden sm:block">
                           {log.event_type}
                         </span>
@@ -870,6 +875,16 @@ export default function AdminWhatsAppPage() {
                     {expandedLog === log.id && (
                       <div className="border-t bg-muted/30 p-3 space-y-2 text-xs">
                         <div className="grid grid-cols-2 gap-2">
+                          {userNames[log.user_id ?? '']?.name && (
+                            <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
+                              <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-muted-foreground">Name:</span>
+                              <span className="font-semibold">{userNames[log.user_id ?? '']?.name}</span>
+                              {userNames[log.user_id ?? '']?.email && (
+                                <span className="text-muted-foreground font-mono">({userNames[log.user_id ?? '']?.email})</span>
+                              )}
+                            </div>
+                          )}
                           <div><span className="text-muted-foreground">Phone:</span> <span className="font-mono">{log.phone}</span></div>
                           <div><span className="text-muted-foreground">Event:</span> {log.event_type}</div>
                           <div><span className="text-muted-foreground">Status:</span> {log.status}</div>
