@@ -751,7 +751,7 @@ export default function SurveyDetail() {
             body: {
               user_ids: waUserIds,
               event_type: 'broadcast',
-              data: { message: messageEn, message_ar: messageAr },
+              data: { message: messageEn, message_ar: messageAr, url: surveyUrl },
             },
           });
           waSent = (waData as any)?.sent ?? 0;
@@ -803,7 +803,7 @@ export default function SurveyDetail() {
         : (settingsForm.reminder_message_ar.trim() || `تذكير: يرجى إكمال الاستبيان "${(survey as any)?.title_ar ?? survey?.title ?? ''}" — ${surveyUrl}`);
       if ((channel === 'whatsapp' || channel === 'both') && u.phone?.trim()) {
         await supabase.functions.invoke('send-whatsapp', {
-          body: { user_ids: [userId], event_type: 'broadcast', data: { message: messageEn, message_ar: messageAr } },
+          body: { user_ids: [userId], event_type: 'broadcast', data: { message: messageEn, message_ar: messageAr, url: surveyUrl } },
         });
       }
       if ((channel === 'email' || channel === 'both') && (u.email as string | null)?.trim()) {

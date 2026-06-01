@@ -122,11 +122,11 @@ const EVENT_TO_TEMPLATE: Record<string, TemplateMapping> = {
   budget_threshold_80:       { template: 'pact_alert', vars: d => ['Budget 80% Used', v(d.budget_line), `remaining: ${v(d.remaining)} ${v(d.currency, 'SDG')}`, 'monitor spending closely'] },
   budget_threshold_100:      { template: 'pact_alert', vars: d => ['Budget Fully Used', v(d.budget_line), '100% utilized', 'no more spending allowed'] },
 
-  // ── Reminders → pact_reminder(name, message) — static URL button ───────────
-  reminder:           { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), v(d.message, '1 pending item')] },
-  daily_digest:       { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `${v(d.active, '0')} active, ${v(d.done, '0')} done, ${v(d.overdue, '0')} overdue`] },
-  broadcast:          { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'team'), v(d.message, 'an important announcement')] },
-  task_reminder_1day: { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `1 task due tomorrow: "${v(d.task_title)}"`] },
+  // ── Reminders → pact_reminder(name, message, url) — static URL button ──────
+  reminder:           { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), v(d.message, '1 pending item'), v(d.url, APP_URL)] },
+  daily_digest:       { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `${v(d.active, '0')} active, ${v(d.done, '0')} done, ${v(d.overdue, '0')} overdue`, v(d.url, APP_URL)] },
+  broadcast:          { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'team'), v(d.message, 'an important announcement'), v(d.url, APP_URL)] },
+  task_reminder_1day: { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `1 task due tomorrow: "${v(d.task_title)}"`, v(d.url, `${APP_URL}/my-tasks`)] },
 }
 
 // ── Phone normalizer ──────────────────────────────────────────────────────────
@@ -266,8 +266,8 @@ function buildWasenderText(eventType: string, data: Record<string, string>, lang
       case 'pact_reminder':
       default:
         return {
-          en: `⏰ *REMINDER*\n\nHello *${p[0]}*,\n\nYou have *${p[1]}*.\n\n👉 View: ${p[2]}`,
-          ar: `⏰ *تذكير*\n\nمرحباً *${p[0]}*،\n\nلديك *${p[1]}*.\n\n👉 للعرض: ${p[2]}`,
+          en: `⏰ *REMINDER*\n\nHello *${p[0]}*,\n\nYou have *${p[1]}*.\n\n👉 View: ${p[2] ?? APP_URL}`,
+          ar: `⏰ *تذكير*\n\nمرحباً *${p[0]}*،\n\nلديك *${p[1]}*.\n\n👉 للعرض: ${p[2] ?? APP_URL}`,
         }
     }
   })()
