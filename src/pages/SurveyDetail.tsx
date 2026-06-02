@@ -744,16 +744,19 @@ export default function SurveyDetail() {
         : (settingsForm.reminder_message_ar.trim() || `تذكير: يرجى إكمال الاستبيان "${(survey as any)?.title_ar ?? survey?.title ?? ''}" — ${surveyUrl}`);
 
       if (notifChannels.whatsapp) {
-        const waUserIds = recipients.filter(u => u.phone?.trim()).map(u => u.id);
-        waTotal = waUserIds.length;
-        if (waUserIds.length > 0) {
-          const { data: waData } = await supabase.functions.invoke('send-whatsapp', {
+        const waRecips = recipients.filter(u => u.phone?.trim());
+        waTotal = waRecips.length;
+        if (waRecips.length > 0) {
+          const { data: waData, error: waErr } = await supabase.functions.invoke('send-whatsapp', {
             body: {
-              user_ids: waUserIds,
+              phone_numbers: waRecips.map(u => u.phone!.trim()),
               event_type: 'broadcast',
+              priority: 'urgent',
               data: { message: messageEn, message_ar: messageAr, url: surveyUrl },
             },
           });
+          if (waErr) console.error('[WA bulk]', waErr);
+          else console.log('[WA bulk]', waData);
           waSent = (waData as any)?.sent ?? 0;
         }
       }
@@ -802,9 +805,21 @@ export default function SurveyDetail() {
         ? (settingsForm.thankyou_notify_message_ar.trim() || `شكراً لإتمامك "${(survey as any)?.title_ar ?? survey?.title ?? ''}"! تم تسجيل إجابتك.`)
         : (settingsForm.reminder_message_ar.trim() || `تذكير: يرجى إكمال الاستبيان "${(survey as any)?.title_ar ?? survey?.title ?? ''}" — ${surveyUrl}`);
       if ((channel === 'whatsapp' || channel === 'both') && u.phone?.trim()) {
-        await supabase.functions.invoke('send-whatsapp', {
-          body: { user_ids: [userId], event_type: 'broadcast', data: { message: messageEn, message_ar: messageAr, url: surveyUrl } },
+        const { data: waData, error: waErr } = await supabase.functions.invoke('send-whatsapp', {
+          body: {
+            phone_numbers: [u.phone!.trim()],
+            event_type: 'broadcast',
+            priority: 'urgent',
+            data: {
+              recipient_name: u.full_name?.split(' ')[0] ?? 'there',
+              message: messageEn,
+              message_ar: messageAr,
+              url: surveyUrl,
+            },
+          },
         });
+        if (waErr) console.error('[WA single]', waErr);
+        else console.log('[WA single]', waData);
       }
       if ((channel === 'email' || channel === 'both') && (u.email as string | null)?.trim()) {
         await supabase.functions.invoke('send-email', {
