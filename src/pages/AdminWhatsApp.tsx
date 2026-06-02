@@ -198,7 +198,6 @@ export default function AdminWhatsAppPage() {
   }, [isSuperAdmin]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
-  useEffect(() => { if (activeTab === 'send') loadStaffWithPhones(); }, [activeTab, loadStaffWithPhones]);
 
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -390,6 +389,8 @@ export default function AdminWhatsAppPage() {
       setLoadingStaff(false);
     }
   }, []);
+
+  useEffect(() => { if (activeTab === 'send') loadStaffWithPhones(); }, [activeTab, loadStaffWithPhones]);
 
   const sendOptInToAll = async () => {
     if (staffWithPhones.length === 0) return;
