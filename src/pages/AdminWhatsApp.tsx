@@ -198,6 +198,7 @@ export default function AdminWhatsAppPage() {
   }, [isSuperAdmin]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
+  useEffect(() => { if (activeTab === 'send') loadStaffWithPhones(); }, [activeTab, loadStaffWithPhones]);
 
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -1067,21 +1068,9 @@ export default function AdminWhatsAppPage() {
               </span>
             </div>
 
-            {staffWithPhones.length === 0 && !loadingStaff && (
-              <Button
-                variant="outline"
-                onClick={loadStaffWithPhones}
-                className="gap-2"
-                data-testid="button-load-staff"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Load Staff List
-              </Button>
-            )}
-
             {loadingStaff && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin" /> Loading staff…
+                <RefreshCw className="h-4 w-4 animate-spin" /> Loading staff list…
               </div>
             )}
 
