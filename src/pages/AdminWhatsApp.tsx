@@ -384,7 +384,15 @@ export default function AdminWhatsAppPage() {
         .select('id, full_name, phone')
         .not('phone', 'is', null)
         .neq('phone', '');
-      setStaffWithPhones((data ?? []).filter(p => p.phone && p.phone.trim().length > 4));
+      const seen = new Set<string>();
+      const deduped = (data ?? []).filter(p => {
+        if (!p.phone || p.phone.trim().length <= 4) return false;
+        const normalized = p.phone.replace(/[\s\-()]/g, '');
+        if (seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+      });
+      setStaffWithPhones(deduped);
     } catch { /* non-fatal */ } finally {
       setLoadingStaff(false);
     }
