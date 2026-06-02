@@ -150,6 +150,7 @@ export default function AdminWhatsAppPage() {
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [sendingOptIn, setSendingOptIn] = useState(false);
   const [optInResults, setOptInResults] = useState<{ sent: number; failed: number } | null>(null);
+  const [optInProgress, setOptInProgress] = useState(0);
 
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
@@ -404,17 +405,23 @@ export default function AdminWhatsAppPage() {
     if (staffWithPhones.length === 0) return;
     setSendingOptIn(true);
     setOptInResults(null);
+    const optInMsg = `👋 Hello from *PACT Command Center*!\n\nTo receive automated WhatsApp notifications (task reminders, approvals, survey invites, and more), please *reply to this message* with *Hi* — that's all it takes!\n\nAfter replying, our system will send you relevant updates directly to this number.\n\n━━━━━━━━━━━━━━━━\n\n👋 مرحباً من *مركز قيادة باكت*!\n\nلاستقبال إشعارات واتساب التلقائية (تذكيرات المهام، الموافقات، دعوات الاستبيانات وأكثر)، يرجى *الرد على هذه الرسالة* بـ *مرحبا* — هذا كل ما تحتاجه!\n\nبعد الرد، سيُرسل لك النظام التحديثات المهمة مباشرة على هذا الرقم.\n\n🔗 PACT: https://app.pactorg.com`;
+    const allPhones = staffWithPhones.map(s => s.phone);
+    const BATCH = 20;
     let sent = 0;
     let failed = 0;
-    const optInMsg = `👋 Hello from *PACT Command Center*!\n\nTo receive automated WhatsApp notifications (task reminders, approvals, survey invites, and more), please *reply to this message* with *Hi* — that's all it takes!\n\nAfter replying, our system will send you relevant updates directly to this number.\n\n━━━━━━━━━━━━━━━━\n\n👋 مرحباً من *مركز قيادة باكت*!\n\nلاستقبال إشعارات واتساب التلقائية (تذكيرات المهام، الموافقات، دعوات الاستبيانات وأكثر)، يرجى *الرد على هذه الرسالة* بـ *مرحبا* — هذا كل ما تحتاجه!\n\nبعد الرد، سيُرسل لك النظام التحديثات المهمة مباشرة على هذا الرقم.\n\n🔗 PACT: https://app.pactorg.com`;
-    for (const staff of staffWithPhones) {
+    setOptInProgress(0);
+    for (let i = 0; i < allPhones.length; i += BATCH) {
+      const batch = allPhones.slice(i, i + BATCH);
       try {
-        await callSendWhatsApp([staff.phone], optInMsg);
-        sent++;
+        const result = await callSendWhatsApp(batch, optInMsg);
+        sent += result.sent ?? batch.length;
+        failed += batch.length - (result.sent ?? batch.length);
       } catch {
-        failed++;
+        failed += batch.length;
       }
-      await new Promise(r => setTimeout(r, 800));
+      setOptInProgress(Math.min(i + BATCH, allPhones.length));
+      if (i + BATCH < allPhones.length) await new Promise(r => setTimeout(r, 500));
     }
     setOptInResults({ sent, failed });
     setSendingOptIn(false);
@@ -1141,7 +1148,7 @@ export default function AdminWhatsAppPage() {
                   data-testid="button-send-optin-all"
                 >
                   {sendingOptIn
-                    ? <><RefreshCw className="h-4 w-4 animate-spin" /> Sending to all staff…</>
+                    ? <><RefreshCw className="h-4 w-4 animate-spin" /> Sending… {optInProgress} / {staffWithPhones.length}</>
                     : <><Send className="h-4 w-4" /> Send Opt-in Invite to All {staffWithPhones.length} Staff</>
                   }
                 </Button>
