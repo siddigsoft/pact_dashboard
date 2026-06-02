@@ -379,6 +379,54 @@ export default function IntegrationsSettings() {
     }
   };
 
+  const sendWelcomeWhatsApp = async (phone: string) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken || !phone) return;
+      const firstName = (currentUser?.name || currentUser?.email || 'there').split(' ')[0];
+      const msg =
+        `👋 Hello *${firstName}*!\n\n` +
+        `Welcome to *PACT Command Center* WhatsApp notifications! 🎉\n\n` +
+        `To activate your notifications, please *reply to this message with "Hi"* — that's all it takes!\n\n` +
+        `Once you reply, you'll automatically receive:\n` +
+        `• ✅ Task reminders & assignments\n` +
+        `• 📋 Approval requests\n` +
+        `• 📊 Survey invitations\n` +
+        `• 💰 Payroll & finance alerts\n` +
+        `• And more...\n\n` +
+        `━━━━━━━━━━━━━━━━\n\n` +
+        `👋 مرحباً *${firstName}*!\n\n` +
+        `أهلاً بك في إشعارات واتساب لـ *مركز قيادة باكت*! 🎉\n\n` +
+        `لتفعيل الإشعارات، يرجى *الرد على هذه الرسالة بـ "مرحبا"* — هذا كل ما تحتاجه!\n\n` +
+        `بعد الرد، ستستقبل تلقائياً:\n` +
+        `• ✅ تذكيرات المهام والإسنادات\n` +
+        `• 📋 طلبات الموافقة\n` +
+        `• 📊 دعوات الاستبيانات\n` +
+        `• 💰 تنبيهات الرواتب والمالية\n` +
+        `• والمزيد...\n\n` +
+        `🔗 PACT: https://app.pactorg.com`;
+
+      await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-whatsapp`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            phone_numbers: [phone],
+            event_type: 'welcome',
+            priority: 'urgent',
+            data: { message: msg, message_ar: msg },
+          }),
+        }
+      );
+    } catch { /* non-fatal — phone saved regardless */ }
+  };
+
   const handleSaveWhatsAppPhone = async () => {
     const trimmed = whatsappPhone.trim();
     // E.164-ish validation: optional +, then 8–15 digits. Accepts spaces/dashes which are stripped.
@@ -395,9 +443,15 @@ export default function IntegrationsSettings() {
       }
     }
     setSavingWhatsapp(true);
+    const previousPhone = integration?.whatsapp_phone ?? null;
     try {
       await upsertIntegration({ whatsapp_phone: trimmed || null });
-      toast({ title: "Phone saved", description: "Your WhatsApp number has been updated." });
+      toast({ title: "Phone saved ✓", description: "Sending you a WhatsApp activation message now…" });
+      // Send welcome message if this is a new phone number
+      if (trimmed && trimmed !== previousPhone) {
+        await sendWelcomeWhatsApp(trimmed);
+        toast({ title: "WhatsApp message sent! 📱", description: `Check your WhatsApp on ${trimmed} and reply "Hi" to activate notifications.` });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save phone";
       toast({ title: "Error", description: message, variant: "destructive" });
