@@ -81,7 +81,7 @@ const DEFAULT_INTEGRATION: Omit<UserIntegration, "user_id"> = {
   email_notify_payroll: true,
   email_notify_project_milestones: true,
   email_notify_system: false,
-  whatsapp_enabled: false,
+  whatsapp_enabled: true,
   whatsapp_phone: null,
   whatsapp_notify_tasks: true,
   whatsapp_notify_approvals: true,
@@ -205,7 +205,17 @@ export default function IntegrationsSettings() {
       }
 
       if (data) {
-        setIntegration(data as UserIntegration);
+        const loaded = data as UserIntegration;
+        // Auto-activate WhatsApp for all users — they can turn it off manually
+        if (!loaded.whatsapp_enabled) {
+          loaded.whatsapp_enabled = true;
+          supabase
+            .from("user_integrations")
+            .update({ whatsapp_enabled: true })
+            .eq("user_id", currentUser.id)
+            .then(() => {});
+        }
+        setIntegration(loaded);
         setNotificationEmail(data.notification_email || "");
         setWhatsappPhone(data.whatsapp_phone || "");
       } else {
