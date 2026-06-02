@@ -407,22 +407,18 @@ export default function AdminWhatsAppPage() {
     setOptInResults(null);
     const optInMsg = `👋 Hello from *PACT Command Center*!\n\nTo receive automated WhatsApp notifications (task reminders, approvals, survey invites, and more), please *reply to this message* with *Hi* — that's all it takes!\n\nAfter replying, our system will send you relevant updates directly to this number.\n\n━━━━━━━━━━━━━━━━\n\n👋 مرحباً من *مركز قيادة باكت*!\n\nلاستقبال إشعارات واتساب التلقائية (تذكيرات المهام، الموافقات، دعوات الاستبيانات وأكثر)، يرجى *الرد على هذه الرسالة* بـ *مرحبا* — هذا كل ما تحتاجه!\n\nبعد الرد، سيُرسل لك النظام التحديثات المهمة مباشرة على هذا الرقم.\n\n🔗 PACT: https://app.pactorg.com`;
     const allPhones = staffWithPhones.map(s => s.phone);
-    const BATCH = 20;
     let sent = 0;
     let failed = 0;
     setOptInProgress(0);
-    for (let i = 0; i < allPhones.length; i += BATCH) {
-      const batch = allPhones.slice(i, i + BATCH);
-      try {
-        const result = await callSendWhatsApp(batch, optInMsg);
-        sent += result.sent ?? batch.length;
-        failed += batch.length - (result.sent ?? batch.length);
-      } catch {
-        failed += batch.length;
-      }
-      setOptInProgress(Math.min(i + BATCH, allPhones.length));
-      if (i + BATCH < allPhones.length) await new Promise(r => setTimeout(r, 500));
+    try {
+      // Send all at once — the edge function uses Promise.all internally
+      const result = await callSendWhatsApp(allPhones, optInMsg);
+      sent = result.sent ?? allPhones.length;
+      failed = allPhones.length - sent;
+    } catch {
+      failed = allPhones.length;
     }
+    setOptInProgress(allPhones.length);
     setOptInResults({ sent, failed });
     setSendingOptIn(false);
     toast({
@@ -1148,7 +1144,7 @@ export default function AdminWhatsAppPage() {
                   data-testid="button-send-optin-all"
                 >
                   {sendingOptIn
-                    ? <><RefreshCw className="h-4 w-4 animate-spin" /> Sending… {optInProgress} / {staffWithPhones.length}</>
+                    ? <><RefreshCw className="h-4 w-4 animate-spin" /> Sending to {staffWithPhones.length} staff…</>
                     : <><Send className="h-4 w-4" /> Send Opt-in Invite to All {staffWithPhones.length} Staff</>
                   }
                 </Button>
