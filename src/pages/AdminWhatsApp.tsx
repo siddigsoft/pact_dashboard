@@ -146,6 +146,10 @@ export default function AdminWhatsAppPage() {
   const threadEndRef = useRef<HTMLDivElement>(null);
   const [noIntegrationCount, setNoIntegrationCount] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [staffWithPhones, setStaffWithPhones] = useState<{ id: string; full_name: string; phone: string }[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+  const [sendingOptIn, setSendingOptIn] = useState(false);
+  const [optInResults, setOptInResults] = useState<{ sent: number; failed: number } | null>(null);
 
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
@@ -370,6 +374,46 @@ export default function AdminWhatsAppPage() {
     } finally {
       setSendingReply(false);
     }
+  };
+
+  const loadStaffWithPhones = useCallback(async () => {
+    setLoadingStaff(true);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone')
+        .not('phone', 'is', null)
+        .neq('phone', '');
+      setStaffWithPhones((data ?? []).filter(p => p.phone && p.phone.trim().length > 4));
+    } catch { /* non-fatal */ } finally {
+      setLoadingStaff(false);
+    }
+  }, []);
+
+  const sendOptInToAll = async () => {
+    if (staffWithPhones.length === 0) return;
+    setSendingOptIn(true);
+    setOptInResults(null);
+    let sent = 0;
+    let failed = 0;
+    const optInMsg = `👋 Hello from *PACT Command Center*!\n\nTo receive automated WhatsApp notifications (task reminders, approvals, survey invites, and more), please *reply to this message* with *Hi* — that's all it takes!\n\nAfter replying, our system will send you relevant updates directly to this number.\n\n━━━━━━━━━━━━━━━━\n\n👋 مرحباً من *مركز قيادة باكت*!\n\nلاستقبال إشعارات واتساب التلقائية (تذكيرات المهام، الموافقات، دعوات الاستبيانات وأكثر)، يرجى *الرد على هذه الرسالة* بـ *مرحبا* — هذا كل ما تحتاجه!\n\nبعد الرد، سيُرسل لك النظام التحديثات المهمة مباشرة على هذا الرقم.\n\n🔗 PACT: https://app.pactorg.com`;
+    for (const staff of staffWithPhones) {
+      try {
+        await callSendWhatsApp([staff.phone], optInMsg);
+        sent++;
+      } catch {
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setOptInResults({ sent, failed });
+    setSendingOptIn(false);
+    toast({
+      title: `Opt-in invites sent`,
+      description: `${sent} sent, ${failed} failed`,
+      variant: failed > 0 && sent === 0 ? 'destructive' : 'default',
+    });
+    await loadLogs();
   };
 
   const copyWebhookUrl = async () => {
@@ -993,6 +1037,118 @@ export default function AdminWhatsAppPage() {
               {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {sending ? 'Sending…' : 'Send Message'}
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── OPT-IN BROADCAST ── */}
+      {activeTab === 'send' && (
+        <Card data-testid="card-optin-broadcast">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Send Opt-in Invite to All Staff</CardTitle>
+                <CardDescription>
+                  Sends a WhatsApp message to every staff member with a phone number, asking them to reply once to activate notifications.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                WhatsApp delivers messages from new numbers only when the recipient has chatted with PACT's number before.
+                This invite message asks staff to <strong>reply with "Hi"</strong> to activate future notifications.
+                Once they reply, all automated notifications will reach them automatically.
+              </span>
+            </div>
+
+            {staffWithPhones.length === 0 && !loadingStaff && (
+              <Button
+                variant="outline"
+                onClick={loadStaffWithPhones}
+                className="gap-2"
+                data-testid="button-load-staff"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Load Staff List
+              </Button>
+            )}
+
+            {loadingStaff && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin" /> Loading staff…
+              </div>
+            )}
+
+            {staffWithPhones.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">{staffWithPhones.length} staff with phone numbers</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadStaffWithPhones}
+                    disabled={loadingStaff}
+                    className="gap-1.5 text-xs"
+                    data-testid="button-reload-staff"
+                  >
+                    <RefreshCw className={cn('h-3 w-3', loadingStaff && 'animate-spin')} /> Refresh
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg divide-y max-h-52 overflow-y-auto">
+                  {staffWithPhones.map(s => (
+                    <div key={s.id} className="flex items-center gap-3 px-3 py-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{s.full_name || '—'}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{s.phone}</p>
+                      </div>
+                      <a
+                        href={`https://wa.me/${s.phone.replace(/[^0-9]/g, '')}?text=Hi%20PACT`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-green-600 hover:underline flex items-center gap-0.5 shrink-0"
+                        data-testid={`link-chat-${s.id}`}
+                      >
+                        Open chat <ArrowUpRight className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+
+                {optInResults && (
+                  <div className={cn(
+                    'flex items-center gap-2 p-3 rounded-lg text-sm',
+                    optInResults.failed === 0
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200'
+                      : 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 border border-amber-200'
+                  )}>
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>
+                      <strong>{optInResults.sent}</strong> invites sent successfully
+                      {optInResults.failed > 0 && <>, <strong>{optInResults.failed}</strong> failed</>}.
+                    </span>
+                  </div>
+                )}
+
+                <Button
+                  onClick={sendOptInToAll}
+                  disabled={sendingOptIn}
+                  className="gap-2 bg-green-600 hover:bg-green-700 text-white w-full"
+                  data-testid="button-send-optin-all"
+                >
+                  {sendingOptIn
+                    ? <><RefreshCw className="h-4 w-4 animate-spin" /> Sending to all staff…</>
+                    : <><Send className="h-4 w-4" /> Send Opt-in Invite to All {staffWithPhones.length} Staff</>
+                  }
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

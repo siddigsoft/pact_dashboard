@@ -946,6 +946,43 @@ export default function IntegrationsSettings() {
             </div>
           </div>
 
+          {/* One-time opt-in banner */}
+          <div className="rounded-xl border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center shrink-0">
+                <MessageSquare className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-green-900 dark:text-green-100">
+                  One-time setup required
+                </p>
+                <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">
+                  WhatsApp only delivers messages from numbers you have chatted with before.
+                  Click the button below <strong>once</strong> to send "Hi PACT" to our number —
+                  after that you'll receive all notifications automatically.
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://wa.me/256751900013?text=Hi%20PACT%20-%20Please%20activate%20my%20WhatsApp%20notifications"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="link-whatsapp-optin"
+            >
+              <Button
+                className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+                data-testid="button-whatsapp-optin"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Open WhatsApp &amp; Activate Notifications
+                <ExternalLink className="h-3.5 w-3.5 ml-auto opacity-70" />
+              </Button>
+            </a>
+            <p className="text-[11px] text-green-600 dark:text-green-400 text-center">
+              This opens WhatsApp with a pre-filled message to <strong>+256 751 900 013</strong> (PACT's number). Just tap Send.
+            </p>
+          </div>
+
           <Separator />
 
           {/* Per-category toggles */}
