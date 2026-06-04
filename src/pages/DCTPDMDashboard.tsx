@@ -457,6 +457,37 @@ const SUBCODE_TO_ROW_ID: Record<string, string> = {
   SD17016: 'SD17-0', SD17017: 'SD17-0', SD17018: 'SD17-0',
 };
 
+// Locality display-name aliases: normalised (lower) → canonical row locality name (exact).
+// Handles ODK label variants, Arabic transliterations, and suffix codes like "Habila - SK".
+const LOCALITY_NAME_ALIASES: Record<string, string> = {
+  // South Kordofan
+  'habila - sk': 'Habila', 'habila-sk': 'Habila', 'habila sk': 'Habila',
+  'kadugli': 'Kadugli', 'kadougli': 'Kadugli',
+  'dilling': 'Dilling', 'ad dilling': 'Dilling',
+  // North Darfur
+  'al fasher': 'El Fasher', 'alfasher': 'El Fasher', 'al-fasher': 'El Fasher',
+  'el fasher': 'El Fasher',
+  // White Nile
+  'um rimta': 'Um Rimta', 'um rinta': 'Um Rimta', 'umrimta': 'Um Rimta',
+  'rabak': 'Rabak',
+  'kosti': 'Kosti',
+  // West Kordofan
+  'as sunut': 'As Sunut', 'assunut': 'As Sunut',
+  'al lagowa': 'Al Lagowa', 'allagowa': 'Al Lagowa', 'lagawa': 'Al Lagowa',
+  // River Nile
+  'shendi': 'Shendi',
+  // Northern
+  'al golid': 'Al Golid', 'al gold': 'Al Golid', 'algolid': 'Al Golid',
+  // Khartoum
+  'bahri': 'Bahri', 'north khartoum': 'Bahri',
+  'sharg an neel': 'Sharg An Neel', 'sharg el neel': 'Sharg An Neel', 'east nile': 'Sharg An Neel',
+  // Red Sea
+  'port sudan': 'Port Sudan',
+  // North Kordofan
+  'um rawaba': 'Um Rawaba', 'umrawaba': 'Um Rawaba',
+  'sheikan': 'Sheikan',
+};
+
 // ── Heartbeat Ticker ────────────────────────────────────────────────────────
 
 const TICKER_TOTAL_PLANNED = Object.values(SAMPLE_PLANNED)
@@ -1087,8 +1118,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     filtered.forEach(r => {
       // ① Try direct locality-name match (e.g. "Bahri" → SD01-0, "Sharg An Neel" → SD01-1)
       if (r.locality) {
-        const byName = localityNameToRowId[normName(r.locality)];
+        const normed = normName(r.locality);
+        const byName = localityNameToRowId[normed];
         if (byName) { map[byName] = (map[byName] || 0) + 1; return; }
+        // ①-b Try alias map (e.g. "Habila - SK" → "Habila", "Al Fasher" → "El Fasher")
+        const canonical = LOCALITY_NAME_ALIASES[normed] ?? LOCALITY_NAME_ALIASES[r.locality.trim().toLowerCase()];
+        if (canonical) {
+          const byAlias = localityNameToRowId[normName(canonical)];
+          if (byAlias) { map[byAlias] = (map[byAlias] || 0) + 1; return; }
+        }
         // ② Try locality subcode map (e.g. "SD01003" → SD01-0)
         const byCode = SUBCODE_TO_ROW_ID[r.locality];
         if (byCode) { map[byCode] = (map[byCode] || 0) + 1; return; }
