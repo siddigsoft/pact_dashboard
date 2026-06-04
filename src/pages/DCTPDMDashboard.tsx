@@ -1163,6 +1163,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         if (byHhid) { map[byHhid] = (map[byHhid] || 0) + 1; return; }
       }
 
+      // ③-b Try interviewer ID prefix as final fallback
+      //     Handles records where hhid was corrupted/missing but interviewer code is valid
+      //     (e.g. interviewer "KH _SH_098" → KH-SH → Sharg An Neel)
+      if (r.interviewer) {
+        const ivPfx = r.interviewer.slice(0, 5).replace(/_/g, '-').toUpperCase();
+        const byIv = HHID_PREFIX_TO_ROW_ID[ivPfx];
+        if (byIv) { map[byIv] = (map[byIv] || 0) + 1; return; }
+      }
+
       // ④ Fall back to state-level routing (single- or multi-locality states)
       const stateCode = resolveStateCode(r.state) ?? resolveStateCode(r.locality);
       if (!stateCode) return;
