@@ -457,6 +457,28 @@ const SUBCODE_TO_ROW_ID: Record<string, string> = {
   SD17016: 'SD17-0', SD17017: 'SD17-0', SD17018: 'SD17-0',
 };
 
+// HH-ID prefix → locality row ID. The first 5 chars of hhid encode state + locality:
+//   "KH-BI" = Khartoum / Bahri  "KH-SH" = Khartoum / Sharg An Neel
+//   "ND-EF" = North Darfur / El Fasher
+//   "SK-KA" = South Kordofan / Kadugli  "SK-HA" = Habila  "SK-DI" = Dilling
+//   "WH-RK" = White Nile / Rabak  "WH-KT" = Kosti  "WH-UR" = Um Rimta
+//   "RS-SN" / "RS-PS" = Red Sea / Port Sudan
+//   "NK-UR" = North Kordofan / Um Rawaba  "NK-SH" = Sheikan
+//   "RN-SH" = River Nile / Shendi
+//   "NS-AG" = Northern / Al Golid
+//   "WK-AS" / "WK-SU" = West Kordofan / As Sunut  "WK-AL" / "WK-LA" = Al Lagowa
+const HHID_PREFIX_TO_ROW_ID: Record<string, string> = {
+  'KH-BI': 'SD01-0', 'KH-SH': 'SD01-1',
+  'ND-EF': 'SD02-0',
+  'SK-KA': 'SD07-0', 'SK-HA': 'SD07-1', 'SK-DI': 'SD07-2',
+  'WH-RK': 'SD09-0', 'WH-KT': 'SD09-1', 'WH-UR': 'SD09-2',
+  'RS-SN': 'SD10-0', 'RS-PS': 'SD10-0',
+  'NK-UR': 'SD13-0', 'NK-SH': 'SD13-1',
+  'RN-SH': 'SD16-0',
+  'NS-AG': 'SD17-0',
+  'WK-AS': 'SD18-0', 'WK-SU': 'SD18-0', 'WK-AL': 'SD18-1', 'WK-LA': 'SD18-1',
+};
+
 // Locality display-name aliases: normalised (lower) → canonical row locality name (exact).
 // Handles ODK label variants, Arabic transliterations, and suffix codes like "Habila - SK".
 const LOCALITY_NAME_ALIASES: Record<string, string> = {
@@ -1132,7 +1154,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         if (byCode) { map[byCode] = (map[byCode] || 0) + 1; return; }
       }
 
-      // ③ Fall back to state-level routing (single- or multi-locality states)
+      // ③ Try hhid prefix (e.g. "KH-BI-011" → Bahri, "WH-KT-016" → Kosti)
+      //    Recovers state+locality for records where the state/locality field was blank.
+      if (r.hhid) {
+        const rawPfx = r.hhid.slice(0, 5).replace(/_/g, '-').toUpperCase();
+        const byHhid = HHID_PREFIX_TO_ROW_ID[rawPfx];
+        if (byHhid) { map[byHhid] = (map[byHhid] || 0) + 1; return; }
+      }
+
+      // ④ Fall back to state-level routing (single- or multi-locality states)
       const stateCode = resolveStateCode(r.state) ?? resolveStateCode(r.locality);
       if (!stateCode) return;
       const stateRows = rowsByState[stateCode] ?? [];
