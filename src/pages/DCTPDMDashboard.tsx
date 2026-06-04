@@ -468,7 +468,8 @@ const SUBCODE_TO_ROW_ID: Record<string, string> = {
 //   "NS-AG" = Northern / Al Golid
 //   "WK-AS" / "WK-SU" = West Kordofan / As Sunut  "WK-AL" / "WK-LA" = Al Lagowa
 const HHID_PREFIX_TO_ROW_ID: Record<string, string> = {
-  'KH-BI': 'SD01-0', 'KH-SH': 'SD01-1',
+  'KH-BI': 'SD01-0', 'KB-BI': 'SD01-0', 'KH-B-': 'SD01-0', // Khartoum/Bahri (+ typo variants)
+  'KH-SH': 'SD01-1', 'KH -S': 'SD01-1',                    // Khartoum/Sharg An Neel (+ space variant)
   'ND-EF': 'SD02-0',
   'SK-KA': 'SD07-0', 'SK-HA': 'SD07-1', 'SK-DI': 'SD07-2',
   'WH-RK': 'SD09-0', 'WH-KT': 'SD09-1', 'WH-UR': 'SD09-2',
