@@ -432,12 +432,7 @@ export default function UnifiedCostRequestForm({
       toast({ title: "Title Required", description: "Please enter a request title (at least 3 characters).", variant: "destructive" });
       return;
     }
-    // MMP is required only when the list is populated — if no MMPs exist for the
-    // selected project we should not block submission entirely.
-    if (!mmpId && mmps.length > 0) {
-      toast({ title: "MMP Required", description: "Please select the Monthly Monitoring Plan (MMP) this cost is related to.", variant: "destructive" });
-      return;
-    }
+    // MMP is always optional — costs may be project-related without an MMP.
     if (fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({ title: "Documents Required", description: "Please upload receipts for reimbursement requests", variant: "destructive" });
       return;
@@ -862,55 +857,43 @@ export default function UnifiedCostRequestForm({
             </div>
           </div>
 
-          {/* MMP — required when MMPs are available, optional otherwise */}
-          <div className={cn("border-l-[3px] pl-3 rounded-r-xl", mmps.length > 0 ? "border-rose-400" : "border-muted-foreground/30")}>
-            <Label className={cn("text-sm font-semibold mb-1.5 flex items-center gap-1.5", mmps.length > 0 ? "text-rose-600" : "text-muted-foreground")}>
+          {/* MMP — always optional; costs may be purely project-related */}
+          <div className="border-l-[3px] pl-3 rounded-r-xl border-muted-foreground/30">
+            <Label className="text-sm font-semibold mb-1.5 flex items-center gap-1.5 text-foreground">
               <ClipboardList className="h-4 w-4" />
               Monthly Monitoring Plan (MMP)
-              {mmps.length > 0 ? (
-                <>
-                  <span className="text-rose-500 font-bold">*</span>
-                  <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold">Required</span>
-                </>
-              ) : (
-                <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
-              )}
+              <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
             </Label>
-            <Select onValueChange={setMmpId} value={mmpId} disabled={mmpsLoading || mmps.length === 0}>
-              <SelectTrigger
-                data-testid="select-mmp"
-                className={cn(
-                  "transition-colors",
-                  mmps.length > 0 && !mmpId ? "border-rose-300 bg-rose-50/40 focus:ring-rose-300/40 focus:border-rose-400" : "border-input"
-                )}
-              >
-                <SelectValue placeholder={
-                  mmpsLoading ? "Loading MMPs…" :
-                  mmps.length === 0 ? "No MMPs available — you may submit without one" :
-                  "Select the MMP this cost relates to…"
-                } />
+            <Select
+              onValueChange={(v) => setMmpId(v === '__NONE__' ? '' : v)}
+              value={mmpId || '__NONE__'}
+              disabled={mmpsLoading}
+            >
+              <SelectTrigger data-testid="select-mmp" className="border-input transition-colors">
+                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : "Not related to an MMP (project cost)"} />
               </SelectTrigger>
               <SelectContent>
                 {mmpsLoading ? (
-                  <SelectItem value="__LOADING__" disabled>
-                    Loading MMPs...
-                  </SelectItem>
-                ) : mmps.length === 0 ? (
-                  <SelectItem value="__NONE__" disabled>
-                    No MMPs available
-                  </SelectItem>
+                  <SelectItem value="__LOADING__" disabled>Loading MMPs…</SelectItem>
                 ) : (
-                  mmps.map((mmp) => (
-                    <SelectItem key={mmp.id} value={mmp.id}>
-                      {mmp.name}
+                  <>
+                    <SelectItem value="__NONE__">
+                      <span className="text-muted-foreground italic">Not related to an MMP (project cost)</span>
                     </SelectItem>
-                  ))
+                    {mmps.map((mmp) => (
+                      <SelectItem key={mmp.id} value={mmp.id}>
+                        {mmp.name}
+                      </SelectItem>
+                    ))}
+                  </>
                 )}
               </SelectContent>
             </Select>
-            {mmps.length === 0 && !mmpsLoading && (
-              <p className="text-xs text-muted-foreground mt-1">No MMPs found — your request will still be submitted and can be linked to an MMP later by an admin.</p>
-            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              {mmpId
+                ? "Cost will be linked to the selected MMP."
+                : "No MMP selected — this cost will be recorded as a project expense only."}
+            </p>
           </div>
 
           <div>
