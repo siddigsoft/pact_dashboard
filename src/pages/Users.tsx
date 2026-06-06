@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { toDisplayLabel, VISIBLE_ROLE_CODES, normalizeRole } from '@/utils/roleMapping';
+import { sudanStates } from '@/data/sudanStates';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -55,7 +56,8 @@ import {
   UserCheck,
   Edit2,
   MessageSquare as MessageIcon,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  MapPin
 } from 'lucide-react';
 import {
   Dialog,
@@ -81,6 +83,8 @@ import { useRoleManagement } from '@/context/role-management/RoleManagementConte
 import { useAppContextSelector } from '@/context/AppContext';
 import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 import RoleBadge from '@/components/user/RoleBadge';
+
+const STATE_ID_TO_NAME = new Map(sudanStates.map(s => [s.id, s.name]));
 
 const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, sendPasswordRecoveryEmail } = useUser();
@@ -689,10 +693,16 @@ const Users = () => {
           </div>
         </TableCell>
         <TableCell className="py-3">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <RoleBadge role={getPrimaryRoleLabel(user)} size="sm" />
             <UserClassificationBadge userId={user.id} compact />
           </div>
+          {user.stateId && STATE_ID_TO_NAME.has(user.stateId) && (
+            <div className="flex items-center gap-1 mt-1">
+              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-[11px] text-muted-foreground leading-tight">{STATE_ID_TO_NAME.get(user.stateId)}</span>
+            </div>
+          )}
         </TableCell>
         <TableCell className="hidden md:table-cell py-3">
           {user.isApproved ? (
