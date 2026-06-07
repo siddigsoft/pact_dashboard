@@ -820,7 +820,8 @@ const CostSubmission = () => {
         updates.tier2_approved_by = currentUser.id;
         updates.tier2_approved_at = now;
         updates.tier2_notes = combinedReason || null;
-        const isFinal = !submissions.some(s => hasThreeTiers(s));
+        // T2 is final only for FOM submissions (2-tier); supervisor & coordinator still have more tiers
+        const isFinal = !submissions.some(s => hasThreeTiers(s) || hasFourTiers(s));
         updates.status = action === 'approve' ? (isFinal ? 'approved' : 'under_review') : 'rejected';
         if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 2';
         else if (action === 'approve' && !isFinal) { updates.tier3_status = 'pending'; }
@@ -829,8 +830,19 @@ const CostSubmission = () => {
         updates.tier3_approved_by = currentUser.id;
         updates.tier3_approved_at = now;
         updates.tier3_notes = combinedReason || null;
-        updates.status = action === 'approve' ? 'approved' : 'rejected';
-        if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 3';
+        if (action === 'reject') {
+          updates.status = 'rejected';
+          updates.rejection_reason = combinedReason || 'Rejected at Tier 3';
+        } else {
+          // T3 is final for supervisor (3-tier); coordinator still has T4=Admin ahead
+          const hasT4 = submissions.some(s => hasFourTiers(s));
+          if (hasT4) {
+            updates.status = 'under_review';
+            updates.tier4_status = 'pending';
+          } else {
+            updates.status = 'approved';
+          }
+        }
       }
 
       const tierStatusKey = `tier${tier}_status` as const;
@@ -3847,11 +3859,11 @@ const CostSubmission = () => {
 
                     const cleanTier1Notes = oc.tier1_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const cleanTier2Notes = oc.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
-                    const cleanTier3Notes = (oc as any).tier3_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
+                    const cleanTier3Notes = oc.tier3_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
                     const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
                     const tier3Approver = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
-                    const hasSig = oc.tier2_notes?.includes('[Signed:') || (oc as any).tier3_notes?.includes('[Signed:') || oc.tier1_notes?.includes('[Signed:');
+                    const hasSig = oc.tier1_notes?.includes('[Signed:') || oc.tier2_notes?.includes('[Signed:') || oc.tier3_notes?.includes('[Signed:') || oc.tier4_notes?.includes('[Signed:');
 
                     // ── COMPACT ROW (inside a multi-item group — mockup design) ──────────────
                     if (isMultiItem) {
@@ -4575,7 +4587,7 @@ const CostSubmission = () => {
                             const sendReminder = async (step: typeof steps[0]) => {
                               const recipients = step.expectedApprovers && step.expectedApprovers.length > 0
                                 ? step.expectedApprovers
-                                : step.person ? [{ id: oc.tier1_approved_by || oc.tier2_approved_by || '', name: step.person }] : [];
+                                : [];
                               if (recipients.length === 0) {
                                 toast({ title: 'No recipient found', description: 'Could not identify who to remind.', variant: 'destructive', duration: 4000 });
                                 return;
@@ -5313,7 +5325,7 @@ const CostSubmission = () => {
             const linkedProject = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
             const derivedStatus = oc.paid_at ? 'paid' : oc.reconciled_at ? 'reconciled' : oc.status;
             const cleanNote = (n: string | null) => n?.replace(/\[Signed:.*?\]/g, '').trim() || null;
-            const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : hasThreeTiers(oc) && oc.tier3_status === 'pending' ? '3' : '?';
+            const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : oc.tier3_status === 'pending' ? '3' : oc.tier4_status === 'pending' ? '4' : '?';
 
             const statusColors: Record<string, string> = {
               pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
@@ -5403,14 +5415,14 @@ const CostSubmission = () => {
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
                   {/* ── Needs Attention Banner ── */}
-                  {(derivedStatus === 'rejected' || oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || (hasThreeTiers(oc) && oc.tier3_status === 'rejected')) && (
+                  {(derivedStatus === 'rejected' || oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.tier4_status === 'rejected') && (
                     <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                       <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                       <div className="text-sm text-red-600 dark:text-red-400 font-medium">
                         Needs Attention — This cost submission has been rejected.
-                        {[oc.tier1_notes, oc.tier2_notes, oc.tier3_notes].filter(Boolean).slice(-1)[0] && (
+                        {[oc.tier1_notes, oc.tier2_notes, oc.tier3_notes, oc.tier4_notes].filter(Boolean).slice(-1)[0] && (
                           <p className="text-xs text-muted-foreground mt-0.5 italic">
-                            "{[oc.tier1_notes, oc.tier2_notes, oc.tier3_notes].filter(Boolean).slice(-1)[0]}"
+                            "{[oc.tier1_notes, oc.tier2_notes, oc.tier3_notes, oc.tier4_notes].filter(Boolean).slice(-1)[0]}"
                           </p>
                         )}
                       </div>
@@ -5634,12 +5646,22 @@ const CostSubmission = () => {
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-3">Approval Trail / مسار الموافقة</p>
                     <div className="space-y-3">
                       <ApprovalStep tier={1} tStatus={oc.tier1_status} tUser={t1User} tAt={oc.tier1_approved_at} tNotes={oc.tier1_notes} />
-                      <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
-                      <ApprovalStep tier={2} tStatus={oc.tier2_status} tUser={t2User} tAt={oc.tier2_approved_at} tNotes={oc.tier2_notes} />
-                      {hasThreeTiers(oc) && (
+                      {!isCDSubmission(oc) && (
+                        <>
+                          <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
+                          <ApprovalStep tier={2} tStatus={oc.tier2_status} tUser={t2User} tAt={oc.tier2_approved_at} tNotes={oc.tier2_notes} />
+                        </>
+                      )}
+                      {(hasThreeTiers(oc) || hasFourTiers(oc)) && (
                         <>
                           <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
                           <ApprovalStep tier={3} tStatus={oc.tier3_status} tUser={t3User} tAt={oc.tier3_approved_at} tNotes={oc.tier3_notes} />
+                        </>
+                      )}
+                      {hasFourTiers(oc) && (
+                        <>
+                          <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
+                          <ApprovalStep tier={4} tStatus={oc.tier4_status} tUser={null} tAt={oc.tier4_approved_at} tNotes={oc.tier4_notes} />
                         </>
                       )}
                     </div>
