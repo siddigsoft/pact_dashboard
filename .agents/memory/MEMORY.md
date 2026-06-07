@@ -1,1 +1,1 @@
-- [Cost submission approval flows](cost-approval-flows.md) — 4 distinct flows based on submitter role; CD is always a separate tier after FOM, before Admin.
+- [CostSubmission 4-tier approval flows](cost-approval-flows.md) — coordinator submissions are 4-tier; all tier maps/unions/state types must include tier 4

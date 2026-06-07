@@ -1,23 +1,26 @@
 ---
-name: Cost submission approval flows
-description: The 4 approval flows for operational cost submissions, defined by submitter role.
+name: CostSubmission 4-tier approval flows
+description: Rules and pitfalls for the 4-tier cost submission approval system in CostSubmission.tsx
 ---
 
-## Flows (as of Jun 2026 redesign)
+## Flow definitions
+- Coordinator: T1=Supervisor → T2=FOM → T3=CountryDirector → T4=Admin (hasFourTiers)
+- Supervisor: T1=FOM → T2=CountryDirector → T3=Admin (hasThreeTiers)
+- FOM: T1=CountryDirector → T2=Admin
+- CD: T1=Admin
 
-| Submitter | T1 | T2 | T3 | T4 | Finance |
-|---|---|---|---|---|---|
-| Coordinator | Hub Supervisor | FOM | Country Director | Admin/SuperAdmin | ✓ |
-| Supervisor | FOM | Country Director | Admin/SuperAdmin | — | ✓ |
-| FOM | Country Director | Admin/SuperAdmin | — | — | ✓ |
-| Country Director | Admin/SuperAdmin | — | — | — | ✓ |
+## Key predicates
+- `hasFourTiers(oc)` — isCoordinatorSubmission OR tier4_status not null/undefined
+- `hasThreeTiers(oc)` — isSupervisorSubmission only
+- Role normalisation: `.toLowerCase().replace(/[\s_-]/g, '')` so 'country_director', 'Country Director', 'countrydirector' all normalise to 'countrydirector'
+- FOM DB roles: 'fom' and 'fieldoperationmanager' (NOT 'Field Operation Manager (FOM)' — display name ≠ DB value)
 
-**Why:** CD was previously grouped with FOM ("either can approve"). The user requires CD to always be a sequential step after FOM and before Admin, never interchangeable.
+## Recurring pitfall checklist
+Every place that handles tiers must include tier 4:
+1. TypeScript union types: `tier: 1 | 2 | 3 | 4` in all state/function signatures
+2. Arabic tier label maps: `{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' }`
+3. `handleGroupApproval` switch/if must have a tier 4 branch
+4. Send-back and recall must clear tier3 AND tier4 fields (not just tier1/tier2)
+5. Notification `nextRoles` arrays must use DB role values, not display names
 
-**How to apply:**
-- isFomSubmission() = FOM role only (NOT countryDirector)
-- isCDSubmission() = countryDirector only
-- hasThreeTiers() = supervisor only
-- hasFourTiers() = coordinator only
-- DB column tier4_status added via migration 20260607_add_tier4_approval.sql — must be run in Supabase before coordinator T4 approvals work
-- canFOMBypass() = FOM only (CD does NOT have bypass authority)
+**Why:** The 4-tier coordinator flow was added later; many existing code paths only had 1/2/3 and silently failed or showed undefined for tier 4.

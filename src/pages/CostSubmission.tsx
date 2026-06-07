@@ -312,7 +312,7 @@ const CostSubmission = () => {
   const [groupApprovalDialog, setGroupApprovalDialog] = useState<{
     open: boolean;
     action: 'approve' | 'reject';
-    tier: 1 | 2 | 3;
+    tier: 1 | 2 | 3 | 4;
     groupId: string;
     groupTitle: string;
     submissions: OperationalCostSubmission[];
@@ -772,7 +772,7 @@ const CostSubmission = () => {
     groupTitle: string,
     submissions: OperationalCostSubmission[],
     action: 'approve' | 'reject',
-    tier: 1 | 2 | 3
+    tier: 1 | 2 | 3 | 4
   ) => {
     setGroupApprovalDialog({ open: true, action, tier, groupId, groupTitle, submissions });
     setGroupApprovalNotes('');
@@ -843,6 +843,13 @@ const CostSubmission = () => {
             updates.status = 'approved';
           }
         }
+      } else if (tier === 4) {
+        updates.tier4_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier4_approved_by = currentUser.id;
+        updates.tier4_approved_at = now;
+        updates.tier4_notes = combinedReason || null;
+        updates.status = action === 'approve' ? 'approved' : 'rejected';
+        if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 4';
       }
 
       const tierStatusKey = `tier${tier}_status` as const;
@@ -1135,7 +1142,7 @@ const CostSubmission = () => {
 
           if (hasFourTiers(submission)) {
             // Coordinator: T1=Supervisor→T2=FOM→T3=CountryDirector→T4=Admin
-            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
+            if (tier === 1) nextRoles = ['fom', 'fieldoperationmanager'];
             if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
             if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else if (hasThreeTiers(submission)) {
@@ -1388,6 +1395,15 @@ const CostSubmission = () => {
         tier2_approved_by: null,
         tier2_approved_at: null,
         tier2_notes: null,
+        tier3_status: null,
+        tier3_approved_by: null,
+        tier3_approved_at: null,
+        tier3_notes: null,
+        tier4_status: null,
+        tier4_approved_by: null,
+        tier4_approved_at: null,
+        tier4_notes: null,
+        rejection_reason: null,
       }).in('id', allGroupIds);
       if (error) throw error;
       toast({ title: 'Sent back for revision', description: `${allGroupIds.length > 1 ? `${allGroupIds.length} items` : 'Request'} returned to the submitter.` });
@@ -2129,6 +2145,14 @@ const CostSubmission = () => {
           tier2_approved_by: null,
           tier2_approved_at: null,
           tier2_notes: null,
+          tier3_status: null,
+          tier3_approved_by: null,
+          tier3_approved_at: null,
+          tier3_notes: null,
+          tier4_status: null,
+          tier4_approved_by: null,
+          tier4_approved_at: null,
+          tier4_notes: null,
           rejection_reason: null,
           updated_at: new Date().toISOString(),
         })
@@ -5892,8 +5916,8 @@ const CostSubmission = () => {
                 : `Tier ${approvalDialog.tier} Rejection`}
               <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">
                 {approvalDialog.action === 'approve'
-                  ? `الموافقة - المرحلة ${{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier]}`
-                  : `الرفض - المرحلة ${{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier]}`}
+                  ? `الموافقة - المرحلة ${{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' }[approvalDialog.tier]}`
+                  : `الرفض - المرحلة ${{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' }[approvalDialog.tier]}`}
               </span>
             </DialogTitle>
             <DialogDescription>
@@ -5910,7 +5934,7 @@ const CostSubmission = () => {
                     ? 'أنت على وشك الموافقة النهائية على هذا الطلب (تمهيد للدفع). التوقيع الرقمي مطلوب.'
                     : (isSuperAdmin || isAdmin)
                       ? `أنت على وشك الموافقة على هذا الطلب في المرحلة ${approvalDialog.tier}. التوقيع الرقمي مطلوب.`
-                      : `أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة ${{ 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier + 1] || ''} للمراجعة).`
+                      : `أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة ${{ 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' }[approvalDialog.tier + 1] || ''} للمراجعة).`
                   : 'أنت على وشك رفض هذا الطلب. يرجى تقديم سبب الرفض.'}
               </span>
             </DialogDescription>
@@ -6065,7 +6089,7 @@ const CostSubmission = () => {
                             {approvalDialog.action === 'approve' ? 'في انتظار موافقتك' : 'في انتظار قرارك'}
                           </span>
                         </span>
-                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier} / المرحلة {{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier]})</span>
+                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier} / المرحلة {{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' }[approvalDialog.tier]})</span>
                         <p className="text-muted-foreground">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
                       </div>
                     </div>
@@ -6238,7 +6262,7 @@ const CostSubmission = () => {
             const isApprove = groupApprovalDialog.action === 'approve';
             const totalCents = groupApprovalDialog.submissions.reduce((s, o) => s + o.amount_cents, 0);
             const currency = groupApprovalDialog.submissions[0]?.currency ?? 'SDG';
-            const tierLabel: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' };
+            const tierLabel: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' };
 
             /* group by category for summary chips */
             const byCat: Record<string, { label: string; icon: any; total: number; count: number }> = {};
@@ -6378,12 +6402,12 @@ const CostSubmission = () => {
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                       <div className="text-xs text-emerald-700 dark:text-emerald-300">
                         <p className="font-semibold mb-0.5">
-                          {groupApprovalDialog.tier === 3
+                          {(groupApprovalDialog.tier === 4 || (groupApprovalDialog.tier === 3 && !groupApprovalDialog.submissions.some(s => hasFourTiers(s))))
                             ? `All items will be fully approved and cleared for payment`
                             : `All items will advance to Tier ${groupApprovalDialog.tier + 1} review`}
                         </p>
                         <p className="opacity-80" dir="rtl">
-                          {groupApprovalDialog.tier === 3
+                          {(groupApprovalDialog.tier === 4 || (groupApprovalDialog.tier === 3 && !groupApprovalDialog.submissions.some(s => hasFourTiers(s))))
                             ? 'سيتم اعتماد جميع البنود نهائياً وتمهيدها للدفع'
                             : `ستنتقل جميع البنود إلى المرحلة التالية للمراجعة`}
                         </p>
