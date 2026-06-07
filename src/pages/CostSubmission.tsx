@@ -4435,6 +4435,14 @@ const CostSubmission = () => {
                             const t3Expected = threeTier && ((oc as any).tier3_status !== 'approved' && (oc as any).tier3_status !== 'rejected')
                               ? getExpected(isAdminRolePred) : [];
 
+                            // ── Helper: build "sent to: Name1, Name2" strings ──
+                            const nameList = (people: Array<{ name?: string; email?: string }>) =>
+                              people.map(p => p.name || p.email || '').filter(Boolean).join(', ');
+
+                            const t1Name  = tier1Approver?.name  || tier1Approver?.email  || nameList(t1Expected) || 'Tier 1 approver';
+                            const t2Name  = tier2Approver?.name  || tier2Approver?.email  || nameList(t2Expected) || 'Tier 2 approver';
+                            const t3Name  = tier3Approver?.name  || tier3Approver?.email  || nameList(t3Expected) || 'Admin';
+
                             const steps: FlowStep[] = [];
 
                             // ① Submitted
@@ -4446,7 +4454,7 @@ const CostSubmission = () => {
                               status: 'done',
                               timestamp: oc.created_at,
                               notifIcon: '📧',
-                              notifText: 'Email + In-app sent to Tier 1 approver(s)',
+                              notifText: `Email sent to: ${t1Name}`,
                             });
 
                             // ② Tier 1
@@ -4461,7 +4469,9 @@ const CostSubmission = () => {
                               timestamp: oc.tier1_approved_at,
                               notes: cleanTier1Notes || undefined,
                               notifIcon: '📧',
-                              notifText: isFomSub ? 'Email + In-app to submitter (final — cleared for payment)' : 'Email + In-app to submitter + Tier 2 approver(s)',
+                              notifText: isFomSub
+                                ? `Email sent to: ${submitterName}`
+                                : `Email sent to: ${submitterName}, ${t2Name}`,
                               expectedApprovers: t1Expected,
                             });
 
@@ -4480,8 +4490,8 @@ const CostSubmission = () => {
                                 notes: cleanTier2Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: threeTier
-                                  ? 'Email + In-app to submitter + Tier 3 Admin'
-                                  : 'Email + In-app to submitter (final — cleared for payment)',
+                                  ? `Email sent to: ${submitterName}, ${t3Name}`
+                                  : `Email sent to: ${submitterName}`,
                                 expectedApprovers: t2Expected,
                               });
                             }
@@ -4500,7 +4510,7 @@ const CostSubmission = () => {
                                 timestamp: (oc as any).tier3_approved_at,
                                 notes: cleanTier3Notes || undefined,
                                 notifIcon: '📧',
-                                notifText: 'Email + In-app to submitter (final — cleared for payment)',
+                                notifText: `Email sent to: ${submitterName}`,
                                 expectedApprovers: t3Expected,
                               });
                             }
@@ -4518,7 +4528,7 @@ const CostSubmission = () => {
                               status: finStatus,
                               timestamp: null,
                               notifIcon: '📧',
-                              notifText: 'Email sent to submitter confirming payment',
+                              notifText: `Email sent to: ${submitterName}`,
                             });
 
                             // ── Style helpers ──
