@@ -27,5 +27,8 @@ Every place that handles tiers must include tier 4:
 7. cleanTierXNotes: define for all 4 tiers; use cleaned version in timeline steps and notes display
 8. Rejection "Rejected by" rows: must exist for T1, T2, T3, and T4
 9. Notes section visibility guard: must check all 4 cleanTierXNotes, not just T1/T2
+10. tXName helpers (t1Name…t4Name): ALWAYS prefix with `tierXApprover?.name || tierXApprover?.email ||` before `nameList(tXExpected)` — omitting it shows wrong name after tier has acted (shows expected-list or fallback string instead of actual approver name)
+11. Finance/Payment step `expectedApprovers`: populate with `isFinanceAdminRolePred` users when `derivedStatus === 'approved'`; do NOT use `finStatus` (forward reference — declared after the expectedApprovers block). Use `derivedStatus === 'approved'` which is equivalent.
+12. `isFinanceAdminRolePred`: matches `financialadmin | financeadmin | finance | *financ*` after nr() normalisation
 
 **Why:** The 4-tier coordinator flow was added later; many existing code paths only had 1/2/3 and silently failed or showed undefined for tier 4.

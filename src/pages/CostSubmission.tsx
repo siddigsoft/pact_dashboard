@@ -4457,10 +4457,11 @@ const CostSubmission = () => {
                                 return true;
                               }).slice(0, 5);
 
-                            const isSupervisorRolePred = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
-                            const isFomRolePred        = (r: string) => r === 'fom' || r === 'fieldoperationmanager';
-                            const isCDRolePred         = (r: string) => r === 'countrydirector' || r === 'country_director';
-                            const isAdminRolePred      = (r: string) => r === 'admin' || r === 'superadmin' || r.includes('superadmin');
+                            const isSupervisorRolePred  = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
+                            const isFomRolePred         = (r: string) => r === 'fom' || r === 'fieldoperationmanager';
+                            const isCDRolePred          = (r: string) => r === 'countrydirector' || r === 'country_director';
+                            const isAdminRolePred       = (r: string) => r === 'admin' || r === 'superadmin' || r.includes('superadmin');
+                            const isFinanceAdminRolePred = (r: string) => r === 'financialadmin' || r === 'financeadmin' || r === 'finance' || r.includes('financ');
 
                             // T1 expected approvers per flow
                             const t1Expected = oc.tier1_status === 'approved' || oc.tier1_status === 'rejected' ? [] :
@@ -4487,6 +4488,9 @@ const CostSubmission = () => {
                             const t4Expected = (oc.tier4_status === 'approved' || oc.tier4_status === 'rejected') ? [] :
                               isCoordSub ? getExpected(isAdminRolePred) : [];
 
+                            // Finance step expected approvers (only shown when step is active / awaiting payment)
+                            const finExpected = derivedStatus === 'approved' ? getExpected(isFinanceAdminRolePred) : [];
+
                             // ── Helper: build "sent to: Name1, Name2" strings ──
                             const nameList = (people: Array<{ name?: string; email?: string }>) =>
                               people.map(p => p.name || p.email || '').filter(Boolean).join(', ');
@@ -4494,7 +4498,7 @@ const CostSubmission = () => {
                             const t1Name = tier1Approver?.name || tier1Approver?.email || nameList(t1Expected) || 'Tier 1 approver';
                             const t2Name = tier2Approver?.name || tier2Approver?.email || nameList(t2Expected) || 'Tier 2 approver';
                             const t3Name = tier3Approver?.name || tier3Approver?.email || nameList(t3Expected) || 'Tier 3 approver';
-                            const t4Name = nameList(t4Expected) || 'Admin';
+                            const t4Name = tier4Approver?.name || tier4Approver?.email || nameList(t4Expected) || 'Admin';
 
                             const steps: FlowStep[] = [];
 
@@ -4621,6 +4625,7 @@ const CostSubmission = () => {
                               timestamp: null,
                               notifIcon: '📧',
                               notifText: `Email sent to: ${submitterName}`,
+                              expectedApprovers: finExpected.length > 0 ? finExpected : undefined,
                             });
 
                             // ── Style helpers ──
