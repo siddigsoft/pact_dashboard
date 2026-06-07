@@ -1390,14 +1390,14 @@ const CostSubmission = () => {
 
   const executeReminder = async () => {
     if (!reminderPreviewDialog) return;
-    const { stepLabel, recipients, refNum, amtStr, submitterName: sName, ocId } = reminderPreviewDialog;
+    const { stepLabel, recipients, refNum, description, amtStr, submitterName: sName, ocId } = reminderPreviewDialog;
     setReminderSending(true);
     try {
       await Promise.all(recipients.map(r =>
         NotificationTriggerService.send({
           userId: r.id,
           title: `⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة`,
-          message: `This is a reminder that cost submission "${refNum}" (${amtStr}) submitted by ${sName} is waiting for your review at ${stepLabel}. Please log in and take action.`,
+          message: `This is a reminder that cost submission "${refNum}${description ? ` — ${description.length > 80 ? description.substring(0, 80) + '…' : description}` : ''}" (${amtStr}) submitted by ${sName} is waiting for your review at ${stepLabel}. Please log in and take action.`,
           type: 'warning',
           category: 'financial',
           priority: 'high',
@@ -7859,7 +7859,7 @@ const CostSubmission = () => {
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                          This is a reminder that cost submission &ldquo;<strong>{reminderPreviewDialog.refNum}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) submitted by {reminderPreviewDialog.submitterName} is waiting for your review at <strong>{reminderPreviewDialog.stepLabel}</strong>. Please log in and take action.
+                          This is a reminder that cost submission &ldquo;<strong>{reminderPreviewDialog.refNum}{reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 80 ? reminderPreviewDialog.description.substring(0, 80) + '…' : reminderPreviewDialog.description}` : ''}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) submitted by {reminderPreviewDialog.submitterName} is waiting for your review at <strong>{reminderPreviewDialog.stepLabel}</strong>. Please log in and take action.
                         </p>
                         <div className="flex items-center gap-3 mt-2">
                           <span className="text-[10px] text-muted-foreground">Just now</span>
@@ -7901,7 +7901,7 @@ const CostSubmission = () => {
                       </h2>
                       {/* Message */}
                       <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-4">
-                        This is a reminder that cost submission &ldquo;<strong>{reminderPreviewDialog.refNum}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) submitted by <strong>{reminderPreviewDialog.submitterName}</strong> is waiting for your review at <strong>{reminderPreviewDialog.stepLabel}</strong>. Please log in and take action.
+                        This is a reminder that cost submission &ldquo;<strong>{reminderPreviewDialog.refNum}{reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 80 ? reminderPreviewDialog.description.substring(0, 80) + '…' : reminderPreviewDialog.description}` : ''}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) submitted by <strong>{reminderPreviewDialog.submitterName}</strong> is waiting for your review at <strong>{reminderPreviewDialog.stepLabel}</strong>. Please log in and take action.
                       </p>
                       {/* Action button */}
                       <div className="flex justify-center my-6">
@@ -7923,7 +7923,7 @@ const CostSubmission = () => {
                           تذكير: مطلوب إجراء على طلب التكلفة
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-                          هذه رسالة تذكير بأن طلب التكلفة رقم &ldquo;<strong>{reminderPreviewDialog.refNum}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) المقدَّم من <strong>{reminderPreviewDialog.submitterName}</strong> بانتظار مراجعتك في مرحلة <strong>{reminderPreviewDialog.stepLabel}</strong>. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.
+                          هذه رسالة تذكير بأن طلب التكلفة رقم &ldquo;<strong>{reminderPreviewDialog.refNum}{reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 80 ? reminderPreviewDialog.description.substring(0, 80) + '…' : reminderPreviewDialog.description}` : ''}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) المقدَّم من <strong>{reminderPreviewDialog.submitterName}</strong> بانتظار مراجعتك في مرحلة <strong>{reminderPreviewDialog.stepLabel}</strong>. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.
                         </p>
                       </div>
                       {/* Divider */}
