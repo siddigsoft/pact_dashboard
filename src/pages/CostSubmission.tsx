@@ -7814,7 +7814,7 @@ const CostSubmission = () => {
                   <Clock className="h-3 w-3" /> Awaiting: {reminderPreviewDialog.stepLabel}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
-                  Ref: {reminderPreviewDialog.refNum}{reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description}` : ''}
+                  Ref: {reminderPreviewDialog.refNum}{reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 60 ? reminderPreviewDialog.description.substring(0, 60) + '…' : reminderPreviewDialog.description}` : ''}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
                   {reminderPreviewDialog.amtStr}
