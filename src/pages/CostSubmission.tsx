@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -418,6 +418,17 @@ const CostSubmission = () => {
   const [sendBackDialog, setSendBackDialog] = useState<{ open: boolean; item: OperationalCostSubmission | null }>({ open: false, item: null });
   const [sendBackComment, setSendBackComment] = useState('');
   const [sendBackSubmitting, setSendBackSubmitting] = useState(false);
+  const [reminderPreviewDialog, setReminderPreviewDialog] = useState<{
+    open: boolean;
+    stepLabel: string;
+    recipients: Array<{ id: string; name?: string; email?: string; role?: string }>;
+    refNum: string;
+    amtStr: string;
+    submitterName: string;
+    ocId: string;
+    tab: 'notification' | 'email';
+  } | null>(null);
+  const [reminderSending, setReminderSending] = useState(false);
   const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
   const [reconcileNotes, setReconcileNotes] = useState('');
   const [reconcileActualAmount, setReconcileActualAmount] = useState('');
@@ -1373,6 +1384,34 @@ const CostSubmission = () => {
       toast({ title: 'Update failed', description: err.message, variant: 'destructive' });
     } finally {
       setItemEditSubmitting(false);
+    }
+  };
+
+  const executeReminder = async () => {
+    if (!reminderPreviewDialog) return;
+    const { stepLabel, recipients, refNum, amtStr, submitterName: sName, ocId } = reminderPreviewDialog;
+    setReminderSending(true);
+    try {
+      await Promise.all(recipients.map(r =>
+        NotificationTriggerService.send({
+          userId: r.id,
+          title: `⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة`,
+          message: `This is a reminder that cost submission "${refNum}" (${amtStr}) submitted by ${sName} is waiting for your review at ${stepLabel}. Please log in and take action.`,
+          type: 'warning',
+          category: 'financial',
+          priority: 'high',
+          link: '/cost-submission',
+          relatedEntityType: 'costSubmission',
+          relatedEntityId: ocId,
+          sendEmail: true,
+          emailActionLabel: 'Review Now',
+        }).catch(console.warn)
+      ));
+      const names = recipients.map(r => r.name || r.email || 'approver').join(', ');
+      toast({ title: 'Reminder Sent ✓', description: `Reminder sent to: ${names}`, duration: 5000 });
+      setReminderPreviewDialog(null);
+    } finally {
+      setReminderSending(false);
     }
   };
 
@@ -4610,33 +4649,24 @@ const CostSubmission = () => {
                             : { label: `Pending — Awaiting ${activeStep?.label || 'Tier 1'}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
 
                             // ── Send reminder handler (inline, no extra state needed) ──
-                            const sendReminder = async (step: typeof steps[0]) => {
-                              const recipients = step.expectedApprovers && step.expectedApprovers.length > 0
-                                ? step.expectedApprovers
-                                : [];
+                            const sendReminder = (step: typeof steps[0]) => {
+                              const recipients = step.expectedApprovers?.length ? step.expectedApprovers : [];
                               if (recipients.length === 0) {
                                 toast({ title: 'No recipient found', description: 'Could not identify who to remind.', variant: 'destructive', duration: 4000 });
                                 return;
                               }
                               const refNum = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
                               const amtStr = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
-                              await Promise.all(recipients.map(r =>
-                                NotificationTriggerService.send({
-                                  userId: r.id,
-                                  title: `⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة`,
-                                  message: `This is a reminder that cost submission "${refNum}" (${amtStr}) submitted by ${submitterName} is waiting for your review at ${step.label}. Please log in and take action.`,
-                                  type: 'warning',
-                                  category: 'financial',
-                                  priority: 'high',
-                                  link: '/cost-submission',
-                                  relatedEntityType: 'costSubmission',
-                                  relatedEntityId: oc.id,
-                                  sendEmail: true,
-                                  emailActionLabel: 'Review Now',
-                                }).catch(console.warn)
-                              ));
-                              const names = recipients.map(r => r.name || r.email || 'approver').join(', ');
-                              toast({ title: 'Reminder Sent ✓', description: `Reminder sent to: ${names}`, duration: 5000 });
+                              setReminderPreviewDialog({
+                                open: true,
+                                stepLabel: step.label,
+                                recipients: recipients.map(r => ({ id: r.id, name: r.name, email: r.email, role: (r as any).role })),
+                                refNum,
+                                amtStr,
+                                submitterName,
+                                ocId: oc.id,
+                                tab: 'notification',
+                              });
                             };
 
                             return (
@@ -7755,6 +7785,199 @@ const CostSubmission = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Reminder Preview Dialog ── */}
+      {reminderPreviewDialog && (
+        <Dialog
+          open={reminderPreviewDialog.open}
+          onOpenChange={(open) => { if (!open && !reminderSending) setReminderPreviewDialog(null); }}
+        >
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0" data-testid="dialog-reminder-preview">
+            {/* Header */}
+            <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-6 py-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex-shrink-0 w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                  <Mail className="h-4.5 w-4.5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-semibold text-amber-900 dark:text-amber-100">Reminder Preview</h2>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                    This is exactly what <strong>{reminderPreviewDialog.recipients.map(r => r.name || r.email || 'the approver').join(', ')}</strong> will receive
+                  </p>
+                </div>
+              </div>
+              {/* Step + submission info pills */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
+                  <Clock className="h-3 w-3" /> Awaiting: {reminderPreviewDialog.stepLabel}
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
+                  Ref: {reminderPreviewDialog.refNum}
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
+                  {reminderPreviewDialog.amtStr}
+                </span>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="px-6 pt-4 pb-1">
+              <Tabs
+                value={reminderPreviewDialog.tab}
+                onValueChange={(v) => setReminderPreviewDialog(prev => prev ? { ...prev, tab: v as 'notification' | 'email' } : prev)}
+              >
+                <TabsList className="w-full grid grid-cols-2 mb-4">
+                  <TabsTrigger value="notification" className="gap-1.5 text-xs">
+                    <Bell className="h-3.5 w-3.5" /> In-App Notification
+                  </TabsTrigger>
+                  <TabsTrigger value="email" className="gap-1.5 text-xs">
+                    <Mail className="h-3.5 w-3.5" /> Email
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* ── Notification Tab ── */}
+                <TabsContent value="notification" className="mt-0">
+                  <p className="text-xs text-muted-foreground mb-3">This appears in the recipient's notification bell (🔔) inside the app:</p>
+                  <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+                    {/* Notification item mock */}
+                    <div className="flex items-start gap-3 px-4 py-3.5 bg-amber-50/60 dark:bg-amber-950/20 border-l-4 border-amber-400">
+                      <div className="flex-shrink-0 mt-0.5 w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-base">
+                        ⏰
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-foreground leading-snug">
+                            Reminder: Action Required — Cost Submission
+                          </span>
+                          <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded-full px-2 py-0.5 font-medium border border-amber-200 dark:border-amber-700">
+                            Financial
+                          </span>
+                          <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full px-2 py-0.5 font-medium border border-red-200 dark:border-red-800">
+                            High Priority
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          This is a reminder that cost submission &ldquo;<strong>{reminderPreviewDialog.refNum}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) submitted by {reminderPreviewDialog.submitterName} is waiting for your review at <strong>{reminderPreviewDialog.stepLabel}</strong>. Please log in and take action.
+                        </p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-[10px] text-muted-foreground">Just now</span>
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium cursor-default">→ Go to Cost Submission</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="px-4 py-2 border-t bg-muted/30">
+                      <p className="text-[10px] text-muted-foreground">Also delivered as a push notification on mobile (FCM) if the recipient has the app installed</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 p-3 rounded-lg bg-muted/40 border text-xs text-muted-foreground space-y-1">
+                    <p><strong>To:</strong> {reminderPreviewDialog.recipients.map(r => `${r.name || ''}${r.email ? ` <${r.email}>` : ''}`).join(', ')}</p>
+                    <p><strong>Title (Arabic):</strong> تذكير: مطلوب إجراء على طلب التكلفة</p>
+                  </div>
+                </TabsContent>
+
+                {/* ── Email Tab ── */}
+                <TabsContent value="email" className="mt-0">
+                  <p className="text-xs text-muted-foreground mb-3">This email is sent to the recipient's registered email address via IONOS SMTP:</p>
+                  {/* Email preview — matches the actual generateNotificationEmailHTML template */}
+                  <div className="rounded-xl border overflow-hidden shadow-sm text-sm font-sans">
+                    {/* Navy header */}
+                    <div className="px-8 py-5" style={{ background: '#0F2041' }}>
+                      <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.5px' }}>PACT Command Center</p>
+                      <p style={{ margin: '3px 0 0 0', fontSize: 11, color: '#8FADD4' }}>مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p>
+                    </div>
+                    {/* Gradient accent line */}
+                    <div style={{ height: 4, background: 'linear-gradient(90deg,#2962FF,#00C6FF)' }} />
+                    {/* Body */}
+                    <div className="px-8 py-6 bg-white dark:bg-slate-900">
+                      {/* Greeting */}
+                      <p className="text-sm text-gray-800 dark:text-gray-200 mb-1">
+                        Dear {reminderPreviewDialog.recipients[0]?.name || 'Approver'}{reminderPreviewDialog.recipients[0]?.role ? ` (${reminderPreviewDialog.recipients[0].role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())})` : ''},
+                      </p>
+                      {/* Subject / title */}
+                      <h2 className="mt-4 mb-2 text-lg font-bold leading-snug" style={{ color: '#0F2041' }}>
+                        ⏰ Reminder: Action Required — Cost Submission
+                      </h2>
+                      {/* Message */}
+                      <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-4">
+                        This is a reminder that cost submission &ldquo;<strong>{reminderPreviewDialog.refNum}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) submitted by <strong>{reminderPreviewDialog.submitterName}</strong> is waiting for your review at <strong>{reminderPreviewDialog.stepLabel}</strong>. Please log in and take action.
+                      </p>
+                      {/* Action button */}
+                      <div className="flex justify-center my-6">
+                        <span
+                          className="inline-block cursor-default rounded text-white text-sm font-bold px-8 py-3 select-none"
+                          style={{ background: '#0F2041' }}
+                        >
+                          Review Now &nbsp;|&nbsp; عرض التفاصيل
+                        </span>
+                      </div>
+                      {/* Divider */}
+                      <hr className="border-t border-gray-200 dark:border-gray-700 my-5" />
+                      {/* Arabic section */}
+                      <div dir="rtl" className="text-right">
+                        <p className="text-sm text-gray-800 dark:text-gray-200 mb-1">
+                          عزيزي {reminderPreviewDialog.recipients[0]?.name || 'المعتمد'}،
+                        </p>
+                        <h3 className="mt-3 mb-2 text-base font-bold" style={{ color: '#0F2041' }}>
+                          تذكير: مطلوب إجراء على طلب التكلفة
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                          هذه رسالة تذكير بأن طلب التكلفة رقم &ldquo;<strong>{reminderPreviewDialog.refNum}</strong>&rdquo; ({reminderPreviewDialog.amtStr}) المقدَّم من <strong>{reminderPreviewDialog.submitterName}</strong> بانتظار مراجعتك في مرحلة <strong>{reminderPreviewDialog.stepLabel}</strong>. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.
+                        </p>
+                      </div>
+                      {/* Divider */}
+                      <hr className="border-t border-gray-200 dark:border-gray-700 my-5" />
+                      {/* Sign-off */}
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-0.5">Kind regards,</p>
+                      <p className="text-sm font-bold mb-0.5" style={{ color: '#0F2041' }}>PACT Command Center</p>
+                      <p className="text-xs text-gray-500">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p>
+                      <p className="text-xs text-gray-400 italic mt-1">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p>
+                    </div>
+                    {/* Footer */}
+                    <div className="px-8 py-3 text-center border-t" style={{ background: '#F8FAFC' }}>
+                      <p className="text-[10px] text-gray-400 leading-relaxed">
+                        This is an automated notification from the PACT Command Center Platform.<br />
+                        هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 p-3 rounded-lg bg-muted/40 border text-xs text-muted-foreground space-y-1">
+                    <p><strong>To:</strong> {reminderPreviewDialog.recipients.map(r => `${r.name || ''}${r.email ? ` <${r.email}>` : ''}`).join(', ')}</p>
+                    <p><strong>Subject:</strong> ⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة</p>
+                    <p><strong>Priority:</strong> High &nbsp;·&nbsp; <strong>Category:</strong> Financial</p>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Footer actions */}
+            <div className="px-6 py-4 border-t bg-muted/20 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReminderPreviewDialog(null)}
+                disabled={reminderSending}
+                data-testid="button-reminder-preview-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={executeReminder}
+                disabled={reminderSending}
+                className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+                data-testid="button-reminder-preview-send"
+              >
+                {reminderSending ? (
+                  <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Sending...</>
+                ) : (
+                  <><Send className="h-3.5 w-3.5" /> Send Reminder to {reminderPreviewDialog.recipients.map(r => r.name || r.email || 'approver').join(', ')}</>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       </>)}
     </div>
   );
