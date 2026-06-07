@@ -584,14 +584,16 @@ export default function UnifiedCostRequestForm({
         }).join(', ');
 
         // Notify the correct Tier 1 approver based on the submitter's role:
-        //   Coordinator  → Supervisor(s) in the hub
-        //   Supervisor   → FOM / Country Director (org-wide)
-        //   FOM / CD     → Admin / Super Admin (org-wide, single-tier flow)
+        //   Coordinator  → T1 = Hub Supervisor(s) in the same hub
+        //   Supervisor   → T1 = FOM (org-wide)
+        //   FOM          → T1 = Country Director (org-wide)
+        //   CD           → T1 = Admin / Super Admin (single-tier)
         {
           const submitterRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
           const isCoordinatorSubmitter = submitterRole.includes('coordinator');
-          const isSupervisorSubmitter = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
-          const isFomSubmitter = submitterRole === 'fom' || submitterRole === 'fieldoperationmanager' || submitterRole === 'countrydirector';
+          const isSupervisorSubmitter  = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
+          const isFomSubmitter         = submitterRole === 'fom' || submitterRole === 'fieldoperationmanager';
+          const isCDSubmitter          = submitterRole === 'countrydirector' || submitterRole === 'country_director';
 
           const notifyTier1 = (recipientIds: string[]) => {
             if (recipientIds.length === 0) {
@@ -608,7 +610,7 @@ export default function UnifiedCostRequestForm({
           };
 
           if (isCoordinatorSubmitter && resolvedHubId) {
-            // Coordinator → notify Supervisors in the same hub
+            // Coordinator → T1 = Hub Supervisors in the same hub
             supabase
               .from('profiles')
               .select('id')
@@ -618,20 +620,29 @@ export default function UnifiedCostRequestForm({
               .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
               .catch(console.error);
           } else if (isSupervisorSubmitter) {
-            // Supervisor → notify FOM / Country Director org-wide
+            // Supervisor → T1 = FOM (not CD, they review at T2)
             supabase
               .from('profiles')
               .select('id')
-              .in('role', ['Field Operation Manager (FOM)', 'fom', 'CountryDirector', 'country_director'])
+              .in('role', ['Field Operation Manager (FOM)', 'fom'])
               .eq('status', 'approved')
               .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
               .catch(console.error);
           } else if (isFomSubmitter) {
-            // FOM / CD → notify Admins (single-tier flow)
+            // FOM → T1 = Country Director
             supabase
               .from('profiles')
               .select('id')
-              .in('role', ['Admin', 'SuperAdmin', 'super_admin'])
+              .in('role', ['countryDirector', 'CountryDirector', 'country_director'])
+              .eq('status', 'approved')
+              .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
+              .catch(console.error);
+          } else if (isCDSubmitter) {
+            // Country Director → T1 = Admin / Super Admin (single-tier)
+            supabase
+              .from('profiles')
+              .select('id')
+              .in('role', ['Admin', 'admin', 'SuperAdmin', 'super_admin'])
               .eq('status', 'approved')
               .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
               .catch(console.error);

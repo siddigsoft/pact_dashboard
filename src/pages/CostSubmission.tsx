@@ -160,6 +160,10 @@ interface OperationalCostSubmission {
   tier3_approved_by: string | null;
   tier3_approved_at: string | null;
   tier3_notes: string | null;
+  tier4_status: string | null;
+  tier4_approved_by: string | null;
+  tier4_approved_at: string | null;
+  tier4_notes: string | null;
   rejection_reason: string | null;
   paid_at: string | null;
   paid_by: string | null;
@@ -296,7 +300,7 @@ const CostSubmission = () => {
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
     action: 'approve' | 'reject';
-    tier: 1 | 2 | 3;
+    tier: 1 | 2 | 3 | 4;
     submission: OperationalCostSubmission | null;
   }>({ open: false, action: 'approve', tier: 1, submission: null });
   const [approvalNotes, setApprovalNotes] = useState('');
@@ -651,35 +655,60 @@ const CostSubmission = () => {
     return role.includes('supervisor') || role.includes('hubsupervisor');
   };
 
-  // FOM/Country Director submissions only need ONE approval (admin/super admin), then go straight to Finance.
+  // FOM submissions: 2-tier — T1=Country Director, T2=Admin/SuperAdmin
   const isFomSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
-    return role === 'fom' || role === 'fieldoperationmanager' || role === 'countrydirector';
+    return role === 'fom' || role === 'fieldoperationmanager';
   };
 
+  // Country Director submissions: single-tier — T1=Admin/SuperAdmin only
+  const isCDSubmission = (oc: OperationalCostSubmission): boolean => {
+    const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'countrydirector' || role === 'country_director';
+  };
+
+  // Supervisor submissions: 3-tier — T1=FOM, T2=Country Director, T3=Admin/SuperAdmin
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
-    // Coordinators use a 3-tier flow; Supervisors use 2-tier.
-    // Also activates for any record that already has tier3_status set (legacy).
-    return isCoordinatorSubmission(oc) || (oc.tier3_status !== null && oc.tier3_status !== undefined);
+    return isSupervisorSubmission(oc);
+  };
+
+  // Coordinator submissions: 4-tier — T1=Supervisor, T2=FOM, T3=Country Director, T4=Admin/SuperAdmin
+  const hasFourTiers = (oc: OperationalCostSubmission): boolean => {
+    return isCoordinatorSubmission(oc) || (oc.tier4_status !== null && oc.tier4_status !== undefined);
   };
 
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
-    if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
+    if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.tier4_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (oc.status === 'approved') return 'approved';
-    // FOM/Country Director submissions: single-tier — T1 approval is sufficient
-    if (isFomSubmission(oc)) {
+
+    // Country Director submission: single-tier — T1=Admin is final
+    if (isCDSubmission(oc)) {
       if (oc.tier1_status === 'approved') return 'approved';
       return 'pending';
     }
+    // FOM submission: 2-tier — T1=CD, T2=Admin
+    if (isFomSubmission(oc)) {
+      if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
+      if (oc.tier1_status === 'approved') return 'under_review';
+      return 'pending';
+    }
+    // Coordinator submission: 4-tier
+    if (hasFourTiers(oc)) {
+      if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved' && oc.tier4_status === 'approved') return 'approved';
+      if (oc.tier1_status === 'approved') return 'under_review';
+      return 'pending';
+    }
+    // Supervisor submission: 3-tier
     if (hasThreeTiers(oc)) {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
-      if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
-    } else {
-      if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
-      if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
+      if (oc.tier1_status === 'approved') return 'under_review';
+      return 'pending';
     }
+    // Fallback: 2-tier
+    if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
+    if (oc.tier1_status === 'approved') return 'under_review';
     if (oc.status === 'under_review') return 'under_review';
     return 'pending';
   };
@@ -688,29 +717,47 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    // Coordinator submissions: Supervisor reviews Tier 1
-    if (isCoordinatorSubmission(oc)) return isSupervisor;
-    // Supervisor submissions: FOM or Country Director reviews Tier 1
-    if (isSupervisorSubmission(oc)) return isFOM || isCountryDirector;
-    return isFOM || isCountryDirector;
+    // Coordinator: T1 = Hub Supervisor
+    if (hasFourTiers(oc)) return isSupervisor;
+    // Supervisor: T1 = FOM
+    if (hasThreeTiers(oc)) return isFOM;
+    // FOM submission: T1 = Country Director
+    if (isFomSubmission(oc)) return isCountryDirector;
+    // Country Director submission: T1 = Admin/SuperAdmin (handled above)
+    return false;
   };
 
   const canTier2Approve = (oc: OperationalCostSubmission): boolean => {
-    // FOM submissions only need single-tier approval — T2 is never required
-    if (isFomSubmission(oc)) return false;
+    // CD submissions are single-tier — no T2
+    if (isCDSubmission(oc)) return false;
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    // Coordinator submissions: FOM/Country Director reviews Tier 2
-    if (isCoordinatorSubmission(oc)) return isFOM || isCountryDirector;
-    // Supervisor submissions: Admin/Super Admin is Tier 2 (already handled above)
+    // Coordinator: T2 = FOM
+    if (hasFourTiers(oc)) return isFOM;
+    // Supervisor: T2 = Country Director
+    if (hasThreeTiers(oc)) return isCountryDirector;
+    // FOM submission: T2 = Admin/SuperAdmin (handled by isSuperAdmin || isAdmin above)
     return false;
   };
 
   const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
-    if (!hasThreeTiers(oc)) return false;
+    const hasT3 = hasThreeTiers(oc) || hasFourTiers(oc);
+    if (!hasT3) return false;
     if (oc.tier2_status !== 'approved') return false;
     if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
+    if (isSuperAdmin || isAdmin) return true;
+    if (oc.submitted_by === currentUser?.id) return false;
+    // Coordinator: T3 = Country Director
+    if (hasFourTiers(oc)) return isCountryDirector;
+    // Supervisor: T3 = Admin/SuperAdmin (handled above)
+    return false;
+  };
+
+  const canTier4Approve = (oc: OperationalCostSubmission): boolean => {
+    if (!hasFourTiers(oc)) return false;
+    if (oc.tier3_status !== 'approved') return false;
+    if (oc.tier4_status !== 'pending' && oc.tier4_status !== null) return false;
     if (isSuperAdmin) return true;
     return isAdmin;
   };
@@ -719,7 +766,7 @@ const CostSubmission = () => {
   // FOM can skip pending intermediate tiers and directly push a submission
   // to final "approved" status (ready for Finance), bypassing the normal flow.
   const canFOMBypass = (oc: OperationalCostSubmission): boolean => {
-    if (!isFOM && !isCountryDirector) return false;
+    if (!isFOM) return false;
     if (oc.submitted_by === currentUser?.id) return false;
     const derived = getOperationalDerivedStatus(oc);
     return derived !== 'approved' && derived !== 'paid' && derived !== 'reconciled' && derived !== 'rejected';
@@ -727,9 +774,13 @@ const CostSubmission = () => {
 
   const openFOMBypassDialog = (oc: OperationalCostSubmission) => {
     const now = new Date().toISOString();
-    const normalFlow = hasThreeTiers(oc)
-      ? 'Tier 1 (Supervisor) → Tier 2 (FOM) → Tier 3 (Admin) → Finance'
-      : 'Tier 1 (Supervisor) → Tier 2 (FOM/Admin) → Finance';
+    const normalFlow = hasFourTiers(oc)
+      ? 'T1 (Supervisor) → T2 (FOM) → T3 (Country Director) → T4 (Admin) → Finance'
+      : hasThreeTiers(oc)
+      ? 'T1 (FOM) → T2 (Country Director) → T3 (Admin) → Finance'
+      : isFomSubmission(oc)
+      ? 'T1 (Country Director) → T2 (Admin) → Finance'
+      : 'T1 (Admin) → Finance';
     const bypassNote = `[FOM Direct Approval — Bypass used by ${currentUser?.name || currentUser?.email} at ${now}. Normal flow: ${normalFlow}. FOM exercised authority to approve directly to Finance level.]`;
     setSignatureModal({
       open: true,
@@ -830,7 +881,7 @@ const CostSubmission = () => {
     }
   };
 
-  const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3) => {
+  const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3 | 4) => {
     setApprovalDialog({ open: true, action, tier, submission: oc });
     setApprovalNotes('');
     setApprovalReason('');
@@ -946,14 +997,15 @@ const CostSubmission = () => {
     }
   };
 
-  const isFinalTier = (oc: OperationalCostSubmission, tier: 1 | 2 | 3): boolean => {
-    // FOM/Country Director submissions are single-tier — T1 is always final
-    if (isFomSubmission(oc)) return tier === 1;
-    if (hasThreeTiers(oc)) return tier === 3;
-    return tier === 2;
+  const isFinalTier = (oc: OperationalCostSubmission, tier: 1 | 2 | 3 | 4): boolean => {
+    if (isCDSubmission(oc))  return tier === 1; // CD: 1-tier
+    if (isFomSubmission(oc)) return tier === 2; // FOM: 2-tier (T1=CD, T2=Admin)
+    if (hasFourTiers(oc))    return tier === 4; // Coordinator: 4-tier
+    if (hasThreeTiers(oc))   return tier === 3; // Supervisor: 3-tier
+    return tier === 2;                          // fallback
   };
 
-  const shouldRequireSignature = (_oc: OperationalCostSubmission, _tier: 1 | 2 | 3): boolean => {
+  const shouldRequireSignature = (_oc: OperationalCostSubmission, _tier: 1 | 2 | 3 | 4): boolean => {
     if (isSuperAdmin || isAdmin) return true;
     return isFinalTier(_oc, _tier);
   };
@@ -994,7 +1046,7 @@ const CostSubmission = () => {
 
   const processApproval = async (
     action: 'approve' | 'reject',
-    tier: 1 | 2 | 3,
+    tier: 1 | 2 | 3 | 4,
     submission: OperationalCostSubmission,
     notes: string,
     signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string },
@@ -1017,12 +1069,8 @@ const CostSubmission = () => {
         updates.tier1_approved_at = new Date().toISOString();
         updates.tier1_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
-          // FOM/Country Director submissions: single-tier — T1 approval finalises the record
-          if (isFomSubmission(submission)) {
-            updates.tier2_status = 'approved';
-            updates.tier2_approved_by = currentUser.id;
-            updates.tier2_approved_at = new Date().toISOString();
-            updates.tier2_notes = `[Auto-approved: single-tier FOM flow — T2 not required]`;
+          // Country Director submission: single-tier — T1 is final
+          if (isCDSubmission(submission)) {
             updates.status = 'approved';
           } else {
             updates.status = 'under_review';
@@ -1038,8 +1086,10 @@ const CostSubmission = () => {
         updates.tier2_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
           if (isFinal) {
+            // FOM submission T2=Admin: final
             updates.status = 'approved';
           } else {
+            // Coordinator T2=FOM or Supervisor T2=CD: more tiers ahead
             updates.status = 'under_review';
             updates.tier3_status = 'pending';
           }
@@ -1053,10 +1103,29 @@ const CostSubmission = () => {
         updates.tier3_approved_at = new Date().toISOString();
         updates.tier3_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
-          updates.status = 'approved';
+          if (isFinal) {
+            // Supervisor T3=Admin: final
+            updates.status = 'approved';
+          } else {
+            // Coordinator T3=Country Director: T4=Admin still ahead
+            updates.status = 'under_review';
+            updates.tier4_status = 'pending';
+          }
         } else {
           updates.status = 'rejected';
           updates.rejection_reason = notes || 'Rejected at Tier 3 / تم الرفض في المرحلة الثالثة';
+        }
+      } else if (tier === 4) {
+        updates.tier4_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier4_approved_by = currentUser.id;
+        updates.tier4_approved_at = new Date().toISOString();
+        updates.tier4_notes = (notes || '') + sigSuffix || null;
+        if (action === 'approve') {
+          // Coordinator T4=Admin: always final
+          updates.status = 'approved';
+        } else {
+          updates.status = 'rejected';
+          updates.rejection_reason = notes || 'Rejected at Tier 4 / تم الرفض في المرحلة الرابعة';
         }
       }
 
@@ -1172,16 +1241,21 @@ const CostSubmission = () => {
           let nextRoles: string[] = [];
           const nextTierNum = tier + 1;
 
-          if (isCoordinatorSubmission(submission)) {
-            // Coordinator: T1=Supervisor, T2=FOM/CD, T3=Admin
-            if (tier === 1) nextRoles = ['Field Operation Manager (FOM)', 'fom', 'CountryDirector'];
-            if (tier === 2) nextRoles = ['Admin', 'SuperAdmin', 'super_admin', 'SuperAdmin'];
-          } else if (isSupervisorSubmission(submission)) {
-            // Supervisor: T1=FOM/CD, T2=Admin
-            if (tier === 1) nextRoles = ['Admin', 'SuperAdmin', 'super_admin'];
+          if (hasFourTiers(submission)) {
+            // Coordinator: T1=Supervisor→T2=FOM→T3=CountryDirector→T4=Admin
+            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
+            if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
+            if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
+          } else if (hasThreeTiers(submission)) {
+            // Supervisor: T1=FOM→T2=CountryDirector→T3=Admin
+            if (tier === 1) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
+            if (tier === 2) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
+          } else if (isFomSubmission(submission)) {
+            // FOM: T1=CountryDirector→T2=Admin
+            if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else {
             // Default fallback
-            if (tier === 1) nextRoles = ['Admin', 'SuperAdmin', 'super_admin', 'Field Operation Manager (FOM)', 'fom'];
+            if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           }
 
           if (nextRoles.length > 0) {
@@ -3680,10 +3754,11 @@ const CostSubmission = () => {
                     const grpApprovedCnt = groupItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'approved' || ds === 'paid' || ds === 'reconciled'; }).length;
                     const grpRejectedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
                     const grpPendingCnt = groupItems.length - grpApprovedCnt - grpRejectedCnt;
-                    const grpApprovableTier: 1 | 2 | 3 | null = isMultiItem ? (
+                    const grpApprovableTier: 1 | 2 | 3 | 4 | null = isMultiItem ? (
                       groupItems.some(o => canTier1Approve(o)) ? 1 :
                       groupItems.some(o => canTier2Approve(o)) ? 2 :
-                      groupItems.some(o => canTier3Approve(o)) ? 3 : null
+                      groupItems.some(o => canTier3Approve(o)) ? 3 :
+                      groupItems.some(o => canTier4Approve(o)) ? 4 : null
                     ) : null;
 
                      // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
@@ -4011,10 +4086,22 @@ const CostSubmission = () => {
                                   <>
                                     <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
                                       onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-tier3-approve-${oc.id}`}>
-                                      <ThumbsUp className="h-2.5 w-2.5" /> Final Approve T3
+                                      <ThumbsUp className="h-2.5 w-2.5" /> {hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
                                     </button>
                                     <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
                                       onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-tier3-reject-${oc.id}`}>
+                                      <ThumbsDown className="h-2.5 w-2.5" /> Reject
+                                    </button>
+                                  </>
+                                )}
+                                {canTier4Approve(oc) && (
+                                  <>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
+                                      onClick={() => openApprovalDialog(oc, 'approve', 4)} data-testid={`button-tier4-approve-${oc.id}`}>
+                                      <ThumbsUp className="h-2.5 w-2.5" /> Final Approve T4
+                                    </button>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                      onClick={() => openApprovalDialog(oc, 'reject', 4)} data-testid={`button-tier4-reject-${oc.id}`}>
                                       <ThumbsDown className="h-2.5 w-2.5" /> Reject
                                     </button>
                                   </>
@@ -4037,7 +4124,7 @@ const CostSubmission = () => {
                                     <SendHorizonal className="h-2.5 w-2.5" /> Resubmit
                                   </button>
                                 )}
-                                {isApproved && !canTier1Approve(oc) && !canTier2Approve(oc) && !canTier3Approve(oc) && !canFOMBypass(oc) && (
+                                {isApproved && !canTier1Approve(oc) && !canTier2Approve(oc) && !canTier3Approve(oc) && !canTier4Approve(oc) && !canFOMBypass(oc) && (
                                   <span className="text-[10px] text-green-600 font-medium">✓ All tiers approved</span>
                                 )}
                               </div>
@@ -4386,9 +4473,11 @@ const CostSubmission = () => {
                           {/* ── Approval Flow Tracker ── */}
                           {(() => {
                             const isFomSub = isFomSubmission(oc);
-                            const isCoordSub = isCoordinatorSubmission(oc);
-                            const isSuperSub = isSupervisorSubmission(oc);
-                            const threeTier = hasThreeTiers(oc);
+                            const isCoordSub = hasFourTiers(oc);
+                            const isSuperSub = hasThreeTiers(oc);
+                            const isCDSub   = isCDSubmission(oc);
+                            const fourTier  = isCoordSub;
+                            const threeTier = isSuperSub;
 
                             type StepStatus = 'done' | 'rejected' | 'active' | 'pending';
                             interface FlowStep {
@@ -4421,27 +4510,43 @@ const CostSubmission = () => {
                               }).slice(0, 5);
 
                             const isSupervisorRolePred = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
-                            const isMgmtRolePred = (r: string) => ['fom','fieldoperationmanager','countrydirector','countrydir'].some(x => r.includes(x));
-                            const isAdminRolePred = (r: string) => r === 'admin' || r === 'superadmin' || r === 'super_admin' || r.includes('superadmin');
+                            const isFomRolePred        = (r: string) => r === 'fom' || r === 'fieldoperationmanager';
+                            const isCDRolePred         = (r: string) => r === 'countrydirector' || r === 'country_director';
+                            const isAdminRolePred      = (r: string) => r === 'admin' || r === 'superadmin' || r.includes('superadmin');
 
+                            // T1 expected approvers per flow
                             const t1Expected = oc.tier1_status === 'approved' || oc.tier1_status === 'rejected' ? [] :
-                              isCoordSub ? getExpected(isSupervisorRolePred, true) :
-                              isSuperSub ? getExpected(isMgmtRolePred) :
-                              isFomSub   ? getExpected(isAdminRolePred)  : getExpected(isSupervisorRolePred, true);
+                              isCoordSub ? getExpected(isSupervisorRolePred, true) :   // T1=Supervisor
+                              isSuperSub ? getExpected(isFomRolePred)              :   // T1=FOM
+                              isFomSub   ? getExpected(isCDRolePred)               :   // T1=CD
+                              isCDSub    ? getExpected(isAdminRolePred)            :   // T1=Admin
+                              getExpected(isSupervisorRolePred, true);
 
-                            const t2Expected = !isFomSub && (oc.tier2_status === 'approved' || oc.tier2_status === 'rejected') ? [] :
-                              !isFomSub ? (threeTier ? getExpected(isMgmtRolePred) : getExpected(r => isMgmtRolePred(r) || isAdminRolePred(r))) : [];
+                            // T2 expected approvers per flow
+                            const t2Expected = isCDSub || (oc.tier2_status === 'approved' || oc.tier2_status === 'rejected') ? [] :
+                              isCoordSub ? getExpected(isFomRolePred)    :   // T2=FOM
+                              isSuperSub ? getExpected(isCDRolePred)     :   // T2=CD
+                              isFomSub   ? getExpected(isAdminRolePred)  :   // T2=Admin
+                              [];
 
-                            const t3Expected = threeTier && ((oc as any).tier3_status !== 'approved' && (oc as any).tier3_status !== 'rejected')
-                              ? getExpected(isAdminRolePred) : [];
+                            // T3 expected approvers per flow
+                            const t3Expected = (oc.tier3_status === 'approved' || oc.tier3_status === 'rejected') ? [] :
+                              isCoordSub ? getExpected(isCDRolePred)    :   // T3=CD
+                              isSuperSub ? getExpected(isAdminRolePred) :   // T3=Admin
+                              [];
+
+                            // T4 expected approvers (coordinator only)
+                            const t4Expected = (oc.tier4_status === 'approved' || oc.tier4_status === 'rejected') ? [] :
+                              isCoordSub ? getExpected(isAdminRolePred) : [];
 
                             // ── Helper: build "sent to: Name1, Name2" strings ──
                             const nameList = (people: Array<{ name?: string; email?: string }>) =>
                               people.map(p => p.name || p.email || '').filter(Boolean).join(', ');
 
-                            const t1Name  = tier1Approver?.name  || tier1Approver?.email  || nameList(t1Expected) || 'Tier 1 approver';
-                            const t2Name  = tier2Approver?.name  || tier2Approver?.email  || nameList(t2Expected) || 'Tier 2 approver';
-                            const t3Name  = tier3Approver?.name  || tier3Approver?.email  || nameList(t3Expected) || 'Admin';
+                            const t1Name = tier1Approver?.name || tier1Approver?.email || nameList(t1Expected) || 'Tier 1 approver';
+                            const t2Name = tier2Approver?.name || tier2Approver?.email || nameList(t2Expected) || 'Tier 2 approver';
+                            const t3Name = tier3Approver?.name || tier3Approver?.email || nameList(t3Expected) || 'Tier 3 approver';
+                            const t4Name = nameList(t4Expected) || 'Admin';
 
                             const steps: FlowStep[] = [];
 
@@ -4458,10 +4563,18 @@ const CostSubmission = () => {
                             });
 
                             // ② Tier 1
-                            const t1RoleLabel = isCoordSub ? 'Hub Supervisor' : isSuperSub ? 'Field Op. Manager' : isFomSub ? 'Admin / Super Admin' : 'Hub Supervisor';
+                            const t1RoleLabel = isCoordSub ? 'Hub Supervisor'
+                              : isSuperSub ? 'Field Op. Manager (FOM)'
+                              : isFomSub   ? 'Country Director'
+                              : isCDSub    ? 'Admin / Super Admin'
+                              : 'Hub Supervisor';
                             const t1Status: StepStatus = oc.tier1_status === 'approved' ? 'done' : oc.tier1_status === 'rejected' ? 'rejected' : 'active';
                             steps.push({
-                              label: isFomSub ? 'Tier 1 — Admin Review' : isCoordSub ? 'Tier 1 — Supervisor' : isSuperSub ? 'Tier 1 — FOM Review' : 'Tier 1 Review',
+                              label: isCoordSub ? 'Tier 1 — Supervisor'
+                                : isSuperSub ? 'Tier 1 — FOM Review'
+                                : isFomSub   ? 'Tier 1 — Country Director'
+                                : isCDSub    ? 'Tier 1 — Admin Review'
+                                : 'Tier 1 Review',
                               stepNum: '②',
                               person: tier1Approver?.name || tier1Approver?.email || '',
                               role: fmtRole((tier1Approver as any)?.role) || t1RoleLabel,
@@ -4469,19 +4582,25 @@ const CostSubmission = () => {
                               timestamp: oc.tier1_approved_at,
                               notes: cleanTier1Notes || undefined,
                               notifIcon: '📧',
-                              notifText: isFomSub
-                                ? `Email sent to: ${submitterName}`
-                                : `Email sent to: ${submitterName}, ${t2Name}`,
+                              notifText: t1Status === 'done'
+                                ? `Email sent to: ${submitterName}, ${t2Name}`
+                                : `Email sent to: ${t1Name}`,
                               expectedApprovers: t1Expected,
                             });
 
-                            // ③ Tier 2 (skip for FOM single-tier)
-                            if (!isFomSub) {
-                              const t2RoleLabel = threeTier ? 'Field Op. Manager / FOM' : 'Finance Manager / FOM';
+                            // ③ Tier 2 (skip for CD single-tier)
+                            if (!isCDSub) {
+                              const t2RoleLabel = isCoordSub ? 'Field Op. Manager (FOM)'
+                                : isSuperSub ? 'Country Director'
+                                : isFomSub   ? 'Admin / Super Admin'
+                                : 'Tier 2 Approver';
                               const t2Reached = oc.tier1_status === 'approved';
                               const t2Status: StepStatus = oc.tier2_status === 'approved' ? 'done' : oc.tier2_status === 'rejected' ? 'rejected' : t2Reached ? 'active' : 'pending';
                               steps.push({
-                                label: threeTier ? 'Tier 2 — FOM / CD' : 'Tier 2 Review',
+                                label: isCoordSub ? 'Tier 2 — FOM Review'
+                                  : isSuperSub ? 'Tier 2 — Country Director'
+                                  : isFomSub   ? 'Tier 2 — Admin Review'
+                                  : 'Tier 2 Review',
                                 stepNum: '③',
                                 person: tier2Approver?.name || tier2Approver?.email || '',
                                 role: fmtRole((tier2Approver as any)?.role) || t2RoleLabel,
@@ -4489,40 +4608,65 @@ const CostSubmission = () => {
                                 timestamp: oc.tier2_approved_at,
                                 notes: cleanTier2Notes || undefined,
                                 notifIcon: '📧',
-                                notifText: threeTier
+                                notifText: t2Status === 'done'
                                   ? `Email sent to: ${submitterName}, ${t3Name}`
-                                  : `Email sent to: ${submitterName}`,
+                                  : `Email sent to: ${t2Name}`,
                                 expectedApprovers: t2Expected,
                               });
                             }
 
-                            // ④ Tier 3 (3-tier coordinator flow only)
-                            if (threeTier) {
-                              const raw3 = (oc as any).tier3_status as string | null;
+                            // ④ Tier 3 (supervisor: T3=Admin final; coordinator: T3=CD, more ahead)
+                            if (threeTier || fourTier) {
+                              const raw3 = oc.tier3_status as string | null;
                               const t3Reached = oc.tier1_status === 'approved' && oc.tier2_status === 'approved';
                               const t3Status: StepStatus = raw3 === 'approved' ? 'done' : raw3 === 'rejected' ? 'rejected' : t3Reached ? 'active' : 'pending';
+                              const t3RoleLabel = fourTier ? 'Country Director' : 'Admin / Super Admin';
                               steps.push({
-                                label: 'Tier 3 — Admin',
+                                label: fourTier ? 'Tier 3 — Country Director' : 'Tier 3 — Admin',
                                 stepNum: '④',
                                 person: tier3Approver?.name || tier3Approver?.email || '',
-                                role: fmtRole((tier3Approver as any)?.role) || 'Admin / Super Admin',
+                                role: fmtRole((tier3Approver as any)?.role) || t3RoleLabel,
                                 status: t3Status,
-                                timestamp: (oc as any).tier3_approved_at,
+                                timestamp: oc.tier3_approved_at,
                                 notes: cleanTier3Notes || undefined,
                                 notifIcon: '📧',
-                                notifText: `Email sent to: ${submitterName}`,
+                                notifText: t3Status === 'done'
+                                  ? `Email sent to: ${submitterName}${fourTier ? `, ${t4Name}` : ''}`
+                                  : `Email sent to: ${t3Name}`,
                                 expectedApprovers: t3Expected,
                               });
                             }
 
-                            // ⑤ Finance / Payment
+                            // ⑤ Tier 4 — Admin (coordinator 4-tier only)
+                            if (fourTier) {
+                              const raw4 = oc.tier4_status as string | null;
+                              const t4Reached = oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved';
+                              const t4Status: StepStatus = raw4 === 'approved' ? 'done' : raw4 === 'rejected' ? 'rejected' : t4Reached ? 'active' : 'pending';
+                              steps.push({
+                                label: 'Tier 4 — Admin',
+                                stepNum: '⑤',
+                                person: '',
+                                role: 'Admin / Super Admin',
+                                status: t4Status,
+                                timestamp: oc.tier4_approved_at,
+                                notes: oc.tier4_notes || undefined,
+                                notifIcon: '📧',
+                                notifText: t4Status === 'done'
+                                  ? `Email sent to: ${submitterName}`
+                                  : `Email sent to: ${t4Name}`,
+                                expectedApprovers: t4Expected,
+                              });
+                            }
+
+                            // ⑥ Finance / Payment
                             const finStatus: StepStatus =
                               derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'done'
                               : derivedStatus === 'approved' ? 'active'
                               : 'pending';
+                            const finStepNum = fourTier ? '⑥' : threeTier ? '⑤' : isFomSub ? '④' : isCDSub ? '③' : '④';
                             steps.push({
                               label: derivedStatus === 'reconciled' ? 'Reconciled' : derivedStatus === 'paid' ? 'Paid' : 'Finance / Payment',
-                              stepNum: threeTier ? '⑤' : isFomSub ? '③' : '④',
+                              stepNum: finStepNum,
                               person: derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'Payment complete' : finStatus === 'active' ? 'Finance Admin' : '—',
                               role: 'Finance Admin',
                               status: finStatus,
@@ -4865,13 +5009,35 @@ const CostSubmission = () => {
                                   data-testid={`button-tier3-approve-${oc.id}`}
                                 >
                                   <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                  Final Approve T3
+                                  {hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="destructive"
                                   onClick={() => openApprovalDialog(oc, 'reject', 3)}
                                   data-testid={`button-tier3-reject-${oc.id}`}
+                                >
+                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            {canTier4Approve(oc) && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 4)}
+                                  data-testid={`button-tier4-approve-${oc.id}`}
+                                >
+                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                                  Final Approve T4
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 4)}
+                                  data-testid={`button-tier4-reject-${oc.id}`}
                                 >
                                   <ThumbsDown className="h-3.5 w-3.5 mr-1" />
                                   Reject
@@ -5682,7 +5848,7 @@ const CostSubmission = () => {
                     Close
                   </Button>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
-                    {(isSuperAdmin || isAdmin || canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc)) && !oc.paid_at && !oc.reconciled_at && (
+                    {(isSuperAdmin || isAdmin || canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc) || canTier4Approve(oc)) && !oc.paid_at && !oc.reconciled_at && (
                       <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20 gap-1"
                         onClick={() => { setSendBackDialog({ open: true, item: oc }); setSendBackComment(''); }}
                         data-testid={`button-detail-sendback-${oc.id}`}>
@@ -5704,7 +5870,13 @@ const CostSubmission = () => {
                     {canTier3Approve(oc) && (
                       <Button size="sm" onClick={() => { setViewingSubmission(null); openApprovalDialog(oc, 'approve', 3); }}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`button-detail-approve-t3-${oc.id}`}>
-                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve T3
+                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> {hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
+                      </Button>
+                    )}
+                    {canTier4Approve(oc) && (
+                      <Button size="sm" onClick={() => { setViewingSubmission(null); openApprovalDialog(oc, 'approve', 4); }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`button-detail-approve-t4-${oc.id}`}>
+                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Final Approve T4
                       </Button>
                     )}
                     {canEditSubmission(oc) && (
