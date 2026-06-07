@@ -4547,13 +4547,58 @@ const CostSubmission = () => {
                             const lineCls = (s: StepStatus) =>
                               s === 'done' ? 'bg-green-300 dark:bg-green-700' : 'bg-border';
 
+                            // ── Current status summary ──
+                            const activeStep = steps.find(s => s.status === 'active');
+                            const statusSummary =
+                              derivedStatus === 'paid'       ? { label: 'Paid', cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' }
+                            : derivedStatus === 'reconciled' ? { label: 'Reconciled', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300' }
+                            : derivedStatus === 'approved'   ? { label: 'Fully Approved — Awaiting Payment', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' }
+                            : derivedStatus === 'rejected'   ? { label: 'Rejected', cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' }
+                            : derivedStatus === 'under_review' ? { label: `Under Review — Awaiting ${activeStep?.label || 'Tier 2'}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' }
+                            : { label: `Pending — Awaiting ${activeStep?.label || 'Tier 1'}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+
+                            // ── Send reminder handler (inline, no extra state needed) ──
+                            const sendReminder = async (step: typeof steps[0]) => {
+                              const recipients = step.expectedApprovers && step.expectedApprovers.length > 0
+                                ? step.expectedApprovers
+                                : step.person ? [{ id: oc.tier1_approved_by || oc.tier2_approved_by || '', name: step.person }] : [];
+                              if (recipients.length === 0) {
+                                toast({ title: 'No recipient found', description: 'Could not identify who to remind.', variant: 'destructive', duration: 4000 });
+                                return;
+                              }
+                              const refNum = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
+                              const amtStr = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
+                              await Promise.all(recipients.map(r =>
+                                NotificationTriggerService.send({
+                                  userId: r.id,
+                                  title: `⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة`,
+                                  message: `This is a reminder that cost submission "${refNum}" (${amtStr}) submitted by ${submitterName} is waiting for your review at ${step.label}. Please log in and take action.`,
+                                  type: 'warning',
+                                  category: 'financial',
+                                  priority: 'high',
+                                  link: '/cost-submission',
+                                  relatedEntityType: 'costSubmission',
+                                  relatedEntityId: oc.id,
+                                  sendEmail: true,
+                                  emailActionLabel: 'Review Now',
+                                }).catch(console.warn)
+                              ));
+                              const names = recipients.map(r => r.name || r.email || 'approver').join(', ');
+                              toast({ title: 'Reminder Sent ✓', description: `Reminder sent to: ${names}`, duration: 5000 });
+                            };
+
                             return (
                               <div className="border-t pt-3 pb-2" data-testid={`approval-flow-${oc.id}`}>
-                                {/* ── Header ── */}
-                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                  <ClipboardCheck className="h-3 w-3" />
-                                  Approval Flow / مسار الموافقة
-                                </p>
+                                {/* ── Header: title + current status ── */}
+                                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                    <ClipboardCheck className="h-3 w-3" />
+                                    Approval Flow / مسار الموافقة
+                                  </p>
+                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummary.cls}`}>
+                                    {statusSummary.label}
+                                  </span>
+                                </div>
 
                                 {/* ── Vertical timeline ── */}
                                 <div className="relative pl-5 space-y-0">
@@ -4567,29 +4612,32 @@ const CostSubmission = () => {
 
                                       {/* Content */}
                                       <div className="flex-1 min-w-0 space-y-1">
-                                        {/* Row 1: label + timestamp */}
+
+                                        {/* Row 1: label + status badge + timestamp */}
                                         <div className="flex items-center justify-between gap-2 flex-wrap">
                                           <span className={`text-[11px] font-bold leading-tight ${labelCls(step.status)}`}>
                                             {step.stepNum} {step.label}
                                           </span>
-                                          {step.timestamp && (
-                                            <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
-                                              {format(new Date(step.timestamp), 'MMM d, yyyy · h:mm a')}
-                                            </span>
-                                          )}
-                                          {step.status === 'active' && (
-                                            <span className="text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
-                                              ⏳ Awaiting
-                                            </span>
-                                          )}
-                                          {step.status === 'rejected' && (
-                                            <span className="text-[9px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
-                                              ✗ Rejected
-                                            </span>
-                                          )}
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            {step.timestamp && (
+                                              <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+                                                {format(new Date(step.timestamp), 'MMM d, yyyy · h:mm a')}
+                                              </span>
+                                            )}
+                                            {step.status === 'active' && (
+                                              <span className="text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                                                ⏳ Awaiting
+                                              </span>
+                                            )}
+                                            {step.status === 'rejected' && (
+                                              <span className="text-[9px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
+                                                ✗ Rejected
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
 
-                                        {/* Row 2: person name + role (actual approver) */}
+                                        {/* Row 2: person name + role (actual approver who acted) */}
                                         {step.person && (
                                           <div className="flex items-center gap-1.5 flex-wrap">
                                             <span className="text-[11px] font-medium text-foreground/90">{step.person}</span>
@@ -4598,18 +4646,32 @@ const CostSubmission = () => {
                                           </div>
                                         )}
 
-                                        {/* Row 3: expected approvers (pending/active steps without an actual approver yet) */}
-                                        {!step.person && step.expectedApprovers && step.expectedApprovers.length > 0 && (
+                                        {/* Row 3: action required by (active/pending step) */}
+                                        {step.status === 'active' && step.expectedApprovers && step.expectedApprovers.length > 0 && (
                                           <div className="space-y-0.5">
-                                            <p className="text-[9px] text-muted-foreground uppercase tracking-wide font-semibold">Expected approvers:</p>
+                                            <p className="text-[9px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                                              Action required by:
+                                            </p>
                                             <div className="flex flex-wrap gap-1">
                                               {step.expectedApprovers.map(a => (
-                                                <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-muted/70 dark:bg-muted/40 text-foreground/80 px-2 py-0.5 rounded-md font-medium">
+                                                <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-md font-medium">
                                                   {a.name || a.email}
-                                                  {a.role && <span className="text-muted-foreground font-normal">· {fmtRole(a.role)}</span>}
+                                                  {a.role && <span className="font-normal opacity-70">· {fmtRole(a.role)}</span>}
                                                 </span>
                                               ))}
                                             </div>
+                                          </div>
+                                        )}
+
+                                        {/* Pending (not yet reached) — show future approvers dimmed */}
+                                        {step.status === 'pending' && !step.person && step.expectedApprovers && step.expectedApprovers.length > 0 && (
+                                          <div className="flex flex-wrap gap-1">
+                                            {step.expectedApprovers.map(a => (
+                                              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-muted/50 text-muted-foreground/60 px-2 py-0.5 rounded-md">
+                                                {a.name || a.email}
+                                                {a.role && <span className="opacity-60">· {fmtRole(a.role)}</span>}
+                                              </span>
+                                            ))}
                                           </div>
                                         )}
 
@@ -4620,14 +4682,35 @@ const CostSubmission = () => {
                                           </p>
                                         )}
 
-                                        {/* Row 5: notification event */}
-                                        <p className="text-[9px] text-blue-600/60 dark:text-blue-400/60 flex items-center gap-1">
+                                        {/* Row 5: notification event + email timestamp */}
+                                        <p className="text-[9px] text-blue-600/60 dark:text-blue-400/60 flex items-center gap-1 flex-wrap">
                                           <span>{step.notifIcon}</span>
                                           <span>{step.notifText}</span>
+                                          {step.timestamp && step.status === 'done' && (
+                                            <span className="text-muted-foreground/50 tabular-nums">
+                                              · sent {format(new Date(step.timestamp), 'MMM d · h:mm a')}
+                                            </span>
+                                          )}
                                           {i === steps.length - 1 && (
-                                            <span className="ml-1 text-muted-foreground/50">· 💬 WhatsApp (if opted-in)</span>
+                                            <span className="text-muted-foreground/50">· 💬 WhatsApp (if opted-in)</span>
                                           )}
                                         </p>
+
+                                        {/* Row 6: Send Reminder button (active step only) */}
+                                        {step.status === 'active' && (
+                                          <div className="pt-0.5">
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-6 px-2.5 text-[10px] border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1"
+                                              onClick={() => sendReminder(step)}
+                                              data-testid={`button-send-reminder-${oc.id}`}
+                                            >
+                                              <Mail className="h-3 w-3" />
+                                              Send Reminder
+                                            </Button>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   ))}
