@@ -423,6 +423,7 @@ const CostSubmission = () => {
     stepLabel: string;
     recipients: Array<{ id: string; name?: string; email?: string; role?: string }>;
     refNum: string;
+    description: string;
     amtStr: string;
     submitterName: string;
     ocId: string;
@@ -4662,6 +4663,7 @@ const CostSubmission = () => {
                                 stepLabel: step.label,
                                 recipients: recipients.map(r => ({ id: r.id, name: r.name, email: r.email, role: (r as any).role })),
                                 refNum,
+                                description: oc.description || oc.expense_category || '',
                                 amtStr,
                                 submitterName,
                                 ocId: oc.id,
@@ -7812,7 +7814,7 @@ const CostSubmission = () => {
                   <Clock className="h-3 w-3" /> Awaiting: {reminderPreviewDialog.stepLabel}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
-                  Ref: {reminderPreviewDialog.refNum}
+                  Ref: {reminderPreviewDialog.refNum}{reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description}` : ''}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs bg-white dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-2.5 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
                   {reminderPreviewDialog.amtStr}
