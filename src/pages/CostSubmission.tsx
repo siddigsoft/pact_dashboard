@@ -3884,9 +3884,11 @@ const CostSubmission = () => {
                     const cleanTier1Notes = oc.tier1_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const cleanTier2Notes = oc.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const cleanTier3Notes = oc.tier3_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
+                    const cleanTier4Notes = oc.tier4_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
                     const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
                     const tier3Approver = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
+                    const tier4Approver = oc.tier4_approved_by ? users.find(u => u.id === oc.tier4_approved_by) : null;
                     const hasSig = oc.tier1_notes?.includes('[Signed:') || oc.tier2_notes?.includes('[Signed:') || oc.tier3_notes?.includes('[Signed:') || oc.tier4_notes?.includes('[Signed:');
 
                     // ── COMPACT ROW (inside a multi-item group — mockup design) ──────────────
@@ -4551,11 +4553,11 @@ const CostSubmission = () => {
                               steps.push({
                                 label: 'Tier 4 — Admin',
                                 stepNum: '⑤',
-                                person: '',
-                                role: 'Admin / Super Admin',
+                                person: tier4Approver?.name || tier4Approver?.email || '',
+                                role: fmtRole((tier4Approver as any)?.role) || 'Admin / Super Admin',
                                 status: t4Status,
                                 timestamp: oc.tier4_approved_at,
-                                notes: oc.tier4_notes || undefined,
+                                notes: cleanTier4Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t4Status === 'done'
                                   ? `Email sent to: ${submitterName}`
@@ -4769,7 +4771,7 @@ const CostSubmission = () => {
                             );
                           })()}
 
-                          {(cleanTier1Notes || cleanTier2Notes || oc.rejection_reason) && (
+                          {(cleanTier1Notes || cleanTier2Notes || cleanTier3Notes || cleanTier4Notes || oc.rejection_reason) && (
                             <div className="space-y-1.5 pt-1 border-t" data-testid={`notes-section-${oc.id}`}>
                               {cleanTier1Notes && (
                                 <div className="flex items-start gap-2 text-xs" data-testid={`text-tier1-notes-${oc.id}`}>
@@ -4795,6 +4797,32 @@ const CostSubmission = () => {
                                   </div>
                                 </div>
                               )}
+                              {cleanTier3Notes && (
+                                <div className="flex items-start gap-2 text-xs" data-testid={`text-tier3-notes-${oc.id}`}>
+                                  <span className="font-medium text-muted-foreground shrink-0 mt-px">T3:</span>
+                                  <div className="text-muted-foreground">
+                                    <span>
+                                      {cleanTier3Notes}
+                                      {tier3Approver && (
+                                        <span className="opacity-60"> — {tier3Approver.name || tier3Approver.email}</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {cleanTier4Notes && (
+                                <div className="flex items-start gap-2 text-xs" data-testid={`text-tier4-notes-${oc.id}`}>
+                                  <span className="font-medium text-muted-foreground shrink-0 mt-px">T4:</span>
+                                  <div className="text-muted-foreground">
+                                    <span>
+                                      {cleanTier4Notes}
+                                      {tier4Approver && (
+                                        <span className="opacity-60"> — {tier4Approver.name || tier4Approver.email}</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                               {oc.rejection_reason && (
                                 <div className="p-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" data-testid={`text-rejection-${oc.id}`}>
                                   <div className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
@@ -4814,6 +4842,18 @@ const CostSubmission = () => {
                                         <p className="text-red-500 dark:text-red-400">
                                           Rejected by / رفض بواسطة: {tier2Approver.name || tier2Approver.email}
                                           {oc.tier2_approved_at && ` — ${format(new Date(oc.tier2_approved_at), 'MMM d, yyyy h:mm a')}`}
+                                        </p>
+                                      )}
+                                      {oc.tier3_status === 'rejected' && tier3Approver && (
+                                        <p className="text-red-500 dark:text-red-400">
+                                          Rejected by / رفض بواسطة: {tier3Approver.name || tier3Approver.email}
+                                          {oc.tier3_approved_at && ` — ${format(new Date(oc.tier3_approved_at), 'MMM d, yyyy h:mm a')}`}
+                                        </p>
+                                      )}
+                                      {oc.tier4_status === 'rejected' && tier4Approver && (
+                                        <p className="text-red-500 dark:text-red-400">
+                                          Rejected by / رفض بواسطة: {tier4Approver.name || tier4Approver.email}
+                                          {oc.tier4_approved_at && ` — ${format(new Date(oc.tier4_approved_at), 'MMM d, yyyy h:mm a')}`}
                                         </p>
                                       )}
                                       <p className="text-red-500/80 dark:text-red-400/80 italic">
@@ -5346,6 +5386,7 @@ const CostSubmission = () => {
             const t1User = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
             const t2User = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
             const t3User = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
+            const t4User = oc.tier4_approved_by ? users.find(u => u.id === oc.tier4_approved_by) : null;
             const linkedProject = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
             const derivedStatus = oc.paid_at ? 'paid' : oc.reconciled_at ? 'reconciled' : oc.status;
             const cleanNote = (n: string | null) => n?.replace(/\[Signed:.*?\]/g, '').trim() || null;
@@ -5685,7 +5726,7 @@ const CostSubmission = () => {
                       {hasFourTiers(oc) && (
                         <>
                           <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
-                          <ApprovalStep tier={4} tStatus={oc.tier4_status} tUser={null} tAt={oc.tier4_approved_at} tNotes={oc.tier4_notes} />
+                          <ApprovalStep tier={4} tStatus={oc.tier4_status} tUser={t4User} tAt={oc.tier4_approved_at} tNotes={oc.tier4_notes} />
                         </>
                       )}
                     </div>

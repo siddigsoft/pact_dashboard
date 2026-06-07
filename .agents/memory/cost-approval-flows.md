@@ -14,6 +14,7 @@ description: Rules and pitfalls for the 4-tier cost submission approval system i
 - `hasThreeTiers(oc)` — isSupervisorSubmission only
 - Role normalisation: `.toLowerCase().replace(/[\s_-]/g, '')` so 'country_director', 'Country Director', 'countrydirector' all normalise to 'countrydirector'
 - FOM DB roles: 'fom' and 'fieldoperationmanager' (NOT 'Field Operation Manager (FOM)' — display name ≠ DB value)
+- hasAnyRole() normalizes via roleMapping.ts, so 'country_director' in DB matches hasAnyRole(['countryDirector'])
 
 ## Recurring pitfall checklist
 Every place that handles tiers must include tier 4:
@@ -22,5 +23,9 @@ Every place that handles tiers must include tier 4:
 3. `handleGroupApproval` switch/if must have a tier 4 branch
 4. Send-back and recall must clear tier3 AND tier4 fields (not just tier1/tier2)
 5. Notification `nextRoles` arrays must use DB role values, not display names
+6. Approver lookups (tierXApprover / tXUser): define for ALL tiers 1–4; never hardcode null
+7. cleanTierXNotes: define for all 4 tiers; use cleaned version in timeline steps and notes display
+8. Rejection "Rejected by" rows: must exist for T1, T2, T3, and T4
+9. Notes section visibility guard: must check all 4 cleanTierXNotes, not just T1/T2
 
 **Why:** The 4-tier coordinator flow was added later; many existing code paths only had 1/2/3 and silently failed or showed undefined for tier 4.
