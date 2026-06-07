@@ -4383,6 +4383,126 @@ const CostSubmission = () => {
                             </div>
                           </div>
 
+                          {/* ── Approval Flow Tracker ── */}
+                          {(() => {
+                            const isFomSub = isFomSubmission(oc);
+                            const isCoordSub = isCoordinatorSubmission(oc);
+                            const isSuperSub = isSupervisorSubmission(oc);
+                            const threeTier = hasThreeTiers(oc);
+
+                            type StepStatus = 'done' | 'rejected' | 'active' | 'pending';
+                            interface FlowStep {
+                              label: string;
+                              person: string;
+                              status: StepStatus;
+                              timestamp?: string | null;
+                            }
+
+                            const steps: FlowStep[] = [];
+
+                            // ① Submitted
+                            steps.push({
+                              label: 'Submitted',
+                              person: submitterName,
+                              status: 'done',
+                              timestamp: oc.created_at,
+                            });
+
+                            // ② Tier 1
+                            const t1Role = isCoordSub ? 'Hub Supervisor' : isSuperSub ? 'Field Op. Mgr' : isFomSub ? 'Admin' : 'Hub Supervisor';
+                            const t1Status: StepStatus = oc.tier1_status === 'approved' ? 'done' : oc.tier1_status === 'rejected' ? 'rejected' : 'active';
+                            steps.push({
+                              label: threeTier ? 'T1 Supervisor' : 'Tier 1 Review',
+                              person: tier1Approver?.name || tier1Approver?.email || t1Role,
+                              status: t1Status,
+                              timestamp: oc.tier1_approved_at,
+                            });
+
+                            // ③ Tier 2 (skip for FOM single-tier)
+                            if (!isFomSub) {
+                              const t2Role = isCoordSub ? 'Field Op. Mgr' : 'Finance Mgr';
+                              const t2Reached = oc.tier1_status === 'approved';
+                              const t2Status: StepStatus = oc.tier2_status === 'approved' ? 'done' : oc.tier2_status === 'rejected' ? 'rejected' : t2Reached ? 'active' : 'pending';
+                              steps.push({
+                                label: threeTier ? 'T2 FOM' : 'Tier 2 Review',
+                                person: tier2Approver?.name || tier2Approver?.email || t2Role,
+                                status: t2Status,
+                                timestamp: oc.tier2_approved_at,
+                              });
+                            }
+
+                            // ④ Tier 3 (3-tier coordinator flow)
+                            if (threeTier) {
+                              const t3Reached = oc.tier1_status === 'approved' && oc.tier2_status === 'approved';
+                              const raw3 = (oc as any).tier3_status as string | null;
+                              const t3Status: StepStatus = raw3 === 'approved' ? 'done' : raw3 === 'rejected' ? 'rejected' : t3Reached ? 'active' : 'pending';
+                              steps.push({
+                                label: 'T3 Admin',
+                                person: tier3Approver?.name || tier3Approver?.email || 'Admin',
+                                status: t3Status,
+                                timestamp: (oc as any).tier3_approved_at,
+                              });
+                            }
+
+                            // ⑤ Finance / Paid
+                            const finStatus: StepStatus = derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'done' : derivedStatus === 'approved' ? 'active' : 'pending';
+                            steps.push({
+                              label: derivedStatus === 'reconciled' ? 'Reconciled' : derivedStatus === 'paid' ? 'Paid' : 'Finance',
+                              person: derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'Payment done ✓' : 'Awaiting payment',
+                              status: finStatus,
+                              timestamp: null,
+                            });
+
+                            const circleCls = (s: StepStatus) =>
+                              s === 'done'     ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 border-green-300 dark:border-green-700'
+                            : s === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 border-red-300 dark:border-red-700'
+                            : s === 'active'   ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/40'
+                            :                   'bg-muted text-muted-foreground border-border';
+
+                            const labelCls = (s: StepStatus) =>
+                              s === 'done'     ? 'text-green-700 dark:text-green-400'
+                            : s === 'rejected' ? 'text-red-600 dark:text-red-400'
+                            : s === 'active'   ? 'text-amber-700 dark:text-amber-400 font-semibold'
+                            :                   'text-muted-foreground';
+
+                            const lineCls = (s: StepStatus) =>
+                              s === 'done' ? 'bg-green-300 dark:bg-green-700' : 'bg-border';
+
+                            return (
+                              <div className="border-t pt-2.5 pb-1" data-testid={`approval-flow-${oc.id}`}>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2.5 flex items-center gap-1">
+                                  <ClipboardCheck className="h-3 w-3" />
+                                  Approval Flow
+                                </p>
+                                <div className="flex items-start overflow-x-auto pb-1 gap-0">
+                                  {steps.map((step, i) => (
+                                    <div key={i} className="flex items-start shrink-0">
+                                      <div className="flex flex-col items-center" style={{ minWidth: 68 }}>
+                                        <div className={`h-6 w-6 rounded-full border flex items-center justify-center shrink-0 ${circleCls(step.status)}`}>
+                                          {step.status === 'done'     && <CheckCircle  className="h-3.5 w-3.5" />}
+                                          {step.status === 'rejected' && <XCircle      className="h-3.5 w-3.5" />}
+                                          {step.status === 'active'   && <Clock        className="h-3.5 w-3.5" />}
+                                          {step.status === 'pending'  && <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />}
+                                        </div>
+                                        <p className={`text-[10px] font-medium mt-1 text-center leading-tight ${labelCls(step.status)}`}>{step.label}</p>
+                                        <p className="text-[9px] text-muted-foreground text-center leading-tight max-w-[64px] truncate mt-0.5" title={step.person}>{step.person}</p>
+                                        {step.timestamp && (
+                                          <p className="text-[9px] text-muted-foreground/60 text-center leading-tight mt-0.5">{format(new Date(step.timestamp), 'MMM d, h:mm a')}</p>
+                                        )}
+                                        {step.status === 'active' && (
+                                          <span className="text-[9px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full mt-1 font-medium">Awaiting</span>
+                                        )}
+                                      </div>
+                                      {i < steps.length - 1 && (
+                                        <div className={`mt-3 h-px flex-1 min-w-[12px] mx-1 ${lineCls(step.status)}`} />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                           {(cleanTier1Notes || cleanTier2Notes || oc.rejection_reason) && (
                             <div className="space-y-1.5 pt-1 border-t" data-testid={`notes-section-${oc.id}`}>
                               {cleanTier1Notes && (
