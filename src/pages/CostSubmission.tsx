@@ -4393,199 +4393,234 @@ const CostSubmission = () => {
                             type StepStatus = 'done' | 'rejected' | 'active' | 'pending';
                             interface FlowStep {
                               label: string;
+                              stepNum: string;
                               person: string;
                               role: string;
                               status: StepStatus;
                               timestamp?: string | null;
                               notes?: string;
-                              notifEvent: string;
+                              notifIcon: string;
+                              notifText: string;
+                              expectedApprovers?: Array<{ id: string; name?: string; email?: string; role?: string }>;
                             }
 
+                            const nr = (r: string) => r.toLowerCase().replace(/[\s_-]/g, '');
+                            const fmtRole = (r?: string | null) => (r || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
                             const submitterUser = users.find(u => u.id === oc.submitted_by);
-                            const submitterRole = submitterUser?.role
-                              ? submitterUser.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-                              : 'Staff';
+                            const submitterRoleDisplay = fmtRole(submitterUser?.role) || 'Staff';
+
+                            // ── Resolve expected pending-step approvers from loaded users list ──
+                            const getExpected = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) =>
+                              users.filter(u => {
+                                if (!u.role) return false;
+                                const roleNorm = nr(u.role);
+                                if (!rolePredicate(roleNorm)) return false;
+                                if (hubMatch && oc.hub_id && (u as any).hub_id && (u as any).hub_id !== oc.hub_id) return false;
+                                return true;
+                              }).slice(0, 5);
+
+                            const isSupervisorRolePred = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
+                            const isMgmtRolePred = (r: string) => ['fom','fieldoperationmanager','countrydirector','countrydir'].some(x => r.includes(x));
+                            const isAdminRolePred = (r: string) => r === 'admin' || r === 'superadmin' || r === 'super_admin' || r.includes('superadmin');
+
+                            const t1Expected = oc.tier1_status === 'approved' || oc.tier1_status === 'rejected' ? [] :
+                              isCoordSub ? getExpected(isSupervisorRolePred, true) :
+                              isSuperSub ? getExpected(isMgmtRolePred) :
+                              isFomSub   ? getExpected(isAdminRolePred)  : getExpected(isSupervisorRolePred, true);
+
+                            const t2Expected = !isFomSub && (oc.tier2_status === 'approved' || oc.tier2_status === 'rejected') ? [] :
+                              !isFomSub ? (threeTier ? getExpected(isMgmtRolePred) : getExpected(r => isMgmtRolePred(r) || isAdminRolePred(r))) : [];
+
+                            const t3Expected = threeTier && ((oc as any).tier3_status !== 'approved' && (oc as any).tier3_status !== 'rejected')
+                              ? getExpected(isAdminRolePred) : [];
 
                             const steps: FlowStep[] = [];
 
                             // ① Submitted
                             steps.push({
                               label: 'Submitted',
+                              stepNum: '①',
                               person: submitterName,
-                              role: submitterRole,
+                              role: submitterRoleDisplay,
                               status: 'done',
                               timestamp: oc.created_at,
-                              notifEvent: '📧 Email + 📱 In-app sent to T1 approver(s)',
+                              notifIcon: '📧',
+                              notifText: 'Email + In-app sent to Tier 1 approver(s)',
                             });
 
                             // ② Tier 1
                             const t1RoleLabel = isCoordSub ? 'Hub Supervisor' : isSuperSub ? 'Field Op. Manager' : isFomSub ? 'Admin / Super Admin' : 'Hub Supervisor';
-                            const t1ApproverRoleDisplay = tier1Approver
-                              ? (tier1Approver as any).role?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || t1RoleLabel
-                              : t1RoleLabel;
                             const t1Status: StepStatus = oc.tier1_status === 'approved' ? 'done' : oc.tier1_status === 'rejected' ? 'rejected' : 'active';
                             steps.push({
-                              label: 'Tier 1 Review',
-                              person: tier1Approver?.name || tier1Approver?.email || `Awaiting ${t1RoleLabel}`,
-                              role: t1ApproverRoleDisplay,
+                              label: isFomSub ? 'Tier 1 — Admin Review' : isCoordSub ? 'Tier 1 — Supervisor' : isSuperSub ? 'Tier 1 — FOM Review' : 'Tier 1 Review',
+                              stepNum: '②',
+                              person: tier1Approver?.name || tier1Approver?.email || '',
+                              role: fmtRole((tier1Approver as any)?.role) || t1RoleLabel,
                               status: t1Status,
                               timestamp: oc.tier1_approved_at,
                               notes: cleanTier1Notes || undefined,
-                              notifEvent: '📧 Email + 📱 In-app sent to submitter' + (isFomSub ? ' (final approval)' : ' + to T2 approver(s)'),
+                              notifIcon: '📧',
+                              notifText: isFomSub ? 'Email + In-app to submitter (final — cleared for payment)' : 'Email + In-app to submitter + Tier 2 approver(s)',
+                              expectedApprovers: t1Expected,
                             });
 
                             // ③ Tier 2 (skip for FOM single-tier)
                             if (!isFomSub) {
-                              const t2RoleLabel = isCoordSub ? 'Field Op. Manager' : 'Finance Manager / FOM';
+                              const t2RoleLabel = threeTier ? 'Field Op. Manager / FOM' : 'Finance Manager / FOM';
                               const t2Reached = oc.tier1_status === 'approved';
                               const t2Status: StepStatus = oc.tier2_status === 'approved' ? 'done' : oc.tier2_status === 'rejected' ? 'rejected' : t2Reached ? 'active' : 'pending';
-                              const t2ApproverRoleDisplay = tier2Approver
-                                ? (tier2Approver as any).role?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || t2RoleLabel
-                                : t2RoleLabel;
                               steps.push({
-                                label: threeTier ? 'Tier 2 — FOM' : 'Tier 2 Review',
-                                person: tier2Approver?.name || tier2Approver?.email || `Awaiting ${t2RoleLabel}`,
-                                role: t2ApproverRoleDisplay,
+                                label: threeTier ? 'Tier 2 — FOM / CD' : 'Tier 2 Review',
+                                stepNum: '③',
+                                person: tier2Approver?.name || tier2Approver?.email || '',
+                                role: fmtRole((tier2Approver as any)?.role) || t2RoleLabel,
                                 status: t2Status,
                                 timestamp: oc.tier2_approved_at,
                                 notes: cleanTier2Notes || undefined,
-                                notifEvent: threeTier
-                                  ? '📧 Email + 📱 In-app sent to submitter + to T3 Admin'
-                                  : '📧 Email + 📱 In-app sent to submitter (final approval — cleared for payment)',
+                                notifIcon: '📧',
+                                notifText: threeTier
+                                  ? 'Email + In-app to submitter + Tier 3 Admin'
+                                  : 'Email + In-app to submitter (final — cleared for payment)',
+                                expectedApprovers: t2Expected,
                               });
                             }
 
-                            // ④ Tier 3 (3-tier coordinator flow)
+                            // ④ Tier 3 (3-tier coordinator flow only)
                             if (threeTier) {
-                              const t3Reached = oc.tier1_status === 'approved' && oc.tier2_status === 'approved';
                               const raw3 = (oc as any).tier3_status as string | null;
+                              const t3Reached = oc.tier1_status === 'approved' && oc.tier2_status === 'approved';
                               const t3Status: StepStatus = raw3 === 'approved' ? 'done' : raw3 === 'rejected' ? 'rejected' : t3Reached ? 'active' : 'pending';
-                              const t3ApproverRoleDisplay = tier3Approver
-                                ? (tier3Approver as any).role?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'Admin'
-                                : 'Admin / Super Admin';
                               steps.push({
                                 label: 'Tier 3 — Admin',
-                                person: tier3Approver?.name || tier3Approver?.email || 'Awaiting Admin',
-                                role: t3ApproverRoleDisplay,
+                                stepNum: '④',
+                                person: tier3Approver?.name || tier3Approver?.email || '',
+                                role: fmtRole((tier3Approver as any)?.role) || 'Admin / Super Admin',
                                 status: t3Status,
                                 timestamp: (oc as any).tier3_approved_at,
                                 notes: cleanTier3Notes || undefined,
-                                notifEvent: '📧 Email + 📱 In-app sent to submitter (final approval — cleared for payment)',
+                                notifIcon: '📧',
+                                notifText: 'Email + In-app to submitter (final — cleared for payment)',
+                                expectedApprovers: t3Expected,
                               });
                             }
 
-                            // ⑤ Finance / Paid
-                            const finStatus: StepStatus = derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'done' : derivedStatus === 'approved' ? 'active' : 'pending';
+                            // ⑤ Finance / Payment
+                            const finStatus: StepStatus =
+                              derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'done'
+                              : derivedStatus === 'approved' ? 'active'
+                              : 'pending';
                             steps.push({
                               label: derivedStatus === 'reconciled' ? 'Reconciled' : derivedStatus === 'paid' ? 'Paid' : 'Finance / Payment',
-                              person: derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'Payment processed' : finStatus === 'active' ? 'Awaiting Finance team' : 'Pending approval first',
+                              stepNum: threeTier ? '⑤' : isFomSub ? '③' : '④',
+                              person: derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'Payment complete' : finStatus === 'active' ? 'Finance Admin' : '—',
                               role: 'Finance Admin',
                               status: finStatus,
                               timestamp: null,
-                              notifEvent: '📧 Email sent to submitter confirming payment',
+                              notifIcon: '📧',
+                              notifText: 'Email sent to submitter confirming payment',
                             });
 
-                            const circleCls = (s: StepStatus) =>
-                              s === 'done'     ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 border-green-300 dark:border-green-700'
-                            : s === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 border-red-300 dark:border-red-700'
-                            : s === 'active'   ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/40'
-                            :                   'bg-muted/60 text-muted-foreground border-border';
+                            // ── Style helpers ──
+                            const dotCls = (s: StepStatus) =>
+                              s === 'done'     ? 'bg-green-500 dark:bg-green-500'
+                            : s === 'rejected' ? 'bg-red-500 dark:bg-red-400'
+                            : s === 'active'   ? 'bg-amber-400 dark:bg-amber-400 ring-4 ring-amber-200 dark:ring-amber-900'
+                            :                   'bg-border dark:bg-muted';
 
                             const labelCls = (s: StepStatus) =>
                               s === 'done'     ? 'text-green-700 dark:text-green-400'
                             : s === 'rejected' ? 'text-red-600 dark:text-red-400'
                             : s === 'active'   ? 'text-amber-700 dark:text-amber-400'
-                            :                   'text-muted-foreground';
+                            :                   'text-muted-foreground/60';
 
                             const lineCls = (s: StepStatus) =>
                               s === 'done' ? 'bg-green-300 dark:bg-green-700' : 'bg-border';
 
                             return (
-                              <div className="border-t pt-3 pb-1 space-y-3" data-testid={`approval-flow-${oc.id}`}>
-                                {/* Header */}
-                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                              <div className="border-t pt-3 pb-2" data-testid={`approval-flow-${oc.id}`}>
+                                {/* ── Header ── */}
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
                                   <ClipboardCheck className="h-3 w-3" />
                                   Approval Flow / مسار الموافقة
                                 </p>
 
-                                {/* Steps — horizontal scrollable */}
-                                <div className="flex items-start overflow-x-auto pb-2 gap-0">
+                                {/* ── Vertical timeline ── */}
+                                <div className="relative pl-5 space-y-0">
+                                  {/* Vertical guide line */}
+                                  <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-border" />
+
                                   {steps.map((step, i) => (
-                                    <div key={i} className="flex items-start shrink-0">
-                                      {/* Step node */}
-                                      <div className="flex flex-col items-center" style={{ minWidth: 110, maxWidth: 130 }}>
-                                        {/* Circle */}
-                                        <div className={`h-7 w-7 rounded-full border-2 flex items-center justify-center shrink-0 ${circleCls(step.status)}`}>
-                                          {step.status === 'done'     && <CheckCircle className="h-4 w-4" />}
-                                          {step.status === 'rejected' && <XCircle     className="h-4 w-4" />}
-                                          {step.status === 'active'   && <Clock       className="h-4 w-4" />}
-                                          {step.status === 'pending'  && <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />}
+                                    <div key={i} className="relative flex gap-3 pb-4 last:pb-0">
+                                      {/* Status dot */}
+                                      <div className={`absolute left-[-14px] top-1 h-3.5 w-3.5 rounded-full shrink-0 z-10 border-2 border-background ${dotCls(step.status)}`} />
+
+                                      {/* Content */}
+                                      <div className="flex-1 min-w-0 space-y-1">
+                                        {/* Row 1: label + timestamp */}
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <span className={`text-[11px] font-bold leading-tight ${labelCls(step.status)}`}>
+                                            {step.stepNum} {step.label}
+                                          </span>
+                                          {step.timestamp && (
+                                            <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                                              {format(new Date(step.timestamp), 'MMM d, yyyy · h:mm a')}
+                                            </span>
+                                          )}
+                                          {step.status === 'active' && (
+                                            <span className="text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                                              ⏳ Awaiting
+                                            </span>
+                                          )}
+                                          {step.status === 'rejected' && (
+                                            <span className="text-[9px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
+                                              ✗ Rejected
+                                            </span>
+                                          )}
                                         </div>
-                                        {/* Step label */}
-                                        <p className={`text-[10px] font-semibold mt-1.5 text-center leading-tight px-1 ${labelCls(step.status)}`}>
-                                          {step.label}
-                                        </p>
-                                        {/* Full person name */}
-                                        <p className="text-[10px] text-foreground/80 text-center leading-snug px-1 mt-0.5 break-words font-medium">
-                                          {step.person}
-                                        </p>
-                                        {/* Role */}
-                                        <p className="text-[9px] text-muted-foreground text-center leading-tight px-1 mt-0.5 italic break-words">
-                                          {step.role}
-                                        </p>
-                                        {/* Timestamp */}
-                                        {step.timestamp && (
-                                          <p className="text-[9px] text-muted-foreground/70 text-center leading-tight mt-1 px-1">
-                                            {format(new Date(step.timestamp), 'MMM d, yyyy')}
-                                            <br />
-                                            {format(new Date(step.timestamp), 'h:mm a')}
-                                          </p>
-                                        )}
-                                        {/* Notes / comment */}
-                                        {step.notes && (
-                                          <div className="mt-1 px-1 w-full">
-                                            <p className="text-[9px] text-muted-foreground/80 leading-tight bg-muted/50 rounded px-1.5 py-1 text-center break-words line-clamp-3" title={step.notes}>
-                                              "{step.notes}"
-                                            </p>
+
+                                        {/* Row 2: person name + role (actual approver) */}
+                                        {step.person && (
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-[11px] font-medium text-foreground/90">{step.person}</span>
+                                            <span className="text-[10px] text-muted-foreground">·</span>
+                                            <span className="text-[10px] text-muted-foreground italic">{step.role}</span>
                                           </div>
                                         )}
-                                        {/* Awaiting badge */}
-                                        {step.status === 'active' && (
-                                          <span className="text-[9px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full mt-1.5 font-semibold">
-                                            ⏳ Awaiting
-                                          </span>
-                                        )}
-                                        {step.status === 'rejected' && (
-                                          <span className="text-[9px] bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full mt-1.5 font-semibold">
-                                            ✗ Rejected
-                                          </span>
-                                        )}
-                                      </div>
-                                      {/* Connector line */}
-                                      {i < steps.length - 1 && (
-                                        <div className={`mt-3.5 h-0.5 flex-1 min-w-[16px] mx-1 rounded ${lineCls(step.status)}`} />
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
 
-                                {/* Notification Events Legend */}
-                                <div className="rounded-md border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2 space-y-1">
-                                  <p className="text-[9px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                                    <Mail className="h-3 w-3" />
-                                    Notification Events / أحداث الإشعارات
-                                  </p>
-                                  {steps.map((step, i) => (
-                                    <div key={i} className="flex items-start gap-2 text-[9px]">
-                                      <span className={`shrink-0 font-semibold mt-px ${labelCls(step.status)}`}>
-                                        {i === 0 ? '→ Submit' : `→ ${step.label}`}:
-                                      </span>
-                                      <span className="text-muted-foreground leading-tight">{step.notifEvent}</span>
+                                        {/* Row 3: expected approvers (pending/active steps without an actual approver yet) */}
+                                        {!step.person && step.expectedApprovers && step.expectedApprovers.length > 0 && (
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] text-muted-foreground uppercase tracking-wide font-semibold">Expected approvers:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {step.expectedApprovers.map(a => (
+                                                <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-muted/70 dark:bg-muted/40 text-foreground/80 px-2 py-0.5 rounded-md font-medium">
+                                                  {a.name || a.email}
+                                                  {a.role && <span className="text-muted-foreground font-normal">· {fmtRole(a.role)}</span>}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Row 4: approval comment/notes */}
+                                        {step.notes && (
+                                          <p className="text-[10px] text-muted-foreground bg-muted/40 rounded-md px-2 py-1 leading-relaxed border-l-2 border-border">
+                                            "{step.notes}"
+                                          </p>
+                                        )}
+
+                                        {/* Row 5: notification event */}
+                                        <p className="text-[9px] text-blue-600/60 dark:text-blue-400/60 flex items-center gap-1">
+                                          <span>{step.notifIcon}</span>
+                                          <span>{step.notifText}</span>
+                                          {i === steps.length - 1 && (
+                                            <span className="ml-1 text-muted-foreground/50">· 💬 WhatsApp (if opted-in)</span>
+                                          )}
+                                        </p>
+                                      </div>
                                     </div>
                                   ))}
-                                  <p className="text-[9px] text-muted-foreground/70 mt-1 pt-1 border-t border-blue-100 dark:border-blue-900/40">
-                                    💬 WhatsApp notification sent to submitter on every action (approve / reject / paid) if opted-in
-                                  </p>
                                 </div>
                               </div>
                             );
