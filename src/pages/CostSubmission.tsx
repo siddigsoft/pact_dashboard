@@ -354,10 +354,9 @@ const CostSubmission = () => {
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
     submission: OperationalCostSubmission | null;
-    tier: 1 | 2 | 3;
+    tier: 1 | 2 | 3 | 4;
     notes: string;
-    isBypass?: boolean;
-  }>({ open: false, submission: null, tier: 2, notes: '', isBypass: false });
+  }>({ open: false, submission: null, tier: 2, notes: '' });
 
   const [paymentRequestDialog, setPaymentRequestDialog] = useState<{
     open: boolean;
@@ -760,125 +759,6 @@ const CostSubmission = () => {
     if (oc.tier4_status !== 'pending' && oc.tier4_status !== null) return false;
     if (isSuperAdmin) return true;
     return isAdmin;
-  };
-
-  // ── FOM Direct Approval (Bypass) ──────────────────────────────────────────
-  // FOM can skip pending intermediate tiers and directly push a submission
-  // to final "approved" status (ready for Finance), bypassing the normal flow.
-  const canFOMBypass = (oc: OperationalCostSubmission): boolean => {
-    if (!isFOM) return false;
-    if (oc.submitted_by === currentUser?.id) return false;
-    const derived = getOperationalDerivedStatus(oc);
-    return derived !== 'approved' && derived !== 'paid' && derived !== 'reconciled' && derived !== 'rejected';
-  };
-
-  const openFOMBypassDialog = (oc: OperationalCostSubmission) => {
-    const now = new Date().toISOString();
-    const normalFlow = hasFourTiers(oc)
-      ? 'T1 (Supervisor) → T2 (FOM) → T3 (Country Director) → T4 (Admin) → Finance'
-      : hasThreeTiers(oc)
-      ? 'T1 (FOM) → T2 (Country Director) → T3 (Admin) → Finance'
-      : isFomSubmission(oc)
-      ? 'T1 (Country Director) → T2 (Admin) → Finance'
-      : 'T1 (Admin) → Finance';
-    const bypassNote = `[FOM Direct Approval — Bypass used by ${currentUser?.name || currentUser?.email} at ${now}. Normal flow: ${normalFlow}. FOM exercised authority to approve directly to Finance level.]`;
-    setSignatureModal({
-      open: true,
-      submission: oc,
-      tier: 2,
-      notes: bypassNote,
-      isBypass: true,
-    });
-    setApprovalProcessing(true);
-  };
-
-  const processFOMBypassApproval = async (
-    submission: OperationalCostSubmission,
-    notes: string,
-    signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string }
-  ) => {
-    if (!currentUser?.id) return;
-    setApprovalProcessing(true);
-    try {
-      const now = new Date().toISOString();
-      const sigSuffix = signatureData
-        ? `\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`
-        : '';
-      const fullNote = (notes || '') + sigSuffix;
-
-      const updates: Record<string, any> = {
-        status: 'approved',
-        // Approve ALL pending tiers simultaneously
-        tier1_status: submission.tier1_status === 'approved' ? submission.tier1_status : 'approved',
-        tier1_approved_by: submission.tier1_approved_by || currentUser.id,
-        tier1_approved_at: submission.tier1_approved_at || now,
-        tier1_notes: submission.tier1_notes || `[FOM Bypass — tier 1 auto-approved]${sigSuffix}`,
-        tier2_status: 'approved',
-        tier2_approved_by: currentUser.id,
-        tier2_approved_at: now,
-        tier2_notes: fullNote,
-      };
-      if (hasThreeTiers(submission)) {
-        updates.tier3_status = 'approved';
-        updates.tier3_approved_by = currentUser.id;
-        updates.tier3_approved_at = now;
-        updates.tier3_notes = `[FOM Bypass — tier 3 auto-approved]${sigSuffix}`;
-      }
-
-      const { data: updatedRows, error } = await supabase
-        .from('operational_cost_submissions')
-        .update(updates)
-        .eq('id', submission.id)
-        .select('id');
-
-      if (error) {
-        console.error('[FOMBypass] Approval error:', error);
-        toast({
-          title: 'Bypass Approval Failed / فشل الموافقة المباشرة',
-          description: error.message || 'Could not process the bypass approval. / تعذرت معالجة الموافقة المباشرة.',
-          variant: 'destructive',
-          duration: 8000,
-        });
-      } else if (!updatedRows || updatedRows.length === 0) {
-        console.error('[FOMBypass] Update matched 0 rows — likely RLS issue.', { submissionId: submission.id, userRole: currentUser.role });
-        toast({
-          title: 'Permission Issue / مشكلة صلاحية',
-          description: 'Your role may not have database-level permission for this bypass yet. Please contact the system administrator. / قد لا يمتلك دورك صلاحية قاعدة البيانات لهذا التجاوز بعد.',
-          variant: 'destructive',
-          duration: 10000,
-        });
-      } else {
-        toast({
-          title: 'Direct Approval Applied / تمت الموافقة المباشرة',
-          description: `Submission approved directly to Finance level by ${currentUser?.name || 'FOM'}. Normal approval flow was bypassed. / تمت الموافقة على الطلب مباشرة إلى مستوى المالية من قِبل ${currentUser?.name || 'مدير العمليات الميدانية'}.`,
-          duration: 6000,
-        });
-
-        // Notify the submitter that their submission was fully approved
-        if (submission.submitted_by) {
-          const bypassRefNum = submission.reference_number || submission.id.substring(0, 8).toUpperCase();
-          const bypassAmountStr = `${submission.currency} ${(submission.amount_cents / 100).toLocaleString()}`;
-          const bypassApproverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'FOM';
-          NotificationTriggerService.send({
-            userId: submission.submitted_by,
-            title: 'Cost Submission Fully Approved / تمت الموافقة الكاملة على المطالبة',
-            message: `Your cost submission "${bypassRefNum}" (${bypassAmountStr}) has been fully approved by ${bypassApproverName} and cleared for payment.`,
-            type: 'success',
-            category: 'financial',
-            priority: 'high',
-            link: '/cost-submission',
-            sendEmail: true,
-            emailActionLabel: 'View Submission',
-          }).catch(console.warn);
-        }
-
-        await fetchOperationalCosts();
-      }
-    } catch (err) {
-      console.error('[FOMBypass] Unexpected error:', err);
-    } finally {
-      setApprovalProcessing(false);
-    }
   };
 
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3 | 4) => {
@@ -1310,19 +1190,15 @@ const CostSubmission = () => {
     method: SignatureMethod;
     signedAt: string;
   }) => {
-    const { submission, notes, tier, isBypass } = signatureModal;
+    const { submission, notes, tier } = signatureModal;
     if (!submission) return;
     signatureCompletedRef.current = true;
-    if (isBypass) {
-      processFOMBypassApproval(submission, notes, signatureData);
-    } else {
-      const pendingDocs = pendingApprovalDocsRef.current;
-      pendingApprovalDocsRef.current = [];
-      setApprovalAttachments([]);
-      processApproval('approve', tier, submission, notes, signatureData, pendingDocs);
-    }
+    const pendingDocs = pendingApprovalDocsRef.current;
+    pendingApprovalDocsRef.current = [];
+    setApprovalAttachments([]);
+    processApproval('approve', tier, submission, notes, signatureData, pendingDocs);
     setTimeout(() => {
-      setSignatureModal({ open: false, submission: null, tier: 2, notes: '', isBypass: false });
+      setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
     }, 100);
   };
 
@@ -4106,12 +3982,6 @@ const CostSubmission = () => {
                                     </button>
                                   </>
                                 )}
-                                {canFOMBypass(oc) && (
-                                  <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/20"
-                                    onClick={() => openFOMBypassDialog(oc)} data-testid={`button-fom-bypass-${oc.id}`}>
-                                    <Unlock className="h-2.5 w-2.5" /> Direct Approve
-                                  </button>
-                                )}
                                 {canEditSubmission(oc) && (
                                   <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                                     onClick={() => handleEditSubmission(oc)} data-testid={`button-edit-submission-${oc.id}`}>
@@ -4124,7 +3994,7 @@ const CostSubmission = () => {
                                     <SendHorizonal className="h-2.5 w-2.5" /> Resubmit
                                   </button>
                                 )}
-                                {isApproved && !canTier1Approve(oc) && !canTier2Approve(oc) && !canTier3Approve(oc) && !canTier4Approve(oc) && !canFOMBypass(oc) && (
+                                {isApproved && !canTier1Approve(oc) && !canTier2Approve(oc) && !canTier3Approve(oc) && !canTier4Approve(oc) && (
                                   <span className="text-[10px] text-green-600 font-medium">✓ All tiers approved</span>
                                 )}
                               </div>
@@ -5043,20 +4913,6 @@ const CostSubmission = () => {
                                   Reject
                                 </Button>
                               </>
-                            )}
-                            {canFOMBypass(oc) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-violet-400 text-violet-700 hover:bg-violet-50 dark:border-violet-500 dark:text-violet-300 dark:hover:bg-violet-950"
-                                onClick={() => openFOMBypassDialog(oc)}
-                                disabled={approvalProcessing}
-                                data-testid={`button-fom-bypass-${oc.id}`}
-                                title="Skip the normal approval tiers and directly approve this submission to Finance level. Your signature is required."
-                              >
-                                <Unlock className="h-3.5 w-3.5 mr-1" />
-                                Direct Approve
-                              </Button>
                             )}
                             {getOperationalDerivedStatus(oc) === 'approved' && (
                               <Button
@@ -7515,10 +7371,10 @@ const CostSubmission = () => {
                 signatureCompletedRef.current = false;
                 return;
               }
-              const { submission: sub, notes, tier: modalTier, isBypass } = signatureModal;
-              setSignatureModal({ open: false, submission: null, tier: 2, notes: '', isBypass: false });
+              const { submission: sub, notes, tier: modalTier } = signatureModal;
+              setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
               setApprovalProcessing(false);
-              if (!isBypass && sub) {
+              if (sub) {
                 setApprovalNotes(notes);
                 setApprovalDialog({ open: true, action: 'approve', tier: modalTier, submission: sub });
               }
@@ -7527,12 +7383,8 @@ const CostSubmission = () => {
           transaction={{
             id: signatureModal.submission.id,
             type: 'cost_submission',
-            title: signatureModal.isBypass
-              ? `FOM Direct Approval / الموافقة المباشرة من FOM — ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`
-              : `Tier ${signatureModal.tier} Approval / الموافقة المرحلة ${signatureModal.tier} - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
-            description: signatureModal.isBypass
-              ? `Bypassing normal approval flow. This will approve the submission directly to Finance level. / تجاوز تدفق الموافقة الاعتيادي. سيوافق على الطلب مباشرة إلى مستوى المالية.`
-              : (signatureModal.submission.description || undefined),
+            title: `Tier ${signatureModal.tier} Approval / الموافقة المرحلة ${signatureModal.tier} - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
+            description: (signatureModal.submission.description || undefined),
             amount: signatureModal.submission.amount_cents / 100,
             currency: signatureModal.submission.currency || 'SDG',
             counterparty: users.find(u => u.id === signatureModal.submission!.submitted_by)?.name || 'Unknown',
@@ -7546,10 +7398,10 @@ const CostSubmission = () => {
           allowedMethods={['uuid', 'handwriting']}
           onSignatureComplete={handleSignatureComplete}
           onCancel={() => {
-            const { submission: sub, notes, tier: modalTier, isBypass } = signatureModal;
-            setSignatureModal({ open: false, submission: null, tier: 2, notes: '', isBypass: false });
+            const { submission: sub, notes, tier: modalTier } = signatureModal;
+            setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
             setApprovalProcessing(false);
-            if (!isBypass && sub) {
+            if (sub) {
               setApprovalNotes(notes);
               setApprovalDialog({ open: true, action: 'approve', tier: modalTier, submission: sub });
             }
