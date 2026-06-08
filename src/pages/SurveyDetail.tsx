@@ -8,6 +8,7 @@ import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import XLSXStyle from 'xlsx-js-style';
 import JSZip from 'jszip';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -1131,34 +1132,233 @@ export default function SurveyDetail() {
 
   const exportExcel = async () => {
     if (!responses.length) return;
+
+    // ── 1. Fetch answers ────────────────────────────────────────────────
     const rIds = responses.map(r => r.id);
     const { data: ans } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
-    const cols = questions.filter(q => !['section_header','begin_group'].includes(q.type));
-    const header = ['Respondent Name','Respondent Email','Submitted At',...cols.map(q => q.label)];
-    const rows = responses.map(r => {
+
+    // ── 2. Fetch profiles for respondents (role + direct manager) ───────
+    const responderIds = [...new Set(responses.map(r => r.respondent_id).filter(Boolean) as string[])];
+    let profileMap: Record<string, { role: string | null; reports_to: string | null; full_name: string | null }> = {};
+    let managerMap: Record<string, string> = {};
+
+    if (responderIds.length) {
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, reports_to')
+        .in('id', responderIds);
+
+      if (profileRows) {
+        for (const p of profileRows) profileMap[p.id] = p;
+
+        const managerIds = [...new Set(profileRows.map(p => p.reports_to).filter(Boolean) as string[])];
+        if (managerIds.length) {
+          const { data: mgrs } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', managerIds);
+          if (mgrs) for (const m of mgrs) managerMap[m.id] = m.full_name ?? m.id;
+        }
+      }
+    }
+
+    // ── 3. Build data rows ──────────────────────────────────────────────
+    const cols = questions.filter(q => !['section_header', 'begin_group'].includes(q.type));
+
+    const getAnswerText = (q: Question, ra: Answer[]): string => {
+      const a = ra.find(x => x.question_id === q.id);
+      if (!a) return '';
+      if (q.type === 'grid_table') {
+        const gridRows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
+        return gridRows ? gridRows.map((row, i) => `R${i + 1}: ${Object.values(row).join(' | ')}`).join('; ') : '';
+      }
+      if (q.type === 'likert') {
+        const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
+        return val ? Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | ') : '';
+      }
+      if (Array.isArray(a.answer_json)) return (a.answer_json as string[]).join('; ');
+      if (a.answer_text) return a.answer_text;
+      if (a.answer_json !== null && a.answer_json !== undefined) return String(a.answer_json);
+      return '';
+    };
+
+    // ── 4. Styles ────────────────────────────────────────────────────────
+    const S = {
+      title: {
+        font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '0F2041' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+      },
+      meta: {
+        font: { sz: 10, italic: true, color: { rgb: '5A5F6E' } },
+        fill: { fgColor: { rgb: 'EDF1F9' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+      },
+      headerMeta: {
+        font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1A3A6B' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: {
+          top: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          bottom: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          left: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          right: { style: 'thin', color: { rgb: 'FFFFFF' } },
+        },
+      },
+      headerQ: {
+        font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '2962FF' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: {
+          top: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          bottom: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          left: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          right: { style: 'thin', color: { rgb: 'FFFFFF' } },
+        },
+      },
+      rowEven: {
+        font: { sz: 10, color: { rgb: '14141E' } },
+        fill: { fgColor: { rgb: 'FFFFFF' } },
+        alignment: { vertical: 'top', wrapText: true },
+        border: {
+          bottom: { style: 'hair', color: { rgb: 'C8CDD7' } },
+          right: { style: 'hair', color: { rgb: 'C8CDD7' } },
+        },
+      },
+      rowOdd: {
+        font: { sz: 10, color: { rgb: '14141E' } },
+        fill: { fgColor: { rgb: 'E8F0FE' } },
+        alignment: { vertical: 'top', wrapText: true },
+        border: {
+          bottom: { style: 'hair', color: { rgb: 'C8CDD7' } },
+          right: { style: 'hair', color: { rgb: 'C8CDD7' } },
+        },
+      },
+      rowNum: (isOdd: boolean) => ({
+        font: { bold: true, sz: 10, color: { rgb: '5A5F6E' } },
+        fill: { fgColor: { rgb: isOdd ? 'E8F0FE' : 'FFFFFF' } },
+        alignment: { horizontal: 'center', vertical: 'top' },
+        border: {
+          bottom: { style: 'hair', color: { rgb: 'C8CDD7' } },
+          right: { style: 'thin', color: { rgb: '9FAEC5' } },
+        },
+      }),
+    };
+
+    const metaCols = ['#', 'Respondent Name', 'Email', 'Date', 'Time', 'Role', 'Direct Manager', 'Review Status'];
+    const totalCols = metaCols.length + cols.length;
+
+    // Helper: encode cell address
+    const addr = (c: number, r: number) => XLSXStyle.utils.encode_cell({ c, r });
+
+    const ws: Record<string, any> = {};
+
+    // Row 0 — Survey title banner (merged)
+    const titleText = `Survey Response Report — ${survey?.title ?? 'Survey'}`;
+    ws[addr(0, 0)] = { v: titleText, s: S.title };
+    for (let c = 1; c < totalCols; c++) ws[addr(c, 0)] = { v: '', s: S.title };
+
+    // Row 1 — Metadata bar
+    const exportedAt = format(new Date(), 'MMM d, yyyy  HH:mm');
+    const metaText = `Exported: ${exportedAt}   |   Total Responses: ${responses.length}   |   Survey ID: ${id?.slice(0, 8).toUpperCase() ?? ''}`;
+    ws[addr(0, 1)] = { v: metaText, s: S.meta };
+    for (let c = 1; c < totalCols; c++) ws[addr(c, 1)] = { v: '', s: S.meta };
+
+    // Row 2 — blank spacer
+    for (let c = 0; c < totalCols; c++) ws[addr(c, 2)] = { v: '', s: { fill: { fgColor: { rgb: 'FFFFFF' } } } };
+
+    // Row 3 — Headers
+    metaCols.forEach((h, c) => { ws[addr(c, 3)] = { v: h, s: S.headerMeta }; });
+    cols.forEach((q, i) => { ws[addr(metaCols.length + i, 3)] = { v: q.label, s: S.headerQ }; });
+
+    // Rows 4+ — Data
+    const submitted = responses.filter(r => r.submitted_at != null);
+    submitted.forEach((r, rowIdx) => {
       const ra = (ans ?? []).filter(a => a.response_id === r.id);
-      const cells = cols.map(q => {
-        const a = ra.find(x => x.question_id === q.id);
-        if (!a) return '';
-        if (q.type === 'grid_table') {
-          const gridRows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
-          return gridRows ? gridRows.map((row, i) => `R${i + 1}: ${Object.values(row).join(' | ')}`).join('; ') : '';
-        }
-        if (q.type === 'likert') {
-          const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
-          return val ? Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | ') : '';
-        }
-        if (Array.isArray(a.answer_json)) return (a.answer_json as string[]).join('; ');
-        if (a.answer_text) return a.answer_text;
-        if (a.answer_json !== null && a.answer_json !== undefined) return String(a.answer_json);
-        return '';
+      const profile = r.respondent_id ? profileMap[r.respondent_id] : null;
+      const role = profile?.role ?? '';
+      const managerName = profile?.reports_to ? (managerMap[profile.reports_to] ?? '') : '';
+      const reviewStatus = r.review_status ?? 'pending';
+
+      let dateStr = '';
+      let timeStr = '';
+      try {
+        const d = new Date(r.submitted_at);
+        dateStr = format(d, 'dd MMM yyyy');
+        timeStr = format(d, 'HH:mm');
+      } catch { /* leave blank */ }
+
+      const rowStyle = rowIdx % 2 === 0 ? S.rowEven : S.rowOdd;
+      const excelRow = 4 + rowIdx;
+
+      const metaValues = [
+        rowIdx + 1,
+        r.respondent_name ?? '',
+        r.respondent_email ?? '',
+        dateStr,
+        timeStr,
+        role.replace(/\b\w/g, c => c.toUpperCase()),
+        managerName,
+        reviewStatus.charAt(0).toUpperCase() + reviewStatus.slice(1).replace(/_/g, ' '),
+      ];
+
+      metaValues.forEach((v, c) => {
+        ws[addr(c, excelRow)] = {
+          v,
+          s: c === 0 ? S.rowNum(rowIdx % 2 !== 0) : rowStyle,
+        };
       });
-      return [r.respondent_name ?? '', r.respondent_email ?? '', format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm:ss'), ...cells];
+
+      cols.forEach((q, i) => {
+        ws[addr(metaCols.length + i, excelRow)] = {
+          v: getAnswerText(q, ra),
+          s: rowStyle,
+        };
+      });
     });
-    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Responses');
-    XLSX.writeFile(wb, `${survey?.title ?? 'survey'}_responses.xlsx`);
+
+    // Sheet range
+    ws['!ref'] = XLSXStyle.utils.encode_range({
+      s: { c: 0, r: 0 },
+      e: { c: totalCols - 1, r: 4 + submitted.length - 1 },
+    });
+
+    // Merges: title row and meta row span full width
+    ws['!merges'] = [
+      { s: { c: 0, r: 0 }, e: { c: totalCols - 1, r: 0 } },
+      { s: { c: 0, r: 1 }, e: { c: totalCols - 1, r: 1 } },
+      { s: { c: 0, r: 2 }, e: { c: totalCols - 1, r: 2 } },
+    ];
+
+    // Row heights
+    ws['!rows'] = [
+      { hpt: 32 },  // title
+      { hpt: 18 },  // meta
+      { hpt: 8 },   // spacer
+      { hpt: 40 },  // header
+      ...Array(submitted.length).fill({ hpt: 20 }),
+    ];
+
+    // Column widths
+    const colWidths = [
+      { wch: 5 },   // #
+      { wch: 24 },  // name
+      { wch: 28 },  // email
+      { wch: 14 },  // date
+      { wch: 8 },   // time
+      { wch: 22 },  // role
+      { wch: 24 },  // direct manager
+      { wch: 14 },  // review status
+      ...cols.map(q => ({ wch: Math.min(Math.max(q.label.length + 4, 18), 45) })),
+    ];
+    ws['!cols'] = colWidths;
+
+    // Freeze top 4 rows + first column
+    ws['!freeze'] = { xSplit: 1, ySplit: 4, topLeftCell: 'B5', activeCell: 'B5' };
+
+    const wb = XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb, ws, 'Responses');
+    XLSXStyle.writeFile(wb, `${survey?.title ?? 'survey'}_responses_report.xlsx`);
   };
 
   const getAnswerDisplay = (q: Question, ans?: Answer): string => {
