@@ -36,7 +36,7 @@ import {
   RefreshCw, FunctionSquare, PenLine, ArrowRightLeft, Activity, AlertCircle,
   Upload, LayoutList, BookOpen, GripVertical, CheckSquare2,
   BellRing, MessageSquareMore,
-  UserCheck, BarChart3, Check, Send,
+  UserCheck, BarChart3, Check, Send, UserX, ChevronUp as ChevronUpIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -390,6 +390,7 @@ export default function SurveyDetail() {
 
   // Bulk response selection
   const [bulkResponses, setBulkResponses]   = useState<Set<string>>(new Set());
+  const [showNotSubmitted, setShowNotSubmitted] = useState(false);
   const [bulkResponseSaving, setBulkResponseSaving] = useState(false);
 
   // Analytics extras
@@ -1361,6 +1362,89 @@ export default function SurveyDetail() {
     XLSXStyle.writeFile(wb, `${survey?.title ?? 'survey'}_responses_report.xlsx`);
   };
 
+  const exportNotSubmitted = async () => {
+    if (!pendingTargetUsers.length) return;
+
+    // Fetch manager names for pending users
+    const managerIds = [...new Set(pendingTargetUsers.map(u => (u as any).reports_to).filter(Boolean) as string[])];
+    let managerMap: Record<string, string> = {};
+    if (managerIds.length) {
+      const { data: mgrs } = await supabase.from('profiles').select('id, full_name').in('id', managerIds);
+      if (mgrs) for (const m of mgrs) managerMap[m.id] = m.full_name ?? m.id;
+    }
+
+    // Need reports_to for the allUsers list — fetch full profiles
+    const userIds = pendingTargetUsers.map(u => u.id);
+    const { data: profileRows } = await supabase.from('profiles').select('id, full_name, role, reports_to, email').in('id', userIds);
+    const profileMap: Record<string, any> = {};
+    if (profileRows) for (const p of profileRows) profileMap[p.id] = p;
+
+    const managerIds2 = [...new Set((profileRows ?? []).map(p => p.reports_to).filter(Boolean) as string[])];
+    if (managerIds2.length) {
+      const { data: mgrs2 } = await supabase.from('profiles').select('id, full_name').in('id', managerIds2);
+      if (mgrs2) for (const m of mgrs2) managerMap[m.id] = m.full_name ?? m.id;
+    }
+
+    const S = {
+      title: { font: { bold: true, sz: 15, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '7B1313' } }, alignment: { horizontal: 'center', vertical: 'center' } },
+      meta:  { font: { sz: 10, italic: true, color: { rgb: '5A5F6E' } }, fill: { fgColor: { rgb: 'FFF4F4' } }, alignment: { horizontal: 'left', vertical: 'center' } },
+      hdr:   { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: 'B91C1C' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: { top: { style: 'thin', color: { rgb: 'FFFFFF' } }, bottom: { style: 'thin', color: { rgb: 'FFFFFF' } }, left: { style: 'thin', color: { rgb: 'FFFFFF' } }, right: { style: 'thin', color: { rgb: 'FFFFFF' } } } },
+      even:  { font: { sz: 10, color: { rgb: '14141E' } }, fill: { fgColor: { rgb: 'FFFFFF' } }, alignment: { vertical: 'center' }, border: { bottom: { style: 'hair', color: { rgb: 'FECACA' } }, right: { style: 'hair', color: { rgb: 'FECACA' } } } },
+      odd:   { font: { sz: 10, color: { rgb: '14141E' } }, fill: { fgColor: { rgb: 'FEF2F2' } }, alignment: { vertical: 'center' }, border: { bottom: { style: 'hair', color: { rgb: 'FECACA' } }, right: { style: 'hair', color: { rgb: 'FECACA' } } } },
+      num:   (isOdd: boolean) => ({ font: { bold: true, sz: 10, color: { rgb: '9CA3AF' } }, fill: { fgColor: { rgb: isOdd ? 'FEF2F2' : 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: { bottom: { style: 'hair', color: { rgb: 'FECACA' } }, right: { style: 'thin', color: { rgb: 'FCA5A5' } } } }),
+    };
+
+    const headers = ['#', 'Full Name', 'Email', 'Role', 'Direct Manager'];
+    const totalCols = headers.length;
+    const addr = (c: number, r: number) => XLSXStyle.utils.encode_cell({ c, r });
+    const ws: Record<string, any> = {};
+
+    // Row 0 — title
+    const titleText = `Not Yet Submitted — ${survey?.title ?? 'Survey'}`;
+    ws[addr(0, 0)] = { v: titleText, s: S.title };
+    for (let c = 1; c < totalCols; c++) ws[addr(c, 0)] = { v: '', s: S.title };
+
+    // Row 1 — meta
+    const metaText = `Generated: ${format(new Date(), 'MMM d, yyyy  HH:mm')}   |   Pending: ${pendingTargetUsers.length}   |   Target: ${targetUserProfiles.length}`;
+    ws[addr(0, 1)] = { v: metaText, s: S.meta };
+    for (let c = 1; c < totalCols; c++) ws[addr(c, 1)] = { v: '', s: S.meta };
+
+    // Row 2 — spacer
+    for (let c = 0; c < totalCols; c++) ws[addr(c, 2)] = { v: '', s: { fill: { fgColor: { rgb: 'FFFFFF' } } } };
+
+    // Row 3 — headers
+    headers.forEach((h, c) => { ws[addr(c, 3)] = { v: h, s: S.hdr }; });
+
+    // Data rows
+    pendingTargetUsers.forEach((u, i) => {
+      const profile = profileMap[u.id];
+      const role = (profile?.role ?? u.role ?? '').replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const manager = profile?.reports_to ? (managerMap[profile.reports_to] ?? '') : '';
+      const isOdd = i % 2 !== 0;
+      const rowStyle = isOdd ? S.odd : S.even;
+      const r = 4 + i;
+      ws[addr(0, r)] = { v: i + 1, s: S.num(isOdd) };
+      ws[addr(1, r)] = { v: profile?.full_name ?? u.full_name ?? '', s: rowStyle };
+      ws[addr(2, r)] = { v: profile?.email ?? u.email ?? '', s: rowStyle };
+      ws[addr(3, r)] = { v: role, s: rowStyle };
+      ws[addr(4, r)] = { v: manager, s: rowStyle };
+    });
+
+    ws['!ref'] = XLSXStyle.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: totalCols - 1, r: 4 + pendingTargetUsers.length - 1 } });
+    ws['!merges'] = [
+      { s: { c: 0, r: 0 }, e: { c: totalCols - 1, r: 0 } },
+      { s: { c: 0, r: 1 }, e: { c: totalCols - 1, r: 1 } },
+      { s: { c: 0, r: 2 }, e: { c: totalCols - 1, r: 2 } },
+    ];
+    ws['!rows'] = [{ hpt: 30 }, { hpt: 16 }, { hpt: 6 }, { hpt: 36 }, ...Array(pendingTargetUsers.length).fill({ hpt: 18 })];
+    ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 30 }, { wch: 24 }, { wch: 26 }];
+    ws['!freeze'] = { xSplit: 1, ySplit: 4, topLeftCell: 'B5', activeCell: 'B5' };
+
+    const wb = XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb, ws, 'Not Submitted');
+    XLSXStyle.writeFile(wb, `${survey?.title ?? 'survey'}_not_submitted.xlsx`);
+  };
+
   const getAnswerDisplay = (q: Question, ans?: Answer): string => {
     if (!ans) return '';
     if (q.type === 'grid_table') {
@@ -2227,6 +2311,18 @@ export default function SurveyDetail() {
               <Button size="sm" variant="outline" onClick={exportExcel} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-excel">
                 <FileSpreadsheet className="w-3.5 h-3.5" />Excel
               </Button>
+              {pendingTargetUsers.length > 0 && (
+                <button
+                  onClick={() => setShowNotSubmitted(v => !v)}
+                  className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium transition-colors shrink-0 ${showNotSubmitted ? 'bg-red-600 border-red-600 text-white' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'}`}
+                  data-testid="btn-not-submitted"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  Not Submitted
+                  <span className={`ml-0.5 font-bold text-[10px] ${showNotSubmitted ? 'text-red-100' : 'text-red-500'}`}>{pendingTargetUsers.length}</span>
+                  {showNotSubmitted ? <ChevronUpIcon className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+                </button>
+              )}
                   {/* Date range filter */}
               <div className="flex items-center gap-1.5">
                 <input
@@ -2264,6 +2360,54 @@ export default function SurveyDetail() {
                   return `${filtered.length} of ${responses.length}`;
                 })()}
               </span>
+            </div>
+          )}
+
+          {/* Not Submitted panel */}
+          {showNotSubmitted && pendingTargetUsers.length > 0 && (
+            <div className="border border-red-200 rounded-xl bg-red-50/50 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-red-600">
+                <div className="flex items-center gap-2">
+                  <UserX className="w-4 h-4 text-white" />
+                  <span className="text-sm font-semibold text-white">
+                    Not Yet Submitted — {pendingTargetUsers.length} of {targetUserProfiles.length} pending
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={exportNotSubmitted}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-white/15 hover:bg-white/25 text-white text-xs font-medium rounded-lg transition-colors"
+                    data-testid="btn-export-not-submitted"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />Export Excel
+                  </button>
+                  <button onClick={() => setShowNotSubmitted(false)} className="p-1 rounded hover:bg-white/20 text-white/70 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-red-100 border-b border-red-200 z-10">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-red-700 font-semibold">#</th>
+                      <th className="text-left px-4 py-2 text-red-700 font-semibold">Name</th>
+                      <th className="text-left px-4 py-2 text-red-700 font-semibold">Email</th>
+                      <th className="text-left px-4 py-2 text-red-700 font-semibold">Role</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-red-100">
+                    {pendingTargetUsers.map((u, i) => (
+                      <tr key={u.id} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/60'}>
+                        <td className="px-4 py-2.5 text-slate-400 font-medium">{i + 1}</td>
+                        <td className="px-4 py-2.5 font-medium text-slate-800">{u.full_name ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-slate-500">{u.email ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-slate-500">{u.role ? u.role.replace(/\b\w/g, c => c.toUpperCase()) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
