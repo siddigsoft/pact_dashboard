@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -78,6 +79,8 @@ interface SiteVisitData {
   enumerator_fee?: number;
   state?: string;
   locality?: string;
+  hub_office?: string;
+  mmp_file_id?: string;
 }
 
 interface ClaimedSiteData {
@@ -271,11 +274,18 @@ export function SuperAdminDataManagement() {
   const [claimedMmpFilter, setClaimedMmpFilter] = useState('all');
   const [hubFilter, setHubFilter] = useState('all');
 
+  // Site-visits-tab filters
+  const [svStateFilter, setSvStateFilter] = useState('all');
+  const [svLocalityFilter, setSvLocalityFilter] = useState('all');
+  const [svHubFilter, setSvHubFilter] = useState('all');
+  const [svMmpFilter, setSvMmpFilter] = useState('all');
+
   // Dispatched-tab filters — kept separate so they never bleed into the Claimed tab
   const [dispatchedStateFilter, setDispatchedStateFilter] = useState('all');
   const [dispatchedLocalityFilter, setDispatchedLocalityFilter] = useState('all');
   const [dispatchedActivityFilter, setDispatchedActivityFilter] = useState('all');
   const [dispatchedHubFilter, setDispatchedHubFilter] = useState('all');
+  const [dispatchedMmpFilter, setDispatchedMmpFilter] = useState('all');
   const [dispatchedNoCostFilter, setDispatchedNoCostFilter] = useState(false);
   const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
   const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
@@ -368,7 +378,7 @@ export function SuperAdminDataManagement() {
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality')
+          .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality, hub_office, mmp_file_id')
           .in('status', ['completed', 'verified'])
           .order('visit_completed_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
@@ -1172,6 +1182,16 @@ export function SuperAdminDataManagement() {
     return map;
   }, [mmps]);
 
+  const svFilterOptions = useMemo(() => {
+    const states = [...new Set(siteVisits.map(s => s.state).filter(Boolean))].sort() as string[];
+    const stateFiltered = siteVisits.filter(s => svStateFilter === 'all' || s.state === svStateFilter);
+    const localities = [...new Set(stateFiltered.map(s => s.locality).filter(Boolean))].sort() as string[];
+    const hubs = [...new Set(siteVisits.map(s => s.hub_office).filter(Boolean))].sort() as string[];
+    // Use all loaded MMPs so the filter bar always renders; selecting an MMP filters to visits under it
+    const mmpOptions = mmps.map(m => ({ id: m.id, label: m.name || m.project_name || m.id }));
+    return { states, localities, hubs, mmpOptions };
+  }, [siteVisits, svStateFilter, mmps]);
+
   const filteredSiteVisits = useMemo(() => {
     return siteVisits.filter(sv => {
       const matchesSearch = 
@@ -1180,10 +1200,14 @@ export function SuperAdminDataManagement() {
         sv.accepted_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || sv.status === statusFilter;
+      const matchesState    = svStateFilter    === 'all' || sv.state      === svStateFilter;
+      const matchesLocality = svLocalityFilter === 'all' || sv.locality   === svLocalityFilter;
+      const matchesHub      = svHubFilter      === 'all' || sv.hub_office === svHubFilter;
+      const matchesMmp      = svMmpFilter      === 'all' || sv.mmp_file_id === svMmpFilter;
       
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesState && matchesLocality && matchesHub && matchesMmp;
     });
-  }, [siteVisits, debouncedSearch, statusFilter]);
+  }, [siteVisits, debouncedSearch, statusFilter, svStateFilter, svLocalityFilter, svHubFilter, svMmpFilter]);
 
   const filteredWallets = useMemo(() => {
     return wallets.filter(w => {
@@ -1307,7 +1331,7 @@ export function SuperAdminDataManagement() {
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
-      const matchesMmp = claimedMmpFilter === 'all' || resolvedMmpName === claimedMmpFilter;
+      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_id === claimedMmpFilter;
       
       const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
       return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
@@ -1342,16 +1366,15 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Unique MMPs across all claimed sites — resolve name via mmpById, deduplicate by name
+    // Unique MMPs across all claimed sites — keyed by real mmp_id for MmpFilterBar compatibility
     const mmpOptions = [...new Map(
       claimedSites
         .filter(s => s.mmp_id)
         .map(s => {
-          const name = mmpById[s.mmp_id!]?.name || s.mmp_name;
-          return name ? [name, { id: name, name }] as [string, { id: string; name: string }] : null;
+          const label = mmpById[s.mmp_id!]?.name || s.mmp_name || s.mmp_id!;
+          return [s.mmp_id!, { id: s.mmp_id!, label }] as [string, { id: string; label: string }];
         })
-        .filter((x): x is [string, { id: string; name: string }] => x !== null)
-    ).values()].sort((a, b) => a.name.localeCompare(b.name));
+    ).values()].sort((a, b) => a.label.localeCompare(b.label));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
   }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById]);
@@ -1370,25 +1393,30 @@ export function SuperAdminDataManagement() {
       const matchesLocality = dispatchedLocalityFilter === 'all' || site.locality      === dispatchedLocalityFilter;
       const matchesActivity = dispatchedActivityFilter === 'all' || site.main_activity === dispatchedActivityFilter;
       const matchesHub      = dispatchedHubFilter      === 'all' || site.hub_office    === dispatchedHubFilter;
+      const matchesMmp      = dispatchedMmpFilter      === 'all' || site.mmp_file_id   === dispatchedMmpFilter;
       const matchesNoCost   = !dispatchedNoCostFilter  || (site.transport_fee == null && site.enumerator_fee == null);
 
-      return matchesSearch && matchesState && matchesLocality && matchesActivity && matchesHub && matchesNoCost;
+      return matchesSearch && matchesState && matchesLocality && matchesActivity && matchesHub && matchesMmp && matchesNoCost;
     });
-  }, [dispatchedSites, debouncedSearch, dispatchedStateFilter, dispatchedLocalityFilter, dispatchedActivityFilter, dispatchedHubFilter, dispatchedNoCostFilter]);
+  }, [dispatchedSites, debouncedSearch, dispatchedStateFilter, dispatchedLocalityFilter, dispatchedActivityFilter, dispatchedHubFilter, dispatchedMmpFilter, dispatchedNoCostFilter]);
 
   // Get unique values for dispatched sites filters
   const dispatchedSitesFilterOptions = useMemo(() => {
-    const states = [...new Set(dispatchedSites.map(s => s.state).filter(Boolean))].sort();
+    const states = [...new Set(dispatchedSites.map(s => s.state).filter(Boolean))].sort() as string[];
     const localities = [...new Set(
       dispatchedSites
         .filter(s => dispatchedStateFilter === 'all' || s.state === dispatchedStateFilter)
         .map(s => s.locality)
         .filter(Boolean)
-    )].sort();
-    const activities = [...new Set(dispatchedSites.map(s => s.main_activity).filter(Boolean))].sort();
-    const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort();
-    return { states, localities, activities, hubs };
-  }, [dispatchedSites, dispatchedStateFilter]);
+    )].sort() as string[];
+    const activities = [...new Set(dispatchedSites.map(s => s.main_activity).filter(Boolean))].sort() as string[];
+    const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort() as string[];
+    const mmpIds = new Set(dispatchedSites.map(s => s.mmp_file_id).filter(Boolean));
+    const mmpOptions = mmps
+      .filter(m => mmpIds.has(m.id))
+      .map(m => ({ id: m.id, label: m.name || m.project_name || m.id }));
+    return { states, localities, activities, hubs, mmpOptions };
+  }, [dispatchedSites, dispatchedStateFilter, mmps]);
 
   const filteredMMPs = useMemo(() => {
     return mmps.filter(mmp => {
@@ -1656,6 +1684,33 @@ export function SuperAdminDataManagement() {
         </div>
 
         <TabsContent value="site-visits" className="mt-4">
+          <MmpFilterBar
+            title="Filter Site Visits"
+            mmpOptions={svFilterOptions.mmpOptions}
+            mmpFilter={svMmpFilter}
+            onMmpFilterChange={setSvMmpFilter}
+            statusOptions={[...new Set(siteVisits.map(s => s.status).filter(Boolean))].sort()}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            hubOptions={svFilterOptions.hubs}
+            hubFilter={svHubFilter}
+            onHubFilterChange={setSvHubFilter}
+            stateOptions={svFilterOptions.states}
+            stateFilter={svStateFilter}
+            onStateFilterChange={(val) => { setSvStateFilter(val); setSvLocalityFilter('all'); }}
+            localityOptions={svFilterOptions.localities}
+            localityFilter={svLocalityFilter}
+            onLocalityFilterChange={setSvLocalityFilter}
+            totalCount={siteVisits.length}
+            filteredCount={filteredSiteVisits.length}
+            onClearAll={() => {
+              setSvMmpFilter('all');
+              setSvStateFilter('all');
+              setSvLocalityFilter('all');
+              setSvHubFilter('all');
+              setStatusFilter('all');
+            }}
+          />
           <Card>
             <CardHeader className="border-b py-3 px-4">
               <div className="flex items-center justify-between gap-3">
@@ -2171,18 +2226,43 @@ export function SuperAdminDataManagement() {
                 />
               </div>
 
-              {/* Advanced Filters for Claimed Sites */}
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {/* MMP-style filter bar for Claimed Sites */}
+              <div className="mt-3">
+                <MmpFilterBar
+                  title="Filter Claimed Sites"
+                  mmpOptions={claimedSitesFilterOptions.mmpOptions}
+                  mmpFilter={claimedMmpFilter}
+                  onMmpFilterChange={setClaimedMmpFilter}
+                  statusOptions={claimedSitesFilterOptions.statusOptions.map(s => STATUS_LABELS[s] || s)}
+                  statusFilter={statusFilter !== 'all' ? (STATUS_LABELS[statusFilter] || statusFilter) : 'all'}
+                  onStatusFilterChange={(val) => {
+                    if (val === 'all') { setStatusFilter('all'); return; }
+                    const key = Object.entries(STATUS_LABELS).find(([, v]) => v === val)?.[0] || val;
+                    setStatusFilter(key);
+                  }}
+                  stateOptions={claimedSitesFilterOptions.states}
+                  stateFilter={stateFilter}
+                  onStateFilterChange={(val) => { setStateFilter(val); setLocalityFilter('all'); setActivityFilter('all'); setClaimedByFilter('all'); }}
+                  localityOptions={claimedSitesFilterOptions.localities}
+                  localityFilter={localityFilter}
+                  onLocalityFilterChange={(val) => { setLocalityFilter(val); setActivityFilter('all'); setClaimedByFilter('all'); }}
+                  totalCount={claimedSites.length}
+                  filteredCount={filteredClaimedSites.length}
+                  onClearAll={() => { setClaimedMmpFilter('all'); setStatusFilter('all'); setStateFilter('all'); setLocalityFilter('all'); setActivityFilter('all'); setClaimedByFilter('all'); }}
+                />
+              </div>
+              {/* Extra filters: Activity + Enumerator */}
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">MMP</Label>
-                  <Select value={claimedMmpFilter} onValueChange={setClaimedMmpFilter}>
-                    <SelectTrigger data-testid="select-claimed-mmp-filter">
-                      <SelectValue placeholder="All MMPs" />
+                  <Label className="text-xs text-muted-foreground">Activity</Label>
+                  <Select value={activityFilter} onValueChange={(val) => { setActivityFilter(val); setClaimedByFilter('all'); }}>
+                    <SelectTrigger data-testid="select-activity-filter">
+                      <SelectValue placeholder="All Activities" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All MMPs</SelectItem>
-                      {claimedSitesFilterOptions.mmpOptions.map(m => (
-                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      <SelectItem value="all">All Activities</SelectItem>
+                      {claimedSitesFilterOptions.activities.map(activity => (
+                        <SelectItem key={activity} value={activity}>{activity}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -2197,74 +2277,6 @@ export function SuperAdminDataManagement() {
                       <SelectItem value="all">All Enumerators</SelectItem>
                       {claimedSitesFilterOptions.claimedByUsers.map(user => (
                         <SelectItem key={user} value={user}>{user}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Activity</Label>
-                  <Select value={activityFilter} onValueChange={(val) => {
-                    setActivityFilter(val);
-                    setClaimedByFilter('all');
-                  }}>
-                    <SelectTrigger data-testid="select-activity-filter">
-                      <SelectValue placeholder="All Activities" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Activities</SelectItem>
-                      {claimedSitesFilterOptions.activities.map(activity => (
-                        <SelectItem key={activity} value={activity}>{activity}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">State</Label>
-                  <Select value={stateFilter} onValueChange={(val) => {
-                    setStateFilter(val);
-                    setLocalityFilter('all');
-                    setActivityFilter('all');
-                    setClaimedByFilter('all');
-                  }}>
-                    <SelectTrigger data-testid="select-state-filter">
-                      <SelectValue placeholder="All States" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All States</SelectItem>
-                      {claimedSitesFilterOptions.states.map(state => (
-                        <SelectItem key={state} value={state}>{state}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Locality</Label>
-                  <Select value={localityFilter} onValueChange={(val) => {
-                    setLocalityFilter(val);
-                    setActivityFilter('all');
-                    setClaimedByFilter('all');
-                  }}>
-                    <SelectTrigger data-testid="select-locality-filter">
-                      <SelectValue placeholder="All Localities" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Localities</SelectItem>
-                      {claimedSitesFilterOptions.localities.map(locality => (
-                        <SelectItem key={locality} value={locality}>{locality}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger data-testid="select-status-filter-claimed">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {claimedSitesFilterOptions.statusOptions.map(s => (
-                        <SelectItem key={s} value={s}>{STATUS_LABELS[s] || s}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -2468,8 +2480,29 @@ export function SuperAdminDataManagement() {
                 </Badge>
               </div>
               
-              {/* Filters for Dispatched Sites */}
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              {/* MMP-style filter bar for Dispatched Sites */}
+              <div className="mt-3">
+                <MmpFilterBar
+                  title="Filter Dispatched Sites"
+                  mmpOptions={dispatchedSitesFilterOptions.mmpOptions}
+                  mmpFilter={dispatchedMmpFilter}
+                  onMmpFilterChange={setDispatchedMmpFilter}
+                  hubOptions={dispatchedSitesFilterOptions.hubs}
+                  hubFilter={dispatchedHubFilter}
+                  onHubFilterChange={setDispatchedHubFilter}
+                  stateOptions={dispatchedSitesFilterOptions.states}
+                  stateFilter={dispatchedStateFilter}
+                  onStateFilterChange={(val) => { setDispatchedStateFilter(val); setDispatchedLocalityFilter('all'); setDispatchedActivityFilter('all'); }}
+                  localityOptions={dispatchedSitesFilterOptions.localities}
+                  localityFilter={dispatchedLocalityFilter}
+                  onLocalityFilterChange={setDispatchedLocalityFilter}
+                  totalCount={dispatchedSites.length}
+                  filteredCount={filteredDispatchedSites.length}
+                  onClearAll={() => { setDispatchedMmpFilter('all'); setDispatchedStateFilter('all'); setDispatchedLocalityFilter('all'); setDispatchedHubFilter('all'); setDispatchedActivityFilter('all'); }}
+                />
+              </div>
+              {/* Extra filter: Activity */}
+              <div className="mt-2 max-w-xs">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
                   <Select value={dispatchedActivityFilter} onValueChange={setDispatchedActivityFilter}>
@@ -2480,52 +2513,6 @@ export function SuperAdminDataManagement() {
                       <SelectItem value="all">All Activities</SelectItem>
                       {dispatchedSitesFilterOptions.activities.map(activity => (
                         <SelectItem key={activity} value={activity}>{activity}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">State</Label>
-                  <Select value={dispatchedStateFilter} onValueChange={(val) => {
-                    setDispatchedStateFilter(val);
-                    setDispatchedLocalityFilter('all');
-                    setDispatchedActivityFilter('all');
-                  }}>
-                    <SelectTrigger data-testid="select-dispatched-state-filter">
-                      <SelectValue placeholder="All States" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All States</SelectItem>
-                      {dispatchedSitesFilterOptions.states.map(state => (
-                        <SelectItem key={state} value={state}>{state}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Locality</Label>
-                  <Select value={dispatchedLocalityFilter} onValueChange={setDispatchedLocalityFilter}>
-                    <SelectTrigger data-testid="select-dispatched-locality-filter">
-                      <SelectValue placeholder="All Localities" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Localities</SelectItem>
-                      {dispatchedSitesFilterOptions.localities.map(locality => (
-                        <SelectItem key={locality} value={locality}>{locality}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Hub</Label>
-                  <Select value={dispatchedHubFilter} onValueChange={setDispatchedHubFilter}>
-                    <SelectTrigger data-testid="select-dispatched-hub-filter">
-                      <SelectValue placeholder="All Hubs" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Hubs</SelectItem>
-                      {dispatchedSitesFilterOptions.hubs.map(hub => (
-                        <SelectItem key={hub} value={hub}>{hub}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
