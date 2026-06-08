@@ -30,5 +30,7 @@ Every place that handles tiers must include tier 4:
 10. tXName helpers (t1Name…t4Name): ALWAYS prefix with `tierXApprover?.name || tierXApprover?.email ||` before `nameList(tXExpected)` — omitting it shows wrong name after tier has acted (shows expected-list or fallback string instead of actual approver name)
 11. Finance/Payment step `expectedApprovers`: populate with `isFinanceAdminRolePred` users when `derivedStatus === 'approved'`; do NOT use `finStatus` (forward reference — declared after the expectedApprovers block). Use `derivedStatus === 'approved'` which is equivalent.
 12. `isFinanceAdminRolePred`: matches `financialadmin | financeadmin | finance | *financ*` after nr() normalisation
+13. `handleGroupApproval` T1: must check `submissions.every(s => isCDSubmission(s))` to set `status='approved'` for CD groups — hardcoded `under_review` leaves CD items stuck with wrong DB status (getOperationalDerivedStatus masks it, but direct-status DB filters break)
+14. `approvalCertificatePdf.ts` interface had only tier1/tier2 — Supervisor and Coordinator PDFs silently omitted final approvers. Fixed: interface now has optional `tier3?` and `tier4?`; callers cascade signature T4→T3→T2 and pass tier data conditionally on `tier3_approved_by || tier3_status === 'approved'`
 
 **Why:** The 4-tier coordinator flow was added later; many existing code paths only had 1/2/3 and silently failed or showed undefined for tier 4.

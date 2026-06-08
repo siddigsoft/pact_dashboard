@@ -825,7 +825,9 @@ const CostSubmission = () => {
         updates.tier1_approved_by = currentUser.id;
         updates.tier1_approved_at = now;
         updates.tier1_notes = combinedReason || null;
-        updates.status = action === 'approve' ? 'under_review' : 'rejected';
+        // CD submissions are single-tier — T1 approval is final
+        const allCDSubs = submissions.every(s => isCDSubmission(s));
+        updates.status = action === 'approve' ? (allCDSubs ? 'approved' : 'under_review') : 'rejected';
         if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 1';
       } else if (tier === 2) {
         updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
@@ -1237,11 +1239,16 @@ const CostSubmission = () => {
     const submitter = users.find(u => u.id === oc.submitted_by);
     const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
     const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
+    const tier3Approver = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
+    const tier4Approver = oc.tier4_approved_by ? users.find(u => u.id === oc.tier4_approved_by) : null;
     const project = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
 
+    // Fetch the signature from the final tier's notes, cascading T4→T3→T2
+    const finalNotes = oc.tier4_notes || oc.tier3_notes || oc.tier2_notes;
+    const finalApprovedBy = oc.tier4_approved_by || oc.tier3_approved_by || oc.tier2_approved_by;
     let signatureImageData: string | null = null;
-    if (oc.tier2_notes) {
-      const sigMatch = oc.tier2_notes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
+    if (finalNotes) {
+      const sigMatch = finalNotes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
       if (sigMatch?.[1]) {
         try {
           const { data: sigRow } = await supabase
@@ -1271,12 +1278,12 @@ const CostSubmission = () => {
       }
     }
 
-    if (!signatureImageData && oc.tier2_approved_by) {
+    if (!signatureImageData && finalApprovedBy) {
       try {
         const { data: savedSigs } = await supabase
           .from('handwriting_signatures')
           .select('signature_image')
-          .eq('user_id', oc.tier2_approved_by)
+          .eq('user_id', finalApprovedBy)
           .eq('is_active', true)
           .order('is_default', { ascending: false })
           .order('created_at', { ascending: false })
@@ -1286,6 +1293,9 @@ const CostSubmission = () => {
         }
       } catch { /* no saved signature, continue without */ }
     }
+
+    // Determine which tier gets the signature (the final approved tier)
+    const finalTierSig = oc.tier4_status === 'approved' ? 4 : oc.tier3_status === 'approved' ? 3 : 2;
 
     await generateApprovalCertificatePdf({
       submission: {
@@ -1320,8 +1330,28 @@ const CostSubmission = () => {
         status: oc.tier2_status || 'approved',
         approvedAt: oc.tier2_approved_at || '',
         notes: oc.tier2_notes,
-        signatureImageData,
+        signatureImageData: finalTierSig === 2 ? signatureImageData : null,
       },
+      ...(oc.tier3_approved_by || oc.tier3_status === 'approved' ? {
+        tier3: {
+          approverName: tier3Approver?.name || tier3Approver?.email || 'Unknown',
+          approverEmail: tier3Approver?.email,
+          status: oc.tier3_status || 'approved',
+          approvedAt: oc.tier3_approved_at || '',
+          notes: oc.tier3_notes,
+          signatureImageData: finalTierSig === 3 ? signatureImageData : null,
+        },
+      } : {}),
+      ...(oc.tier4_approved_by || oc.tier4_status === 'approved' ? {
+        tier4: {
+          approverName: tier4Approver?.name || tier4Approver?.email || 'Unknown',
+          approverEmail: tier4Approver?.email,
+          status: oc.tier4_status || 'approved',
+          approvedAt: oc.tier4_approved_at || '',
+          notes: oc.tier4_notes,
+          signatureImageData: finalTierSig === 4 ? signatureImageData : null,
+        },
+      } : {}),
     });
 
     toast({
@@ -2023,10 +2053,16 @@ const CostSubmission = () => {
       try {
         const tier1Approver = (oc as any).tier1_approved_by ? users?.find(u => u.id === (oc as any).tier1_approved_by) : null;
         const tier2Approver = (oc as any).tier2_approved_by ? users?.find(u => u.id === (oc as any).tier2_approved_by) : null;
+        const tier3Approver = (oc as any).tier3_approved_by ? users?.find(u => u.id === (oc as any).tier3_approved_by) : null;
+        const tier4Approver = (oc as any).tier4_approved_by ? users?.find(u => u.id === (oc as any).tier4_approved_by) : null;
 
+        // Signature from final tier notes, cascading T4→T3→T2
+        const finalNotes = (oc as any).tier4_notes || (oc as any).tier3_notes || (oc as any).tier2_notes;
+        const finalApprovedBy = (oc as any).tier4_approved_by || (oc as any).tier3_approved_by || (oc as any).tier2_approved_by;
+        const finalTierSig = (oc as any).tier4_status === 'approved' ? 4 : (oc as any).tier3_status === 'approved' ? 3 : 2;
         let signatureImageData: string | null = null;
-        if ((oc as any).tier2_notes) {
-          const sigMatch = ((oc as any).tier2_notes as string).match(/ID:\s*(\S+?)(?:\s*\||$)/);
+        if (finalNotes) {
+          const sigMatch = (finalNotes as string).match(/ID:\s*(\S+?)(?:\s*\||$)/);
           if (sigMatch?.[1]) {
             try {
               const { data: sigRow } = await supabase
@@ -2051,6 +2087,20 @@ const CostSubmission = () => {
               }
             } catch { /* continue without signature */ }
           }
+        }
+        if (!signatureImageData && finalApprovedBy) {
+          try {
+            const { data: savedSigs } = await supabase
+              .from('handwriting_signatures')
+              .select('signature_image')
+              .eq('user_id', finalApprovedBy)
+              .eq('is_active', true)
+              .order('is_default', { ascending: false })
+              .limit(1);
+            if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+              signatureImageData = savedSigs[0].signature_image;
+            }
+          } catch { /* continue without signature */ }
         }
 
         pdfAttachment = await generateApprovalCertificateBase64({
@@ -2086,8 +2136,28 @@ const CostSubmission = () => {
             status: (oc as any).tier2_status || 'approved',
             approvedAt: (oc as any).tier2_approved_at || '',
             notes: (oc as any).tier2_notes,
-            signatureImageData,
+            signatureImageData: finalTierSig === 2 ? signatureImageData : null,
           },
+          ...((oc as any).tier3_approved_by || (oc as any).tier3_status === 'approved' ? {
+            tier3: {
+              approverName: (tier3Approver as any)?.name || (tier3Approver as any)?.email || 'Unknown',
+              approverEmail: (tier3Approver as any)?.email,
+              status: (oc as any).tier3_status || 'approved',
+              approvedAt: (oc as any).tier3_approved_at || '',
+              notes: (oc as any).tier3_notes,
+              signatureImageData: finalTierSig === 3 ? signatureImageData : null,
+            },
+          } : {}),
+          ...((oc as any).tier4_approved_by || (oc as any).tier4_status === 'approved' ? {
+            tier4: {
+              approverName: (tier4Approver as any)?.name || (tier4Approver as any)?.email || 'Unknown',
+              approverEmail: (tier4Approver as any)?.email,
+              status: (oc as any).tier4_status || 'approved',
+              approvedAt: (oc as any).tier4_approved_at || '',
+              notes: (oc as any).tier4_notes,
+              signatureImageData: finalTierSig === 4 ? signatureImageData : null,
+            },
+          } : {}),
         });
       } catch (pdfErr) {
         console.warn('[Payment Request] Failed to generate PDF attachment, sending without it:', pdfErr);

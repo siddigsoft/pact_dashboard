@@ -2,6 +2,15 @@ import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
 
+interface TierData {
+  approverName: string;
+  approverEmail?: string;
+  status: string;
+  approvedAt: string;
+  notes: string | null;
+  signatureImageData?: string | null;
+}
+
 interface ApprovalCertificateData {
   submission: {
     id: string;
@@ -27,21 +36,10 @@ interface ApprovalCertificateData {
   hub?: {
     name: string;
   } | null;
-  tier1: {
-    approverName: string;
-    approverEmail?: string;
-    status: string;
-    approvedAt: string;
-    notes: string | null;
-  };
-  tier2: {
-    approverName: string;
-    approverEmail?: string;
-    status: string;
-    approvedAt: string;
-    notes: string | null;
-    signatureImageData?: string | null;
-  };
+  tier1: TierData;
+  tier2: TierData;
+  tier3?: TierData;
+  tier4?: TierData;
 }
 
 const C = {
@@ -145,6 +143,8 @@ const ARABIC_MAP: Record<string, string> = {
   'HUB': 'المحور',
   'APPROVAL WORKFLOW': 'مسار الموافقة',
   'Supervisor / FOM Review': 'مراجعة المشرف',
+  'FOM Review': 'مراجعة مدير العمليات الميدانية',
+  'Country Director Review': 'مراجعة المدير القُطري',
   'Admin / Super Admin Final Approval': 'الموافقة النهائية للمسؤول',
 };
 
@@ -180,32 +180,41 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.setFont('helvetica', 'normal');
   };
 
-  const qrLines = [
-    `PACT APPROVAL CERTIFICATE`,
-    `========================`,
-    `Ref: ${refNumber}`,
-    `Date: ${format(new Date(), 'MMM d, yyyy HH:mm')}`,
-    ``,
-    `SUBMISSION`,
-    `Amount: ${fmtCurrency(data.submission.amount_cents, data.submission.currency)}`,
-    `Category: ${fmtCategory(data.submission.expense_category)}`,
-    `Submitter: ${data.submitter.name}`,
-    `Project: ${data.project?.name || 'N/A'}`,
-    `Expense Date: ${fmtDate(data.submission.expense_date)}`,
-    ``,
-    `TIER 1 APPROVAL`,
-    `Approver: ${data.tier1.approverName}`,
-    `Status: ${data.tier1.status.toUpperCase()}`,
-    `Date: ${fmtDate(data.tier1.approvedAt, true)}`,
-    ``,
-    `TIER 2 APPROVAL`,
-    `Approver: ${data.tier2.approverName}`,
-    `Status: ${data.tier2.status.toUpperCase()}`,
-    `Date: ${fmtDate(data.tier2.approvedAt, true)}`,
-    ``,
-    `Verified: YES`,
-  ];
-  const qrContent = qrLines.join('\n');
+  const buildQRLines = (): string[] => {
+    const lines = [
+      `PACT APPROVAL CERTIFICATE`,
+      `========================`,
+      `Ref: ${refNumber}`,
+      `Date: ${format(new Date(), 'MMM d, yyyy HH:mm')}`,
+      ``,
+      `SUBMISSION`,
+      `Amount: ${fmtCurrency(data.submission.amount_cents, data.submission.currency)}`,
+      `Category: ${fmtCategory(data.submission.expense_category)}`,
+      `Submitter: ${data.submitter.name}`,
+      `Project: ${data.project?.name || 'N/A'}`,
+      `Expense Date: ${fmtDate(data.submission.expense_date)}`,
+      ``,
+      `TIER 1 APPROVAL`,
+      `Approver: ${data.tier1.approverName}`,
+      `Status: ${data.tier1.status.toUpperCase()}`,
+      `Date: ${fmtDate(data.tier1.approvedAt, true)}`,
+      ``,
+      `TIER 2 APPROVAL`,
+      `Approver: ${data.tier2.approverName}`,
+      `Status: ${data.tier2.status.toUpperCase()}`,
+      `Date: ${fmtDate(data.tier2.approvedAt, true)}`,
+    ];
+    if (data.tier3) {
+      lines.push(``, `TIER 3 APPROVAL`, `Approver: ${data.tier3.approverName}`, `Status: ${data.tier3.status.toUpperCase()}`, `Date: ${fmtDate(data.tier3.approvedAt, true)}`);
+    }
+    if (data.tier4) {
+      lines.push(``, `TIER 4 APPROVAL`, `Approver: ${data.tier4.approverName}`, `Status: ${data.tier4.status.toUpperCase()}`, `Date: ${fmtDate(data.tier4.approvedAt, true)}`);
+    }
+    lines.push(``, `Verified: YES`);
+    return lines;
+  };
+
+  const qrContent = buildQRLines().join('\n');
 
   const [logoDataUrl, qrDataUrl] = await Promise.all([
     loadPactLogoDataUrl(),
@@ -397,15 +406,15 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   const drawTierCard = (
     tierNum: number,
     tierLabel: string,
-    tierData: ApprovalCertificateData['tier1'],
-    sigImage?: string | null
+    tierData: TierData,
+    arTierLabel?: string
   ) => {
     const sig = parseSignatureFromNotes(tierData.notes);
+    const sigImage = tierData.signatureImageData;
     const hasSigBlock = sig || sigImage;
     const cleanNotes = getCleanNotes(tierData.notes);
     const hasNotes = cleanNotes.length > 0;
 
-    // Pre-compute wrapped note lines for accurate card height
     const notesFontSize = 9;
     const notesMaxW = cw - 14;
     let notesLines: string[] = [];
@@ -423,6 +432,12 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     const tierColor = tierNum === 1 ? C.green : C.blue;
     const tierBg = tierNum === 1 ? C.greenLight : C.blueLight;
     const isApproved = tierData.status === 'approved';
+
+    // Check if we need a new page
+    if (y + ch + 10 > ph - 20) {
+      doc.addPage();
+      y = 14;
+    }
 
     rr(doc, ml, y, cw, ch, 2, C.white, C.border);
 
@@ -443,10 +458,9 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.setTextColor(...C.body);
     doc.text(tierLabel, ml + 22, y + 6);
 
-    if (hasArabic) {
-      const arLabel = tierNum === 1 ? ar('Supervisor / FOM Review') : ar('Admin / Super Admin Final Approval');
+    if (hasArabic && arTierLabel) {
       doc.setFontSize(8.5);
-      arText(arLabel, pw - mr - 5, y + 6, { align: 'right' });
+      arText(arTierLabel, pw - mr - 5, y + 6, { align: 'right' });
     }
 
     if (isApproved) {
@@ -484,24 +498,20 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     iy += 9;
 
     if (hasNotes) {
-      // Amber highlighted "Approval Conditions" block — bold and fully visible
       const blockX = ml + 4;
       const blockW = cw - 8;
       const blockH = notesBlockH - 2;
 
       rr(doc, blockX, iy, blockW, blockH, 1.5, C.amberLight, C.amberBorder);
 
-      // Left accent bar
       doc.setFillColor(...C.amberBorder);
       doc.rect(blockX + 0.3, iy + 0.3, 2.5, blockH - 0.6, 'F');
 
-      // Label: APPROVAL CONDITIONS
       doc.setFontSize(7);
       doc.setTextColor(...C.amber);
       doc.setFont('helvetica', 'bold');
       doc.text('APPROVAL CONDITIONS / شروط الموافقة', blockX + 6, iy + 5);
 
-      // Notes text — bold, full, unwrapped
       doc.setFontSize(notesFontSize);
       doc.setTextColor(...C.dark);
       doc.setFont('helvetica', 'bold');
@@ -549,13 +559,24 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     y += ch + 4;
   };
 
-  drawTierCard(1, 'Supervisor / FOM Review', data.tier1);
-  drawTierCard(2, 'Admin / Super Admin Final Approval', data.tier2, data.tier2.signatureImageData);
+  drawTierCard(1, 'Supervisor / FOM Review', data.tier1, ar('Supervisor / FOM Review'));
+  drawTierCard(2, data.tier3 ? 'FOM Review' : 'Admin / Super Admin Final Approval', data.tier2, data.tier3 ? ar('FOM Review') : ar('Admin / Super Admin Final Approval'));
+  if (data.tier3) {
+    drawTierCard(3, data.tier4 ? 'Country Director Review' : 'Admin / Super Admin Final Approval', data.tier3, data.tier4 ? ar('Country Director Review') : ar('Admin / Super Admin Final Approval'));
+  }
+  if (data.tier4) {
+    drawTierCard(4, 'Admin / Super Admin Final Approval', data.tier4, ar('Admin / Super Admin Final Approval'));
+  }
 
   y += 1;
 
   const qrSize = 24;
   const disclaimerH = qrSize + 6;
+
+  if (y + disclaimerH + 10 > ph - 20) {
+    doc.addPage();
+    y = 14;
+  }
 
   rr(doc, ml, y, cw, disclaimerH, 2, C.bgLight, C.border);
 
