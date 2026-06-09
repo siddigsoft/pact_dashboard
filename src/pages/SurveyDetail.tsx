@@ -1206,16 +1206,55 @@ export default function SurveyDetail() {
       }
     }
 
-    // ── 3. Build data rows ──────────────────────────────────────────────
-    const cols = questions.filter(q => !['section_header', 'begin_group'].includes(q.type));
+    // ── 3. Build flat column list — grid_table questions are expanded ────
+    type XGridCol = { id: string; label: string };
+    type FlatCol =
+      | { kind: 'q'; q: Question }
+      | { kind: 'grid'; q: Question; gc: XGridCol };
 
-    const getAnswerText = (q: Question, ra: Answer[]): string => {
-      const a = ra.find(x => x.question_id === q.id);
-      if (!a) return '';
+    // Track section/group context for question labels
+    let curSection = '';
+    let curGroup = '';
+    const sectionCtx: Record<string, string> = {};
+    const groupCtx: Record<string, string> = {};
+    for (const q of questions) {
+      if (q.type === 'section_header') { curSection = q.label; curGroup = ''; }
+      else if (q.type === 'begin_group') { curGroup = q.label; }
+      else { sectionCtx[q.id] = curSection; groupCtx[q.id] = curGroup; }
+    }
+
+    // Flat columns + track grid merges (question label spans N sub-cols in row 3)
+    const flatCols: FlatCol[] = [];
+    type GridMerge = { startCol: number; endCol: number; label: string };
+    const gridMerges: GridMerge[] = [];
+    const metaCols = ['#', 'Respondent Name', 'Email', 'Date', 'Time', 'Role', 'Direct Manager', 'Review Status'];
+
+    for (const q of questions) {
+      if (['section_header', 'begin_group'].includes(q.type)) continue;
       if (q.type === 'grid_table') {
-        const gridRows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
-        return gridRows ? gridRows.map((row, i) => `R${i + 1}: ${Object.values(row).join(' | ')}`).join('; ') : '';
+        const gridCols = (q.settings?.grid_columns as XGridCol[] | undefined) ?? [];
+        if (gridCols.length > 0) {
+          const startCol = metaCols.length + flatCols.length;
+          for (const gc of gridCols) flatCols.push({ kind: 'grid', q, gc });
+          gridMerges.push({ startCol, endCol: metaCols.length + flatCols.length - 1, label: q.label });
+        } else {
+          flatCols.push({ kind: 'q', q });
+        }
+      } else {
+        flatCols.push({ kind: 'q', q });
       }
+    }
+
+    // Answer extractor per flat column
+    const getCellValue = (fc: FlatCol, ra: Answer[]): string => {
+      const a = ra.find(x => x.question_id === fc.q.id);
+      if (!a) return '';
+      if (fc.kind === 'grid') {
+        const rows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
+        if (!rows) return '';
+        return rows.map(row => row[fc.gc.id] ?? '').filter(v => v !== '').join('\n');
+      }
+      const q = fc.q;
       if (q.type === 'likert') {
         const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
         return val ? Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | ') : '';
@@ -1260,6 +1299,28 @@ export default function SurveyDetail() {
           right: { style: 'thin', color: { rgb: 'FFFFFF' } },
         },
       },
+      headerGridGroup: {
+        font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '0D47A1' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: {
+          top: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          bottom: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          left: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          right: { style: 'thin', color: { rgb: 'FFFFFF' } },
+        },
+      },
+      headerGridCol: {
+        font: { bold: true, sz: 9, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1565C0' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: {
+          top: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          bottom: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          left: { style: 'thin', color: { rgb: 'FFFFFF' } },
+          right: { style: 'thin', color: { rgb: 'FFFFFF' } },
+        },
+      },
       rowEven: {
         font: { sz: 10, color: { rgb: '14141E' } },
         fill: { fgColor: { rgb: 'FFFFFF' } },
@@ -1289,8 +1350,7 @@ export default function SurveyDetail() {
       }),
     };
 
-    const metaCols = ['#', 'Respondent Name', 'Email', 'Date', 'Time', 'Role', 'Direct Manager', 'Review Status'];
-    const totalCols = metaCols.length + cols.length;
+    const totalCols = metaCols.length + flatCols.length;
 
     // Helper: encode cell address
     const addr = (c: number, r: number) => XLSXStyle.utils.encode_cell({ c, r });
@@ -1311,14 +1371,45 @@ export default function SurveyDetail() {
     // Row 2 — blank spacer
     for (let c = 0; c < totalCols; c++) ws[addr(c, 2)] = { v: '', s: { fill: { fgColor: { rgb: 'FFFFFF' } } } };
 
-    // Row 3 — Headers
-    metaCols.forEach((h, c) => { ws[addr(c, 3)] = { v: h, s: S.headerMeta }; });
-    cols.forEach((q, i) => { ws[addr(metaCols.length + i, 3)] = { v: q.label, s: S.headerQ }; });
+    // Rows 3 + 4 — Two-row header:
+    //   Row 3: meta labels | question labels (grid questions span their sub-cols)
+    //   Row 4: blank for meta/simple | sub-column labels for grid questions
+    // Meta cols span rows 3-4 (merged vertically)
+    metaCols.forEach((h, c) => {
+      ws[addr(c, 3)] = { v: h, s: S.headerMeta };
+      ws[addr(c, 4)] = { v: '', s: S.headerMeta };
+    });
 
-    // Rows 4+ — Data
+    // Build a set of columns that are part of a grid (for row-3 skipping)
+    const gridColSet = new Set<number>();
+    for (const gm of gridMerges) {
+      for (let c = gm.startCol; c <= gm.endCol; c++) gridColSet.add(c);
+    }
+
+    // Row 3: question labels; row 4: sub-col labels
+    flatCols.forEach((fc, i) => {
+      const absCol = metaCols.length + i;
+      if (fc.kind === 'grid') {
+        // Row 3: question label — written only at the first sub-col of each grid group (handled via gridMerges below)
+        ws[addr(absCol, 3)] = { v: '', s: S.headerGridGroup };
+        // Row 4: sub-column label
+        ws[addr(absCol, 4)] = { v: fc.gc.label, s: S.headerGridCol };
+      } else {
+        // Simple question: label in row 3, blank in row 4 (will merge rows 3-4)
+        const ctx = [sectionCtx[fc.q.id], groupCtx[fc.q.id]].filter(Boolean).join(' › ');
+        ws[addr(absCol, 3)] = { v: ctx ? `${ctx}\n${fc.q.label}` : fc.q.label, s: S.headerQ };
+        ws[addr(absCol, 4)] = { v: '', s: S.headerQ };
+      }
+    });
+    // Write grid question labels at their start columns
+    for (const gm of gridMerges) {
+      ws[addr(gm.startCol, 3)] = { v: gm.label, s: S.headerGridGroup };
+    }
+
+    // Rows 5+ — Data
     const submitted = responses.filter(r => r.submitted_at != null);
     submitted.forEach((r, rowIdx) => {
-      const ra = (ans ?? []).filter(a => a.response_id === r.id);
+      const ra = ans.filter(a => a.response_id === r.id);
       const profile = r.respondent_id ? profileMap[r.respondent_id] : null;
       const role = profile?.role ?? '';
       const managerName = profile?.reports_to ? (managerMap[profile.reports_to] ?? '') : '';
@@ -1333,7 +1424,7 @@ export default function SurveyDetail() {
       } catch { /* leave blank */ }
 
       const rowStyle = rowIdx % 2 === 0 ? S.rowEven : S.rowOdd;
-      const excelRow = 4 + rowIdx;
+      const excelRow = 5 + rowIdx;
 
       const metaValues = [
         rowIdx + 1,
@@ -1353,9 +1444,9 @@ export default function SurveyDetail() {
         };
       });
 
-      cols.forEach((q, i) => {
+      flatCols.forEach((fc, i) => {
         ws[addr(metaCols.length + i, excelRow)] = {
-          v: getAnswerText(q, ra),
+          v: getCellValue(fc, ra),
           s: rowStyle,
         };
       });
@@ -1364,23 +1455,39 @@ export default function SurveyDetail() {
     // Sheet range
     ws['!ref'] = XLSXStyle.utils.encode_range({
       s: { c: 0, r: 0 },
-      e: { c: totalCols - 1, r: 4 + submitted.length - 1 },
+      e: { c: totalCols - 1, r: 5 + submitted.length - 1 },
     });
 
-    // Merges: title row and meta row span full width
-    ws['!merges'] = [
+    // Merges: banner rows + header rows
+    const merges: Array<{ s: { c: number; r: number }; e: { c: number; r: number } }> = [
+      // Title / meta / spacer span full width
       { s: { c: 0, r: 0 }, e: { c: totalCols - 1, r: 0 } },
       { s: { c: 0, r: 1 }, e: { c: totalCols - 1, r: 1 } },
       { s: { c: 0, r: 2 }, e: { c: totalCols - 1, r: 2 } },
+      // Meta cols: merge rows 3-4 vertically
+      ...metaCols.map((_, c) => ({ s: { c, r: 3 }, e: { c, r: 4 } })),
     ];
+    // Simple question cols: merge rows 3-4 vertically
+    flatCols.forEach((fc, i) => {
+      if (fc.kind === 'q') {
+        const absCol = metaCols.length + i;
+        merges.push({ s: { c: absCol, r: 3 }, e: { c: absCol, r: 4 } });
+      }
+    });
+    // Grid question label: merge horizontally across sub-cols in row 3
+    for (const gm of gridMerges) {
+      merges.push({ s: { c: gm.startCol, r: 3 }, e: { c: gm.endCol, r: 3 } });
+    }
+    ws['!merges'] = merges;
 
     // Row heights
     ws['!rows'] = [
       { hpt: 32 },  // title
       { hpt: 18 },  // meta
       { hpt: 8 },   // spacer
-      { hpt: 40 },  // header
-      ...Array(submitted.length).fill({ hpt: 20 }),
+      { hpt: 40 },  // header row 1 (question labels)
+      { hpt: 28 },  // header row 2 (grid sub-column labels)
+      ...Array(submitted.length).fill({ hpt: 22 }),
     ];
 
     // Column widths
@@ -1393,12 +1500,16 @@ export default function SurveyDetail() {
       { wch: 22 },  // role
       { wch: 24 },  // direct manager
       { wch: 14 },  // review status
-      ...cols.map(q => ({ wch: Math.min(Math.max(q.label.length + 4, 18), 45) })),
+      ...flatCols.map(fc =>
+        fc.kind === 'grid'
+          ? { wch: Math.min(Math.max(fc.gc.label.length + 4, 14), 30) }
+          : { wch: Math.min(Math.max(fc.q.label.length + 4, 18), 45) }
+      ),
     ];
     ws['!cols'] = colWidths;
 
-    // Freeze top 4 rows + first column
-    ws['!freeze'] = { xSplit: 1, ySplit: 4, topLeftCell: 'B5', activeCell: 'B5' };
+    // Freeze top 5 rows + first column
+    ws['!freeze'] = { xSplit: 1, ySplit: 5, topLeftCell: 'B6', activeCell: 'B6' };
 
     const wb = XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb, ws, 'Responses');
