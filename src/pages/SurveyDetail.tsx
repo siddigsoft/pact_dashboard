@@ -1141,29 +1141,54 @@ export default function SurveyDetail() {
     if (!responses.length) return;
     const rIds = responses.map(r => r.id);
     const ans = await fetchAllAnswersForResponses(rIds);
-    const cols = questions.filter(q => !['section_header','begin_group'].includes(q.type));
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const header = ['Respondent Name','Respondent Email','Submitted At',...cols.map(q => esc(q.label))].join(',');
+
+    // Build flat CSV columns — grid_table expanded into sub-columns
+    type CsvCol =
+      | { kind: 'q'; q: Question }
+      | { kind: 'grid'; q: Question; gc: { id: string; label: string } };
+    const csvCols: CsvCol[] = [];
+    for (const q of questions) {
+      if (['section_header', 'begin_group'].includes(q.type)) continue;
+      if (q.type === 'grid_table') {
+        const gridCols = (q.settings?.grid_columns as Array<{ id: string; label: string }> | undefined) ?? [];
+        if (gridCols.length > 0) {
+          for (const gc of gridCols) csvCols.push({ kind: 'grid', q, gc });
+        } else {
+          csvCols.push({ kind: 'q', q });
+        }
+      } else {
+        csvCols.push({ kind: 'q', q });
+      }
+    }
+
+    const colHeader = (cc: CsvCol) =>
+      cc.kind === 'grid' ? esc(`${cc.q.label} > ${cc.gc.label}`) : esc(cc.q.label);
+
+    const colValue = (cc: CsvCol, ra: Answer[]): string => {
+      const a = ra.find(x => x.question_id === cc.q.id);
+      if (!a) return '""';
+      if (cc.kind === 'grid') {
+        const rows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
+        if (!rows) return '""';
+        return esc(rows.map(row => row[cc.gc.id] ?? '').filter(v => v !== '').join(' | '));
+      }
+      const q = cc.q;
+      if (q.type === 'likert') {
+        const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
+        if (!val) return '""';
+        return esc(Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | '));
+      }
+      if (Array.isArray(a.answer_json)) return esc((a.answer_json as string[]).join('; '));
+      if (a.answer_text) return esc(a.answer_text);
+      if (a.answer_json !== null && a.answer_json !== undefined) return esc(String(a.answer_json));
+      return '""';
+    };
+
+    const header = ['Respondent Name', 'Respondent Email', 'Submitted At', ...csvCols.map(colHeader)].join(',');
     const rows = responses.map(r => {
-      const ra = (ans ?? []).filter(a => a.response_id === r.id);
-      const cells = cols.map(q => {
-        const a = ra.find(x => x.question_id === q.id);
-        if (!a) return '""';
-        if (q.type === 'grid_table') {
-          const gridRows = (() => { try { const p = typeof a.answer_json === 'string' ? JSON.parse(a.answer_json) : a.answer_json; return Array.isArray(p) ? p as Array<Record<string, string>> : null; } catch { return null; } })();
-          if (!gridRows) return '""';
-          return esc(gridRows.map((row, i) => `R${i + 1}: ${Object.values(row).join(' | ')}`).join('; '));
-        }
-        if (q.type === 'likert') {
-          const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
-          if (!val) return '""';
-          return esc(Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | '));
-        }
-        if (Array.isArray(a.answer_json)) return esc((a.answer_json as string[]).join('; '));
-        if (a.answer_text) return esc(a.answer_text);
-        if (a.answer_json !== null && a.answer_json !== undefined) return esc(String(a.answer_json));
-        return '""';
-      });
+      const ra = ans.filter(a => a.response_id === r.id);
+      const cells = csvCols.map(cc => colValue(cc, ra));
       return [esc(r.respondent_name ?? ''), esc(r.respondent_email ?? ''), esc(format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm:ss')), ...cells].join(',');
     });
     const csv = [header, ...rows].join('\n');
