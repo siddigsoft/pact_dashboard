@@ -1102,6 +1102,31 @@ export default function SurveyDetail() {
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
+  // Fetch ALL answers for a set of response IDs — batched to avoid URL-length
+  // limits and paginated within each batch to bypass Supabase's 1000-row cap.
+  const fetchAllAnswersForResponses = async (rIds: string[]): Promise<Answer[]> => {
+    if (!rIds.length) return [];
+    const BATCH = 50;
+    const PAGE = 1000;
+    let all: Answer[] = [];
+    for (let bi = 0; bi < rIds.length; bi += BATCH) {
+      const slice = rIds.slice(bi, bi + BATCH);
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('survey_answers')
+          .select('*')
+          .in('response_id', slice)
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = [...all, ...(data ?? [])];
+        if ((data ?? []).length < PAGE) break;
+        from += PAGE;
+      }
+    }
+    return all;
+  };
+
   const copyFillLink = () => {
     const slug = survey?.short_code ?? survey?.id ?? id;
     const url = `${window.location.origin}/s/${slug}`;
@@ -1115,7 +1140,7 @@ export default function SurveyDetail() {
   const exportCSV = async () => {
     if (!responses.length) return;
     const rIds = responses.map(r => r.id);
-    const { data: ans } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
+    const ans = await fetchAllAnswersForResponses(rIds);
     const cols = questions.filter(q => !['section_header','begin_group'].includes(q.type));
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const header = ['Respondent Name','Respondent Email','Submitted At',...cols.map(q => esc(q.label))].join(',');
@@ -1152,9 +1177,9 @@ export default function SurveyDetail() {
   const exportExcel = async () => {
     if (!responses.length) return;
 
-    // ── 1. Fetch answers ────────────────────────────────────────────────
+    // ── 1. Fetch answers (paginated — avoids the 1000-row Supabase cap) ──
     const rIds = responses.map(r => r.id);
-    const { data: ans } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
+    const ans = await fetchAllAnswersForResponses(rIds);
 
     // ── 2. Fetch profiles for respondents (role + direct manager) ───────
     const responderIds = [...new Set(responses.map(r => r.respondent_id).filter(Boolean) as string[])];
