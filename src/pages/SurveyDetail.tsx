@@ -560,14 +560,32 @@ export default function SurveyDetail() {
   });
 
   const { data: allAnswers = [], isLoading: allAnswersLoading } = useQuery<Answer[]>({
-    queryKey: ['survey-answers', id, responses.map(r => r.id)],
+    queryKey: ['survey-answers', id],
     enabled: !!id && tab !== 'builder' && responses.length > 0,
     queryFn: async () => {
       const rIds = responses.map(r => r.id);
       if (!rIds.length) return [];
-      const { data, error } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
-      if (error) throw error;
-      return (data ?? []) as Answer[];
+      // Fetch in batches of 50 response IDs to stay under URL-length limits,
+      // then paginate within each batch to bypass the 1000-row Supabase default.
+      const BATCH = 50;
+      const PAGE = 1000;
+      let all: Answer[] = [];
+      for (let bi = 0; bi < rIds.length; bi += BATCH) {
+        const slice = rIds.slice(bi, bi + BATCH);
+        let from = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from('survey_answers')
+            .select('*')
+            .in('response_id', slice)
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          all = [...all, ...(data ?? [])];
+          if ((data ?? []).length < PAGE) break;
+          from += PAGE;
+        }
+      }
+      return all;
     },
   });
 
@@ -7205,7 +7223,7 @@ function QuestionCard({
 
 // ── SubmissionDialog ──────────────────────────────────────────────────────────
 function SubmissionDialog({
-  response, questions, answers, canManage, onDelete, onClose,
+  response, questions, answers: propAnswers, canManage, onDelete, onClose,
 }: {
   response: Response;
   questions: Question[];
@@ -7215,6 +7233,26 @@ function SubmissionDialog({
   onClose: () => void;
 }) {
   const displayName = response.respondent_name ?? response.respondent_email ?? 'Anonymous';
+
+  // Always fetch answers for this specific response directly — the parent's
+  // bulk allAnswers query can be silently truncated at 1000 rows when a survey
+  // has many responses, causing some question answers to appear as "No answer".
+  const { data: fetchedAnswers, isLoading: answersLoading } = useQuery<Answer[]>({
+    queryKey: ['submission-answers', response.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('survey_answers')
+        .select('*')
+        .eq('response_id', response.id);
+      if (error) throw error;
+      return (data ?? []) as Answer[];
+    },
+    initialData: propAnswers.length > 0 ? propAnswers : undefined,
+    staleTime: 30_000,
+  });
+
+  const answers = fetchedAnswers ?? propAnswers;
+
   const imageAnswers = answers.filter(a => {
     const q = questions.find(q => q.id === a.question_id);
     return q?.type === 'image' && a.answer_json;
@@ -7320,6 +7358,12 @@ function SubmissionDialog({
           {/* Q&A list */}
           <div className="space-y-3">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Answers</p>
+            {answersLoading && answers.length === 0 && (
+              <div className="flex items-center gap-2 py-4 text-slate-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading answers…
+              </div>
+            )}
             {questions.map((q, qi) => {
               const ans = answers.find(a => a.question_id === q.id);
               let displayValue: React.ReactNode;
