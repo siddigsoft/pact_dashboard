@@ -38,6 +38,7 @@ import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
 import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
+import { approveCycleClose } from '@/services/cycleCloseService';
 
 import { useWallet } from '@/context/wallet/WalletContext';
 import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
@@ -2541,21 +2542,23 @@ const MMP = () => {
   const handleMmpBannerApprove = useCallback(async (mmpId: string) => {
     setMmpBannerApproving(mmpId);
     try {
-      const userId = currentUser?.id;
-      const { error } = await supabase.rpc('cycle_approve_close', { p_mmp_id: mmpId, p_approved_by: userId });
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      const { error } = await approveCycleClose({
+        mmpId,
+        mmp: mmp as any,
+        userId: currentUser?.id || '',
+        userName: currentUser?.fullName,
+      });
       if (error) throw error;
       setPendingApprovalMmps(prev => prev.filter(m => m.id !== mmpId));
+      await refreshMMPFiles();
       toast({ title: 'Cycle Approved & Closed', description: 'The MMP cycle has been approved and closed.' });
     } catch (err: any) {
-      await supabase.from('mmp_files')
-        .update({ cycle_status: 'closed', cycle_closed_at: new Date().toISOString(), cycle_closed_by: currentUser?.id } as any)
-        .eq('id', mmpId);
-      setPendingApprovalMmps(prev => prev.filter(m => m.id !== mmpId));
-      toast({ title: 'Cycle Approved & Closed', description: 'The MMP cycle has been approved and closed.' });
+      toast({ title: 'Approval Failed', description: err?.message || 'Failed to approve cycle close', variant: 'destructive' });
     } finally {
       setMmpBannerApproving(null);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, mmpFiles, refreshMMPFiles, toast]);
 
   const handleMmpBannerReject = useCallback(async (mmpId: string, note: string) => {
     try {

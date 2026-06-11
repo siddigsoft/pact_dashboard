@@ -53,6 +53,8 @@ import { logPaymentEvent } from '@/services/paymentEventLogger';
 import { dispatchNotification } from '@/lib/notify';
 import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
 import { getLatestExchangeRate } from '@/utils/exchange-rate-service';
+import { checkFinanceReadinessForClose, canSubmitForApproval, mmpCostSubmissionOrFilter } from '@/utils/cycleCloseGates';
+import { approveCycleClose } from '@/services/cycleCloseService';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
@@ -348,7 +350,7 @@ const MMPCycleClose = () => {
       const { data: costRows } = await supabase
         .from('operational_cost_submissions')
         .select('expense_category, amount_cents, currency, tier1_status, tier2_status')
-        .eq('mmp_id', mmpId);
+        .or(mmpCostSubmissionOrFilter(mmpId));
       const catMap: Record<string, { count: number; approvedCents: number; pendingCents: number; currency: string }> = {};
       (costRows || []).forEach((r: any) => {
         const cat = r.expense_category || 'Other';
@@ -990,6 +992,18 @@ const MMPCycleClose = () => {
 
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
 
+  const submitEligibility = useMemo(() => {
+    const unreasoned = checklistMmpId
+      ? uncoveredSites.filter(s => s.mmp_id === checklistMmpId && !s.not_covered_reason).length
+      : 0;
+    return canSubmitForApproval({
+      allReadinessPassed: cycleReadiness.allPassed,
+      feesLockedAt,
+      paymentsConfirmedAt,
+      unreasonedSiteCount: unreasoned,
+    });
+  }, [checklistMmpId, uncoveredSites, cycleReadiness.allPassed, feesLockedAt, paymentsConfirmedAt]);
+
   // Build correct update payload mirroring CostSubmission.tsx approval logic
   const buildCostApproveUpdate = (cost: FinanceCost, userId: string): Record<string, string | null> => {
     const now = new Date().toISOString();
@@ -1079,10 +1093,10 @@ const MMPCycleClose = () => {
     if (!selectedMmpId || selectedMmpId === 'all') return;
     setFinanceLoading(true);
     try {
-      const { data: costs } = await supabase
+        const { data: costs } = await supabase
         .from('operational_cost_submissions')
         .select('id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status')
-        .eq('mmp_id', selectedMmpId)
+        .or(mmpCostSubmissionOrFilter(selectedMmpId))
         .or('tier1_status.eq.pending,tier2_status.eq.pending,tier3_status.eq.pending');
       setFinanceCosts((costs as FinanceCost[]) || []);
     } finally { setFinanceLoading(false); }
@@ -1100,7 +1114,7 @@ const MMPCycleClose = () => {
         const { data: costs } = await supabase
           .from('operational_cost_submissions')
           .select('id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status')
-          .eq('mmp_id', selectedMmpId)
+          .or(mmpCostSubmissionOrFilter(selectedMmpId))
           .or('tier1_status.eq.pending,tier2_status.eq.pending,tier3_status.eq.pending');
         setFinanceCosts((costs as FinanceCost[]) || []);
 
@@ -2606,92 +2620,6 @@ const MMPCycleClose = () => {
     }
   };
 
-  const checkFinanceReadinessForClose = async (mmpId: string): Promise<{ ok: boolean; issues: string[]; pendingViaReport: number }> => {
-    let siteEntryIds: string[] = [];
-    let advancesRes, withdrawalsRes, costSubsRes;
-    try {
-      // Step 1: fetch all site entry IDs for this MMP so advances are scoped
-      // via mmp_site_entry_id — the same join used by the readiness checklist hook.
-      // This prevents the count mismatch that occurs when advances carry mmp_id but
-      // the hook sources them through site entries.
-      const { data: entries, error: entriesErr } = await supabase
-        .from('mmp_site_entries')
-        .select('id')
-        .eq('mmp_file_id', mmpId);
-      if (!entriesErr && entries) {
-        siteEntryIds = entries.map((e: any) => e.id);
-      }
-
-      // Step 2: fetch advances, withdrawals, and cost submissions in parallel.
-      // Cost submissions filter by mmp_id FK directly — avoids counting
-      // submissions from other MMPs in the same calendar month.
-      const costSubsQuery = supabase
-        .from('operational_cost_submissions')
-        .select('id, tier1_status, tier2_status')
-        .eq('mmp_id', mmpId)
-        .or('tier1_status.eq.pending,tier2_status.eq.pending');
-
-      const advancesQuery = siteEntryIds.length > 0
-        ? supabase.from('down_payment_requests').select('id, status, metadata').in('mmp_site_entry_id', siteEntryIds)
-        : supabase.from('down_payment_requests').select('id, status, metadata').eq('mmp_id', mmpId);
-
-      [advancesRes, withdrawalsRes, costSubsRes] = await Promise.all([
-        advancesQuery,
-        supabase.from('withdrawal_requests').select('id, status').eq('mmp_id', mmpId),
-        costSubsQuery,
-      ]);
-    } catch {
-      toast({
-        title: 'Finance Gate — Close Blocked',
-        description: 'Unable to verify finance readiness. Please retry or contact support.',
-        variant: 'destructive',
-      });
-      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'], pendingViaReport: 0 };
-    }
-
-    // Cost submissions error is blocking (required table).
-    if (costSubsRes.error) {
-      toast({
-        title: 'Finance Gate — Close Blocked',
-        description: 'Unable to verify cost submission readiness. Please retry or contact support.',
-        variant: 'destructive',
-      });
-      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'], pendingViaReport: 0 };
-    }
-
-    // Advances gate logic (matches server RPC gate 2 after Fix 3 SQL):
-    //   - fully_paid / paid / reconciled → cleared
-    //   - partially_paid + unreconciled → BLOCKING
-    //   - approved (zero disbursement) → "pending payment via report" — NOT blocking but counted
-    const advances = (!advancesRes.error && advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
-    const unreconciledAdvances = advances.filter(a => {
-      const meta = a.metadata ?? {};
-      const isCleared = a.status === 'fully_paid' || a.status === 'paid' || meta['reconciled'] === true || Boolean(meta['reconciled_at']);
-      return a.status === 'partially_paid' && !isCleared;
-    }).length;
-
-    const pendingViaReport = advances.filter(a => {
-      const meta = a.metadata ?? {};
-      const isCleared = a.status === 'fully_paid' || a.status === 'paid' || meta['reconciled'] === true || Boolean(meta['reconciled_at']);
-      return a.status === 'approved' && !isCleared;
-    }).length;
-
-    // Withdrawals: treat query error as empty
-    const pendingWithdrawals = ((!withdrawalsRes.error && withdrawalsRes.data || []) as Array<{ id: string; status: string }>).filter(
-      w => !['approved', 'rejected', 'completed', 'paid'].includes(w.status ?? ''),
-    ).length;
-
-    const pendingCostSubs = (costSubsRes.data || []).length;
-
-    const issues: string[] = [];
-    if (unreconciledAdvances > 0) issues.push(`${unreconciledAdvances} partially-paid transport advance(s) not yet reconciled`);
-    if (pendingWithdrawals > 0) issues.push(`${pendingWithdrawals} pending withdrawal request(s)`);
-    if (pendingCostSubs > 0) issues.push(`${pendingCostSubs} pending cost submission(s) (tier 1 or tier 2 pending)`);
-
-    return { ok: issues.length === 0, issues, pendingViaReport };
-  };
-
-
   const exportCycleSummaryExcel = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
     const XLSX = await import('xlsx');
@@ -2975,8 +2903,18 @@ const MMPCycleClose = () => {
   const handleFinalizeCycleClose = async (mmpId: string) => {
     if (!canManageCycle) return;
     const unreasoned = uncoveredSites.filter(s => s.mmp_id === mmpId && !s.not_covered_reason);
-    if (unreasoned.length > 0) {
-      toast({ title: 'Cannot Close', description: `${unreasoned.length} sites still need a reason. All uncovered sites must have reasons before closing.`, variant: 'destructive' });
+    const submitCheck = canSubmitForApproval({
+      allReadinessPassed: cycleReadiness.allPassed,
+      feesLockedAt,
+      paymentsConfirmedAt,
+      unreasonedSiteCount: unreasoned.length,
+    });
+    if (!submitCheck.ok) {
+      toast({
+        title: 'Cannot Submit',
+        description: submitCheck.blockers.join('\n'),
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -3172,73 +3110,13 @@ const MMPCycleClose = () => {
 
     try {
       const mmpData = mmpFiles?.find(m => m.id === mmpId);
-      const existingRecords: CycleCloseRecord[] = (mmpData as any)?.cycle_close_records || [];
-      const updatedRecords = existingRecords.map(r => ({
-        ...r,
-        status: 'closed' as const,
-      }));
-
-      // Build frozen financial snapshot at close time
-      let financialSnapshot: ClosedCycleFinancialSnapshot | null = null;
-      try {
-        const PAYABLE_STATUSES = ['wfp_confirmed', 'verified', 'completed', 'approved'];
-        const [siteRes, opRes] = await Promise.all([
-          supabase.from('mmp_site_entries')
-            .select('enumerator_fee, transport_fee, status')
-            .eq('mmp_file_id', mmpId),
-          supabase.from('operational_cost_submissions')
-            .select('amount_cents, currency')
-            .eq('mmp_file_id', mmpId)
-            .eq('status', 'approved'),
-        ]);
-        const payable = (siteRes.data || []).filter((e: any) => PAYABLE_STATUSES.includes(e.status));
-        const enumeratorFees = payable.reduce((s: number, e: any) => s + (e.enumerator_fee ?? 0), 0);
-        const transportFees = payable.reduce((s: number, e: any) => s + (e.transport_fee ?? 0), 0);
-        const opCosts = (opRes.data || []).reduce((s: number, c: any) => s + ((c.amount_cents ?? 0) / 100), 0);
-        const currency = (opRes.data?.[0] as any)?.currency || 'SDG';
-        // Outstanding advances: get site entry ids then query down_payment_requests
-        const siteIds = (siteRes.data || []).map((e: any) => e.id).filter(Boolean);
-        let advancesRecovered = 0;
-        if (siteIds.length > 0) {
-          const { data: advData } = await supabase
-            .from('down_payment_requests')
-            .select('remaining_amount, requested_amount, total_paid_amount')
-            .in('mmp_site_entry_id', siteIds)
-            .in('status', ['partially_paid', 'approved', 'pending_payment']);
-          advancesRecovered = (advData || []).reduce((s: number, a: any) => {
-            const rem = a.remaining_amount ?? Math.max(0, (a.requested_amount ?? 0) - (a.total_paid_amount ?? 0));
-            return s + Math.max(0, rem);
-          }, 0);
-        }
-        financialSnapshot = { enumeratorFees, transportFees, opCosts, advancesRecovered, currency, payableSiteCount: payable.length };
-      } catch (snapErr) {
-        console.warn('Could not build financial snapshot at close time', snapErr);
-      }
-
-      const now = new Date().toISOString();
-      const mmpSnap = mmpFiles?.find(m => m.id === mmpId);
-      const snapshotRecord = {
-        id: `snapshot-${now}`,
-        scope: 'full',
-        status: 'closed' as const,
-        closedAt: now,
-        closedBy: currentUser?.id,
-        closedByName: currentUser?.fullName,
-        hubOrRegion: mmpSnap?.hub || mmpSnap?.region || null,
-        month: mmpSnap?.month ?? null,
-        name: mmpSnap?.name ?? null,
-        financialSnapshot,
-      };
-      const finalRecords = [
-        ...updatedRecords,
-        snapshotRecord,
-      ];
-
-      const { error } = await supabase.rpc('cycle_approve_close', {
-        p_mmp_id: mmpId,
-        p_close_records: JSON.parse(JSON.stringify(finalRecords)),
-        p_super_admin_override: skipFinanceCheck && !!overrideJustification,
-        p_override_justification: overrideJustification || null,
+      const { error } = await approveCycleClose({
+        mmpId,
+        mmp: mmpData as any,
+        userId: currentUser?.id || '',
+        userName: currentUser?.fullName,
+        skipFinanceCheck,
+        overrideJustification,
       });
 
       if (error) throw error;
@@ -5161,7 +5039,7 @@ const MMPCycleClose = () => {
                                       )}
 
                                       {/* Submit button for step 7 */}
-                                      {step.id === 'submit' && cycleReadiness.allPassed && !cycleReadiness.loading && (
+                                      {step.id === 'submit' && submitEligibility.ok && !cycleReadiness.loading && (
                                         <div className="mt-3 space-y-3">
                                           {/* Pre-submit payment summary */}
                                           {cycleSummaryData && (() => {
@@ -5382,7 +5260,8 @@ const MMPCycleClose = () => {
                                             size="sm"
                                             className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
                                             onClick={() => handleFinalizeCycleClose(checklistMmpId!)}
-                                            disabled={finalizingCycle || !reconciliationAcknowledged}
+                                            disabled={finalizingCycle || !reconciliationAcknowledged || !submitEligibility.ok}
+                                            title={!submitEligibility.ok ? submitEligibility.blockers.join('; ') : undefined}
                                             data-testid="button-proceed-close-cycle-guide"
                                           >
                                             {finalizingCycle
@@ -5392,6 +5271,9 @@ const MMPCycleClose = () => {
                                                 : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
                                             }
                                           </Button>
+                                          {!submitEligibility.ok && submitEligibility.blockers.length > 0 && (
+                                            <p className="text-xs text-destructive">{submitEligibility.blockers.join(' · ')}</p>
+                                          )}
                                         </div>
                                       )}
                                     </div>

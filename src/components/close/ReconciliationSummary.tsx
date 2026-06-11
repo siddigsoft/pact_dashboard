@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { mmpCostSubmissionOrFilter } from '@/utils/cycleCloseGates';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -47,7 +48,7 @@ export function ReconciliationSummary({
           // Filter directly by mmp_id FK — this is the correct scope.
           // A date-range filter would pick up cost submissions from other
           // MMPs that share the same calendar month, inflating the numbers.
-          query = query.eq('mmp_id', mmpId);
+          query = query.or(mmpCostSubmissionOrFilter(mmpId));
           resolvedScopeLabel = mmpContextLabel ? `(cycle: ${mmpContextLabel})` : '(this cycle)';
         }
 

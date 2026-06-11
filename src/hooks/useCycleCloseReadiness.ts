@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  isSiteResolved,
+  isAdvanceCleared,
+  parseMmpMonthYear,
+  mmpCostSubmissionOrFilter,
+} from '@/utils/cycleCloseGates';
 
 export interface CycleChecklistItem {
   id: string;
@@ -52,30 +58,24 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
     setLoading(true);
     setError(null);
     try {
-      // ── Phase 1: Fetch MMP metadata + site entries + cost submissions in parallel
       const mmpRes = await supabase
         .from('mmp_files')
-        .select('id, name, month, year')
+        .select('id, name, month')
         .eq('id', mmpId)
         .single();
 
-      const mmpRow = mmpRes.data as { id: string; name: string | null; month: number | null; year: number | null } | null;
+      const mmpRow = mmpRes.data as { id: string; name: string | null; month: string | number | null } | null;
       const mmpName = mmpRow?.name ?? '';
-      const month = mmpRow?.month ?? null;
-      const year = mmpRow?.year ?? null;
-      setCycleMonth(month);
-      setCycleYear(year);
+      const parsed = parseMmpMonthYear(mmpRow?.month ?? null);
+      setCycleMonth(parsed.month);
+      setCycleYear(parsed.year);
 
-      // Filter cost submissions by mmp_id FK directly.
-      // Using a date-range filter picks up submissions from other MMPs that
-      // share the same calendar month — giving inflated totals.
       const costSubsQuery = supabase
         .from('operational_cost_submissions')
         .select('id, tier1_status, tier2_status, description, amount_cents, currency, expense_category, vendor, expense_date')
-        .eq('mmp_id', mmpId)
+        .or(mmpCostSubmissionOrFilter(mmpId))
         .or('tier1_status.eq.pending,tier2_status.eq.pending');
 
-      // Fetch site entries (paginated) and cost submissions in parallel
       const [siteVisits, costSubsRes] = await Promise.all([
         fetchAllSiteEntries(mmpId),
         costSubsQuery,
@@ -85,8 +85,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
 
       const siteEntryIds = siteVisits.map(s => s.id);
 
-      // ── Phase 2: Fetch advances, withdrawals, cost recovery, WFP — all parallel
-      // Transport advances: filter via mmp_site_entry_id (the actual FK on down_payment_requests)
       const advancesPromise = siteEntryIds.length > 0
         ? (async () => {
             const PAGE = 1000;
@@ -122,7 +120,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         supabase.from('cost_recovery_log').select('site_entry_id').eq('mmp_id', mmpId),
       ]);
 
-      // ── WFP confirmation gate
       let wfpApplied = false;
       let wfpError = false;
       const submittedCount = submittedRes.count ?? 0;
@@ -134,7 +131,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         wfpApplied = (wfpRes.data || []).length > 0;
       }
 
-      // ── Cost recovery gate
       let costRecoveryPending = 0;
       let costRecoveryError = false;
       if (advNotCoveredRes.error || recoveryLogRes.error) {
@@ -157,31 +153,14 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         ).length;
       }
 
-      // ── Resolved sites gate
       const totalSites = siteVisits.length;
-      const RESOLVED_STATUSES = new Set([
-        'submitted',
-        'wfp_confirmed',
-        'rejected',
-        'not_covered',
-        'approved',
-        'cancelled',
-        'completed',
-        'verified',
-      ]);
-      const resolvedSites = siteVisits.filter(
-        s =>
-          RESOLVED_STATUSES.has((s.status ?? '').toLowerCase().trim()) ||
-          s.not_covered_flag === true ||
-          Boolean(s.not_covered_reason),
-      ).length;
+      const resolvedSites = siteVisits.filter(s => isSiteResolved(s)).length;
       const completedSites = siteVisits.filter(s => {
         const st = (s.status ?? '').toLowerCase().trim();
-        return st === 'completed' || st === 'wfp_confirmed';
+        return st === 'completed' || st === 'submitted' || st === 'wfp_confirmed';
       }).length;
       const unresolvedSites = totalSites - resolvedSites;
 
-      // ── Cost submissions gate
       type PendingCostSub = {
         id: string;
         tier1_status: string | null;
@@ -196,43 +175,22 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       const pendingCostSubRows = (costSubsRes.data || []) as PendingCostSub[];
       const pendingCostSubs = pendingCostSubRows.length;
 
-      // ── Transport advances gate
       const advancesError = Boolean(advancesRes.error);
       const advances = advancesError
         ? []
         : (advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
       const totalAdvances = advances.length;
 
-      // Advances split into three buckets:
-      // 1. Cleared   — fully_paid / paid, OR explicitly reconciled via metadata
-      // 2. Via report — approved but zero disbursement yet; these will be
-      //                 settled in the "report of payments" (transport + enumerator
-      //                 fees paid together). NOT blocking — just informational.
-      // 3. Blocking  — partially_paid (some payment made, not completed) and
-      //                NOT explicitly reconciled. Must resolve before close.
-      const isCleared = (a: { status: string; metadata: Record<string, unknown> | null }) => {
-        const meta = a.metadata ?? {};
-        return (
-          a.status === 'fully_paid' ||
-          a.status === 'paid' ||
-          meta['reconciled'] === true ||
-          Boolean(meta['reconciled_at'])
-        );
-      };
-
-      // Advances pending payment via report (approved, zero disbursement)
       const pendingViaReport = advances.filter(
-        a => a.status === 'approved' && !isCleared(a),
+        a => a.status === 'approved' && !isAdvanceCleared(a),
       ).length;
 
-      // Blocking: partially paid but not reconciled
       const unreconciledAdvances = advances.filter(
-        a => a.status === 'partially_paid' && !isCleared(a),
+        a => a.status === 'partially_paid' && !isAdvanceCleared(a),
       ).length;
 
-      const clearedAdvances = advances.filter(isCleared).length;
+      const clearedAdvances = advances.filter(isAdvanceCleared).length;
 
-      // ── Withdrawal requests gate
       const withdrawalsError = Boolean(withdrawalsRes.error);
       const withdrawals = withdrawalsError
         ? []
@@ -243,12 +201,10 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       ).length;
 
       const cycleLabel =
-        year !== null && month !== null
-          ? ` for ${new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`
+        parsed.year !== null && parsed.month !== null
+          ? ` for ${new Date(parsed.year, parsed.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`
           : '';
 
-      // Build a human-readable list of pending cost submissions so the user
-      // can see exactly which one(s) are blocking close.
       const costSubsDescription = (() => {
         if (pendingCostSubs === 0) {
           return 'All cost submissions (tier 1 & tier 2) for this cycle are approved or rejected.';
@@ -271,7 +227,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           id: 'site_visits',
           label: 'All site visits resolved',
           description: unresolvedSites > 0
-            ? `${unresolvedSites} site${unresolvedSites !== 1 ? 's' : ''} still pending — each must be visited (submitted/approved) or officially marked as Not Covered before closing. Go to Uncovered Sites tab to act on them.`
+            ? `${unresolvedSites} site${unresolvedSites !== 1 ? 's' : ''} still pending — each must be visited (submitted/approved) or officially marked as Not Covered with a reason before closing.`
             : `All sites are resolved. ${completedSites} visit${completedSites !== 1 ? 's' : ''} completed; remaining sites are approved, confirmed, or officially marked as not covered.`,
           passed: unresolvedSites === 0,
           count: completedSites,
@@ -300,8 +256,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
             ? 'No transport advances recorded for this cycle.'
             : `All ${totalAdvances} advance${totalAdvances !== 1 ? 's' : ''} fully cleared.`,
           passed: !advancesError && unreconciledAdvances === 0,
-          // count = cleared + via-report so the fraction reads as "all on track"
-          // rather than showing only the fully-cleared subset.
           count: clearedAdvances + pendingViaReport,
           total: totalAdvances,
           link: `/down-payment-approval?mmpName=${encodeURIComponent(mmpName)}`,
@@ -313,7 +267,9 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           label: 'All withdrawal requests processed',
           description: withdrawalsError
             ? 'Could not check withdrawal request status — please retry. Do not close the cycle until this is confirmed.'
-            : 'All withdrawal requests must be approved, rejected, or completed.',
+            : totalWithdrawals === 0
+            ? 'No withdrawal requests tagged to this MMP.'
+            : 'All withdrawal requests tagged to this MMP must be approved, rejected, or completed.',
           passed: !withdrawalsError && pendingWithdrawals === 0,
           count: totalWithdrawals - pendingWithdrawals,
           total: totalWithdrawals,

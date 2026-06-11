@@ -752,53 +752,14 @@ export function CycleMMPCard({
               {cycleStatus === 'closing' && (
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2 items-center">
-                    {canManageCycle && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" disabled={finalizingCycle || progress < 100} data-testid={`button-finalize-${mmp.id}`}>
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize Close
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Finalize Cycle Close</AlertDialogTitle>
-                            <AlertDialogDescription asChild>
-                              <div className="space-y-3">
-                                <p>You are about to close this MMP cycle. Here is a summary:</p>
-                                <div className="grid grid-cols-2 gap-2 text-sm bg-muted rounded-lg p-3">
-                                  <div>Total Uncovered Sites:</div>
-                                  <div className="font-semibold" data-testid="text-summary-uncovered">{mmpUncovered.length}</div>
-                                  <div>Reasons Assigned:</div>
-                                  <div className="font-semibold text-green-600 dark:text-green-400" data-testid="text-summary-reasoned">{mmpReasoned}</div>
-                                  <div>Top Reason:</div>
-                                  <div className="font-semibold" data-testid="text-summary-top-reason">{(() => { const counts: Record<string, number> = {}; mmpUncovered.forEach(s => { if (s.not_covered_reason) counts[s.not_covered_reason] = (counts[s.not_covered_reason] || 0) + 1; }); const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0]; return top ? `${getReasonLabel(top[0])} (${top[1]})` : 'N/A'; })()}</div>
-                                  <div>Completion Rate:</div>
-                                  <div className="font-semibold text-blue-600 dark:text-blue-400" data-testid="text-summary-completion">{progress}%</div>
-                                </div>
-                                {closeRecords.length > 0 && (
-                                  <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
-                                    <div className="text-xs font-medium text-muted-foreground">Scoped Closures Recorded:</div>
-                                    {closeRecords.map(r => (
-                                      <div key={r.id} className="text-xs flex items-center gap-2">
-                                        <Badge variant="outline">{SCOPE_LABELS[r.scope]}</Badge>
-                                        <span>{r.scopeValue}</span>
-                                        <span className="text-muted-foreground">({formatDate(r.closedAt)})</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <p className="text-xs text-muted-foreground">All uncovered site visits will be cancelled and archived. This action cannot be undone.</p>
-                              </div>
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleFinalizeCycleClose(mmp.id)} data-testid="button-confirm-finalize">
-                              Close Cycle
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                    {canManageCycle && onOpenGuide && (
+                      <Button
+                        size="sm"
+                        onClick={onOpenGuide}
+                        data-testid={`button-open-close-wizard-${mmp.id}`}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Continue in Close Wizard
+                      </Button>
                     )}
 
                     <Button size="sm" variant="outline" onClick={() => { setSelectedMmpId(mmp.id); setActiveTab('uncovered'); }} data-testid={`button-view-uncovered-${mmp.id}`}>

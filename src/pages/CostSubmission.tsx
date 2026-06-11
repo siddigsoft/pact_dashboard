@@ -2915,6 +2915,7 @@ const CostSubmission = () => {
               key={editingSubmission?.id || 'new'}
               projects={projectsForForm}
               hubs={hubs}
+              defaultMmpId={cycleContextMmpId}
               editData={editingSubmission ? {
                 id: editingSubmission.id,
                 expense_category: editingSubmission.expense_category,

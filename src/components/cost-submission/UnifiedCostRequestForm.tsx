@@ -118,6 +118,8 @@ interface UnifiedCostRequestFormProps {
   onSuccess?: () => void;
   editData?: EditSubmissionData | null;
   onCancelEdit?: () => void;
+  /** Pre-select MMP when opened from cycle-close readiness checklist */
+  defaultMmpId?: string | null;
 }
 
 type ItemErrors = Record<string, Record<string, string>>;
@@ -145,6 +147,7 @@ export default function UnifiedCostRequestForm({
   onSuccess,
   editData,
   onCancelEdit,
+  defaultMmpId,
 }: UnifiedCostRequestFormProps) {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
@@ -192,9 +195,15 @@ export default function UnifiedCostRequestForm({
   const [hubId, setHubId] = useState(editData?.hub_id || currentUser?.hubId || '');
   const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
   const [requestTitle, setRequestTitle] = useState(editDefaults?.requestTitle || '');
-   const [mmpId, setMmpId] = useState(editData?.mmp_file_id || '');
+   const [mmpId, setMmpId] = useState(editData?.mmp_file_id || defaultMmpId || '');
     const [mmps, setMmps] = useState<MmpOption[]>([]);
     const [mmpsLoading, setMmpsLoading] = useState(false);
+
+    useEffect(() => {
+      if (!editData && defaultMmpId) {
+        setMmpId(defaultMmpId);
+      }
+    }, [defaultMmpId, editData]);
 
     // Skip first render for the project→MMP reset effect so that editData's
     // mmp_file_id isn't cleared immediately on mount.
@@ -472,6 +481,7 @@ export default function UnifiedCostRequestForm({
            hub_id: resolvedHubId,
            project_id: resolvedProjectId,
            mmp_file_id: mmpId || null,
+           mmp_id: mmpId || null,
            supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
            updated_at: new Date().toISOString(),
         };
@@ -547,6 +557,7 @@ export default function UnifiedCostRequestForm({
            hub_id: resolvedHubId,
            project_id: resolvedProjectId,
            mmp_file_id: resolvedMmpId,
+           mmp_id: resolvedMmpId,
            supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
            submitted_by: currentUser.id,
           submitter_role: currentUser.role || 'user',
