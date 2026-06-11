@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { PENDING_COST_TIER_FILTER } from '@/utils/operationalCostApproval';
 
 /** Terminal statuses — site is considered visited/resolved without a not-covered reason. */
 export const RESOLVED_SITE_STATUSES = new Set([
@@ -94,9 +95,9 @@ export async function checkFinanceReadinessForClose(mmpId: string): Promise<Fina
 
   const costSubsQuery = supabase
     .from('operational_cost_submissions')
-    .select('id, tier1_status, tier2_status')
+    .select('id, tier1_status, tier2_status, tier3_status, tier4_status')
     .or(mmpCostSubmissionOrFilter(mmpId))
-    .or('tier1_status.eq.pending,tier2_status.eq.pending');
+    .or(PENDING_COST_TIER_FILTER);
 
   const advancesQuery =
     siteEntryIds.length > 0
@@ -141,7 +142,7 @@ export async function checkFinanceReadinessForClose(mmpId: string): Promise<Fina
     issues.push(`${pendingWithdrawals} pending withdrawal request(s)`);
   }
   if (pendingCostSubs > 0) {
-    issues.push(`${pendingCostSubs} pending cost submission(s) (tier 1 or tier 2 pending)`);
+    issues.push(`${pendingCostSubs} pending cost submission(s) awaiting tier approval`);
   }
 
   return { ok: issues.length === 0, issues, pendingViaReport };

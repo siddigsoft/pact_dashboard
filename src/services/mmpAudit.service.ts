@@ -35,7 +35,9 @@ export type MMPAuditAction =
   | 'cost_update'
   | 'bulk_operation'
   | 'reclaim_from_coordinator'
-  | 'fee_lock';
+  | 'fee_lock'
+  | 'cycle_reopened'
+  | 'bypass';
 
 export interface MMPAuditContext {
   mmpId: string;
@@ -101,7 +103,9 @@ const ACTION_DESCRIPTIONS: Record<MMPAuditAction, string> = {
   cost_update: 'Cost information updated',
   bulk_operation: 'Bulk operation performed',
   reclaim_from_coordinator: 'Sites reclaimed from coordinator back to FOM',
-  fee_lock: 'Exchange rate applied — enumerator fees locked to SDG'
+  fee_lock: 'Exchange rate applied — enumerator fees locked to SDG',
+  cycle_reopened: 'MMP cycle re-opened from closed state',
+  bypass: 'Cycle close gate bypassed by super admin',
 };
 
 export async function logMMPAudit(context: MMPAuditContext): Promise<string | null> {

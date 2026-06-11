@@ -6,6 +6,7 @@ import {
   parseMmpMonthYear,
   mmpCostSubmissionOrFilter,
 } from '@/utils/cycleCloseGates';
+import { PENDING_COST_TIER_FILTER } from '@/utils/operationalCostApproval';
 
 export interface CycleChecklistItem {
   id: string;
@@ -72,9 +73,9 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
 
       const costSubsQuery = supabase
         .from('operational_cost_submissions')
-        .select('id, tier1_status, tier2_status, description, amount_cents, currency, expense_category, vendor, expense_date')
+        .select('id, tier1_status, tier2_status, tier3_status, tier4_status, description, amount_cents, currency, expense_category, vendor, expense_date')
         .or(mmpCostSubmissionOrFilter(mmpId))
-        .or('tier1_status.eq.pending,tier2_status.eq.pending');
+        .or(PENDING_COST_TIER_FILTER);
 
       const [siteVisits, costSubsRes] = await Promise.all([
         fetchAllSiteEntries(mmpId),

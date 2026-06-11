@@ -85,4 +85,9 @@ export interface MMPBase {
   periodKey?: string;  // Format: YYYY-MM for monthly grouping
   fiscalQuarter?: string;  // Q1, Q2, Q3, Q4
   fiscalYear?: number;
+
+  // Cycle close fields (mmp_files table)
+  cycle_status?: string | null;
+  cycle_closed_at?: string | null;
+  cycle_close_records?: unknown[] | null;
 }

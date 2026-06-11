@@ -54,6 +54,14 @@ import { dispatchNotification } from '@/lib/notify';
 import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
 import { getLatestExchangeRate } from '@/utils/exchange-rate-service';
 import { checkFinanceReadinessForClose, canSubmitForApproval, mmpCostSubmissionOrFilter } from '@/utils/cycleCloseGates';
+import {
+  buildCostApproveUpdate,
+  buildCostRejectUpdate,
+  getPendingCostTierLabel,
+  isCostFullyApproved,
+  PENDING_COST_TIER_FILTER,
+  type OperationalCostTierInput,
+} from '@/utils/operationalCostApproval';
 import { approveCycleClose } from '@/services/cycleCloseService';
 
 const NOT_COVERED_REASONS = [
@@ -596,7 +604,36 @@ const MMPCycleClose = () => {
   const [cycleSubmittedAt, setCycleSubmittedAt] = useState<string | null>(null);
   const guideScrolledStepRef = useRef<string | null>(null);
   // Finance tab state
-  type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null; tier1_status: string | null; tier2_status: string | null; tier3_status: string | null };
+  type FinanceCost = OperationalCostTierInput & {
+    id: string;
+    description: string | null;
+    vendor: string | null;
+    amount_cents: number;
+    currency: string | null;
+    expense_date: string | null;
+    expense_category: string | null;
+  };
+
+  const COST_APPROVAL_SELECT =
+    'id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status, tier4_status, submitter_role, status';
+
+  const applyCostApprovalUpdate = async (
+    costId: string,
+    update: Record<string, string | null>,
+  ): Promise<OperationalCostTierInput> => {
+    const { data, error } = await supabase
+      .from('operational_cost_submissions')
+      .update(update)
+      .eq('id', costId)
+      .select('id, tier1_status, tier2_status, tier3_status, tier4_status, submitter_role, status');
+    if (error) throw error;
+    if (!data?.length) {
+      throw new Error(
+        'Database security policy blocked this approval. Open Cost Submission to approve with signature, or contact an admin.',
+      );
+    }
+    return data[0];
+  };
   type FinanceAdvance = { id: string; status: string; amount_cents: number | null; currency: string | null };
   const [financeCosts, setFinanceCosts] = useState<FinanceCost[]>([]);
   const [financeAdvances, setFinanceAdvances] = useState<FinanceAdvance[]>([]);
@@ -1004,35 +1041,17 @@ const MMPCycleClose = () => {
     });
   }, [checklistMmpId, uncoveredSites, cycleReadiness.allPassed, feesLockedAt, paymentsConfirmedAt]);
 
-  // Build correct update payload mirroring CostSubmission.tsx approval logic
-  const buildCostApproveUpdate = (cost: FinanceCost, userId: string): Record<string, string | null> => {
-    const now = new Date().toISOString();
-    const hasThreeTiers = cost.tier3_status !== null;
-    if (cost.tier1_status === 'pending') {
-      return { tier1_status: 'approved', tier1_approved_by: userId, tier1_approved_at: now, status: 'under_review' };
-    } else if (cost.tier2_status === 'pending') {
-      if (hasThreeTiers) {
-        return { tier2_status: 'approved', tier2_approved_by: userId, tier2_approved_at: now, status: 'under_review', tier3_status: 'pending' };
-      }
-      return { tier2_status: 'approved', tier2_approved_by: userId, tier2_approved_at: now, status: 'approved' };
-    } else if (cost.tier3_status === 'pending') {
-      return { tier3_status: 'approved', tier3_approved_by: userId, tier3_approved_at: now, status: 'approved' };
+  const cascadeApproveCost = useCallback(async (cost: FinanceCost, userId: string): Promise<FinanceCost | null> => {
+    let current: FinanceCost = { ...cost };
+    for (let step = 0; step < 4; step++) {
+      const update = buildCostApproveUpdate(current, userId);
+      if (Object.keys(update).length === 0) break;
+      const row = await applyCostApprovalUpdate(cost.id, update);
+      current = { ...current, ...row };
+      if (isCostFullyApproved(current)) return null;
     }
-    return {};
-  };
-
-  const buildCostRejectUpdate = (cost: FinanceCost, userId: string, reason: string): Record<string, string | null> => {
-    const now = new Date().toISOString();
-    const msg = reason || 'Rejected from MMP Cycle Close';
-    if (cost.tier1_status === 'pending') {
-      return { tier1_status: 'rejected', tier1_approved_by: userId, tier1_approved_at: now, tier1_notes: msg, status: 'rejected', rejection_reason: msg };
-    } else if (cost.tier2_status === 'pending') {
-      return { tier2_status: 'rejected', tier2_approved_by: userId, tier2_approved_at: now, tier2_notes: msg, status: 'rejected', rejection_reason: msg };
-    } else if (cost.tier3_status === 'pending') {
-      return { tier3_status: 'rejected', tier3_approved_by: userId, tier3_approved_at: now, tier3_notes: msg, status: 'rejected', rejection_reason: msg };
-    }
-    return {};
-  };
+    return current;
+  }, []);
 
   const handleApproveCost = useCallback(async (costId: string) => {
     const cost = financeCosts.find(c => c.id === costId);
@@ -1041,10 +1060,21 @@ const MMPCycleClose = () => {
     if (Object.keys(update).length === 0) return;
     setFinanceApproving(prev => new Set(prev).add(costId));
     try {
-      const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', costId);
-      if (error) throw error;
-      setFinanceCosts(prev => prev.filter(c => c.id !== costId));
-      toast({ title: 'Approved', description: 'Cost submission approved.' });
+      const row = await applyCostApprovalUpdate(costId, update);
+      const updated: FinanceCost = { ...cost, ...row };
+      if (isCostFullyApproved(updated)) {
+        setFinanceCosts(prev => prev.filter(c => c.id !== costId));
+        toast({ title: 'Approved', description: 'Cost submission fully approved.' });
+      } else {
+        const nextTier = getPendingCostTierLabel(updated);
+        setFinanceCosts(prev => prev.map(c => (c.id === costId ? updated : c)));
+        toast({
+          title: 'Tier approved',
+          description: nextTier
+            ? `Advanced to ${nextTier}. Approve again to continue.`
+            : 'Cost submission updated.',
+        });
+      }
     } catch (e: any) {
       toast({ title: 'Approval Failed', description: e.message || 'Could not update the record.', variant: 'destructive' });
     } finally {
@@ -1059,8 +1089,7 @@ const MMPCycleClose = () => {
     if (Object.keys(update).length === 0) return;
     setFinanceRejecting(prev => new Set(prev).add(costId));
     try {
-      const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', costId);
-      if (error) throw error;
+      await applyCostApprovalUpdate(costId, update);
       setFinanceCosts(prev => prev.filter(c => c.id !== costId));
       toast({ title: 'Rejected', description: 'Cost submission rejected.' });
     } catch (e: any) {
@@ -1070,37 +1099,46 @@ const MMPCycleClose = () => {
     }
   }, [financeCosts, currentUser?.id, toast]);
 
-  const handleApproveAllCosts = useCallback(async () => {
-    if (!currentUser?.id || financeCosts.length === 0) return;
-    setFinanceApprovingAll(true);
-    try {
-      await Promise.all(financeCosts.map(async cost => {
-        const update = buildCostApproveUpdate(cost, currentUser.id!);
-        if (Object.keys(update).length === 0) return;
-        const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', cost.id);
-        if (error) throw error;
-      }));
-      setFinanceCosts([]);
-      toast({ title: 'All Approved', description: `${financeCosts.length} cost submissions approved.` });
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message || 'One or more approvals failed.', variant: 'destructive' });
-    } finally {
-      setFinanceApprovingAll(false);
-    }
-  }, [financeCosts, currentUser?.id, toast]);
-
   const refetchFinance = useCallback(async () => {
     if (!selectedMmpId || selectedMmpId === 'all') return;
     setFinanceLoading(true);
     try {
-        const { data: costs } = await supabase
+      const { data: costs } = await supabase
         .from('operational_cost_submissions')
-        .select('id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status')
+        .select(COST_APPROVAL_SELECT)
         .or(mmpCostSubmissionOrFilter(selectedMmpId))
-        .or('tier1_status.eq.pending,tier2_status.eq.pending,tier3_status.eq.pending');
+        .or(PENDING_COST_TIER_FILTER);
       setFinanceCosts((costs as FinanceCost[]) || []);
     } finally { setFinanceLoading(false); }
   }, [selectedMmpId]);
+
+  const handleApproveAllCosts = useCallback(async () => {
+    if (!currentUser?.id || financeCosts.length === 0) return;
+    setFinanceApprovingAll(true);
+    const total = financeCosts.length;
+    try {
+      const stillPending: FinanceCost[] = [];
+      for (const cost of financeCosts) {
+        const remaining = await cascadeApproveCost(cost, currentUser.id);
+        if (remaining) stillPending.push(remaining);
+      }
+      setFinanceCosts(stillPending);
+      const cleared = total - stillPending.length;
+      if (stillPending.length === 0) {
+        toast({ title: 'All Approved', description: `${total} cost submission(s) fully approved.` });
+      } else {
+        toast({
+          title: 'Partially approved',
+          description: `${cleared} cleared. ${stillPending.length} still need further tier approval.`,
+        });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'One or more approvals failed.', variant: 'destructive' });
+      await refetchFinance();
+    } finally {
+      setFinanceApprovingAll(false);
+    }
+  }, [financeCosts, currentUser?.id, toast, cascadeApproveCost, refetchFinance]);
 
   useEffect(() => {
     if (activeTab !== 'finance' || !selectedMmpId || selectedMmpId === 'all') {
@@ -1113,9 +1151,9 @@ const MMPCycleClose = () => {
       try {
         const { data: costs } = await supabase
           .from('operational_cost_submissions')
-          .select('id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status')
+          .select(COST_APPROVAL_SELECT)
           .or(mmpCostSubmissionOrFilter(selectedMmpId))
-          .or('tier1_status.eq.pending,tier2_status.eq.pending,tier3_status.eq.pending');
+          .or(PENDING_COST_TIER_FILTER);
         setFinanceCosts((costs as FinanceCost[]) || []);
 
         const { data: siteEntries } = await supabase
@@ -1794,7 +1832,7 @@ const MMPCycleClose = () => {
       const manualRows = wfpResults.filter(r => r.match_tier === 'weak' || r.match_tier === 'fuzzy');
       for (const r of manualRows) {
         await supabase.from('wfp_match_results')
-          .update({ outcome: r.outcome, review_note: r.review_note || null, reviewed_by: userId || null, reviewed_at: new Date().toISOString() })
+          .update({ outcome: r.outcome, review_note: r.match_notes || null, reviewed_by: userId || null, reviewed_at: new Date().toISOString() })
           .eq('upload_id', wfpUploadId)
           .eq('wfp_row_number', r.wfp_row_number);
       }
@@ -1812,7 +1850,7 @@ const MMPCycleClose = () => {
           eventType: 'site_confirmed',
           siteEntryId: r.site_entry_id!,
           mmpId,
-          performedBy: userId,
+          performedById: userId,
           metadata: { wfp_upload_id: wfpUploadId, match_tier: r.match_tier, match_score: r.match_score, wfp_site_name: r.wfp_site_name },
         });
 
@@ -1824,12 +1862,17 @@ const MMPCycleClose = () => {
           .single();
 
         if (entry?.accepted_by) {
+          const siteLabel = entry.site_name || r.wfp_site_name || 'your site';
           await dispatchNotification({
-            recipientId: entry.accepted_by,
-            eventType: 'site_confirmed',
-            title: 'Site Visit WFP Confirmed ✓',
-            body: `Your visit to ${entry.site_name || r.wfp_site_name} has been confirmed by WFP.`,
-            metadata: { site_entry_id: r.site_entry_id, mmp_id: mmpId },
+            event: 'site_confirmed',
+            recipientIds: [entry.accepted_by],
+            titleEn: 'Site Visit WFP Confirmed ✓',
+            titleAr: 'تم تأكيد زيارة الموقع من WFP ✓',
+            messageEn: `Your visit to ${siteLabel} has been confirmed by WFP.`,
+            messageAr: `تم تأكيد زيارتك إلى ${siteLabel} من قبل WFP.`,
+            entityType: 'mmp_site_entry',
+            entityId: r.site_entry_id!,
+            metadata: { site_entry_id: r.site_entry_id!, mmp_id: mmpId },
           });
         }
       }
@@ -1846,7 +1889,7 @@ const MMPCycleClose = () => {
           eventType: 'site_rejected',
           siteEntryId: r.site_entry_id!,
           mmpId,
-          performedBy: userId,
+          performedById: userId,
           metadata: { wfp_upload_id: wfpUploadId, match_tier: r.match_tier, match_score: r.match_score, wfp_site_name: r.wfp_site_name },
         });
 
@@ -1870,13 +1913,19 @@ const MMPCycleClose = () => {
       for (const { enumId, sites } of Object.values(enumRejectedMap)) {
         const isBundled = sites.length > 1;
         await dispatchNotification({
-          recipientId: enumId,
-          eventType: 'site_rejected',
-          title: isBundled ? `${sites.length} Site Visits Not Found in WFP Data` : 'Site Visit Not Found in WFP Data',
-          body: isBundled
+          event: 'site_rejected',
+          recipientIds: [enumId],
+          titleEn: isBundled ? `${sites.length} Site Visits Not Found in WFP Data` : 'Site Visit Not Found in WFP Data',
+          titleAr: isBundled ? `${sites.length} زيارات مواقع غير موجودة في بيانات WFP` : 'زيارة موقع غير موجودة في بيانات WFP',
+          messageEn: isBundled
             ? `${sites.length} of your sites were not found in the WFP data for ${mmpLabel}: ${sites.join(', ')}. Contact your supervisor for next steps.`
             : `Your visit to ${sites[0]} was not found in the WFP confirmation file for ${mmpLabel}. Contact your supervisor.`,
-          metadata: { mmp_id: mmpId, rejected_sites: sites, bundled: isBundled },
+          messageAr: isBundled
+            ? `${sites.length} من مواقعك لم تُعثر في بيانات WFP لـ ${mmpLabel}: ${sites.join(', ')}. تواصل مع مشرفك.`
+            : `زيارتك إلى ${sites[0]} لم تُعثر في ملف تأكيد WFP لـ ${mmpLabel}. تواصل مع مشرفك.`,
+          entityType: 'mmp',
+          entityId: mmpId,
+          metadata: { mmp_id: mmpId, rejected_sites: sites.join(', '), bundled: isBundled, site_count: sites.length },
         });
       }
 
@@ -3030,10 +3079,12 @@ const MMPCycleClose = () => {
       if (error) throw error;
       await logMMPAudit({
         mmpId,
+        mmpName: mmpFiles?.find(m => m.id === mmpId)?.name || 'MMP',
         action: 'cycle_reopened',
         performedBy: currentUser?.id || '',
         performedByName: currentUser?.fullName || 'Unknown',
-        details: { reason, reopenedAt: new Date().toISOString() },
+        reason,
+        metadata: { reopenedAt: new Date().toISOString() },
       });
       setClosedCycles(prev => prev.filter(c => c.id !== mmpId));
       setReopenConfirmId(null);
@@ -4364,9 +4415,12 @@ const MMPCycleClose = () => {
                                   <p className="text-sm font-bold text-green-800 dark:text-green-200">Cycle Closed &amp; Archived</p>
                                   <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
                                     All steps are complete. The financial settlement has been frozen and this cycle is permanently archived.
-                                    {mmpFiles?.find(m => m.id === checklistMmpId)?.cycle_closed_at
-                                      ? ` Closed on ${new Date((mmpFiles.find(m => m.id === checklistMmpId) as any).cycle_closed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.`
-                                      : ''}
+                                    {(() => {
+                                      const closedAt = mmpFiles?.find(m => m.id === checklistMmpId)?.cycle_closed_at;
+                                      return closedAt
+                                        ? ` Closed on ${new Date(closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.`
+                                        : '';
+                                    })()}
                                   </p>
                                 </div>
                                 {isSuperAdmin && (
@@ -6747,7 +6801,7 @@ const MMPCycleClose = () => {
                         </thead>
                         <tbody>
                           {financeCosts.map(c => {
-                            const pendingTier = c.tier1_status === 'pending' ? 'Tier 1' : c.tier2_status === 'pending' ? 'Tier 2' : c.tier3_status === 'pending' ? 'Tier 3' : null;
+                            const pendingTier = getPendingCostTierLabel(c);
                             const isApproving = financeApproving.has(c.id);
                             return (
                               <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">

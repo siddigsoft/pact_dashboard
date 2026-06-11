@@ -110,7 +110,10 @@ BEGIN
     SELECT COUNT(*) INTO v_pending_cost_count
     FROM public.operational_cost_submissions
     WHERE (mmp_id = p_mmp_id OR mmp_file_id = p_mmp_id)
-      AND (tier1_status = 'pending' OR tier2_status = 'pending');
+      AND (
+        tier1_status = 'pending' OR tier2_status = 'pending'
+        OR tier3_status = 'pending' OR tier4_status = 'pending'
+      );
 
     IF v_pending_cost_count > 0 THEN
       RAISE EXCEPTION 'Finance gate: % pending cost submission(s) for this cycle must be resolved before close.', v_pending_cost_count;
