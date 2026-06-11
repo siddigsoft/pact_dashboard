@@ -5088,7 +5088,6 @@ const MMPCycleClose = () => {
                                               )}
                                             </div>
                                           )}
-                                          <p className="text-[10px] text-muted-foreground">Note: payment tracking is saved to the database. If the column doesn't exist yet, apply the migration in <code>supabase/mmp_payment_tracking_migration.sql</code>.</p>
                                         </div>
                                       )}
 
