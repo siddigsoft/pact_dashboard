@@ -143,8 +143,8 @@ const getWorkflowMenuGroups = (
   const canSeeProgrammeHub = isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager || isCountryDirector || isDataTeam || perms.projects;
   if (canSeeProgrammeHub && !isHidden("/programme-hub"))
     planningItems.push({ id: "programme-hub", title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1 });
-  if (!isHidden("/mmp") && (isDataCollector || isSupervisor || isCoordinator) && !(isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector)) {
-    const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
+  if (!isHidden("/mmp") && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager)) {
+    const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? "My Sites Management" : "MMP Management";
     planningItems.push({ id: "mmp-management", title: mmpTitle, url: "/mmp", icon: Database, priority: 2 });
   }
   if (planningItems.length) groups.push({ id: "programme-management", label: "Programme Mgmt", order: 2, items: planningItems });

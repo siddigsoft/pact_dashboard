@@ -88,11 +88,20 @@ export const navigationConfig: NavigationGroup[] = [
       {
         id: 'mmp',
         icon: Database,
-        label: 'My Sites',
+        label: 'MMP Management',
         path: '/mmp',
         category: 'primary',
         priority: 88,
-        roles: ['DataCollector' as AppRole, 'Coordinator' as AppRole, 'Supervisor' as AppRole],
+        roles: [
+          'Admin' as AppRole,
+          'Super Admin' as AppRole,
+          'ICT' as AppRole,
+          'Field Operation Manager (FOM)' as AppRole,
+          'Country Director' as AppRole,
+          'DataCollector' as AppRole,
+          'Coordinator' as AppRole,
+          'Supervisor' as AppRole
+        ],
         description: 'Monthly monitoring plans'
       }
     ]
