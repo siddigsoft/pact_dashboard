@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
 import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
@@ -16,7 +20,7 @@ import {
   MessageSquare, CheckCircle2, XCircle, RefreshCw, Send, Webhook,
   Copy, Phone, BarChart3, AlertTriangle, ArrowLeft, Clock,
   ChevronDown, ChevronUp, Activity, Inbox, Reply, User, ArrowUpRight,
-  ArrowDownLeft, Settings, Info, X,
+  ArrowDownLeft, Settings, Info, X, Key, Eye, EyeOff, Save, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isValid } from "date-fns";
@@ -151,6 +155,50 @@ export default function AdminWhatsAppPage() {
   const [sendingOptIn, setSendingOptIn] = useState(false);
   const [optInResults, setOptInResults] = useState<{ sent: number; failed: number } | null>(null);
   const [optInProgress, setOptInProgress] = useState(0);
+
+  // ── WasenderAPI Token dialog ────────────────────────────────────────────
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [savedTokenMask, setSavedTokenMask] = useState<string | null>(null);
+  const [tokenSaving, setTokenSaving] = useState(false);
+
+  const loadSavedToken = useCallback(async () => {
+    if (!isSuperAdmin) return;
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'wasender_api_key')
+      .maybeSingle();
+    if (data?.value) {
+      const raw = String(data.value);
+      setSavedTokenMask(raw.length > 8
+        ? `${raw.slice(0, 4)}${'•'.repeat(Math.min(raw.length - 8, 16))}${raw.slice(-4)}`
+        : '•'.repeat(raw.length));
+    }
+  }, [isSuperAdmin]);
+
+  useEffect(() => { loadSavedToken(); }, [loadSavedToken]);
+
+  const saveToken = async () => {
+    if (!tokenInput.trim()) return;
+    setTokenSaving(true);
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({ key: 'wasender_api_key', value: tokenInput.trim() }, { onConflict: 'key' });
+      if (error) throw error;
+      await loadSavedToken();
+      setTokenInput('');
+      setTokenVisible(false);
+      setTokenDialogOpen(false);
+      toast({ title: 'Token saved', description: 'WasenderAPI token stored in app settings.' });
+    } catch (err) {
+      toast({ title: 'Save failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setTokenSaving(false);
+    }
+  };
 
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
@@ -1254,8 +1302,132 @@ export default function AdminWhatsAppPage() {
       )}
 
       {/* ── SETTINGS TAB ── */}
+      {/* ── WasenderAPI Token Dialog ── */}
+      <Dialog open={tokenDialogOpen} onOpenChange={open => { setTokenDialogOpen(open); if (!open) { setTokenInput(''); setTokenVisible(false); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                <Key className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <DialogTitle>WasenderAPI Token</DialogTitle>
+                <DialogDescription>Paste your API token from wasenderapi.com</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {savedTokenMask && (
+              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3 flex items-center gap-3">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Token already configured</p>
+                  <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">{savedTokenMask}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="wasender-token-input">
+                {savedTokenMask ? 'Replace with new token' : 'API Token'}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="wasender-token-input"
+                  data-testid="input-wasender-token"
+                  type={tokenVisible ? 'text' : 'password'}
+                  placeholder="Paste your WasenderAPI token here…"
+                  value={tokenInput}
+                  onChange={e => setTokenInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && tokenInput.trim()) saveToken(); }}
+                  className="pr-10 font-mono text-sm"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  data-testid="btn-toggle-token-visibility"
+                  onClick={() => setTokenVisible(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Stored securely in app settings (super-admin only). The edge function also reads{' '}
+                <code className="bg-muted px-1 rounded">WASENDER_API_KEY</code> from Supabase secrets for actual message delivery.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTokenDialogOpen(false)} data-testid="btn-cancel-token">
+              Cancel
+            </Button>
+            <Button
+              onClick={saveToken}
+              disabled={!tokenInput.trim() || tokenSaving}
+              data-testid="btn-save-token"
+              className="gap-2"
+            >
+              {tokenSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Token
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {activeTab === 'settings' && (
         <div className="space-y-4">
+
+          {/* ── WasenderAPI Token Configuration ── */}
+          <Card data-testid="card-token-config" className="border-emerald-200 dark:border-emerald-800">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                    <Key className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">WasenderAPI Token</CardTitle>
+                    <CardDescription>Store your API token to use within the app</CardDescription>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setTokenDialogOpen(true)}
+                  data-testid="btn-configure-token"
+                  className="gap-2 shrink-0"
+                >
+                  <Key className="h-3.5 w-3.5" />
+                  {savedTokenMask ? 'Update Token' : 'Set Token'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {savedTokenMask ? (
+                <div className="flex items-center gap-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Token configured</p>
+                    <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400 mt-0.5 truncate">{savedTokenMask}</p>
+                  </div>
+                  <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-0 text-[10px]">Active</Badge>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">No token saved</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Click "Set Token" to configure your WasenderAPI key.</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* ── Quick Activation Guide ── */}
           <Card data-testid="card-activation-guide" className="border-emerald-200 dark:border-emerald-800">
