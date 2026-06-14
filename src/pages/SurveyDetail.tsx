@@ -304,6 +304,46 @@ const ALL_Q_TYPES: QTypeEntry[] = Q_TYPE_GROUPS.flatMap(g => g.types);
 
 const CHART_COLORS = ['#6366f1','#22c55e','#f59e0b','#ec4899','#14b8a6','#8b5cf6','#f97316','#0ea5e9'];
 
+// ── Notification templates (bilingual, survey-title-aware) ─────────────────────
+const NOTIF_TEMPLATES = [
+  {
+    id: 'survey_reminder', label: 'Survey Reminder', label_ar: 'تذكير بالاستبيان',
+    color: 'amber', emoji: '🔔',
+    getEn: (t: string) => `Reminder: Please complete the survey "${t}" — your response is needed.`,
+    getAr: (t: string) => `تذكير: يرجى إكمال الاستبيان "${t}" — إجابتك مطلوبة.`,
+  },
+  {
+    id: 'deadline_today', label: 'Deadline Today', label_ar: 'الموعد النهائي اليوم',
+    color: 'red', emoji: '⏰',
+    getEn: (t: string) => `Last chance! The survey "${t}" closes today. Please submit your response now.`,
+    getAr: (t: string) => `آخر فرصة! ينتهي الاستبيان "${t}" اليوم. يرجى تقديم إجابتك الآن.`,
+  },
+  {
+    id: 'thankyou', label: 'Thank You', label_ar: 'رسالة شكر',
+    color: 'emerald', emoji: '✅',
+    getEn: (t: string) => `Thank you for completing the survey "${t}"! Your response has been recorded and is greatly appreciated.`,
+    getAr: (t: string) => `شكراً لإتمامك الاستبيان "${t}"! تم تسجيل إجابتك ونقدّر مشاركتك جداً.`,
+  },
+  {
+    id: 'urgent', label: 'Urgent Request', label_ar: 'طلب عاجل',
+    color: 'rose', emoji: '🚨',
+    getEn: (t: string) => `URGENT: Please complete the survey "${t}" immediately. Your participation is critical.`,
+    getAr: (t: string) => `عاجل: يرجى إكمال الاستبيان "${t}" فوراً. مشاركتك ضرورية جداً.`,
+  },
+  {
+    id: 'new_survey', label: 'New Survey', label_ar: 'استبيان جديد',
+    color: 'blue', emoji: '📋',
+    getEn: (t: string) => `A new survey "${t}" has been launched. Please take a moment to complete it — your feedback matters.`,
+    getAr: (t: string) => `تم إطلاق استبيان جديد "${t}". يرجى تخصيص وقت لإكماله — رأيك مهم.`,
+  },
+  {
+    id: 'followup', label: 'Follow-up', label_ar: 'متابعة',
+    color: 'purple', emoji: '💬',
+    getEn: (t: string) => `Following up: the survey "${t}" is still waiting for your response. Please complete it at your earliest convenience.`,
+    getAr: (t: string) => `متابعة: لا يزال الاستبيان "${t}" ينتظر إجابتك. يرجى إكماله في أقرب وقت ممكن.`,
+  },
+];
+
 export default function SurveyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -446,7 +486,7 @@ export default function SurveyDetail() {
   const [targetUserDropOpen, setTargetUserDropOpen] = useState(false);
   const [targetTab, setTargetTab] = useState<'select' | 'status' | 'notify'>('select');
   const [targetRoleFilter, setTargetRoleFilter] = useState<string>('');
-  const [sendingManualNotif, setSendingManualNotif] = useState<'reminder' | 'thankyou' | 'all' | null>(null);
+  const [sendingManualNotif, setSendingManualNotif] = useState<'reminder' | 'thankyou' | 'all' | 'selected' | null>(null);
   const [notifChannels, setNotifChannels] = useState({ email: true, whatsapp: true });
   const [manualNotifResult, setManualNotifResult] = useState<{
     type: string; wa_sent: number; wa_total: number; email_sent: number; email_total: number;
@@ -455,6 +495,9 @@ export default function SurveyDetail() {
   const [notifPopoverAnchor, setNotifPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
   const [notifPopoverChannel, setNotifPopoverChannel] = useState<'whatsapp' | 'email' | 'both'>('whatsapp');
   const [sendingSingleNotif, setSendingSingleNotif] = useState<string | null>(null);
+  const [notifSelectedUserIds, setNotifSelectedUserIds] = useState<Set<string>>(new Set());
+  const [notifTabSearch, setNotifTabSearch] = useState('');
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
 
   const REMINDER_ROLES = [
     { id: 'superAdmin',            label: 'Super Admin' },
@@ -737,13 +780,36 @@ export default function SurveyDetail() {
     }
   };
 
-  const sendManualNotif = async (type: 'reminder' | 'thankyou' | 'all') => {
+  // Derived: users filtered by notify-tab search
+  const notifFilteredUsers = notifTabSearch.trim()
+    ? targetUserProfiles.filter(u => {
+        const q = notifTabSearch.toLowerCase();
+        return u.full_name?.toLowerCase().includes(q)
+          || (u.email as string | null)?.toLowerCase().includes(q)
+          || u.phone?.toLowerCase().includes(q)
+          || u.role?.toLowerCase().includes(q);
+      })
+    : targetUserProfiles;
+
+  // Apply a pre-built template to the reminder message fields
+  const applyTemplate = (templateId: string) => {
+    const tpl = NOTIF_TEMPLATES.find(t => t.id === templateId);
+    if (!tpl) return;
+    const titleEn = survey?.title ?? '';
+    const titleAr = (survey as any)?.title_ar ?? survey?.title ?? '';
+    setSettingsForm(s => ({ ...s, reminder_message_en: tpl.getEn(titleEn), reminder_message_ar: tpl.getAr(titleAr) }));
+    setActiveTemplateId(templateId);
+  };
+
+  const sendManualNotif = async (type: 'reminder' | 'thankyou' | 'all' | 'selected') => {
     if (!id) return;
-    const recipients = type === 'reminder' ? pendingTargetUsers
+    const recipients = type === 'selected'
+      ? targetUserProfiles.filter(u => notifSelectedUserIds.has(u.id))
+      : type === 'reminder' ? pendingTargetUsers
       : type === 'thankyou' ? submittedTargetUsers
       : targetUserProfiles;
     if (!recipients.length) {
-      toast({ title: 'No recipients', description: 'No users match this notification type.', variant: 'destructive' });
+      toast({ title: 'No recipients', description: type === 'selected' ? 'Select at least one user first.' : 'No users match this notification type.', variant: 'destructive' });
       return;
     }
     if (!notifChannels.email && !notifChannels.whatsapp) {
@@ -803,7 +869,7 @@ export default function SurveyDetail() {
         notifChannels.whatsapp ? `${waSent}/${waTotal} WhatsApp` : '',
         notifChannels.email ? `${emailSent}/${emailTotal} email` : '',
       ].filter(Boolean).join(' · ');
-      toast({ title: isThankYou ? 'Thank-you sent' : 'Reminder sent', description: desc });
+      toast({ title: isThankYou ? 'Thank-you sent' : type === 'selected' ? `Sent to ${recipients.length} selected` : 'Reminder sent', description: desc });
     } catch (e: unknown) {
       toast({ title: 'Send failed', description: (e as Error).message, variant: 'destructive' });
     } finally {
@@ -4530,7 +4596,49 @@ export default function SurveyDetail() {
                   </div>
                 ) : (
                   <>
-                    {/* Channel toggles */}
+                    {/* ── Quick Templates ── */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" />Quick Templates
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {NOTIF_TEMPLATES.map(tpl => {
+                          const colorBase: Record<string, string> = {
+                            amber: 'border-amber-200 text-amber-700 hover:bg-amber-50',
+                            red:   'border-red-200 text-red-700 hover:bg-red-50',
+                            emerald: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50',
+                            rose:  'border-rose-200 text-rose-700 hover:bg-rose-50',
+                            blue:  'border-blue-200 text-blue-700 hover:bg-blue-50',
+                            purple:'border-purple-200 text-purple-700 hover:bg-purple-50',
+                          };
+                          const colorActive: Record<string, string> = {
+                            amber: 'bg-amber-100 border-amber-400 text-amber-800',
+                            red:   'bg-red-100 border-red-400 text-red-800',
+                            emerald: 'bg-emerald-100 border-emerald-400 text-emerald-800',
+                            rose:  'bg-rose-100 border-rose-400 text-rose-800',
+                            blue:  'bg-blue-100 border-blue-400 text-blue-800',
+                            purple:'bg-purple-100 border-purple-400 text-purple-800',
+                          };
+                          const isActive = activeTemplateId === tpl.id;
+                          return (
+                            <button key={tpl.id} type="button" onClick={() => applyTemplate(tpl.id)}
+                              data-testid={`btn-template-${tpl.id}`}
+                              className={cn(
+                                'flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg border text-[10px] font-semibold transition-all text-center leading-tight',
+                                isActive ? colorActive[tpl.color] : 'bg-white ' + colorBase[tpl.color],
+                              )}>
+                              <span className="text-sm leading-none">{tpl.emoji}</span>
+                              <span>{tpl.label}</span>
+                              <span className="font-normal opacity-70" dir="rtl">{tpl.label_ar}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* ── Channel toggles ── */}
                     <div className="space-y-2">
                       <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send via</p>
                       <div className="flex items-center gap-5">
@@ -4551,20 +4659,29 @@ export default function SurveyDetail() {
                       </div>
                     </div>
 
-                    {/* Message templates */}
+                    <div className="border-t border-slate-100" />
+
+                    {/* ── Message fields ── */}
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                          <BellRing className="w-3.5 h-3.5 text-amber-500" />Reminder message
-                          <span className="text-[10px] text-slate-400 font-normal">(leave blank for default)</span>
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                            <BellRing className="w-3.5 h-3.5 text-amber-500" />Reminder / Custom message
+                          </label>
+                          {activeTemplateId && (
+                            <button type="button" onClick={() => { setActiveTemplateId(null); setSettingsForm(s => ({ ...s, reminder_message_en: '', reminder_message_ar: '' })); }}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                              <X className="w-3 h-3" />Clear template
+                            </button>
+                          )}
+                        </div>
                         <Textarea placeholder="e.g. Please complete the survey before the deadline…"
                           value={settingsForm.reminder_message_en}
-                          onChange={e => setSettingsForm(s => ({ ...s, reminder_message_en: e.target.value }))}
+                          onChange={e => { setSettingsForm(s => ({ ...s, reminder_message_en: e.target.value })); setActiveTemplateId(null); }}
                           className="text-sm resize-none" rows={2} data-testid="input-reminder-message-en" />
                         <Textarea placeholder="رسالة التذكير بالعربية (اختياري)"
                           value={settingsForm.reminder_message_ar}
-                          onChange={e => setSettingsForm(s => ({ ...s, reminder_message_ar: e.target.value }))}
+                          onChange={e => { setSettingsForm(s => ({ ...s, reminder_message_ar: e.target.value })); setActiveTemplateId(null); }}
                           className="text-sm resize-none" rows={2} dir="rtl" data-testid="input-reminder-message-ar" />
                       </div>
                       <div className="space-y-1.5">
@@ -4583,51 +4700,168 @@ export default function SurveyDetail() {
                       </div>
                     </div>
 
-                    {/* Send buttons */}
+                    <div className="border-t border-slate-100" />
+
+                    {/* ── Recipients list ── */}
                     <div className="space-y-2">
-                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send now to</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button type="button" data-testid="btn-notif-reminder"
-                          onClick={() => sendManualNotif('reminder')}
-                          disabled={!!sendingManualNotif || pendingTargetUsers.length === 0}
-                          className={cn(
-                            'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
-                            sendingManualNotif === 'reminder' ? 'bg-amber-100 border-amber-200 text-amber-500 cursor-not-allowed'
-                              : pendingTargetUsers.length === 0 ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                              : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
-                          )}>
-                          {sendingManualNotif === 'reminder' ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellRing className="w-4 h-4" />}
-                          <span className="font-semibold">Remind pending</span>
-                          <span className="text-[10px] opacity-70">{pendingTargetUsers.length} user{pendingTargetUsers.length !== 1 ? 's' : ''}</span>
-                        </button>
-
-                        <button type="button" data-testid="btn-notif-thankyou"
-                          onClick={() => sendManualNotif('thankyou')}
-                          disabled={!!sendingManualNotif || submittedTargetUsers.length === 0}
-                          className={cn(
-                            'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
-                            sendingManualNotif === 'thankyou' ? 'bg-emerald-100 border-emerald-200 text-emerald-500 cursor-not-allowed'
-                              : submittedTargetUsers.length === 0 ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                              : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
-                          )}>
-                          {sendingManualNotif === 'thankyou' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                          <span className="font-semibold">Thank submitters</span>
-                          <span className="text-[10px] opacity-70">{submittedTargetUsers.length} user{submittedTargetUsers.length !== 1 ? 's' : ''}</span>
-                        </button>
-
-                        <button type="button" data-testid="btn-notif-all"
-                          onClick={() => sendManualNotif('all')}
-                          disabled={!!sendingManualNotif || targetUserProfiles.length === 0}
-                          className={cn(
-                            'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
-                            sendingManualNotif === 'all' ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed'
-                              : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100',
-                          )}>
-                          {sendingManualNotif === 'all' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-                          <span className="font-semibold">Notify all</span>
-                          <span className="text-[10px] opacity-70">{targetUserProfiles.length} user{targetUserProfiles.length !== 1 ? 's' : ''}</span>
-                        </button>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5" />Recipients
+                          {notifSelectedUserIds.size > 0 && (
+                            <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
+                              {notifSelectedUserIds.size} selected
+                            </span>
+                          )}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button type="button"
+                            onClick={() => setNotifSelectedUserIds(new Set(notifFilteredUsers.map(u => u.id)))}
+                            className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium">
+                            Select all shown
+                          </button>
+                          {notifSelectedUserIds.size > 0 && (
+                            <button type="button"
+                              onClick={() => setNotifSelectedUserIds(new Set())}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 font-medium">
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Search box */}
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="Search name, phone, role…"
+                          value={notifTabSearch}
+                          onChange={e => setNotifTabSearch(e.target.value)}
+                          className="w-full pl-8 pr-8 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                          data-testid="input-notif-tab-search"
+                        />
+                        {notifTabSearch && (
+                          <button type="button" onClick={() => setNotifTabSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* User list */}
+                      <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                        {notifFilteredUsers.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-slate-400">No users match your search</div>
+                        ) : notifFilteredUsers.map(u => {
+                          const isChecked = notifSelectedUserIds.has(u.id);
+                          const isSubmitted = submittedUserIds.has(u.id);
+                          return (
+                            <label key={u.id}
+                              className={cn(
+                                'flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors select-none',
+                                isChecked ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                              )}>
+                              <input type="checkbox" checked={isChecked}
+                                onChange={e => setNotifSelectedUserIds(prev => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(u.id);
+                                  else next.delete(u.id);
+                                  return next;
+                                })}
+                                className="rounded border-slate-300 text-indigo-600 shrink-0"
+                                data-testid={`check-notif-user-${u.id}`}
+                              />
+                              <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                <span className="text-[10px] font-bold text-indigo-600">
+                                  {(u.full_name ?? '?').charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-slate-800 truncate">{u.full_name ?? '—'}</p>
+                                <p className="text-[10px] text-slate-400 truncate">
+                                  {u.phone ?? (u.email as string | null) ?? u.role ?? ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {u.phone && <Phone className="w-2.5 h-2.5 text-emerald-500" />}
+                                {(u.email as string | null) && <Mail className="w-2.5 h-2.5 text-blue-400" />}
+                                <span className={cn(
+                                  'text-[9px] font-semibold px-1.5 py-0.5 rounded-full border',
+                                  isSubmitted
+                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                    : 'bg-amber-50 text-amber-600 border-amber-200',
+                                )}>
+                                  {isSubmitted ? 'Done' : 'Pending'}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* ── Send buttons ── */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Send now</p>
+                      {notifSelectedUserIds.size > 0 ? (
+                        <button type="button" data-testid="btn-notif-selected"
+                          onClick={() => sendManualNotif('selected')}
+                          disabled={!!sendingManualNotif}
+                          className={cn(
+                            'w-full flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-all',
+                            sendingManualNotif === 'selected'
+                              ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed'
+                              : 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700',
+                          )}>
+                          {sendingManualNotif === 'selected'
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Send className="w-4 h-4" />}
+                          Send to {notifSelectedUserIds.size} selected user{notifSelectedUserIds.size !== 1 ? 's' : ''}
+                        </button>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2">
+                          <button type="button" data-testid="btn-notif-reminder"
+                            onClick={() => sendManualNotif('reminder')}
+                            disabled={!!sendingManualNotif || pendingTargetUsers.length === 0}
+                            className={cn(
+                              'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
+                              sendingManualNotif === 'reminder' ? 'bg-amber-100 border-amber-200 text-amber-500 cursor-not-allowed'
+                                : pendingTargetUsers.length === 0 ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
+                            )}>
+                            {sendingManualNotif === 'reminder' ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellRing className="w-4 h-4" />}
+                            <span className="font-semibold">Remind pending</span>
+                            <span className="text-[10px] opacity-70">{pendingTargetUsers.length} user{pendingTargetUsers.length !== 1 ? 's' : ''}</span>
+                          </button>
+                          <button type="button" data-testid="btn-notif-thankyou"
+                            onClick={() => sendManualNotif('thankyou')}
+                            disabled={!!sendingManualNotif || submittedTargetUsers.length === 0}
+                            className={cn(
+                              'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
+                              sendingManualNotif === 'thankyou' ? 'bg-emerald-100 border-emerald-200 text-emerald-500 cursor-not-allowed'
+                                : submittedTargetUsers.length === 0 ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+                            )}>
+                            {sendingManualNotif === 'thankyou' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            <span className="font-semibold">Thank submitters</span>
+                            <span className="text-[10px] opacity-70">{submittedTargetUsers.length} user{submittedTargetUsers.length !== 1 ? 's' : ''}</span>
+                          </button>
+                          <button type="button" data-testid="btn-notif-all"
+                            onClick={() => sendManualNotif('all')}
+                            disabled={!!sendingManualNotif || targetUserProfiles.length === 0}
+                            className={cn(
+                              'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs transition-all',
+                              sendingManualNotif === 'all' ? 'bg-indigo-100 border-indigo-200 text-indigo-400 cursor-not-allowed'
+                                : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100',
+                            )}>
+                            {sendingManualNotif === 'all' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                            <span className="font-semibold">Notify all</span>
+                            <span className="text-[10px] opacity-70">{targetUserProfiles.length} user{targetUserProfiles.length !== 1 ? 's' : ''}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Result banner */}
@@ -4635,7 +4869,10 @@ export default function SurveyDetail() {
                       <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2.5 flex items-center gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                         <p className="text-[11px] font-semibold text-indigo-700">
-                          {manualNotifResult.type === 'reminder' ? 'Reminder' : manualNotifResult.type === 'thankyou' ? 'Thank-you' : 'Notification'} sent —{' '}
+                          {manualNotifResult.type === 'reminder' ? 'Reminder'
+                            : manualNotifResult.type === 'thankyou' ? 'Thank-you'
+                            : manualNotifResult.type === 'selected' ? 'Sent to selected'
+                            : 'Notification'} sent —{' '}
                           {notifChannels.whatsapp && `${manualNotifResult.wa_sent}/${manualNotifResult.wa_total} WhatsApp`}
                           {notifChannels.whatsapp && notifChannels.email && ' · '}
                           {notifChannels.email && `${manualNotifResult.email_sent}/${manualNotifResult.email_total} email`}
