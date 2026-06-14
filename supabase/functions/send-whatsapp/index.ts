@@ -280,7 +280,24 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const wasenderKey = Deno.env.get('WASENDER_API_KEY')
+    // ── Resolve WASENDER_API_KEY: env var first, then app_settings fallback ──
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    let wasenderKey = Deno.env.get('WASENDER_API_KEY') ?? null
+    if (!wasenderKey) {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'wasender_api_key')
+          .maybeSingle()
+        if (data?.value) wasenderKey = String(data.value).trim() || null
+      } catch (_) { /* ignore — env var is the authoritative source */ }
+    }
     const hasWasender = !!wasenderKey
 
     // ── Ping / status check ───────────────────────────────────────────────────
@@ -289,7 +306,7 @@ Deno.serve(async (req) => {
     if (rawBody.ping === true) {
       if (!hasWasender) {
         return new Response(
-          JSON.stringify({ ping: true, configured: false, providers: { wasender: false }, error: 'WASENDER_API_KEY not configured' }),
+          JSON.stringify({ ping: true, configured: false, providers: { wasender: false }, error: 'WASENDER_API_KEY not configured (set env var or save token in Admin → WhatsApp → Settings)' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       }
@@ -362,12 +379,6 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
 
     interface PhoneEntry { phone: string; userId: string | null; lang: string }
     let skippedCount = 0

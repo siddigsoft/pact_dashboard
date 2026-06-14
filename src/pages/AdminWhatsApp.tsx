@@ -1356,8 +1356,8 @@ export default function AdminWhatsAppPage() {
                 </button>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Stored securely in app settings (super-admin only). The edge function also reads{' '}
-                <code className="bg-muted px-1 rounded">WASENDER_API_KEY</code> from Supabase secrets for actual message delivery.
+                Saved here and picked up automatically by the edge function — no Supabase secrets or redeployment needed.
+                The env var <code className="bg-muted px-1 rounded">WASENDER_API_KEY</code> takes priority if both are set.
               </p>
             </div>
           </div>
@@ -1449,9 +1449,13 @@ export default function AdminWhatsAppPage() {
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center mt-0.5">1</span>
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold">Set the WasenderAPI key in Supabase secrets</p>
+                    <p className="text-sm font-semibold">Set your WasenderAPI token</p>
                     <p className="text-xs text-muted-foreground">
-                      Go to <strong>Supabase dashboard → Edge Functions → Secrets</strong> and add:
+                      <strong>Easiest:</strong> use the <strong>"Set Token"</strong> card at the top of this page — paste your key and save.
+                      The edge function reads it automatically from app settings.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Alternative:</strong> set it as a Supabase Edge Function secret (takes priority if both are set):
                     </p>
                     <div className="rounded-md bg-muted/60 border px-3 py-2 font-mono text-xs space-y-1 mt-1">
                       <p><span className="text-emerald-600 dark:text-emerald-400">WASENDER_API_KEY</span> = your WasenderAPI key (get it from <span className="underline">wasenderapi.com</span>)</p>
