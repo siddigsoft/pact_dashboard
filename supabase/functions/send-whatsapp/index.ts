@@ -122,9 +122,9 @@ const EVENT_TO_TEMPLATE: Record<string, TemplateMapping> = {
   budget_threshold_100:      { template: 'pact_alert', vars: d => ['Budget Fully Used', v(d.budget_line), '100% utilized', 'no more spending allowed'] },
 
   // ── Reminders → pact_reminder(name, message, url) — static URL button ──────
-  reminder:           { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), v(d.message, '1 pending item'), v(d.url, APP_URL)] },
+  reminder:           { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), v(d.count, v(d.message, '1 pending item')), v(d.url, APP_URL)] },
   daily_digest:       { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `${v(d.active, '0')} active, ${v(d.done, '0')} done, ${v(d.overdue, '0')} overdue`, v(d.url, APP_URL)] },
-  broadcast:          { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'team'), v(d.message, 'an important announcement'), v(d.url, APP_URL)] },
+  // broadcast is intentionally NOT in this map — it falls to the free-text bilingual handler below
   task_reminder_1day: { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `1 task due tomorrow: "${v(d.task_title)}"`, v(d.url, `${APP_URL}/my-tasks`)] },
 }
 
@@ -232,8 +232,14 @@ function buildWasenderText(eventType: string, data: Record<string, string>, lang
   const stampLine = `\n🕒 ${stamp} (Khartoum)`
 
   if (!mapping) {
-    const en = data.message || `PACT update: ${eventType}`
-    const ar = data.message_ar || data.message || `تحديث من باكت: ${eventType}`
+    // Free-form bilingual handler (used by broadcast, survey notifications, etc.)
+    const name = (data.recipient_name ?? '').trim()
+    const greetingEn = name ? `Hello *${name}*,\n\n` : ''
+    const greetingAr = name ? `مرحباً *${name}*،\n\n` : ''
+    const urlLine  = data.url ? `\n\n👉 ${data.url}` : ''
+    const urlLineAr = data.url ? `\n\n👉 ${data.url}` : ''
+    const en = greetingEn + (data.message || `PACT update: ${eventType}`) + urlLine
+    const ar = greetingAr + (data.message_ar || data.message || `تحديث من باكت: ${eventType}`) + urlLineAr
     const body = lang === 'ar' ? ar + sep + en : en + sep + ar
     return header + body + stampLine + footer
   }

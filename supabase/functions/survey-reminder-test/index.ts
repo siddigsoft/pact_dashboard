@@ -94,6 +94,7 @@ serve(async (req: Request) => {
   const titleAr      = (survey.title_ar ?? survey.title) as string
 
   let daysLabel      = 'at a future date'
+  let daysLabelAr    = 'في موعد مستقبلي'
   let deadlineDateStr = 'No deadline set'
 
   if (expiresAtStr) {
@@ -105,6 +106,11 @@ serve(async (req: Request) => {
       : daysRemaining === 0 ? 'today'
       : daysRemaining === 1 ? 'tomorrow'
       : `in ${daysRemaining} days`
+    daysLabelAr = daysRemaining < 0
+      ? `منذ ${Math.abs(daysRemaining)} أيام (انتهى)`
+      : daysRemaining === 0 ? 'اليوم'
+      : daysRemaining === 1 ? 'غداً'
+      : `خلال ${daysRemaining} أيام`
     deadlineDateStr = deadline.toLocaleDateString('en-GB', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     })
@@ -195,11 +201,11 @@ serve(async (req: Request) => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           phone_numbers: [phone],
-          event_type: 'reminder',
+          event_type: 'broadcast',
           priority: 'urgent',
           data: {
-            recipient_name: 'there',
-            message: `${test_mode ? '[TEST] ' : ''}Survey "${titleEn}" deadline is ${daysLabel} (${deadlineDateStr}). Fill it here: ${surveyUrl}`,
+            message: `${test_mode ? '[TEST] ' : ''}⏰ Survey reminder: "${titleEn}" deadline is *${daysLabel}* (${deadlineDateStr}). Please submit your response before it closes.`,
+            message_ar: `${test_mode ? '[TEST] ' : ''}⏰ تذكير باستبيان: "${titleAr}" — الموعد النهائي *${daysLabelAr}* (${deadlineDateStr}). يرجى إرسال إجابتك قبل انتهاء المهلة.`,
             url: surveyUrl,
           },
         }),

@@ -155,6 +155,11 @@ serve(async (req: Request) => {
       : daysRemaining === 1
         ? 'tomorrow'
         : `in ${daysRemaining} days`
+    const daysLabelAr = daysRemaining === 0
+      ? 'اليوم'
+      : daysRemaining === 1
+        ? 'غداً'
+        : `خلال ${daysRemaining} أيام`
 
     const titleEn = survey.title
     const titleAr = survey.title_ar ?? survey.title
@@ -257,11 +262,11 @@ serve(async (req: Request) => {
           },
           body: JSON.stringify({
             phone_numbers: [phone],
-            event_type: 'reminder',
+            event_type: 'broadcast',
             priority: 'urgent',
             data: {
-              recipient_name: 'there',
-              message: `Survey "${titleEn}" deadline is ${daysLabel} (${deadlineDateStr}). Fill it here: ${surveyUrl}`,
+              message: `⏰ Survey reminder: "${titleEn}" deadline is *${daysLabel}* (${deadlineDateStr}). Please submit your response before it closes.`,
+              message_ar: `⏰ تذكير باستبيان: "${titleAr}" — الموعد النهائي *${daysLabelAr}* (${deadlineDateStr}). يرجى إرسال إجابتك قبل انتهاء المهلة.`,
               url: surveyUrl,
             },
           }),
