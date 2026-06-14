@@ -53,7 +53,13 @@ export default function OutstandingAdvances({
     const overdueCount = openAdvances.filter(r => {
       if (!r.disbursedAt) return false;
       const daysSinceDisbursement = differenceInDays(new Date(), new Date(r.disbursedAt));
-      return daysSinceDisbursement > 30;
+      return daysSinceDisbursement > 14;
+    }).length;
+
+    const atRiskCount = openAdvances.filter(r => {
+      if (!r.disbursedAt) return false;
+      const days = differenceInDays(new Date(), new Date(r.disbursedAt));
+      return days >= 7 && days <= 14;
     }).length;
 
     const byUserMap = new Map<string, { userId: string; userName: string; openCount: number; totalOpenCents: number; oldestDisbursementDate?: string }>();
