@@ -60,3 +60,9 @@ id = "JndYRPG-AoiMmMzaJNosM"
 uri = "file://PACT_Platform_Technical_Brief.md"
 type = "text"
 title = "PACT Platform — IT Technical Brief"
+
+[[outputs]]
+id = "-69yuRx3FYt4dweYd4Hi9"
+uri = "file://PACT_Operations_Workflow_Management_Brief.docx"
+type = "word_document"
+title = "PACT Operations & Financial Workflow — Management Brief"
