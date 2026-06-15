@@ -192,34 +192,49 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
         throw new Error(userMessage);
       }
 
-      // Notify supervisor(s) in the hub that a new submission needs Tier 1 approval
-      const hubId = currentUser.hubId;
-      if (hubId) {
-        supabase
-          .from('profiles')
-          .select('id')
-          .eq('hub_id', hubId)
-          .in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor'])
-          .eq('status', 'approved')
-          .then(({ data: supervisors, error: supervisorLookupError }) => {
-            if (supervisorLookupError) {
-              console.error('[COST] Failed to resolve approvers for notification:', supervisorLookupError);
-              return;
-            }
-            if (supervisors && supervisors.length > 0) {
-              const totalSdg = lineItems.reduce((s, i) => s + i.amountCents / 100, 0);
-              const categories = [...new Set(lineItems.map(i => i.expenseCategory))].join(', ');
-              NotificationTriggerService.costSubmissionCreated(
-                supervisors.map(s => s.id),
-                currentUser.fullName || currentUser.email || 'Unknown',
-                totalSdg,
-                'SDG',
-                categories
-              ).catch(console.error);
-            } else {
-              console.warn(`[COST] No supervisor recipients found for hub ${hubId}`);
-            }
-          }).catch(console.error);
+      // Notify the correct Tier 1 approver based on submitter's role:
+      //   Coordinator / default → Hub Supervisors
+      //   Supervisor            → FOM (org-wide)
+      //   FOM                   → Country Director (org-wide)
+      //   Country Director      → Admin / Super Admin
+      {
+        const submitterRoleNorm = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+        const isFomRole = submitterRoleNorm === 'fom' || submitterRoleNorm.includes('fieldoperationmanager');
+        const isSupervisorRole = submitterRoleNorm.includes('supervisor');
+        const isCDRole = submitterRoleNorm === 'countrydirector' || submitterRoleNorm === 'country_director';
+        const totalSdg = lineItems.reduce((s, i) => s + i.amountCents / 100, 0);
+        const categories = [...new Set(lineItems.map(i => i.expenseCategory))].join(', ');
+        const sendNotif = (ids: string[]) => {
+          if (ids.length > 0) {
+            NotificationTriggerService.costSubmissionCreated(
+              ids,
+              currentUser.fullName || currentUser.email || 'Unknown',
+              totalSdg,
+              'SDG',
+              categories
+            ).catch(console.error);
+          }
+        };
+        if (isFomRole) {
+          supabase.from('profiles').select('id')
+            .in('role', ['countryDirector', 'CountryDirector', 'country_director']).eq('status', 'approved')
+            .then(({ data }) => sendNotif((data || []).map(r => r.id))).catch(console.error);
+        } else if (isSupervisorRole) {
+          supabase.from('profiles').select('id')
+            .in('role', ['Field Operation Manager (FOM)', 'fom']).eq('status', 'approved')
+            .then(({ data }) => sendNotif((data || []).map(r => r.id))).catch(console.error);
+        } else if (isCDRole) {
+          supabase.from('profiles').select('id')
+            .in('role', ['Admin', 'admin', 'SuperAdmin', 'super_admin']).eq('status', 'approved')
+            .then(({ data }) => sendNotif((data || []).map(r => r.id))).catch(console.error);
+        } else {
+          const hubId = currentUser.hubId;
+          if (hubId) {
+            supabase.from('profiles').select('id')
+              .eq('hub_id', hubId).in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor']).eq('status', 'approved')
+              .then(({ data }) => sendNotif((data || []).map(r => r.id))).catch(console.error);
+          }
+        }
       }
 
       toast({

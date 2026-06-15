@@ -603,7 +603,7 @@ export default function UnifiedCostRequestForm({
           const submitterRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
           const isCoordinatorSubmitter = submitterRole.includes('coordinator');
           const isSupervisorSubmitter  = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
-          const isFomSubmitter         = submitterRole === 'fom' || submitterRole === 'fieldoperationmanager';
+          const isFomSubmitter         = submitterRole === 'fom' || submitterRole.includes('fieldoperationmanager');
           const isCDSubmitter          = submitterRole === 'countrydirector' || submitterRole === 'country_director';
 
           const notifyTier1 = (recipientIds: string[]) => {

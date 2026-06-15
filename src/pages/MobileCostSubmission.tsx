@@ -428,6 +428,11 @@ const MobileCostSubmission = () => {
     return role.includes('supervisor') || role.includes('hubsupervisor');
   };
 
+  const isFomSubmission = (oc: OperationalCostSubmission): boolean => {
+    const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'fom' || role.includes('fieldoperationmanager');
+  };
+
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
     return isCoordinatorSubmission(oc) || oc.tier3_status !== null;
   };
@@ -451,9 +456,10 @@ const MobileCostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    if (isSupervisorSubmission(oc)) return isFOM || isCountryDirector;
     if (isCoordinatorSubmission(oc)) return isSupervisor;
-    return isFOM || isCountryDirector;
+    if (isSupervisorSubmission(oc)) return isFOM || isCountryDirector;
+    if (isFomSubmission(oc)) return isCountryDirector;
+    return isCountryDirector;
   };
 
   const canTier2Approve = (oc: OperationalCostSubmission): boolean => {

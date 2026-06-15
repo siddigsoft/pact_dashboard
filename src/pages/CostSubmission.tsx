@@ -667,9 +667,10 @@ const CostSubmission = () => {
   };
 
   // FOM submissions: 2-tier — T1=Country Director, T2=Admin/SuperAdmin
+  // Role can be stored as 'fom', 'fieldoperationmanager', or 'Field Operation Manager (FOM)'
   const isFomSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
-    return role === 'fom' || role === 'fieldoperationmanager';
+    return role === 'fom' || role.includes('fieldoperationmanager');
   };
 
   // Country Director submissions: single-tier — T1=Admin/SuperAdmin only
