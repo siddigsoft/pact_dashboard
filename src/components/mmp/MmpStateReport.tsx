@@ -315,7 +315,20 @@ export default function MmpStateReport({
         locality:   cleanName(e.locality || e.localityName || ''),
         hub:        e.hub_office || e.hub_name || e.hubName || '',
         cpName:     e.cp_name || e.cpName || '',
-        activityType: e.activity_type || e.activityType || ad.activity_type || '',
+        activityType: (() => {
+          // draft_activity_types is an array (mobile multi-select); join for display
+          const arr = ad.draft_activity_types;
+          if (Array.isArray(arr) && arr.length > 0) return arr.filter(Boolean).join(' / ');
+          return (
+            ad.draft_activity_type ||
+            ad.activity_type       ||
+            e.activity_type        ||
+            e.activityType         ||
+            e.main_activity        ||
+            ad.main_activity       ||
+            ''
+          );
+        })(),
         status:     status || 'unknown',
         statusCategory: cat,
         coordinatorName:   coordinatorNames[coordId] || userMap[coordId] || cleanName(ad.assigned_to_name || e.coordinator_name) || '—',
@@ -454,14 +467,20 @@ export default function MmpStateReport({
     const total      = sites.length;
     const noAdvance  = sites.filter(s => !s.advanceStatus || s.advanceStatus === '' || ['cancelled','rejected'].includes(s.advanceStatus)).length;
 
-    // Activity type breakdown
+    // Activity type breakdown — split joined multi-types so each counts separately
     const atMap = new Map<string, { count: number; verified: number }>();
     sites.forEach(s => {
-      const at = s.activityType || 'Unspecified';
-      const cur = atMap.get(at) || { count: 0, verified: 0 };
-      cur.count++;
-      if (s.statusCategory === 'verified') cur.verified++;
-      atMap.set(at, cur);
+      // activityType may be "DM / AIM" — split back to individual types
+      const raw = s.activityType || '';
+      const types = raw
+        ? raw.split(/\s*\/\s*/).map(t => t.trim()).filter(Boolean)
+        : ['Unspecified'];
+      types.forEach(at => {
+        const cur = atMap.get(at) || { count: 0, verified: 0 };
+        cur.count++;
+        if (s.statusCategory === 'verified') cur.verified++;
+        atMap.set(at, cur);
+      });
     });
     const activityTypeBreakdown = Array.from(atMap.entries())
       .map(([type, { count, verified: v }]) => ({ type, count, verified: v }))
