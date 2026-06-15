@@ -34,10 +34,12 @@ export function isCDSubmission(oc: OperationalCostTierInput): boolean {
 }
 
 export function hasThreeTiers(oc: OperationalCostTierInput): boolean {
+  if (isFomSubmission(oc) || isCDSubmission(oc)) return false;
   return isSupervisorSubmission(oc);
 }
 
 export function hasFourTiers(oc: OperationalCostTierInput): boolean {
+  if (isFomSubmission(oc) || isCDSubmission(oc)) return false;
   return isCoordinatorSubmission(oc) || oc.tier4_status != null;
 }
 

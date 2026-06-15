@@ -434,6 +434,7 @@ const MobileCostSubmission = () => {
   };
 
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
+    if (isFomSubmission(oc)) return false;
     return isCoordinatorSubmission(oc) || oc.tier3_status !== null;
   };
 

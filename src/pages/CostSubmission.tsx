@@ -680,12 +680,16 @@ const CostSubmission = () => {
   };
 
   // Supervisor submissions: 3-tier — T1=FOM, T2=Country Director, T3=Admin/SuperAdmin
+  // FOM and CD submissions must never be treated as 3-tier even if tier3_status was set accidentally.
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
+    if (isFomSubmission(oc) || isCDSubmission(oc)) return false;
     return isSupervisorSubmission(oc);
   };
 
   // Coordinator submissions: 4-tier — T1=Supervisor, T2=FOM, T3=Country Director, T4=Admin/SuperAdmin
+  // FOM and CD submissions must never be treated as 4-tier even if tier4_status was set accidentally.
   const hasFourTiers = (oc: OperationalCostSubmission): boolean => {
+    if (isFomSubmission(oc) || isCDSubmission(oc)) return false;
     return isCoordinatorSubmission(oc) || (oc.tier4_status !== null && oc.tier4_status !== undefined);
   };
 
