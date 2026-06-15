@@ -315,6 +315,7 @@ export default function MmpStateReport({
         locality:   cleanName(e.locality || e.localityName || ''),
         hub:        e.hub_office || e.hub_name || e.hubName || '',
         cpName:     e.cp_name || e.cpName || '',
+        activityType: e.activity_type || e.activityType || ad.activity_type || '',
         status:     status || 'unknown',
         statusCategory: cat,
         coordinatorName:   coordinatorNames[coordId] || userMap[coordId] || cleanName(ad.assigned_to_name || e.coordinator_name) || '—',
@@ -452,6 +453,20 @@ export default function MmpStateReport({
     const pending    = sites.filter(s => s.statusCategory === 'pending').length;
     const total      = sites.length;
     const noAdvance  = sites.filter(s => !s.advanceStatus || s.advanceStatus === '' || ['cancelled','rejected'].includes(s.advanceStatus)).length;
+
+    // Activity type breakdown
+    const atMap = new Map<string, { count: number; verified: number }>();
+    sites.forEach(s => {
+      const at = s.activityType || 'Unspecified';
+      const cur = atMap.get(at) || { count: 0, verified: 0 };
+      cur.count++;
+      if (s.statusCategory === 'verified') cur.verified++;
+      atMap.set(at, cur);
+    });
+    const activityTypeBreakdown = Array.from(atMap.entries())
+      .map(([type, { count, verified: v }]) => ({ type, count, verified: v }))
+      .sort((a, b) => b.count - a.count);
+
     return {
       totalSites: total, verified, inProgress, returned, rejected, pending,
       coveragePct: total > 0 ? Math.round((verified / total) * 100) : 0,
@@ -459,6 +474,7 @@ export default function MmpStateReport({
       totalAdvanceRequested: advancesDetail.reduce((s, a) => s + (Number(a.requested_amount) || 0), 0),
       totalAdvanceApproved:  advancesDetail.reduce((s, a) => s + (Number(a.approved_amount)  || 0), 0),
       totalAdvancePaid:      advancesDetail.reduce((s, a) => s + (Number(a.total_paid_amount)|| 0), 0),
+      activityTypeBreakdown,
     };
   }, [sites, advancesDetail]);
 
@@ -693,6 +709,46 @@ export default function MmpStateReport({
                   ))}
                 </div>
               </div>
+
+              {/* Activity Type Breakdown */}
+              {cycleSummary.activityTypeBreakdown.length > 0 && (
+                <div className="md:col-span-2">
+                  <h3 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-teal-500" />Activity Type
+                  </h3>
+                  <div className="overflow-x-auto rounded border border-border/40">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 text-muted-foreground text-xs">
+                          <th className="text-left px-3 py-2 font-medium">Activity Type</th>
+                          <th className="text-center px-3 py-2 font-medium">Total Sites</th>
+                          <th className="text-center px-3 py-2 font-medium">Verified</th>
+                          <th className="text-right px-3 py-2 font-medium">Coverage</th>
+                          <th className="px-3 py-2 w-32" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cycleSummary.activityTypeBreakdown.map(({ type, count, verified: v }) => {
+                          const pct = count > 0 ? Math.round((v / count) * 100) : 0;
+                          return (
+                            <tr key={type} className="border-t border-border/30 hover:bg-muted/20">
+                              <td className="px-3 py-2 font-medium">{type}</td>
+                              <td className="px-3 py-2 text-center">{count}</td>
+                              <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{v}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-purple-700 dark:text-purple-400">{pct}%</td>
+                              <td className="px-3 py-2">
+                                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                  <div className="h-full bg-teal-500 rounded-full" style={{ width: `${pct}%` }} />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Cycle timeline */}
               <div className="md:col-span-2">

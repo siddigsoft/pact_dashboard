@@ -11,6 +11,7 @@ export interface ReportSiteRow {
   locality: string;
   hub: string;
   cpName: string;
+  activityType: string;
   status: string;
   statusCategory: 'verified' | 'in_progress' | 'returned' | 'rejected' | 'pending';
   coordinatorName: string;
@@ -106,6 +107,7 @@ export interface MmpReportData {
     totalAdvanceRequested: number;
     totalAdvanceApproved: number;
     totalAdvancePaid: number;
+    activityTypeBreakdown: { type: string; count: number; verified: number }[];
   };
   cycleTimeline: { milestone: string; dateTime: string; doneBy: string }[];
 }
@@ -224,6 +226,24 @@ function buildSummarySheet(data: MmpReportData): any {
     r++;
   });
   r++;
+
+  // Activity Type Breakdown
+  if (data.cycleSummary.activityTypeBreakdown.length > 0) {
+    writeCell(ws, r, 0, c('ACTIVITY TYPE BREAKDOWN', { ...DARK_HEADER, alignment: { horizontal: 'left' } }));
+    mergeRange(ws, r, 0, r, 5); r++;
+    const atHeaders = ['Activity Type', 'Total Sites', 'Verified', 'Coverage %'];
+    atHeaders.forEach((h, i) => writeCell(ws, r, i, c(h, SUB_HEADER)));
+    r++;
+    data.cycleSummary.activityTypeBreakdown.forEach(({ type, count, verified }) => {
+      const pct = count > 0 ? `${Math.round((verified / count) * 100)}%` : '0%';
+      writeCell(ws, r, 0, c(type,      VALUE_STYLE));
+      writeCell(ws, r, 1, c(count,     VALUE_STYLE));
+      writeCell(ws, r, 2, c(verified,  VALUE_STYLE));
+      writeCell(ws, r, 3, c(pct,       VALUE_STYLE));
+      r++;
+    });
+    r++;
+  }
 
   // Cycle timeline
   writeCell(ws, r, 0, c('CYCLE TIMELINE', { ...DARK_HEADER, alignment: { horizontal: 'left' } }));
