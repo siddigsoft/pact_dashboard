@@ -123,6 +123,8 @@ export default function MmpStateReport({
   const [siteCollectorMap, setSiteCollectorMap] = useState<Record<string, string>>({});
   // entry_id → resolved display name (from additional_data fallback)
   const [siteCollectorNameMap, setSiteCollectorNameMap] = useState<Record<string, string>>({});
+  // actor_id → actor_name from audit logs (resolves users not in profiles table)
+  const [actorNameMap, setActorNameMap] = useState<Record<string, string>>({});
   const [cycleStatus, setCycleStatus]       = useState<string>('active');
   const [exporting, setExporting]           = useState(false);
   const [activeTab, setActiveTab]           = useState('summary');
@@ -230,6 +232,15 @@ export default function MmpStateReport({
         logs.forEach((l: any) => { if (l.actor_id) idSet.add(l.actor_id); });
         adv.forEach((a: any)  => { if (a.requested_by) idSet.add(a.requested_by); });
 
+        // Build actor_id → actor_name map from audit logs.
+        // This resolves names for users whose UUIDs are in accepted_by but who
+        // have no row in the profiles table (mobile-only / legacy accounts).
+        const aNameMap: Record<string, string> = {};
+        logs.forEach((l: any) => {
+          if (l.actor_id && l.actor_name) aNameMap[l.actor_id] = l.actor_name;
+        });
+        setActorNameMap(aNameMap);
+
         if (idSet.size > 0) {
           const { data: profiles } = await supabase
             .from('profiles')
@@ -299,14 +310,24 @@ export default function MmpStateReport({
       // siteCollectorNameMap[e.id] holds names extracted from additional_data fields at fetch time,
       // which resolves mobile / legacy users not present in the profiles table.
       const resolvedFromUuid = collectorId
-        ? (userMap[collectorId] || coordinatorNames[collectorId])
+        ? (userMap[collectorId] || coordinatorNames[collectorId] || actorNameMap[collectorId])
         : '';
       const collectorName =
         resolvedFromUuid ||
         siteCollectorNameMap[e.id] ||
         collectorDirect ||
-        cleanName(ad.collector_name || ad.accepted_by_name || ad.enumerator_name || e.collectorName) ||
-        (collectorId ? `Collector #${collectorId.substring(0, 8)}` : '—');
+        cleanName(
+          ad.collector_name      ||
+          ad.accepted_by_name    ||
+          ad.enumerator_name     ||
+          ad.data_collector_name ||
+          ad.user_name           ||
+          ad.visited_by_name     ||
+          ad.submittedByName     ||
+          e.collectorName        ||
+          ''
+        ) ||
+        (collectorId ? `ID:${collectorId.substring(0, 8)}` : '—');
 
       return {
         id: e.id || '',
@@ -355,7 +376,7 @@ export default function MmpStateReport({
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawEntries, coordinatorNames, userMap, advanceMap, siteCollectorMap, siteCollectorNameMap]);
+  }, [rawEntries, coordinatorNames, userMap, advanceMap, siteCollectorMap, siteCollectorNameMap, actorNameMap]);
 
   // ── Derived: coordinators ──────────────────────────────────────────────────
   const coordinatorRows = useMemo<ReportCoordinatorRow[]>(() => {
