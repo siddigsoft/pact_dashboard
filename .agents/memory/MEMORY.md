@@ -1,1 +1,1 @@
-- [CostSubmission 4-tier approval flows](cost-approval-flows.md) — coordinator submissions are 4-tier; all tier maps/unions/state types must include tier 4
+- [tier4-default-pending-bug](tier4-default-pending-bug.md) — 20260607 migration set tier4_status DEFAULT 'pending' on ALL rows; hasFourTiers() must use submitter_role only.

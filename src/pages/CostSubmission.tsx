@@ -704,9 +704,12 @@ const CostSubmission = () => {
 
   // Coordinator submissions: 4-tier — T1=Supervisor, T2=FOM, T3=Country Director, T4=Admin/SuperAdmin
   // FOM and CD submissions must never be treated as 4-tier even if tier4_status was set accidentally.
+  // NOTE: Do NOT use oc.tier4_status != null as a signal — the 20260607 migration set DEFAULT 'pending'
+  // on all existing rows, so Supervisor and FOM submissions also have tier4_status='pending'.
+  // Always use submitter_role for tier classification.
   const hasFourTiers = (oc: OperationalCostSubmission): boolean => {
     if (isFomSubmission(oc) || isCDSubmission(oc)) return false;
-    return isCoordinatorSubmission(oc) || (oc.tier4_status !== null && oc.tier4_status !== undefined);
+    return isCoordinatorSubmission(oc);
   };
 
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {

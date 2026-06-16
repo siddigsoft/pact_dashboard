@@ -40,7 +40,10 @@ export function hasThreeTiers(oc: OperationalCostTierInput): boolean {
 
 export function hasFourTiers(oc: OperationalCostTierInput): boolean {
   if (isFomSubmission(oc) || isCDSubmission(oc)) return false;
-  return isCoordinatorSubmission(oc) || oc.tier4_status != null;
+  // Do NOT use oc.tier4_status != null — the 20260607 migration set DEFAULT 'pending'
+  // on all existing rows, poisoning this check for Supervisor/FOM/CD submissions.
+  // Always derive tier count from submitter_role only.
+  return isCoordinatorSubmission(oc);
 }
 
 export function isFinalTier(oc: OperationalCostTierInput, tier: 1 | 2 | 3 | 4): boolean {
