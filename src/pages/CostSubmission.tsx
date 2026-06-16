@@ -225,8 +225,8 @@ const CostSubmission = () => {
   
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
 
-  // Default to Submit Request tab for all users
-  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">("submit");
+  // FOM defaults to Approval Queue; all others default to Submit Request
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">(isFOM ? "history" : "submit");
   // Task #56 — top-of-page expense-type selector (operational vs personal reimbursement)
   const [expenseMode, setExpenseMode] = useState<ExpenseMode>("operational");
   const [pendingMode, setPendingMode] = useState<ExpenseMode | null>(null);
@@ -2882,7 +2882,7 @@ const CostSubmission = () => {
             >
               <ClipboardCheck className="h-4 w-4" />
               <span className="hidden sm:inline">
-                {(isAdmin || isSuperAdmin) ? "All Submissions" : isSupervisor ? "Team" : "My Submissions"}
+                {(isAdmin || isSuperAdmin) ? "All Submissions" : isFOM ? "Approvals" : isSupervisor ? "Team" : "My Submissions"}
               </span>
               <span className="sm:hidden">History</span>
               {submissionStats.total > 0 && activeTab !== "history" && (
@@ -3544,15 +3544,17 @@ const CostSubmission = () => {
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-slate-600" />
                 <CardTitle>
-                  {(isAdmin || isSuperAdmin) ? "All Cost Submissions" : isSupervisor ? "Team Submissions" : "My Submissions"}
+                  {(isAdmin || isSuperAdmin) ? "All Cost Submissions" : isFOM ? "Approval Queue" : isSupervisor ? "Team Submissions" : "My Submissions"}
                 </CardTitle>
               </div>
               <CardDescription>
                 {(isAdmin || isSuperAdmin)
                   ? "Review and manage all cost submissions across the organization. Approve, reject, or request more information."
-                  : isSupervisor
-                    ? "Review cost submissions from your team members. Verify and forward for admin approval."
-                    : "Track the status of your submitted costs and view approval history."
+                  : isFOM
+                    ? "Review and approve cost submissions from Supervisors and Coordinators. Your approval is required before Finance can process payment."
+                    : isSupervisor
+                      ? "Review cost submissions from your team members. Verify and forward for admin approval."
+                      : "Track the status of your submitted costs and view approval history."
                 }
               </CardDescription>
             </CardHeader>
