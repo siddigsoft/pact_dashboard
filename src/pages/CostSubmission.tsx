@@ -4186,6 +4186,319 @@ const CostSubmission = () => {
                             </div>
                           </div>
 
+                          {/* ── Approval Flow Tracker (compact / group item) ── */}
+                          {(() => {
+                            const isFomSub   = isFomSubmission(oc);
+                            const isCoordSub = hasFourTiers(oc);
+                            const isSuperSub = hasThreeTiers(oc);
+                            const isCDSub    = isCDSubmission(oc);
+                            const fourTier   = isCoordSub;
+                            const threeTier  = isSuperSub;
+
+                            type StepStatus = 'done' | 'rejected' | 'active' | 'pending';
+                            interface FlowStepC {
+                              label: string; stepNum: string; person: string; role: string;
+                              status: StepStatus; timestamp?: string | null; notes?: string;
+                              notifIcon: string; notifText: string;
+                              expectedApprovers?: Array<{ id: string; name?: string; email?: string; role?: string }>;
+                            }
+
+                            const nr = (r: string) => r.toLowerCase().replace(/[\s_-]/g, '');
+                            const fmtRoleC = (r?: string | null) => (r || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+                            const submitterUser2 = users.find(u => u.id === oc.submitted_by);
+                            const submitterRoleDisplay2 = fmtRoleC(submitterUser2?.role) || 'Staff';
+
+                            const getExpectedC = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) =>
+                              users.filter(u => {
+                                if (!u.role) return false;
+                                const roleNorm = nr(u.role);
+                                if (!rolePredicate(roleNorm)) return false;
+                                if (hubMatch && oc.hub_id && (u as any).hub_id && (u as any).hub_id !== oc.hub_id) return false;
+                                return true;
+                              }).slice(0, 5);
+
+                            const isSupervisorRolePredC  = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
+                            const isFomRolePredC         = (r: string) => r === 'fom' || r === 'fieldoperationmanager';
+                            const isCDRolePredC          = (r: string) => r === 'countrydirector' || r === 'country_director';
+                            const isAdminRolePredC       = (r: string) => r === 'admin' || r === 'superadmin' || r.includes('superadmin');
+                            const isFinanceAdminRolePredC = (r: string) => r === 'financialadmin' || r === 'financeadmin' || r === 'finance' || r.includes('financ');
+
+                            const t1ExpectedC = oc.tier1_status === 'approved' || oc.tier1_status === 'rejected' ? [] :
+                              isCoordSub ? getExpectedC(isSupervisorRolePredC, true) :
+                              isSuperSub ? getExpectedC(isFomRolePredC)              :
+                              isFomSub   ? getExpectedC(isCDRolePredC)               :
+                              isCDSub    ? getExpectedC(isAdminRolePredC)            :
+                              getExpectedC(isSupervisorRolePredC, true);
+
+                            const t2ExpectedC = isCDSub || (oc.tier2_status === 'approved' || oc.tier2_status === 'rejected') ? [] :
+                              isCoordSub ? getExpectedC(isFomRolePredC)    :
+                              isSuperSub ? getExpectedC(isCDRolePredC)     :
+                              isFomSub   ? getExpectedC(isAdminRolePredC)  :
+                              [];
+
+                            const t3ExpectedC = (oc.tier3_status === 'approved' || oc.tier3_status === 'rejected') ? [] :
+                              isCoordSub ? getExpectedC(isCDRolePredC)    :
+                              isSuperSub ? getExpectedC(isAdminRolePredC) :
+                              [];
+
+                            const t4ExpectedC = (oc.tier4_status === 'approved' || oc.tier4_status === 'rejected') ? [] :
+                              isCoordSub ? getExpectedC(isAdminRolePredC) : [];
+
+                            const finExpectedC = derivedStatus === 'approved' ? getExpectedC(isFinanceAdminRolePredC) : [];
+
+                            const nameListC = (people: Array<{ name?: string; email?: string }>) =>
+                              people.map(p => p.name || p.email || '').filter(Boolean).join(', ');
+
+                            const t1NameC = tier1Approver?.name || tier1Approver?.email || nameListC(t1ExpectedC) || 'Tier 1 approver';
+                            const t2NameC = tier2Approver?.name || tier2Approver?.email || nameListC(t2ExpectedC) || 'Tier 2 approver';
+                            const t3NameC = tier3Approver?.name || tier3Approver?.email || nameListC(t3ExpectedC) || 'Tier 3 approver';
+                            const t4NameC = tier4Approver?.name || tier4Approver?.email || nameListC(t4ExpectedC) || 'Admin';
+
+                            const stepsC: FlowStepC[] = [];
+
+                            stepsC.push({
+                              label: 'Submitted', stepNum: '①', person: submitterName,
+                              role: submitterRoleDisplay2, status: 'done', timestamp: oc.created_at,
+                              notifIcon: '📧', notifText: `Email sent to: ${t1NameC}`,
+                            });
+
+                            const t1RoleLabelC = isCoordSub ? 'Hub Supervisor'
+                              : isSuperSub ? 'Field Op. Manager (FOM)'
+                              : isFomSub   ? 'Country Director'
+                              : isCDSub    ? 'Admin / Super Admin'
+                              : 'Hub Supervisor';
+                            const t1StatusC: StepStatus = oc.tier1_status === 'approved' ? 'done' : oc.tier1_status === 'rejected' ? 'rejected' : 'active';
+                            stepsC.push({
+                              label: isCoordSub ? 'Tier 1 — Supervisor'
+                                : isSuperSub ? 'Tier 1 — FOM Review'
+                                : isFomSub   ? 'Tier 1 — Country Director'
+                                : isCDSub    ? 'Tier 1 — Admin Review'
+                                : 'Tier 1 Review',
+                              stepNum: '②',
+                              person: tier1Approver?.name || tier1Approver?.email || '',
+                              role: fmtRoleC((tier1Approver as any)?.role) || t1RoleLabelC,
+                              status: t1StatusC, timestamp: oc.tier1_approved_at,
+                              notes: cleanTier1Notes || undefined,
+                              notifIcon: '📧',
+                              notifText: t1StatusC === 'done'
+                                ? `Email sent to: ${submitterName}, ${t2NameC}`
+                                : `Email sent to: ${t1NameC}`,
+                              expectedApprovers: t1ExpectedC,
+                            });
+
+                            if (!isCDSub) {
+                              const t2RoleLabelC = isCoordSub ? 'Field Op. Manager (FOM)'
+                                : isSuperSub ? 'Country Director'
+                                : isFomSub   ? 'Admin / Super Admin'
+                                : 'Tier 2 Approver';
+                              const t2ReachedC = oc.tier1_status === 'approved';
+                              const t2StatusC: StepStatus = oc.tier2_status === 'approved' ? 'done' : oc.tier2_status === 'rejected' ? 'rejected' : t2ReachedC ? 'active' : 'pending';
+                              stepsC.push({
+                                label: isCoordSub ? 'Tier 2 — FOM Review'
+                                  : isSuperSub ? 'Tier 2 — Country Director'
+                                  : isFomSub   ? 'Tier 2 — Admin Review'
+                                  : 'Tier 2 Review',
+                                stepNum: '③',
+                                person: tier2Approver?.name || tier2Approver?.email || '',
+                                role: fmtRoleC((tier2Approver as any)?.role) || t2RoleLabelC,
+                                status: t2StatusC, timestamp: oc.tier2_approved_at,
+                                notes: cleanTier2Notes || undefined,
+                                notifIcon: '📧',
+                                notifText: t2StatusC === 'done'
+                                  ? `Email sent to: ${submitterName}, ${t3NameC}`
+                                  : `Email sent to: ${t2NameC}`,
+                                expectedApprovers: t2ExpectedC,
+                              });
+                            }
+
+                            if (threeTier || fourTier) {
+                              const raw3C = oc.tier3_status as string | null;
+                              const t3ReachedC = oc.tier1_status === 'approved' && oc.tier2_status === 'approved';
+                              const t3StatusC: StepStatus = raw3C === 'approved' ? 'done' : raw3C === 'rejected' ? 'rejected' : t3ReachedC ? 'active' : 'pending';
+                              stepsC.push({
+                                label: fourTier ? 'Tier 3 — Country Director' : 'Tier 3 — Admin',
+                                stepNum: '④',
+                                person: tier3Approver?.name || tier3Approver?.email || '',
+                                role: fmtRoleC((tier3Approver as any)?.role) || (fourTier ? 'Country Director' : 'Admin / Super Admin'),
+                                status: t3StatusC, timestamp: oc.tier3_approved_at,
+                                notes: cleanTier3Notes || undefined,
+                                notifIcon: '📧',
+                                notifText: t3StatusC === 'done'
+                                  ? `Email sent to: ${submitterName}, ${t4NameC}`
+                                  : `Email sent to: ${t3NameC}`,
+                                expectedApprovers: t3ExpectedC,
+                              });
+                            }
+
+                            if (fourTier) {
+                              const raw4C = oc.tier4_status as string | null;
+                              const t4ReachedC = oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved';
+                              const t4StatusC: StepStatus = raw4C === 'approved' ? 'done' : raw4C === 'rejected' ? 'rejected' : t4ReachedC ? 'active' : 'pending';
+                              stepsC.push({
+                                label: 'Tier 4 — Admin', stepNum: '⑤',
+                                person: tier4Approver?.name || tier4Approver?.email || '',
+                                role: fmtRoleC((tier4Approver as any)?.role) || 'Admin / Super Admin',
+                                status: t4StatusC, timestamp: oc.tier4_approved_at,
+                                notes: cleanTier4Notes || undefined,
+                                notifIcon: '📧',
+                                notifText: t4StatusC === 'done'
+                                  ? `Email sent to: ${submitterName}`
+                                  : `Email sent to: ${t4NameC}`,
+                                expectedApprovers: t4ExpectedC,
+                              });
+                            }
+
+                            const finStatusC: StepStatus =
+                              derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'done'
+                              : derivedStatus === 'approved' ? 'active'
+                              : 'pending';
+                            const finStepNumC = fourTier ? '⑥' : threeTier ? '⑤' : isFomSub ? '④' : isCDSub ? '③' : '④';
+                            stepsC.push({
+                              label: derivedStatus === 'reconciled' ? 'Reconciled' : derivedStatus === 'paid' ? 'Paid' : 'Finance / Payment',
+                              stepNum: finStepNumC,
+                              person: derivedStatus === 'paid' || derivedStatus === 'reconciled' ? 'Payment complete' : finStatusC === 'active' ? 'Finance Admin' : '—',
+                              role: 'Finance Admin', status: finStatusC, timestamp: null,
+                              notifIcon: '📧', notifText: `Email sent to: ${submitterName}`,
+                              expectedApprovers: finExpectedC.length > 0 ? finExpectedC : undefined,
+                            });
+
+                            const dotClsC = (s: StepStatus) =>
+                              s === 'done'     ? 'bg-green-500 dark:bg-green-500'
+                            : s === 'rejected' ? 'bg-red-500 dark:bg-red-400'
+                            : s === 'active'   ? 'bg-amber-400 dark:bg-amber-400 ring-4 ring-amber-200 dark:ring-amber-900'
+                            :                   'bg-border dark:bg-muted';
+
+                            const labelClsC = (s: StepStatus) =>
+                              s === 'done'     ? 'text-green-700 dark:text-green-400'
+                            : s === 'rejected' ? 'text-red-600 dark:text-red-400'
+                            : s === 'active'   ? 'text-amber-700 dark:text-amber-400'
+                            :                   'text-muted-foreground/60';
+
+                            const activeStepC = stepsC.find(s => s.status === 'active');
+                            const statusSummaryC =
+                              derivedStatus === 'paid'        ? { label: 'Paid', cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' }
+                            : derivedStatus === 'reconciled'  ? { label: 'Reconciled', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300' }
+                            : derivedStatus === 'approved'    ? { label: 'Fully Approved — Awaiting Payment', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' }
+                            : derivedStatus === 'rejected'    ? { label: 'Rejected', cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' }
+                            : derivedStatus === 'under_review' ? { label: `Under Review — Awaiting ${activeStepC?.label || 'Tier 2'}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' }
+                            : { label: `Pending — Awaiting ${activeStepC?.label || 'Tier 1'}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+
+                            const sendReminderC = (step: FlowStepC) => {
+                              const recipients = step.expectedApprovers?.length ? step.expectedApprovers : [];
+                              if (recipients.length === 0) {
+                                toast({ title: 'No recipient found', description: 'Could not identify who to remind.', variant: 'destructive', duration: 4000 });
+                                return;
+                              }
+                              setReminderPreviewDialog({
+                                open: true,
+                                stepLabel: step.label,
+                                recipients: recipients.map(r => ({ id: r.id, name: r.name, email: r.email, role: (r as any).role })),
+                                refNum: oc.reference_number || oc.id.substring(0, 8).toUpperCase(),
+                                description: oc.description || oc.expense_category || '',
+                                amtStr: `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`,
+                                submitterName,
+                                ocId: oc.id,
+                                tab: 'notification',
+                              });
+                            };
+
+                            return (
+                              <div className="border-t pt-3 pb-2 px-4 bg-gray-50/30 dark:bg-gray-900/10" data-testid={`approval-flow-compact-${oc.id}`}>
+                                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                    <ClipboardCheck className="h-3 w-3" />
+                                    Approval Flow / مسار الموافقة
+                                  </p>
+                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummaryC.cls}`}>
+                                    {statusSummaryC.label}
+                                  </span>
+                                </div>
+                                <div className="relative pl-5 space-y-0">
+                                  <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-border" />
+                                  {stepsC.map((step, i) => (
+                                    <div key={i} className="relative flex gap-3 pb-4 last:pb-0">
+                                      <div className={`absolute left-[-14px] top-1 h-3.5 w-3.5 rounded-full shrink-0 z-10 border-2 border-background ${dotClsC(step.status)}`} />
+                                      <div className="flex-1 min-w-0 space-y-1">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <span className={`text-[11px] font-bold leading-tight ${labelClsC(step.status)}`}>
+                                            {step.stepNum} {step.label}
+                                          </span>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            {step.timestamp && (
+                                              <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+                                                {format(new Date(step.timestamp), 'MMM d, yyyy · h:mm a')}
+                                              </span>
+                                            )}
+                                            {step.status === 'active' && (
+                                              <span className="text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">⏳ Awaiting</span>
+                                            )}
+                                            {step.status === 'rejected' && (
+                                              <span className="text-[9px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">✗ Rejected</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {step.person && (
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-[11px] font-medium text-foreground/90">{step.person}</span>
+                                            <span className="text-[10px] text-muted-foreground">·</span>
+                                            <span className="text-[10px] text-muted-foreground italic">{step.role}</span>
+                                          </div>
+                                        )}
+                                        {step.status === 'active' && step.expectedApprovers && step.expectedApprovers.length > 0 && (
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Action required by:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {step.expectedApprovers.map(a => (
+                                                <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-md font-medium">
+                                                  {a.name || a.email}{a.role && <span className="font-normal opacity-70">· {fmtRoleC(a.role)}</span>}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {step.status === 'pending' && !step.person && step.expectedApprovers && step.expectedApprovers.length > 0 && (
+                                          <div className="flex flex-wrap gap-1">
+                                            {step.expectedApprovers.map(a => (
+                                              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-muted/50 text-muted-foreground/60 px-2 py-0.5 rounded-md">
+                                                {a.name || a.email}{a.role && <span className="opacity-60">· {fmtRoleC(a.role)}</span>}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {step.notes && (
+                                          <p className="text-[10px] text-muted-foreground bg-muted/40 rounded-md px-2 py-1 leading-relaxed border-l-2 border-border">"{step.notes}"</p>
+                                        )}
+                                        <p className="text-[9px] text-blue-600/60 dark:text-blue-400/60 flex items-center gap-1 flex-wrap">
+                                          <span>{step.notifIcon}</span>
+                                          <span>{step.notifText}</span>
+                                          {step.timestamp && step.status === 'done' && (
+                                            <span className="text-muted-foreground/50 tabular-nums">· sent {format(new Date(step.timestamp), 'MMM d · h:mm a')}</span>
+                                          )}
+                                          {i === stepsC.length - 1 && (
+                                            <span className="text-muted-foreground/50">· 💬 WhatsApp (if opted-in)</span>
+                                          )}
+                                        </p>
+                                        {step.status === 'active' && (
+                                          <div className="pt-0.5">
+                                            <Button
+                                              size="sm" variant="outline"
+                                              className="h-6 px-2.5 text-[10px] border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1"
+                                              onClick={() => sendReminderC(step)}
+                                              data-testid={`button-send-reminder-compact-${oc.id}`}
+                                            >
+                                              <Mail className="h-3 w-3" />Send Reminder
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                           {/* ── Action bar for compact row ─────────────────────────────────── */}
                           <div className="flex items-center gap-2 px-4 py-2 border-t border-[#1D3461]/10 flex-wrap bg-gray-50/50 dark:bg-gray-900/20">
                             <Button
