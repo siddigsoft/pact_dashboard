@@ -649,9 +649,16 @@ const CostSubmission = () => {
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
           if (teamMemberIds.length > 0 && teamMemberIds.includes(o.submitted_by)) return true;
-          if (o.tier1_status === 'pending') return true;
+          // Show submissions this Supervisor has already actioned (T1 approved/rejected)
+          if (o.tier1_approved_by === currentUser?.id) return true;
+          // Show Coordinator/Enumerator/DataCollector submissions — but only from the same hub
           const submitterRole = (o.submitter_role || '').toLowerCase();
-          if (submitterRole.includes('coordinator') || submitterRole.includes('enumerator') || submitterRole.includes('datacollector')) return true;
+          const isCoordEnumSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator') || submitterRole.includes('datacollector');
+          if (isCoordEnumSub) {
+            const myHubId = (currentUser as any)?.hubId;
+            const sameHub = !o.hub_id || !myHubId || o.hub_id === myHubId;
+            if (sameHub) return true;
+          }
           return false;
         });
       } else if (!canViewTeamSubmissions) {
@@ -752,8 +759,13 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    // Coordinator: T1 = Hub Supervisor
-    if (hasFourTiers(oc)) return isSupervisor;
+    // Coordinator: T1 = Hub Supervisor (same hub only)
+    if (hasFourTiers(oc)) {
+      if (!isSupervisor) return false;
+      const myHubId = (currentUser as any)?.hubId;
+      if (!oc.hub_id || !myHubId) return true;
+      return oc.hub_id === myHubId;
+    }
     // Supervisor: T1 = FOM
     if (hasThreeTiers(oc)) return isFOM;
     // FOM submission: T1 = Country Director
@@ -4743,15 +4755,23 @@ const CostSubmission = () => {
                                   </div>
                                 );
                                 const threeTier = hasThreeTiers(oc);
+                                const fourTier  = hasFourTiers(oc);
+                                const isCDSub   = isCDSubmission(oc);
                                 return (
                                   <>
-                                    {tierStatusBadge(oc.tier1_status, threeTier ? 'T1 Sup' : 'T1', `status-tier1-${oc.id}`)}
-                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                                    {tierStatusBadge(oc.tier2_status, threeTier ? 'T2 FOM' : 'T2', `status-tier2-${oc.id}`)}
-                                    {threeTier && (
+                                    {tierStatusBadge(oc.tier1_status, 'T1', `status-tier1-${oc.id}`)}
+                                    {!isCDSub && <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                    {!isCDSub && tierStatusBadge(oc.tier2_status, 'T2', `status-tier2-${oc.id}`)}
+                                    {(threeTier || fourTier) && (
                                       <>
                                         <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                                        {tierStatusBadge(oc.tier3_status, 'T3 Admin', `status-tier3-${oc.id}`)}
+                                        {tierStatusBadge(oc.tier3_status, fourTier ? 'T3 CD' : 'T3 Admin', `status-tier3-${oc.id}`)}
+                                      </>
+                                    )}
+                                    {fourTier && (
+                                      <>
+                                        <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        {tierStatusBadge(oc.tier4_status, 'T4 Admin', `status-tier4-${oc.id}`)}
                                       </>
                                     )}
                                   </>

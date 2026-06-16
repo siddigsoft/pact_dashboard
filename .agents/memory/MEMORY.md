@@ -1,1 +1,2 @@
 - [tier4-default-pending-bug](tier4-default-pending-bug.md) — 20260607 migration set tier4_status DEFAULT 'pending' on ALL rows; hasFourTiers() must use submitter_role only.
+- [cost-submission-supervisor-filter](cost-submission-supervisor-filter.md) — Supervisor visibility filter and canTier1Approve must both be hub-scoped for Coordinator submissions.
