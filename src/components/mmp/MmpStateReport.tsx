@@ -790,6 +790,7 @@ export default function MmpStateReport({
                             <th className="text-left px-3 py-2 font-medium">Activity Type</th>
                             <th className="text-center px-3 py-2 font-medium">Total Sites</th>
                             <th className="text-center px-3 py-2 font-medium">Verified</th>
+                            <th className="text-center px-3 py-2 font-medium">Remaining</th>
                             <th className="text-right px-3 py-2 font-medium">Coverage</th>
                             <th className="px-3 py-2 w-28" />
                           </tr>
@@ -797,6 +798,7 @@ export default function MmpStateReport({
                         <tbody>
                           {cycleSummary.activityTypeBreakdown.map(({ type, count, verified: v }) => {
                             const pct = count > 0 ? Math.round((v / count) * 100) : 0;
+                            const remaining = count - v;
                             const isExpanded = expandedActivityType === type;
                             const typeSites = atSiteMap.get(type) || [];
                             return (
@@ -813,6 +815,7 @@ export default function MmpStateReport({
                                   <td className="px-3 py-2 font-medium">{type}</td>
                                   <td className="px-3 py-2 text-center">{count}</td>
                                   <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{v}</td>
+                                  <td className={`px-3 py-2 text-center font-medium ${remaining > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>{remaining > 0 ? remaining : '—'}</td>
                                   <td className="px-3 py-2 text-right font-semibold text-purple-700 dark:text-purple-400">{pct}%</td>
                                   <td className="px-3 py-2">
                                     <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -822,7 +825,7 @@ export default function MmpStateReport({
                                 </tr>
                                 {isExpanded && (
                                   <tr key={`${type}-sites`} className="bg-muted/10">
-                                    <td colSpan={6} className="px-4 py-2">
+                                    <td colSpan={7} className="px-4 py-2">
                                       <div className="rounded border border-border/30 overflow-hidden">
                                         <table className="w-full text-xs">
                                           <thead>
@@ -866,6 +869,29 @@ export default function MmpStateReport({
                             );
                           })}
                         </tbody>
+                        <tfoot>
+                          {(() => {
+                            const totCount    = cycleSummary.activityTypeBreakdown.reduce((s, r) => s + r.count,    0);
+                            const totVerified = cycleSummary.activityTypeBreakdown.reduce((s, r) => s + r.verified, 0);
+                            const totRemain   = totCount - totVerified;
+                            const totPct      = totCount > 0 ? Math.round((totVerified / totCount) * 100) : 0;
+                            return (
+                              <tr className="border-t-2 border-border bg-muted/60 text-xs font-bold">
+                                <td className="px-3 py-2" />
+                                <td className="px-3 py-2 text-foreground">Total</td>
+                                <td className="px-3 py-2 text-center text-foreground">{totCount}</td>
+                                <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{totVerified}</td>
+                                <td className={`px-3 py-2 text-center ${totRemain > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>{totRemain > 0 ? totRemain : '—'}</td>
+                                <td className="px-3 py-2 text-right text-purple-700 dark:text-purple-400">{totPct}%</td>
+                                <td className="px-3 py-2">
+                                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                    <div className="h-full bg-teal-500 rounded-full" style={{ width: `${totPct}%` }} />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })()}
+                        </tfoot>
                       </table>
                     </div>
                   </div>
