@@ -66,7 +66,9 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   // Financial
   'cost_submitted':             { title_en: 'Cost Submission Received',             title_ar: 'تم استلام طلب التكلفة',                       category: 'approvals',    priority: 'normal' },
   'cost_approved':              { title_en: 'Cost Approved',                        title_ar: 'تمت الموافقة على التكلفة',                    category: 'financial',    priority: 'normal' },
-  'cost_rejected':              { title_en: 'Cost Rejected',                        title_ar: 'تم رفض التكلفة',                              category: 'financial',    priority: 'normal' },
+  'cost_rejected':              { title_en: 'Cost Rejected / Returned',             title_ar: 'تم رفض التكلفة / إعادتها',                   category: 'financial',    priority: 'high'   },
+  'cost_action_required':       { title_en: 'Action Required: Cost Review',         title_ar: 'مطلوب إجراء: مراجعة طلب التكلفة',             category: 'approvals',    priority: 'high'   },
+  'cost_reminder':              { title_en: 'Reminder: Cost Submission Pending',    title_ar: 'تذكير: طلب التكلفة بانتظار المراجعة',         category: 'financial',    priority: 'high'   },
   'payment_processed':          { title_en: 'Payment Processed',                    title_ar: 'تمت معالجة الدفع',                           category: 'financial',    priority: 'normal' },
   'wallet_updated':             { title_en: 'Wallet Balance Updated',               title_ar: 'تم تحديث رصيد المحفظة',                      category: 'financial',    priority: 'normal' },
   'withdrawal_approved':        { title_en: 'Withdrawal Request Approved',          title_ar: 'تمت الموافقة على طلب السحب',                  category: 'financial',    priority: 'normal' },

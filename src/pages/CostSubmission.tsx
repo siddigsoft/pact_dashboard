@@ -969,7 +969,11 @@ const CostSubmission = () => {
                   ? `Your group request "${repRef}" (${amtStrG}, ${count} items) has been fully approved by ${approverName} and cleared for payment.`
                   : `Your group request "${repRef}" (${amtStrG}, ${count} items) passed Tier ${tier} review by ${approverName}. Forwarded to Tier ${tier + 1}.`
                 : `Your group request "${repRef}" (${amtStrG}, ${count} items) was rejected at Tier ${tier} by ${approverName}. Reason: ${combinedReason || 'Not specified'}. Please edit and resubmit.`,
-              messageAr: '',
+              messageAr: action === 'approve'
+                ? isFinalG
+                  ? `تمت الموافقة الكاملة على طلبك الجماعي "${repRef}" (${amtStrG}، ${count} بنود) من قِبل ${approverName} وتم تصفيته للدفع.`
+                  : `طلبك الجماعي "${repRef}" (${amtStrG}، ${count} بنود) اجتاز مراجعة المرحلة ${tierArMapG[tier]} من قِبل ${approverName}. تم إحالته إلى المرحلة ${tier + 1}.`
+                : `تم رفض طلبك الجماعي "${repRef}" (${amtStrG}، ${count} بنود) في المرحلة ${tierArMapG[tier]} من قِبل ${approverName}. السبب: ${combinedReason || 'غير محدد'}. يرجى التعديل وإعادة التقديم.`,
               priority: 'high',
               entityType: 'costSubmission',
               entityId: repSub?.id,
@@ -1267,7 +1271,11 @@ const CostSubmission = () => {
             titleEn: submitterTitleEn,
             titleAr: submitterTitleAr,
             messageEn: submitterMsgEn,
-            messageAr: submitterMsgEn,
+            messageAr: action === 'approve'
+              ? isFinal
+                ? `تمت الموافقة الكاملة على مطالبتك "${refNum}" (${amountStr}) من قِبل ${approverName} وتم تصفيتها للدفع. ستصلك الأموال قريباً.`
+                : `مطالبتك "${refNum}" (${amountStr}) اجتازت مراجعة المرحلة ${tier} من قِبل ${approverName}. تم إحالتها إلى المعتمد التالي (المرحلة ${tier + 1}).`
+              : `تم رفض مطالبتك "${refNum}" (${amountStr}) في المرحلة ${tier} من قِبل ${approverName}. السبب: ${notes || 'غير محدد'}. يرجى التعديل وإعادة التقديم.`,
             priority: 'high',
             entityType: 'costSubmission',
             entityId: submission.id,
@@ -1838,7 +1846,9 @@ const CostSubmission = () => {
           titleEn: isSingle ? 'Cost Submission Paid ✅' : `${items.length} Cost Submissions Paid ✅`,
           titleAr: isSingle ? 'تم صرف المطالبة ✅' : `تم صرف ${items.length} مطالبات ✅`,
           messageEn: batchMsgEn,
-          messageAr: batchMsgEn,
+          messageAr: isSingle
+            ? `تم صرف مطالبتك "${items[0].ref}" (${currency} ${items[0].amount.toLocaleString()}). يرجى تأكيد الاستلام في تبويب المطالبات.`
+            : `تم صرف ${items.length} من مطالباتك.\n\nالإجمالي: ${currency} ${total.toLocaleString()}\n\n${breakdown}\n\nيرجى تأكيد الاستلام في تبويب المطالبات.`,
           priority: 'high',
           entityType: 'costSubmission',
           entityId: items[0].ref,
@@ -8553,9 +8563,13 @@ const CostSubmission = () => {
                     </div>
                     {/* Bubble */}
                     <div className="bg-white dark:bg-[#202C33] rounded-lg px-3.5 py-2.5 shadow-sm max-w-xs">
-                      <p className="text-sm font-semibold text-[#25D366] mb-1">⏰ Reminder: Action Required</p>
+                      <p className="text-sm font-semibold text-[#25D366] mb-1">⏰ Reminder: Action Required / تذكير: مطلوب إجراء</p>
                       <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line">
                         {`This is a reminder that cost submission "${reminderPreviewDialog.refNum}${reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 60 ? reminderPreviewDialog.description.substring(0, 60) + '…' : reminderPreviewDialog.description}` : ''}" (${reminderPreviewDialog.amtStr}) submitted by ${reminderPreviewDialog.submitterName} is waiting for your review at ${reminderPreviewDialog.stepLabel}. Please log in and take action.`}
+                      </p>
+                      <hr className="my-2 border-gray-200 dark:border-gray-600" />
+                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line text-right" dir="rtl">
+                        {`تذكير: طلب التكلفة "${reminderPreviewDialog.refNum}${reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 60 ? reminderPreviewDialog.description.substring(0, 60) + '…' : reminderPreviewDialog.description}` : ''}" (${reminderPreviewDialog.amtStr}) المقدَّم من ${reminderPreviewDialog.submitterName} بانتظار مراجعتك في مرحلة ${reminderPreviewDialog.stepLabel}. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.`}
                       </p>
                       <p className="text-[10px] text-gray-400 mt-1.5 text-right">
                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
