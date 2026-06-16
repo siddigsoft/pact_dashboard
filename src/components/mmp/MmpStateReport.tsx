@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Download, MapPin, Users, User, Clock, CheckCircle2,
   XCircle, FileText, Activity, ShieldAlert, BarChart3, Loader2,
-  LockKeyhole, Unlock, ChevronDown, X,
+  LockKeyhole, Unlock, ChevronDown, ChevronRight, X,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -129,6 +129,7 @@ export default function MmpStateReport({
   const [exporting, setExporting]           = useState(false);
   const [activeTab, setActiveTab]           = useState('summary');
   const [expandedCollector, setExpandedCollector] = useState<string | null>(null);
+  const [expandedActivityType, setExpandedActivityType] = useState<string | null>(null);
 
   // ── Fetch supplementary data when modal opens ──────────────────────────────
   useEffect(() => {
@@ -340,12 +341,16 @@ export default function MmpStateReport({
           // draft_activity_types is an array (mobile multi-select); join for display
           const arr = ad.draft_activity_types;
           if (Array.isArray(arr) && arr.length > 0) return arr.filter(Boolean).join(' / ');
+          // mapSiteEntry converts main_activity → mainActivity, activity_at_site → siteActivity
           return (
+            e.mainActivity         ||   // camelCase (context / transformed entries)
+            e.siteActivity         ||   // camelCase activity_at_site
+            e.main_activity        ||   // raw DB rows
+            e.activity_at_site     ||   // raw DB rows
             ad.draft_activity_type ||
             ad.activity_type       ||
             e.activity_type        ||
             e.activityType         ||
-            e.main_activity        ||
             ad.main_activity       ||
             ''
           );
@@ -751,44 +756,114 @@ export default function MmpStateReport({
               </div>
 
               {/* Activity Type Breakdown */}
-              {cycleSummary.activityTypeBreakdown.length > 0 && (
-                <div className="md:col-span-2">
-                  <h3 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
-                    <Activity className="h-4 w-4 text-teal-500" />Activity Type
-                  </h3>
-                  <div className="overflow-x-auto rounded border border-border/40">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-muted/50 text-muted-foreground text-xs">
-                          <th className="text-left px-3 py-2 font-medium">Activity Type</th>
-                          <th className="text-center px-3 py-2 font-medium">Total Sites</th>
-                          <th className="text-center px-3 py-2 font-medium">Verified</th>
-                          <th className="text-right px-3 py-2 font-medium">Coverage</th>
-                          <th className="px-3 py-2 w-32" />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cycleSummary.activityTypeBreakdown.map(({ type, count, verified: v }) => {
-                          const pct = count > 0 ? Math.round((v / count) * 100) : 0;
-                          return (
-                            <tr key={type} className="border-t border-border/30 hover:bg-muted/20">
-                              <td className="px-3 py-2 font-medium">{type}</td>
-                              <td className="px-3 py-2 text-center">{count}</td>
-                              <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{v}</td>
-                              <td className="px-3 py-2 text-right font-semibold text-purple-700 dark:text-purple-400">{pct}%</td>
-                              <td className="px-3 py-2">
-                                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                  <div className="h-full bg-teal-500 rounded-full" style={{ width: `${pct}%` }} />
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+              {cycleSummary.activityTypeBreakdown.length > 0 && (() => {
+                // Build type → sites map (a site with "DM / AIM" appears under both)
+                const atSiteMap = new Map<string, ReportSiteRow[]>();
+                sites.forEach(s => {
+                  const raw = s.activityType || '';
+                  const types = raw
+                    ? raw.split(/\s*\/\s*/).map(t => t.trim()).filter(Boolean)
+                    : ['Unspecified'];
+                  types.forEach(at => {
+                    if (!atSiteMap.has(at)) atSiteMap.set(at, []);
+                    atSiteMap.get(at)!.push(s);
+                  });
+                });
+                return (
+                  <div className="md:col-span-2">
+                    <h3 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Activity className="h-4 w-4 text-teal-500" />Activity Type
+                    </h3>
+                    <div className="overflow-x-auto rounded border border-border/40">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-muted/50 text-muted-foreground text-xs">
+                            <th className="text-left px-3 py-2 font-medium w-6" />
+                            <th className="text-left px-3 py-2 font-medium">Activity Type</th>
+                            <th className="text-center px-3 py-2 font-medium">Total Sites</th>
+                            <th className="text-center px-3 py-2 font-medium">Verified</th>
+                            <th className="text-right px-3 py-2 font-medium">Coverage</th>
+                            <th className="px-3 py-2 w-28" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cycleSummary.activityTypeBreakdown.map(({ type, count, verified: v }) => {
+                            const pct = count > 0 ? Math.round((v / count) * 100) : 0;
+                            const isExpanded = expandedActivityType === type;
+                            const typeSites = atSiteMap.get(type) || [];
+                            return (
+                              <>
+                                <tr
+                                  key={type}
+                                  className="border-t border-border/30 hover:bg-muted/20 cursor-pointer"
+                                  onClick={() => setExpandedActivityType(isExpanded ? null : type)}
+                                >
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {isExpanded
+                                      ? <ChevronDown className="h-3.5 w-3.5" />
+                                      : <ChevronRight className="h-3.5 w-3.5" />}
+                                  </td>
+                                  <td className="px-3 py-2 font-medium">{type}</td>
+                                  <td className="px-3 py-2 text-center">{count}</td>
+                                  <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{v}</td>
+                                  <td className="px-3 py-2 text-right font-semibold text-purple-700 dark:text-purple-400">{pct}%</td>
+                                  <td className="px-3 py-2">
+                                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                      <div className="h-full bg-teal-500 rounded-full" style={{ width: `${pct}%` }} />
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr key={`${type}-sites`} className="bg-muted/10">
+                                    <td colSpan={6} className="px-4 py-2">
+                                      <div className="rounded border border-border/30 overflow-hidden">
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="bg-muted/60 text-muted-foreground">
+                                              <th className="text-left px-3 py-1.5 font-medium">#</th>
+                                              <th className="text-left px-3 py-1.5 font-medium">Site Name</th>
+                                              <th className="text-left px-3 py-1.5 font-medium">Code</th>
+                                              <th className="text-left px-3 py-1.5 font-medium">Locality</th>
+                                              <th className="text-left px-3 py-1.5 font-medium">Data Collector</th>
+                                              <th className="text-left px-3 py-1.5 font-medium">Status</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {typeSites.map((s, idx) => (
+                                              <tr key={s.id} className="border-t border-border/20 hover:bg-muted/20">
+                                                <td className="px-3 py-1.5 text-muted-foreground">{idx + 1}</td>
+                                                <td className="px-3 py-1.5 font-medium max-w-[180px] truncate">{s.siteName}</td>
+                                                <td className="px-3 py-1.5 text-muted-foreground">{s.siteCode || '—'}</td>
+                                                <td className="px-3 py-1.5">{s.locality || '—'}</td>
+                                                <td className="px-3 py-1.5">{s.dataCollectorName || '—'}</td>
+                                                <td className="px-3 py-1.5">
+                                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                    s.statusCategory === 'verified'    ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
+                                                    s.statusCategory === 'in_progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
+                                                    s.statusCategory === 'returned'    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' :
+                                                    s.statusCategory === 'rejected'    ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' :
+                                                    'bg-muted text-muted-foreground'
+                                                  }`}>
+                                                    {s.status}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Cycle timeline */}
               <div className="md:col-span-2">
