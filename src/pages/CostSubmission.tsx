@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -61,10 +61,17 @@ import { generateFinancialStatementPdf, type StatementRow, type StatementConfig 
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmission, type BulkUserMap, type BulkProjectMap } from '@/utils/bulkCostEmailAttachments';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { dispatchNotification } from '@/lib/notify';
 import { getStatesInHub, normalizeHubId, hubs } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
-const MGMT_ROLES = ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'];
+const MGMT_ROLES = [
+  'fom', 'field_operation_manager', 'Field Operation Manager (FOM)',
+  'countryDirector', 'country_director', 'CountryDirector',
+  'superAdmin', 'super_admin', 'SuperAdmin',
+  'admin', 'Admin',
+  'financial_admin', 'finance',
+];
 
 async function notifyMgmtOfCostEvent(
   eventTitle: string,
@@ -427,7 +434,7 @@ const CostSubmission = () => {
     amtStr: string;
     submitterName: string;
     ocId: string;
-    tab: 'notification' | 'email';
+    tab: 'notification' | 'email' | 'whatsapp';
   } | null>(null);
   const [reminderSending, setReminderSending] = useState(false);
   const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
@@ -933,6 +940,87 @@ const CostSubmission = () => {
             : `All ${count} expense items have been rejected.${newDocs.length > 0 ? ` ${newDocs.length} attachment(s) added.` : ''}`,
           duration: 6000,
         });
+
+        // 3️⃣ Group approval notifications — notify submitter(s) + next-tier approvers
+        {
+          const approverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'Reviewer';
+          const tierArMapG: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' };
+          const repSub = submissions[0];
+          const repRef = groupTitle || repSub?.reference_number || repSub?.id?.slice(0, 8)?.toUpperCase() || groupId.slice(0, 8).toUpperCase();
+          const totalAmtG = submissions.reduce((s, x) => s + (x.amount_cents || 0), 0);
+          const amtStrG = `${repSub?.currency || 'SDG'} ${(totalAmtG / 100).toLocaleString()}`;
+          // isFinalTier check: all submissions in group share the same role → use first as representative
+          const isFinalG = isFinalTier(repSub, tier);
+
+          // Notify all distinct submitters
+          const distinctSubmitters = [...new Set(submissions.map(s => s.submitted_by).filter(Boolean))];
+          distinctSubmitters.forEach(uid => {
+            dispatchNotification({
+              event: action === 'approve' ? 'cost_approved' : 'cost_rejected',
+              recipientIds: [uid],
+              titleEn: action === 'approve'
+                ? isFinalG ? `Group Request Fully Approved ✅ — ${count} items` : `Group Request: Tier ${tier} Approved — Advancing`
+                : `Group Request Rejected at Tier ${tier}`,
+              titleAr: action === 'approve'
+                ? isFinalG ? `تمت الموافقة الكاملة على الطلب الجماعي` : `تمت الموافقة على المرحلة ${tierArMapG[tier]}`
+                : `تم رفض الطلب الجماعي في المرحلة ${tierArMapG[tier]}`,
+              messageEn: action === 'approve'
+                ? isFinalG
+                  ? `Your group request "${repRef}" (${amtStrG}, ${count} items) has been fully approved by ${approverName} and cleared for payment.`
+                  : `Your group request "${repRef}" (${amtStrG}, ${count} items) passed Tier ${tier} review by ${approverName}. Forwarded to Tier ${tier + 1}.`
+                : `Your group request "${repRef}" (${amtStrG}, ${count} items) was rejected at Tier ${tier} by ${approverName}. Reason: ${combinedReason || 'Not specified'}. Please edit and resubmit.`,
+              messageAr: '',
+              priority: 'high',
+              entityType: 'costSubmission',
+              entityId: repSub?.id,
+              actionUrl: '/cost-submission',
+              sendEmail: true,
+              sendWhatsApp: true,
+              metadata: { ref_number: repRef, amount: amtStrG, item_count: count, approver_name: approverName },
+            }).catch(console.warn);
+          });
+
+          // Notify next-tier approvers if not final
+          if (action === 'approve' && !isFinalG) {
+            const nextTierNumG = tier + 1;
+            let nextRolesG: string[] = [];
+            if (hasFourTiers(repSub)) {
+              if (tier === 1) nextRolesG = ['fom', 'Field Operation Manager (FOM)'];
+              if (tier === 2) nextRolesG = ['countryDirector', 'CountryDirector', 'country_director'];
+              if (tier === 3) nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
+            } else if (hasThreeTiers(repSub)) {
+              if (tier === 1) nextRolesG = ['fom', 'Field Operation Manager (FOM)'];
+              if (tier === 2) nextRolesG = ['countryDirector', 'CountryDirector', 'country_director'];
+            } else if (isFomSubmission(repSub)) {
+              if (tier === 1) nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
+            } else {
+              nextRolesG = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
+            }
+            if (nextRolesG.length > 0) {
+              supabase.from('profiles').select('id').in('role', nextRolesG).eq('status', 'approved')
+                .then(({ data }) => {
+                  const ids = (data || []).map(r => r.id);
+                  if (!ids.length) return;
+                  dispatchNotification({
+                    event: 'cost_action_required',
+                    recipientIds: ids,
+                    titleEn: `Action Required: Group Request — Tier ${nextTierNumG} Review`,
+                    titleAr: `مطلوب إجراء: مراجعة المرحلة ${nextTierNumG} للطلب الجماعي`,
+                    messageEn: `Group request "${repRef}" (${amtStrG}, ${count} items) has passed Tier ${tier} and is waiting for your Tier ${nextTierNumG} review.`,
+                    messageAr: `الطلب الجماعي "${repRef}" (${amtStrG}) اجتاز المرحلة ${tier} وينتظر مراجعتك في المرحلة ${nextTierNumG}.`,
+                    priority: 'high',
+                    entityType: 'costSubmission',
+                    entityId: repSub?.id,
+                    actionUrl: '/cost-submission',
+                    sendEmail: true,
+                    sendWhatsApp: true,
+                    metadata: { ref_number: repRef, amount: amtStrG, item_count: count, tier: String(nextTierNumG) },
+                  }).catch(console.warn);
+                }).catch(console.warn);
+            }
+          }
+        }
+
         setGroupApprovalDialog(prev => ({ ...prev, open: false }));
         setGroupApprovalNotes('');
         setGroupApprovalReason('');
@@ -1160,26 +1248,33 @@ const CostSubmission = () => {
         if (submission.submitted_by) {
           const approverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'Reviewer';
           const tierArMap2: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' };
-          NotificationTriggerService.send({
-            userId: submission.submitted_by,
-            title: action === 'approve'
-              ? isFinal
-                ? 'Cost Submission Fully Approved ✅ / تمت الموافقة الكاملة على المطالبة'
-                : `Cost Submission: Tier ${tier} Approved — Advancing / تمت الموافقة على المرحلة ${tierArMap2[tier]} وجارٍ رفعه`
-              : `Cost Submission Rejected at Tier ${tier} / تم رفض الطلب في المرحلة ${tierArMap2[tier]}`,
-            message: action === 'approve'
-              ? isFinal
-                ? `Your cost submission "${refNum}" (${amountStr}) has been fully approved by ${approverName} and cleared for payment. You will receive the funds shortly.`
-                : `Your cost submission "${refNum}" (${amountStr}) passed Tier ${tier} review by ${approverName}. It has been forwarded to the next approver (Tier ${tier + 1}).`
-              : `Your cost submission "${refNum}" (${amountStr}) was rejected at Tier ${tier} by ${approverName}. Reason: ${notes || 'Not specified'}. Please edit and resubmit.`,
-            type: action === 'approve' ? 'success' : 'error',
-            category: 'financial',
+          const submitterTitleEn = action === 'approve'
+            ? isFinal
+              ? 'Cost Submission Fully Approved ✅'
+              : `Cost Submission: Tier ${tier} Approved — Advancing`
+            : `Cost Submission Rejected at Tier ${tier}`;
+          const submitterTitleAr = action === 'approve'
+            ? isFinal ? 'تمت الموافقة الكاملة على المطالبة' : `تمت الموافقة على المرحلة ${tierArMap2[tier]} وجارٍ رفعه`
+            : `تم رفض الطلب في المرحلة ${tierArMap2[tier]}`;
+          const submitterMsgEn = action === 'approve'
+            ? isFinal
+              ? `Your cost submission "${refNum}" (${amountStr}) has been fully approved by ${approverName} and cleared for payment. You will receive the funds shortly.`
+              : `Your cost submission "${refNum}" (${amountStr}) passed Tier ${tier} review by ${approverName}. It has been forwarded to the next approver (Tier ${tier + 1}).`
+            : `Your cost submission "${refNum}" (${amountStr}) was rejected at Tier ${tier} by ${approverName}. Reason: ${notes || 'Not specified'}. Please edit and resubmit.`;
+          dispatchNotification({
+            event: action === 'approve' ? 'cost_approved' : 'cost_rejected',
+            recipientIds: [submission.submitted_by],
+            titleEn: submitterTitleEn,
+            titleAr: submitterTitleAr,
+            messageEn: submitterMsgEn,
+            messageAr: submitterMsgEn,
             priority: 'high',
-            link: '/cost-submission',
-            relatedEntityType: 'costSubmission',
-            relatedEntityId: submission.id,
+            entityType: 'costSubmission',
+            entityId: submission.id,
+            actionUrl: '/cost-submission',
             sendEmail: true,
-            emailActionLabel: 'View Submission',
+            sendWhatsApp: true,
+            metadata: { ref_number: refNum, amount: amountStr, approver_name: approverName },
           }).catch(console.warn);
         }
 
@@ -1192,43 +1287,44 @@ const CostSubmission = () => {
 
           if (hasFourTiers(submission)) {
             // Coordinator: T1=Supervisor→T2=FOM→T3=CountryDirector→T4=Admin
-            if (tier === 1) nextRoles = ['fom', 'fieldoperationmanager', 'Field Operation Manager (FOM)'];
+            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
             if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
             if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else if (hasThreeTiers(submission)) {
             // Supervisor: T1=FOM→T2=CountryDirector→T3=Admin
-            if (tier === 1) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
-            if (tier === 2) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
+            if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
+            if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
           } else if (isFomSubmission(submission)) {
             // FOM: T1=CountryDirector→T2=Admin
             if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else {
-            // Default fallback
             if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           }
 
           if (nextRoles.length > 0) {
             supabase
               .from('profiles')
-              .select('id, name')
+              .select('id')
               .in('role', nextRoles)
               .eq('status', 'approved')
               .then(({ data: nextApprovers }) => {
-                (nextApprovers || []).forEach(approver => {
-                  NotificationTriggerService.send({
-                    userId: approver.id,
-                    title: `Action Required: Cost Submission — Tier ${nextTierNum} Review / مطلوب إجراء: مراجعة المرحلة ${nextTierNum}`,
-                    message: `Submission "${refNum}" (${amountStr}) by ${submitterName} has passed Tier ${tier} and is now waiting for your Tier ${nextTierNum} review. Please approve or reject.`,
-                    type: 'info',
-                    category: 'financial',
-                    priority: 'high',
-                    link: '/cost-submission',
-                    relatedEntityType: 'costSubmission',
-                    relatedEntityId: submission.id,
-                    sendEmail: true,
-                    emailActionLabel: 'Review Now',
-                  }).catch(console.warn);
-                });
+                const ids = (nextApprovers || []).map(a => a.id);
+                if (ids.length === 0) return;
+                dispatchNotification({
+                  event: 'cost_action_required',
+                  recipientIds: ids,
+                  titleEn: `Action Required: Cost Submission — Tier ${nextTierNum} Review`,
+                  titleAr: `مطلوب إجراء: مراجعة المرحلة ${nextTierNum} لطلب التكلفة`,
+                  messageEn: `Submission "${refNum}" (${amountStr}) by ${submitterName} has passed Tier ${tier} and is now waiting for your Tier ${nextTierNum} review. Please approve or reject.`,
+                  messageAr: `طلب "${refNum}" (${amountStr}) من ${submitterName} اجتاز المرحلة ${tier} وينتظر الآن مراجعتك في المرحلة ${nextTierNum}. يرجى الموافقة أو الرفض.`,
+                  priority: 'high',
+                  entityType: 'costSubmission',
+                  entityId: submission.id,
+                  actionUrl: '/cost-submission',
+                  sendEmail: true,
+                  sendWhatsApp: true,
+                  metadata: { ref_number: refNum, amount: amountStr, submitter_name: submitterName, tier: String(nextTierNum) },
+                }).catch(console.warn);
               }).catch(console.warn);
           }
         }
@@ -1458,24 +1554,26 @@ const CostSubmission = () => {
     if (!reminderPreviewDialog) return;
     const { stepLabel, recipients, refNum, description, amtStr, submitterName: sName, ocId } = reminderPreviewDialog;
     setReminderSending(true);
+    const descSnippet = description ? ` — ${description.length > 80 ? description.substring(0, 80) + '…' : description}` : '';
+    const msgEn = `This is a reminder that cost submission "${refNum}${descSnippet}" (${amtStr}) submitted by ${sName} is waiting for your review at ${stepLabel}. Please log in and take action.`;
     try {
-      await Promise.all(recipients.map(r =>
-        NotificationTriggerService.send({
-          userId: r.id,
-          title: `⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة`,
-          message: `This is a reminder that cost submission "${refNum}${description ? ` — ${description.length > 80 ? description.substring(0, 80) + '…' : description}` : ''}" (${amtStr}) submitted by ${sName} is waiting for your review at ${stepLabel}. Please log in and take action.`,
-          type: 'warning',
-          category: 'financial',
-          priority: 'high',
-          link: '/cost-submission',
-          relatedEntityType: 'costSubmission',
-          relatedEntityId: ocId,
-          sendEmail: true,
-          emailActionLabel: 'Review Now',
-        }).catch(console.warn)
-      ));
+      await dispatchNotification({
+        event: 'cost_reminder',
+        recipientIds: recipients.map(r => r.id),
+        titleEn: `⏰ Reminder: Action Required — Cost Submission`,
+        titleAr: `⏰ تذكير: مطلوب إجراء على طلب التكلفة`,
+        messageEn: msgEn,
+        messageAr: `تذكير: طلب التكلفة "${refNum}${descSnippet}" (${amtStr}) المقدَّم من ${sName} بانتظار مراجعتك في مرحلة ${stepLabel}. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.`,
+        priority: 'high',
+        entityType: 'costSubmission',
+        entityId: ocId,
+        actionUrl: '/cost-submission',
+        sendEmail: true,
+        sendWhatsApp: true,
+        metadata: { ref_number: refNum, amount: amtStr, submitter_name: sName, step_label: stepLabel },
+      });
       const names = recipients.map(r => r.name || r.email || 'approver').join(', ');
-      toast({ title: 'Reminder Sent ✓', description: `Reminder sent to: ${names}`, duration: 5000 });
+      toast({ title: 'Reminder Sent ✓', description: `Reminder sent via in-app, email & WhatsApp to: ${names}`, duration: 5000 });
       setReminderPreviewDialog(null);
     } finally {
       setReminderSending(false);
@@ -1518,20 +1616,20 @@ const CostSubmission = () => {
         const sbRef = oc.reference_number || oc.id.slice(0, 8).toUpperCase();
         const sbAmt = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
         const sbApproverName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Approver';
-        NotificationTriggerService.send({
-          userId: oc.submitted_by,
-          title: `Cost Submission Returned for Revision — ${sbRef}`,
+        dispatchNotification({
+          event: 'cost_rejected',
+          recipientIds: [oc.submitted_by],
+          titleEn: `Cost Submission Returned for Revision — ${sbRef}`,
           titleAr: `إعادة الطلب للمراجعة — ${sbRef}`,
-          message: `Your cost submission "${sbRef}" (${sbAmt}) has been returned for revision by ${sbApproverName}. Please review the comments and resubmit. Comment: ${sendBackComment}`,
+          messageEn: `Your cost submission "${sbRef}" (${sbAmt}) has been returned for revision by ${sbApproverName}. Please review the comments and resubmit. Comment: ${sendBackComment}`,
           messageAr: `تم إعادة طلبك "${sbRef}" (${sbAmt}) للمراجعة من قِبل ${sbApproverName}. يرجى الاطلاع على التعليقات وإعادة التقديم.`,
-          type: 'warning',
-          category: 'financial',
           priority: 'high',
-          link: '/cost-submission',
-          relatedEntityType: 'costSubmission',
-          relatedEntityId: oc.id,
+          entityType: 'costSubmission',
+          entityId: oc.id,
+          actionUrl: '/cost-submission',
           sendEmail: true,
-          emailActionLabel: 'View & Resubmit',
+          sendWhatsApp: true,
+          metadata: { ref_number: sbRef, amount: sbAmt, approver_name: sbApproverName, comment: sendBackComment },
         }).catch(console.warn);
       }
 
@@ -1625,16 +1723,20 @@ const CostSubmission = () => {
         });
         // Notify the submitter
         const amount = (oc.amount_cents / 100).toLocaleString();
-        NotificationTriggerService.send({
-          userId: oc.submitted_by,
-          title: 'Cost Submission Paid / تم صرف المطالبة',
-          message: `Your cost submission "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${amount}) has been paid. Please confirm receipt in your Cost Submissions tab.`,
-          type: 'success',
-          category: 'financial',
+        dispatchNotification({
+          event: 'payment_processed',
+          recipientIds: [oc.submitted_by],
+          titleEn: 'Cost Submission Paid ✅',
+          titleAr: 'تم صرف المطالبة ✅',
+          messageEn: `Your cost submission "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${amount}) has been paid. Please confirm receipt in your Cost Submissions tab.`,
+          messageAr: `تم صرف طلبك "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${amount}). يرجى تأكيد الاستلام في تبويب المطالبات.`,
           priority: 'high',
-          link: '/cost-submission',
+          entityType: 'costSubmission',
+          entityId: oc.id,
+          actionUrl: '/cost-submission',
           sendEmail: true,
-          emailActionLabel: 'View Submission',
+          sendWhatsApp: true,
+          metadata: { ref_number: oc.reference_number || oc.id.slice(0, 8), amount: `${oc.currency} ${amount}` },
         }).catch(console.error);
         // Notify management that a payment was disbursed
         const paidRef = oc.reference_number || oc.id.slice(0, 8).toUpperCase();
@@ -1727,20 +1829,23 @@ const CostSubmission = () => {
         const total = items.reduce((s, i) => s + i.amount, 0);
         const currency = items[0].currency;
         const breakdown = items.map(i => `• Ref ${i.ref} — ${i.currency} ${i.amount.toLocaleString()}`).join('\n');
-        NotificationTriggerService.send({
-          userId,
-          title: isSingle
-            ? 'Cost Submission Paid / تم صرف المطالبة'
-            : `${items.length} Cost Submissions Paid / تم صرف ${items.length} مطالبات`,
-          message: isSingle
-            ? `Your cost submission "${items[0].ref}" (${currency} ${items[0].amount.toLocaleString()}) has been paid. Please confirm receipt in your Cost Submissions tab.`
-            : `${items.length} of your cost submissions have been paid.\n\nTotal: ${currency} ${total.toLocaleString()}\n\n${breakdown}\n\nPlease confirm receipt in your Cost Submissions tab.`,
-          type: 'success',
-          category: 'financial',
+        const batchMsgEn = isSingle
+          ? `Your cost submission "${items[0].ref}" (${currency} ${items[0].amount.toLocaleString()}) has been paid. Please confirm receipt in your Cost Submissions tab.`
+          : `${items.length} of your cost submissions have been paid.\n\nTotal: ${currency} ${total.toLocaleString()}\n\n${breakdown}\n\nPlease confirm receipt in your Cost Submissions tab.`;
+        dispatchNotification({
+          event: 'payment_processed',
+          recipientIds: [userId],
+          titleEn: isSingle ? 'Cost Submission Paid ✅' : `${items.length} Cost Submissions Paid ✅`,
+          titleAr: isSingle ? 'تم صرف المطالبة ✅' : `تم صرف ${items.length} مطالبات ✅`,
+          messageEn: batchMsgEn,
+          messageAr: batchMsgEn,
           priority: 'high',
-          link: '/cost-submission',
+          entityType: 'costSubmission',
+          entityId: items[0].ref,
+          actionUrl: '/cost-submission',
           sendEmail: true,
-          emailActionLabel: 'View Submissions',
+          sendWhatsApp: true,
+          metadata: { amount: `${currency} ${total.toLocaleString()}`, item_count: items.length },
         }).catch(console.error);
       });
 
@@ -3757,6 +3862,52 @@ const CostSubmission = () => {
                     Batch Pay ({selectedPayable.length})
                   </Button>
                 )}
+              </div>
+            );
+          })()}
+
+          {/* Stale-submissions alert — shown to approvers when items have been pending >3 days */}
+          {!operationalCostsLoading && (() => {
+            const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            const stalePending = filteredOperationalCosts.filter(oc => {
+              const st = getOperationalDerivedStatus(oc);
+              if (st !== 'pending' && st !== 'under_review') return false;
+              const submittedAt = oc.submitted_at ? new Date(oc.submitted_at).getTime() : 0;
+              return submittedAt > 0 && (now - submittedAt) > THREE_DAYS_MS;
+            });
+            if (stalePending.length === 0) return null;
+            const oldest = stalePending.reduce((a, b) => {
+              const ta = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+              const tb = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+              return ta < tb ? a : b;
+            });
+            const oldestDays = Math.floor((now - new Date(oldest.submitted_at!).getTime()) / (24 * 60 * 60 * 1000));
+            return (
+              <div
+                className="flex items-start gap-3 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm"
+                data-testid="banner-stale-submissions"
+              >
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">
+                    {stalePending.length === 1
+                      ? `1 submission has been waiting for approval for ${oldestDays} days`
+                      : `${stalePending.length} submissions have been waiting for approval — oldest is ${oldestDays} days`}
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-400 text-xs mt-0.5">
+                    Use the <strong>Send Reminder</strong> (⏰) button on each card to notify approvers via in-app notification, email, and WhatsApp.
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 flex-shrink-0"
+                  onClick={() => setStatusFilter('pending')}
+                  data-testid="button-stale-filter-pending"
+                >
+                  Show pending
+                </Button>
               </div>
             );
           })()}
@@ -8261,14 +8412,17 @@ const CostSubmission = () => {
             <div className="px-6 pt-4 pb-1">
               <Tabs
                 value={reminderPreviewDialog.tab}
-                onValueChange={(v) => setReminderPreviewDialog(prev => prev ? { ...prev, tab: v as 'notification' | 'email' } : prev)}
+                onValueChange={(v) => setReminderPreviewDialog(prev => prev ? { ...prev, tab: v as 'notification' | 'email' | 'whatsapp' } : prev)}
               >
-                <TabsList className="w-full grid grid-cols-2 mb-4">
+                <TabsList className="w-full grid grid-cols-3 mb-4">
                   <TabsTrigger value="notification" className="gap-1.5 text-xs">
-                    <Bell className="h-3.5 w-3.5" /> In-App Notification
+                    <Bell className="h-3.5 w-3.5" /> In-App
                   </TabsTrigger>
                   <TabsTrigger value="email" className="gap-1.5 text-xs">
                     <Mail className="h-3.5 w-3.5" /> Email
+                  </TabsTrigger>
+                  <TabsTrigger value="whatsapp" className="gap-1.5 text-xs">
+                    <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
                   </TabsTrigger>
                 </TabsList>
 
@@ -8381,6 +8535,43 @@ const CostSubmission = () => {
                     <p><strong>To:</strong> {reminderPreviewDialog.recipients.map(r => `${r.name || ''}${r.email ? ` <${r.email}>` : ''}`).join(', ')}</p>
                     <p><strong>Subject:</strong> ⏰ Reminder: Action Required — Cost Submission / تذكير: مطلوب إجراء على طلب التكلفة</p>
                     <p><strong>Priority:</strong> High &nbsp;·&nbsp; <strong>Category:</strong> Financial</p>
+                  </div>
+                </TabsContent>
+
+                {/* ── WhatsApp Tab ── */}
+                <TabsContent value="whatsapp" className="mt-0">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Sent via WhatsApp to recipients who have opted in to WhatsApp notifications:
+                  </p>
+                  <div className="rounded-xl overflow-hidden bg-[#ECE5DD] dark:bg-[#1A2C37] p-4 space-y-3 shadow-sm border">
+                    {/* WA header */}
+                    <div className="flex items-center gap-2 border-b border-black/10 dark:border-white/10 pb-2 mb-1">
+                      <div className="w-7 h-7 rounded-full bg-[#25D366] flex items-center justify-center flex-shrink-0">
+                        <MessageSquare className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="text-xs font-semibold text-[#075E54] dark:text-[#25D366]">PACT Command Center</span>
+                    </div>
+                    {/* Bubble */}
+                    <div className="bg-white dark:bg-[#202C33] rounded-lg px-3.5 py-2.5 shadow-sm max-w-xs">
+                      <p className="text-sm font-semibold text-[#25D366] mb-1">⏰ Reminder: Action Required</p>
+                      <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line">
+                        {`This is a reminder that cost submission "${reminderPreviewDialog.refNum}${reminderPreviewDialog.description ? ` — ${reminderPreviewDialog.description.length > 60 ? reminderPreviewDialog.description.substring(0, 60) + '…' : reminderPreviewDialog.description}` : ''}" (${reminderPreviewDialog.amtStr}) submitted by ${reminderPreviewDialog.submitterName} is waiting for your review at ${reminderPreviewDialog.stepLabel}. Please log in and take action.`}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-1.5 text-right">
+                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    {/* CTA link */}
+                    <div className="bg-white dark:bg-[#202C33] rounded-lg px-3.5 py-2 shadow-sm max-w-xs">
+                      <p className="text-xs text-[#25D366] font-medium flex items-center gap-1">
+                        <ExternalLink className="h-3 w-3" /> Open PACT Command Center
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 p-3 rounded-lg bg-muted/40 border text-xs text-muted-foreground space-y-1">
+                    <p><strong>Via:</strong> WasenderAPI (WhatsApp Business)</p>
+                    <p><strong>To:</strong> {reminderPreviewDialog.recipients.map(r => r.name || r.email || 'approver').join(', ')}</p>
+                    <p className="text-amber-600 dark:text-amber-400"><strong>Note:</strong> Only delivered to recipients with WhatsApp opted in.</p>
                   </div>
                 </TabsContent>
               </Tabs>
