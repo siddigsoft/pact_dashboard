@@ -25,7 +25,7 @@ export function isSupervisorSubmission(oc: OperationalCostTierInput): boolean {
 
 export function isFomSubmission(oc: OperationalCostTierInput): boolean {
   const role = normRole(oc.submitter_role);
-  return role === 'fom' || role === 'fieldoperationmanager';
+  return role === 'fom' || role.includes('fieldoperationmanager');
 }
 
 export function isCDSubmission(oc: OperationalCostTierInput): boolean {

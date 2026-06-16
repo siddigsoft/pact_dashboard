@@ -1161,7 +1161,7 @@ const CostSubmission = () => {
 
           if (hasFourTiers(submission)) {
             // Coordinator: T1=Supervisor→T2=FOM→T3=CountryDirector→T4=Admin
-            if (tier === 1) nextRoles = ['fom', 'fieldoperationmanager'];
+            if (tier === 1) nextRoles = ['fom', 'fieldoperationmanager', 'Field Operation Manager (FOM)'];
             if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
             if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else if (hasThreeTiers(submission)) {

@@ -267,6 +267,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'finances', action: 'read' },
+    { resource: 'finances', action: 'create' },  // FOM can submit operational costs
+    { resource: 'finances', action: 'approve' },  // FOM approves T1 (Supervisor flow) and T2 (Coordinator flow)
     { resource: 'reports', action: 'read' },
     // CRM - full operational access (manage partners/donors)
     { resource: 'crm', action: 'create' },
