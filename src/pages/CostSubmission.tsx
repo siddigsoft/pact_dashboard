@@ -627,9 +627,25 @@ const CostSubmission = () => {
 
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
-    // Admins, Super Admins, FOM, and Country Directors see everything unfiltered
-    if (!isAdminOrSuperUser && !isSuperAdmin && !isFOM && !isCountryDirector) {
-      if (isSupervisor) {
+    // Admins and Super Admins see everything unfiltered
+    // Country Directors see everything (they approve FOM T1 and Supervisor T2)
+    if (!isAdminOrSuperUser && !isSuperAdmin && !isCountryDirector) {
+      if (isFOM) {
+        // FOM sees only submissions in their approval chain:
+        //   • Their own submissions (any status)
+        //   • Supervisor submissions (FOM is T1 approver in the 3-tier flow)
+        //   • Coordinator submissions (FOM is T2 approver in the 4-tier flow)
+        //   • Any submission FOM has already actioned (T1 or T2 approved_by)
+        filtered = filtered.filter(o => {
+          if (o.submitted_by === currentUser?.id) return true;
+          const submitterRole = (o.submitter_role || '').toLowerCase();
+          if (submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor')) return true;
+          if (submitterRole.includes('coordinator')) return true;
+          if (o.tier1_approved_by === currentUser?.id) return true;
+          if (o.tier2_approved_by === currentUser?.id) return true;
+          return false;
+        });
+      } else if (isSupervisor) {
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
           if (teamMemberIds.length > 0 && teamMemberIds.includes(o.submitted_by)) return true;
