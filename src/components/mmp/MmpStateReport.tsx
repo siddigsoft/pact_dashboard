@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -265,7 +265,8 @@ export default function MmpStateReport({
   const resolveName = (id: any): string => {
     if (!id) return '—';
     if (typeof id !== 'string') return String(id);
-    return coordinatorNames[id] || userMap[id] || (id.length > 10 ? id.substring(0, 8) + '…' : id);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    return coordinatorNames[id] || userMap[id] || actorNameMap[id] || (isUuid ? id.substring(0, 8) + '…' : id);
   };
 
   // ── Derived: sites ─────────────────────────────────────────────────────────
@@ -491,7 +492,12 @@ export default function MmpStateReport({
     const rejected   = sites.filter(s => s.statusCategory === 'rejected').length;
     const pending    = sites.filter(s => s.statusCategory === 'pending').length;
     const total      = sites.length;
-    const noAdvance  = sites.filter(s => !s.advanceStatus || s.advanceStatus === '' || ['cancelled','rejected'].includes(s.advanceStatus)).length;
+    // Only flag sites where a collector is already involved (accepted/in-progress/verified)
+    // — pending/not-started sites don't need an advance yet
+    const noAdvance  = sites.filter(s =>
+      ['in_progress', 'verified'].includes(s.statusCategory) &&
+      (!s.advanceStatus || s.advanceStatus === '' || ['cancelled', 'rejected'].includes(s.advanceStatus))
+    ).length;
 
     // Activity type breakdown — split joined multi-types so each counts separately
     const atMap = new Map<string, { count: number; verified: number }>();
@@ -526,15 +532,17 @@ export default function MmpStateReport({
   // ── Derived: cycle timeline ────────────────────────────────────────────────
   const cycleTimeline = useMemo(() => {
     const events: { milestone: string; dateTime: string }[] = [];
-    const allTs = (field: string) => rawEntries.map((e: any) => e[field]).filter(Boolean).sort();
+    // rawEntries may be snake_case (raw DB) or camelCase (via mapSiteEntry) — check both
+    const allTs = (snake: string, camel: string) =>
+      rawEntries.map((e: any) => e[snake] || e[camel]).filter(Boolean).sort();
     const first = (arr: string[]) => arr[0]              ? fmt(arr[0])              : '—';
     const last  = (arr: string[]) => arr[arr.length - 1] ? fmt(arr[arr.length - 1]) : '—';
-    const dispatched = allTs('dispatched_at');
-    const forwarded  = allTs('forwarded_at');
-    const accepted   = allTs('accepted_at');
-    const started    = allTs('visit_started_at');
-    const completed  = allTs('visit_completed_at');
-    const verified   = allTs('verified_at');
+    const dispatched = allTs('dispatched_at',    'dispatchedAt');
+    const forwarded  = allTs('forwarded_at',     'forwardedAt');
+    const accepted   = allTs('accepted_at',      'acceptedAt');
+    const started    = allTs('visit_started_at', 'visitStartedAt');
+    const completed  = allTs('visit_completed_at','visitCompletedAt');
+    const verified   = allTs('verified_at',      'verifiedAt');
     if (forwarded.length)  events.push({ milestone: 'Plan sent to coordinators',        dateTime: first(forwarded)  });
     if (dispatched.length) events.push({ milestone: 'First site dispatched',            dateTime: first(dispatched) });
     if (accepted.length)   events.push({ milestone: 'First site accepted by collector', dateTime: first(accepted)   });
@@ -792,9 +800,8 @@ export default function MmpStateReport({
                             const isExpanded = expandedActivityType === type;
                             const typeSites = atSiteMap.get(type) || [];
                             return (
-                              <>
+                              <React.Fragment key={type}>
                                 <tr
-                                  key={type}
                                   className="border-t border-border/30 hover:bg-muted/20 cursor-pointer"
                                   onClick={() => setExpandedActivityType(isExpanded ? null : type)}
                                 >
@@ -855,7 +862,7 @@ export default function MmpStateReport({
                                     </td>
                                   </tr>
                                 )}
-                              </>
+                              </React.Fragment>
                             );
                           })}
                         </tbody>
@@ -1070,7 +1077,7 @@ export default function MmpStateReport({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {['#','Site Name','Locality','Status','Coordinator','Data Collector','Days in Status','Dispatched','Accepted','Verified/Done','Advance','Requested (SDG)','Next Step'].map(h => (
+                    {['#','Site Name','Locality','Activity Type','Status','Coordinator','Data Collector','Days in Status','Dispatched','Accepted','Verified/Done','Advance','Requested (SDG)','Next Step'].map(h => (
                       <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>
                     ))}
                   </TableRow>
@@ -1084,6 +1091,7 @@ export default function MmpStateReport({
                         {site.siteCode && <div className="text-[10px] text-muted-foreground">{site.siteCode}</div>}
                       </TableCell>
                       <TableCell className="text-xs">{site.locality || '—'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{site.activityType || '—'}</TableCell>
                       <TableCell>
                         <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_BADGE[site.statusCategory] || ''}`}>
                           {site.status.replace(/_/g, ' ')}
