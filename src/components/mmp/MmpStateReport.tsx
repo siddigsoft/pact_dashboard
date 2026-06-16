@@ -470,8 +470,9 @@ export default function MmpStateReport({
       const d = site.daysInCurrentStatus;
       if (site.statusCategory === 'in_progress' && d >= 7)
         items.push({ category: 'Stale Site', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: `In progress for ${d} days with no status change`, daysAffected: d });
-      if (['in_progress','verified'].includes(site.statusCategory) && !site.advanceStatus)
-        items.push({ category: 'Missing Advance', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: 'Site accepted/completed but no advance fund requested', daysAffected: d });
+      if (['in_progress','verified'].includes(site.statusCategory) &&
+          (!site.advanceStatus || site.advanceStatus === '' || ['cancelled','rejected'].includes(site.advanceStatus)))
+        items.push({ category: 'Missing Advance', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: site.advanceStatus && ['cancelled','rejected'].includes(site.advanceStatus) ? `Advance was ${site.advanceStatus} — new request needed` : 'Site accepted/completed but no advance fund requested', daysAffected: d });
       if (site.statusCategory === 'returned')
         items.push({ category: 'Returned – Needs Re-dispatch', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: 'Site returned — awaiting coordinator re-dispatch', daysAffected: d });
       if (site.statusCategory === 'rejected')
@@ -721,7 +722,7 @@ export default function MmpStateReport({
                     { label: 'Returned',              value: cycleSummary.returned,            cls: 'text-orange-700 dark:text-orange-400' },
                     { label: 'Rejected',              value: cycleSummary.rejected,            cls: 'text-red-700 dark:text-red-400' },
                     { label: 'Coverage %',            value: `${cycleSummary.coveragePct}%`,  cls: 'text-purple-700 dark:text-purple-400 font-bold' },
-                    { label: 'Sites Without Advance', value: cycleSummary.noAdvance,           cls: 'text-orange-700 dark:text-orange-400' },
+                    { label: 'Active Sites Missing Advance', value: cycleSummary.noAdvance,    cls: 'text-orange-700 dark:text-orange-400' },
                   ].map(({ label, value, cls }) => (
                     <div key={label} className="flex justify-between border-b border-border/30 py-1">
                       <span className="text-muted-foreground">{label}</span>
@@ -839,7 +840,7 @@ export default function MmpStateReport({
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {typeSites.map((s, idx) => (
+                                            {[...typeSites].sort((a, b) => a.siteName.localeCompare(b.siteName)).map((s, idx) => (
                                               <tr key={s.id} className="border-t border-border/20 hover:bg-muted/20">
                                                 <td className="px-3 py-1.5 text-muted-foreground">{idx + 1}</td>
                                                 <td className="px-3 py-1.5 font-medium max-w-[180px] truncate">{s.siteName}</td>
@@ -854,7 +855,7 @@ export default function MmpStateReport({
                                                     s.statusCategory === 'rejected'    ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' :
                                                     'bg-muted text-muted-foreground'
                                                   }`}>
-                                                    {s.status}
+                                                    {s.status.replace(/_/g, ' ')}
                                                   </span>
                                                 </td>
                                               </tr>
@@ -871,24 +872,36 @@ export default function MmpStateReport({
                         </tbody>
                         <tfoot>
                           {(() => {
-                            const totCount    = cycleSummary.activityTypeBreakdown.reduce((s, r) => s + r.count,    0);
-                            const totVerified = cycleSummary.activityTypeBreakdown.reduce((s, r) => s + r.verified, 0);
-                            const totRemain   = totCount - totVerified;
-                            const totPct      = totCount > 0 ? Math.round((totVerified / totCount) * 100) : 0;
+                            // Use real site counts (not summed type counts) to avoid double-counting
+                            // multi-type sites like "DM / AIM" that appear under more than one row
+                            const realTotal    = cycleSummary.totalSites;
+                            const realVerified = cycleSummary.verified;
+                            const realRemain   = realTotal - realVerified;
+                            const realPct      = realTotal > 0 ? Math.round((realVerified / realTotal) * 100) : 0;
+                            const hasMultiType = cycleSummary.activityTypeBreakdown.reduce((s, r) => s + r.count, 0) > realTotal;
                             return (
-                              <tr className="border-t-2 border-border bg-muted/60 text-xs font-bold">
-                                <td className="px-3 py-2" />
-                                <td className="px-3 py-2 text-foreground">Total</td>
-                                <td className="px-3 py-2 text-center text-foreground">{totCount}</td>
-                                <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{totVerified}</td>
-                                <td className={`px-3 py-2 text-center ${totRemain > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>{totRemain > 0 ? totRemain : '—'}</td>
-                                <td className="px-3 py-2 text-right text-purple-700 dark:text-purple-400">{totPct}%</td>
-                                <td className="px-3 py-2">
-                                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                    <div className="h-full bg-teal-500 rounded-full" style={{ width: `${totPct}%` }} />
-                                  </div>
-                                </td>
-                              </tr>
+                              <>
+                                <tr className="border-t-2 border-border bg-muted/60 text-xs font-bold">
+                                  <td className="px-3 py-2" />
+                                  <td className="px-3 py-2 text-foreground">Total</td>
+                                  <td className="px-3 py-2 text-center text-foreground">{realTotal}</td>
+                                  <td className="px-3 py-2 text-center text-green-700 dark:text-green-400">{realVerified}</td>
+                                  <td className={`px-3 py-2 text-center ${realRemain > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>{realRemain > 0 ? realRemain : '—'}</td>
+                                  <td className="px-3 py-2 text-right text-purple-700 dark:text-purple-400">{realPct}%</td>
+                                  <td className="px-3 py-2">
+                                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                      <div className="h-full bg-teal-500 rounded-full" style={{ width: `${realPct}%` }} />
+                                    </div>
+                                  </td>
+                                </tr>
+                                {hasMultiType && (
+                                  <tr className="bg-muted/30">
+                                    <td colSpan={7} className="px-3 py-1 text-[10px] text-muted-foreground italic">
+                                      * Some sites cover multiple activity types — row counts may exceed total sites
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
                             );
                           })()}
                         </tfoot>
