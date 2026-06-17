@@ -645,9 +645,12 @@ const CostSubmission = () => {
         //   • Any submission FOM has already actioned (T1 or T2 approved_by)
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
-          const submitterRole = (o.submitter_role || '').toLowerCase();
+          const submitterRole = (o.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
           if (submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor')) return true;
-          if (submitterRole.includes('coordinator')) return true;
+          // Coordinator-level roles (FOM is T2 approver for all of these)
+          if (submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
+            || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
+            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent')) return true;
           if (o.tier1_approved_by === currentUser?.id) return true;
           if (o.tier2_approved_by === currentUser?.id) return true;
           return false;
@@ -687,8 +690,14 @@ const CostSubmission = () => {
   }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
-    const role = (oc.submitter_role || '').toLowerCase();
-    return role.includes('coordinator');
+    const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
+    // Coordinator-level roles: coordinator, enumerator, data collector, field staff, field worker
+    return role.includes('coordinator')
+      || role.includes('enumerator')
+      || role.includes('datacollector')
+      || role.includes('fieldstaff')
+      || role.includes('fieldworker')
+      || role.includes('fieldagent');
   };
 
   const isSupervisorSubmission = (oc: OperationalCostSubmission): boolean => {
@@ -4392,7 +4401,7 @@ const CostSubmission = () => {
                               }).slice(0, 5);
 
                             const isSupervisorRolePredC  = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
-                            const isFomRolePredC         = (r: string) => r === 'fom' || r === 'fieldoperationmanager';
+                            const isFomRolePredC         = (r: string) => r === 'fom' || r.includes('fieldoperationmanager') || r.includes('fieldopmanager');
                             const isCDRolePredC          = (r: string) => r === 'countrydirector' || r === 'country_director';
                             const isAdminRolePredC       = (r: string) => r === 'admin' || r === 'superadmin' || r.includes('superadmin');
                             const isFinanceAdminRolePredC = (r: string) => r === 'financialadmin' || r === 'financeadmin' || r === 'finance' || r.includes('financ');
@@ -5049,7 +5058,7 @@ const CostSubmission = () => {
                               }).slice(0, 5);
 
                             const isSupervisorRolePred  = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
-                            const isFomRolePred         = (r: string) => r === 'fom' || r === 'fieldoperationmanager';
+                            const isFomRolePred         = (r: string) => r === 'fom' || r.includes('fieldoperationmanager') || r.includes('fieldopmanager');
                             const isCDRolePred          = (r: string) => r === 'countrydirector' || r === 'country_director';
                             const isAdminRolePred       = (r: string) => r === 'admin' || r === 'superadmin' || r.includes('superadmin');
                             const isFinanceAdminRolePred = (r: string) => r === 'financialadmin' || r === 'financeadmin' || r === 'finance' || r.includes('financ');
