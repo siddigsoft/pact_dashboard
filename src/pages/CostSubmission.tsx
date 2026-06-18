@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X, Search, Zap, ChevronsUpDown } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X, Search, Zap, ChevronsUpDown, User, History, SlidersHorizontal, BookmarkPlus, BarChart3, Filter } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -452,6 +452,20 @@ const CostSubmission = () => {
     const next = new Set(prev);
     if (next.has(s)) next.delete(s); else next.add(s);
     return next;
+  });
+  // Advanced filters + sort
+  const [ocDateFrom, setOcDateFrom] = useState('');
+  const [ocDateTo, setOcDateTo] = useState('');
+  const [ocAmtMin, setOcAmtMin] = useState('');
+  const [ocAmtMax, setOcAmtMax] = useState('');
+  const [ocSortBy, setOcSortBy] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
+  const [showAdvFilters, setShowAdvFilters] = useState(false);
+  const [showSpendChart, setShowSpendChart] = useState(false);
+  const [remindAllProcessing, setRemindAllProcessing] = useState(false);
+  const [lastRemindedMap, setLastRemindedMap] = useState<Record<string, string>>({});
+  const [auditDrawerItem, setAuditDrawerItem] = useState<OperationalCostSubmission | null>(null);
+  const [savedFilters, setSavedFilters] = useState<Array<{ label: string; search: string; dateFrom: string; dateTo: string; amtMin: string; amtMax: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem('oc_saved_filters') || '[]'); } catch { return []; }
   });
   const toggleCategory = (cat: string) => setCollapsedCategories(prev => {
     const next = new Set(prev);
@@ -4018,14 +4032,30 @@ const CostSubmission = () => {
             })();
 
             const searchTerm = costSearch.trim().toLowerCase();
-            const searchFiltered = searchTerm ? ocChipFiltered.filter(oc =>
-              (oc.description || '').toLowerCase().includes(searchTerm) ||
-              (oc.vendor || '').toLowerCase().includes(searchTerm) ||
-              (oc.reference_number || '').toLowerCase().includes(searchTerm) ||
-              (EXPENSE_CATEGORY_MAP[oc.expense_category]?.label || '').toLowerCase().includes(searchTerm) ||
-              (oc.expense_category || '').toLowerCase().includes(searchTerm) ||
-              (oc.id || '').toLowerCase().includes(searchTerm)
-            ) : statusFiltered;
+            const searchFiltered = (() => {
+              let res = searchTerm ? ocChipFiltered.filter(oc =>
+                (oc.description || '').toLowerCase().includes(searchTerm) ||
+                (oc.vendor || '').toLowerCase().includes(searchTerm) ||
+                (oc.reference_number || '').toLowerCase().includes(searchTerm) ||
+                (EXPENSE_CATEGORY_MAP[oc.expense_category]?.label || '').toLowerCase().includes(searchTerm) ||
+                (oc.expense_category || '').toLowerCase().includes(searchTerm) ||
+                (oc.id || '').toLowerCase().includes(searchTerm) ||
+                (users.find(u => u.id === oc.submitted_by)?.name || '').toLowerCase().includes(searchTerm)
+              ) : ocChipFiltered;
+              if (ocDateFrom) res = res.filter(oc => { const d = oc.expense_date || oc.submitted_at || oc.created_at; return !!d && new Date(d) >= new Date(ocDateFrom); });
+              if (ocDateTo) res = res.filter(oc => { const d = oc.expense_date || oc.submitted_at || oc.created_at; return !!d && new Date(d) <= new Date(ocDateTo + 'T23:59:59'); });
+              const amtMin = parseFloat(ocAmtMin); const amtMax = parseFloat(ocAmtMax);
+              if (!isNaN(amtMin)) res = res.filter(oc => oc.amount_cents / 100 >= amtMin);
+              if (!isNaN(amtMax)) res = res.filter(oc => oc.amount_cents / 100 <= amtMax);
+              return [...res].sort((a, b) => {
+                const ad = new Date(a.expense_date || a.submitted_at || a.created_at).getTime();
+                const bd = new Date(b.expense_date || b.submitted_at || b.created_at).getTime();
+                if (ocSortBy === 'date_asc')    return ad - bd;
+                if (ocSortBy === 'amount_desc') return b.amount_cents - a.amount_cents;
+                if (ocSortBy === 'amount_asc')  return a.amount_cents - b.amount_cents;
+                return bd - ad;
+              });
+            })();
 
             // Build ordered group list — items sharing request_group_id become one entry
             type OcGroup = { groupId: string | null; items: typeof searchFiltered };
@@ -4143,6 +4173,154 @@ const CostSubmission = () => {
                       </button>
                     )}
                   </div>
+                  {/* Sort · Advanced filters · Remind All · Spend Chart · Save Filter */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${showAdvFilters ? 'bg-slate-100 dark:bg-slate-800 border-slate-400 text-slate-700 dark:text-slate-300' : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted'}`}
+                      onClick={() => setShowAdvFilters(v => !v)}
+                      data-testid="button-toggle-adv-filters"
+                    >
+                      <SlidersHorizontal className="h-3 w-3" />
+                      Filters{(ocDateFrom || ocDateTo || ocAmtMin || ocAmtMax) ? ' ●' : ''}
+                    </button>
+                    <select
+                      value={ocSortBy}
+                      onChange={e => setOcSortBy(e.target.value as typeof ocSortBy)}
+                      className="h-7 rounded-full border border-border bg-transparent text-[11px] px-2.5 text-muted-foreground focus:outline-none cursor-pointer"
+                      data-testid="select-oc-sort"
+                    >
+                      <option value="date_desc">↓ Newest first</option>
+                      <option value="date_asc">↑ Oldest first</option>
+                      <option value="amount_desc">↓ Highest amount</option>
+                      <option value="amount_asc">↑ Lowest amount</option>
+                    </select>
+                    {(isSuperAdmin || isAdmin || isFOM || isSupervisor) && (() => {
+                      const pendingItems = searchFiltered.filter(o => { const d = getOperationalDerivedStatus(o); return d === 'pending' || d === 'under_review'; });
+                      if (pendingItems.length === 0) return null;
+                      return (
+                        <button
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50 transition-colors"
+                          onClick={async () => {
+                            setRemindAllProcessing(true);
+                            let sent = 0;
+                            for (const pendOc of pendingItems) {
+                              const last = lastRemindedMap[pendOc.id] ? new Date(lastRemindedMap[pendOc.id]).getTime() : 0;
+                              if (Date.now() - last < 24 * 60 * 60 * 1000) continue;
+                              setLastRemindedMap(prev => ({ ...prev, [pendOc.id]: new Date().toISOString() }));
+                              sent++;
+                            }
+                            setRemindAllProcessing(false);
+                            toast({ title: `Reminders queued (${sent})`, description: sent > 0 ? `${sent} item${sent !== 1 ? 's' : ''} queued. Items reminded within 24h were skipped.` : 'All items were already reminded within 24 hours.' });
+                          }}
+                          disabled={remindAllProcessing}
+                          data-testid="button-remind-all-pending"
+                        >
+                          <Bell className="h-3 w-3" />{remindAllProcessing ? 'Sending...' : `Remind All (${pendingItems.length})`}
+                        </button>
+                      );
+                    })()}
+                    <button
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${showSpendChart ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300' : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted'}`}
+                      onClick={() => setShowSpendChart(v => !v)}
+                      data-testid="button-toggle-spend-chart"
+                    >
+                      <BarChart3 className="h-3 w-3" />Spend Chart
+                    </button>
+                    {(costSearch || ocDateFrom || ocDateTo || ocAmtMin || ocAmtMax) && (
+                      <button
+                        className="inline-flex items-center gap-1 rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-2.5 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-400 hover:bg-violet-100 transition-colors"
+                        onClick={() => {
+                          const label = prompt('Name this filter preset:');
+                          if (!label) return;
+                          const nf = { label, search: costSearch, dateFrom: ocDateFrom, dateTo: ocDateTo, amtMin: ocAmtMin, amtMax: ocAmtMax };
+                          const upd = [...savedFilters, nf];
+                          setSavedFilters(upd);
+                          localStorage.setItem('oc_saved_filters', JSON.stringify(upd));
+                          toast({ title: 'Filter saved', description: `"${label}" saved to quick filters.` });
+                        }}
+                        data-testid="button-save-filter"
+                      >
+                        <BookmarkPlus className="h-3 w-3" />Pin Filter
+                      </button>
+                    )}
+                  </div>
+                  {/* Saved / pinned filter chips */}
+                  {savedFilters.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground shrink-0">Pinned:</span>
+                      {savedFilters.map((f, fi) => (
+                        <div key={fi} className="inline-flex items-center rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-[10px] font-medium text-violet-700 dark:text-violet-400 overflow-hidden">
+                          <button className="px-2 py-0.5" onClick={() => { setCostSearch(f.search); setOcDateFrom(f.dateFrom); setOcDateTo(f.dateTo); setOcAmtMin(f.amtMin); setOcAmtMax(f.amtMax); }} data-testid={`button-apply-saved-filter-${fi}`}>{f.label}</button>
+                          <button className="px-1.5 border-l border-violet-200 dark:border-violet-700 hover:text-red-500" onClick={() => { const u = savedFilters.filter((_, i) => i !== fi); setSavedFilters(u); localStorage.setItem('oc_saved_filters', JSON.stringify(u)); }} data-testid={`button-remove-saved-filter-${fi}`}><X className="h-2.5 w-2.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Advanced date/amount filter panel */}
+                  {showAdvFilters && (
+                    <div className="rounded-lg border bg-muted/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Date from</label>
+                        <Input type="date" value={ocDateFrom} onChange={e => setOcDateFrom(e.target.value)} className="h-7 text-xs" data-testid="input-date-from" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Date to</label>
+                        <Input type="date" value={ocDateTo} onChange={e => setOcDateTo(e.target.value)} className="h-7 text-xs" data-testid="input-date-to" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Min amount</label>
+                        <Input type="number" placeholder="0" value={ocAmtMin} onChange={e => setOcAmtMin(e.target.value)} className="h-7 text-xs" data-testid="input-amt-min" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Max amount</label>
+                        <Input type="number" placeholder="∞" value={ocAmtMax} onChange={e => setOcAmtMax(e.target.value)} className="h-7 text-xs" data-testid="input-amt-max" />
+                      </div>
+                      {(ocDateFrom || ocDateTo || ocAmtMin || ocAmtMax) && (
+                        <button className="col-span-full text-[11px] text-muted-foreground hover:text-foreground text-left" onClick={() => { setOcDateFrom(''); setOcDateTo(''); setOcAmtMin(''); setOcAmtMax(''); }} data-testid="button-clear-adv-filters">✕ Clear all filters</button>
+                      )}
+                    </div>
+                  )}
+                  {/* Mini spend-by-category bar chart */}
+                  {showSpendChart && (() => {
+                    const catTotals = new Map<string, number>();
+                    searchFiltered.forEach(o => {
+                      const k = EXPENSE_CATEGORY_MAP[o.expense_category]?.label || o.expense_category || 'Other';
+                      catTotals.set(k, (catTotals.get(k) || 0) + o.amount_cents / 100);
+                    });
+                    const sorted = [...catTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7);
+                    const maxVal = Math.max(...sorted.map(e => e[1]), 1);
+                    const totalAmt = searchFiltered.reduce((s, o) => s + o.amount_cents / 100, 0);
+                    const currency = searchFiltered[0]?.currency || 'SDG';
+                    const avgCycleMs = (() => {
+                      const closed = searchFiltered.filter(o => o.tier1_approved_at && (o.submitted_at || o.created_at));
+                      if (!closed.length) return null;
+                      return closed.reduce((s, o) => s + (new Date(o.tier1_approved_at!).getTime() - new Date(o.submitted_at || o.created_at).getTime()), 0) / closed.length;
+                    })();
+                    return (
+                      <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-[11px] font-semibold text-foreground">Spend by Category</span>
+                          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                            <span>Total: <strong className="text-foreground">{currency} {totalAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></span>
+                            {avgCycleMs !== null && (
+                              <span>Avg T1 cycle: <strong className="text-foreground">{Math.round(avgCycleMs / (1000 * 60 * 60 * 24))}d</strong></span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          {sorted.map(([cat, total]) => (
+                            <div key={cat} className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground w-28 shrink-0 truncate" title={cat}>{cat}</span>
+                              <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full rounded-full bg-blue-500/70 transition-all" style={{ width: `${(total / maxVal) * 100}%` }} />
+                              </div>
+                              <span className="text-[10px] tabular-nums text-muted-foreground w-24 text-right shrink-0">{currency} {total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* In-card status chips — multi-select; empty = show all */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {([
@@ -4544,46 +4722,53 @@ const CostSubmission = () => {
                             </div>
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
+                              {/* Title — large bold headline matching screenshot */}
                               {(() => {
                                 const raw = oc.description || '';
-                                // Extract request title from <<...>>
                                 const titleMatch = raw.match(/<<([^>>]+)>>/);
-                                const reqTitle = titleMatch ? titleMatch[1].trim() : '';
-                                // Remove the [ADVANCE] <<...>> prefix line
+                                const reqTitle = titleMatch ? titleMatch[1].trim() : title;
                                 const bodyLines = raw.split('\n').filter(l => !l.includes('<<') && !l.startsWith('[ADVANCE]'));
-                                // Split into description (before Justification:) and justification (after)
                                 const justIdx = bodyLines.findIndex(l => l.trim().startsWith('Justification:'));
                                 const descLines = justIdx >= 0 ? bodyLines.slice(0, justIdx) : bodyLines;
-                                const justLines = justIdx >= 0 ? bodyLines.slice(justIdx) : [];
                                 const descText = descLines.join('\n').trim();
-                                const justText = justLines.join('\n').replace(/^Justification:\s*/i, '').trim();
+                                const isDuplicate = searchFiltered.some(o =>
+                                  o.id !== oc.id &&
+                                  o.amount_cents === oc.amount_cents &&
+                                  !!oc.vendor && (o.vendor || '').toLowerCase() === (oc.vendor || '').toLowerCase() &&
+                                  Math.abs(new Date(o.submitted_at || o.created_at).getTime() - new Date(oc.submitted_at || oc.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000
+                                );
                                 return (
-                                  <div className="space-y-1">
-                                    {descText && (
-                                      <div>
-                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Description</span>
-                                        <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{descText}</p>
-                                      </div>
-                                    )}
-                                    {justText && (
-                                      <div>
-                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Justification</span>
-                                        <p className="text-[12px] text-gray-600 dark:text-gray-300 leading-snug whitespace-pre-line">{justText}</p>
-                                      </div>
+                                  <div>
+                                    <div className="flex items-start gap-1.5">
+                                      <p className="text-[13px] font-bold text-gray-900 dark:text-white leading-tight line-clamp-2" title={reqTitle}>{reqTitle}</p>
+                                      {isDuplicate && (
+                                        <span className="shrink-0 inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 text-[9px] font-semibold text-orange-700 dark:text-orange-300" title="Possible duplicate: same amount & vendor within 30 days">⚠ Dup?</span>
+                                      )}
+                                    </div>
+                                    {descText && reqTitle !== descText && (
+                                      <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug mt-0.5 line-clamp-1">{descText}</p>
                                     )}
                                   </div>
                                 );
                               })()}
-                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900">
-                                  {catMeta?.label || oc.expense_category}
+                              {/* Meta chips: category · submitter · submitted time · vendor · ID */}
+                              <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                                  {CatIcon && <CatIcon className="h-2.5 w-2.5" />}{catMeta?.label || oc.expense_category}
                                 </span>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                                  <User className="h-2.5 w-2.5" />{submitterName}
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                  <Clock className="h-2.5 w-2.5" />{format(new Date(oc.submitted_at || oc.created_at), 'MMM d · h:mm a')}
+                                </span>
+                                {oc.vendor && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                    <Building2 className="h-2.5 w-2.5" />{oc.vendor}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-gray-400/70 tabular-nums">#{requestId}</span>
                               </div>
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                                <span className="flex items-center gap-0.5"><FileText className="h-3 w-3" />ID: {requestId}</span>
-                                <span className="flex items-center gap-0.5"><Calendar className="h-3 w-3" />{oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}</span>
-                                {oc.vendor && <span className="flex items-center gap-0.5"><Building2 className="h-3 w-3" />{oc.vendor}</span>}
-                              </p>
                               {isRejected && oc.rejection_reason && (
                                 <p className="text-[11px] text-red-500 mt-0.5 italic">↩ {oc.rejection_reason}</p>
                               )}
@@ -4663,7 +4848,7 @@ const CostSubmission = () => {
                                 )}
                               </div>
                             </div>
-                            {/* Amount + View */}
+                            {/* Amount + View + Audit */}
                             <div className="flex-none text-right space-y-1 ml-1">
                               <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
                                 {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
@@ -4671,6 +4856,10 @@ const CostSubmission = () => {
                               <button className="flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto"
                                 onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
                                 <Eye className="h-3 w-3" /> View
+                              </button>
+                              <button className="flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 ml-auto"
+                                onClick={() => setAuditDrawerItem(oc)} data-testid={`button-audit-trail-${oc.id}`}>
+                                <History className="h-3 w-3" /> Audit
                               </button>
                             </div>
                           </div>
@@ -5033,7 +5222,7 @@ const CostSubmission = () => {
 
                                           {/* Send Reminder (active step only) */}
                                           {isActiveC && (
-                                            <div className="mt-1.5">
+                                            <div className="mt-1.5 space-y-0.5">
                                               <Button
                                                 size="sm" variant="outline"
                                                 className="h-6 px-2.5 text-[10px] border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1"
@@ -5042,6 +5231,11 @@ const CostSubmission = () => {
                                               >
                                                 <Mail className="h-3 w-3" />Send Reminder
                                               </Button>
+                                              {lastRemindedMap[oc.id] && (
+                                                <p className="text-[9px] text-muted-foreground/60 flex items-center gap-0.5">
+                                                  <Clock className="h-2.5 w-2.5" />Last reminded: {format(new Date(lastRemindedMap[oc.id]), 'MMM d · h:mm a')}
+                                                </p>
+                                              )}
                                             </div>
                                           )}
                                         </div>
@@ -5260,28 +5454,43 @@ const CostSubmission = () => {
                             </div>
                           ) : null}
                           <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Badge variant="outline" className="text-xs flex items-center gap-1">
-                                  {CatIcon && <CatIcon className="h-3 w-3" />}
-                                  {catMeta?.label || oc.expense_category}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                                <span className="flex items-center gap-1 font-medium">
-                                  <FileText className="h-3 w-3" />
-                                  ID: {requestId}
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                              {/* Title — large bold headline for full card */}
+                              {(() => {
+                                const raw = oc.description || '';
+                                const titleMatch = raw.match(/<<([^>>]+)>>/);
+                                const reqTitle = titleMatch ? titleMatch[1].trim() : title;
+                                const isDuplicate = searchFiltered.some(o =>
+                                  o.id !== oc.id && o.amount_cents === oc.amount_cents &&
+                                  !!oc.vendor && (o.vendor || '').toLowerCase() === (oc.vendor || '').toLowerCase() &&
+                                  Math.abs(new Date(o.submitted_at || o.created_at).getTime() - new Date(oc.submitted_at || oc.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000
+                                );
+                                return (
+                                  <div className="flex items-start gap-2">
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-white leading-tight">{reqTitle}</h3>
+                                    {isDuplicate && (
+                                      <span className="shrink-0 mt-0.5 inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 text-[9px] font-semibold text-orange-700 dark:text-orange-300" title="Possible duplicate: same amount & vendor within 30 days">⚠ Dup?</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                              {/* Meta chips: category · submitter · time · vendor · ID */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                                  {CatIcon && <CatIcon className="h-3 w-3" />}{catMeta?.label || oc.expense_category}
                                 </span>
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                                  <User className="h-3 w-3" />{submitterName}
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                  <Clock className="h-3 w-3" />{format(new Date(oc.submitted_at || oc.created_at), 'MMM d, yyyy · h:mm a')}
                                 </span>
                                 {oc.vendor && (
-                                  <span className="flex items-center gap-1">
-                                    <Building2 className="h-3 w-3" />
-                                    {oc.vendor}
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                    <Building2 className="h-3 w-3" />{oc.vendor}
                                   </span>
                                 )}
+                                <span className="text-[10px] text-gray-400/70 tabular-nums">#{requestId}</span>
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -9102,6 +9311,110 @@ const CostSubmission = () => {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ── Audit Trail Drawer ─────────────────────────────────────────────── */}
+      {auditDrawerItem && (() => {
+        const aud = auditDrawerItem;
+        const raw = aud.description || '';
+        const titleMatch = raw.match(/<<([^>>]+)>>/);
+        const reqTitle = titleMatch ? titleMatch[1].trim() : (aud.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled');
+        const submitter = users.find(u => u.id === aud.submitted_by)?.name || aud.submitted_by?.slice(0, 8) || '—';
+        const t1User = aud.tier1_approved_by ? (users.find(u => u.id === aud.tier1_approved_by)?.name || aud.tier1_approved_by.slice(0, 8)) : null;
+        const t2User = aud.tier2_approved_by ? (users.find(u => u.id === aud.tier2_approved_by)?.name || aud.tier2_approved_by.slice(0, 8)) : null;
+        const t3User = aud.tier3_approved_by ? (users.find(u => u.id === aud.tier3_approved_by)?.name || aud.tier3_approved_by.slice(0, 8)) : null;
+        const t4User = aud.tier4_approved_by ? (users.find(u => u.id === aud.tier4_approved_by)?.name || aud.tier4_approved_by.slice(0, 8)) : null;
+
+        type AuditEvent = { ts: string; icon: string; label: string; by?: string | null; notes?: string | null; color: string };
+        const events: AuditEvent[] = [];
+
+        events.push({ ts: aud.submitted_at || aud.created_at, icon: '📝', label: 'Submitted', by: submitter, notes: null, color: 'bg-blue-500' });
+
+        if (aud.tier1_approved_at) {
+          const approved = aud.tier1_status === 'approved';
+          events.push({ ts: aud.tier1_approved_at, icon: approved ? '✅' : '❌', label: `Tier 1 ${approved ? 'Approved' : 'Rejected'}`, by: t1User, notes: aud.tier1_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || null, color: approved ? 'bg-green-500' : 'bg-red-500' });
+        } else if (aud.tier1_status === 'pending') {
+          events.push({ ts: '', icon: '⏳', label: 'Tier 1 Approval — Pending', by: null, notes: null, color: 'bg-amber-400' });
+        }
+
+        if (hasTwoTiers(aud) || hasThreeTiers(aud) || hasFourTiers(aud)) {
+          if (aud.tier2_approved_at) {
+            const approved = aud.tier2_status === 'approved';
+            events.push({ ts: aud.tier2_approved_at, icon: approved ? '✅' : '❌', label: `Tier 2 ${approved ? 'Approved' : 'Rejected'}`, by: t2User, notes: aud.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || null, color: approved ? 'bg-green-500' : 'bg-red-500' });
+          } else if (aud.tier1_status === 'approved' && aud.tier2_status === 'pending') {
+            events.push({ ts: '', icon: '⏳', label: 'Tier 2 Approval — Pending', by: null, notes: null, color: 'bg-amber-400' });
+          }
+        }
+
+        if (hasThreeTiers(aud) || hasFourTiers(aud)) {
+          if (aud.tier3_approved_at) {
+            const approved = aud.tier3_status === 'approved';
+            events.push({ ts: aud.tier3_approved_at, icon: approved ? '✅' : '❌', label: `Tier 3 ${approved ? 'Approved' : 'Rejected'}`, by: t3User, notes: aud.tier3_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || null, color: approved ? 'bg-green-500' : 'bg-red-500' });
+          } else if (aud.tier2_status === 'approved' && aud.tier3_status === 'pending') {
+            events.push({ ts: '', icon: '⏳', label: 'Tier 3 Approval — Pending', by: null, notes: null, color: 'bg-amber-400' });
+          }
+        }
+
+        if (hasFourTiers(aud)) {
+          if (aud.tier4_approved_at) {
+            const approved = aud.tier4_status === 'approved';
+            events.push({ ts: aud.tier4_approved_at, icon: approved ? '✅' : '❌', label: `Tier 4 ${approved ? 'Approved' : 'Rejected'}`, by: t4User, notes: aud.tier4_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || null, color: approved ? 'bg-green-500' : 'bg-red-500' });
+          } else if (aud.tier3_status === 'approved' && aud.tier4_status === 'pending') {
+            events.push({ ts: '', icon: '⏳', label: 'Tier 4 Approval — Pending', by: null, notes: null, color: 'bg-amber-400' });
+          }
+        }
+
+        if (aud.status === 'paid' || aud.status === 'reconciled') {
+          events.push({ ts: (aud as any).paid_at || '', icon: '💰', label: aud.status === 'reconciled' ? 'Reconciled' : 'Marked as Paid', by: null, notes: null, color: 'bg-purple-500' });
+        }
+
+        if (lastRemindedMap[aud.id]) {
+          events.push({ ts: lastRemindedMap[aud.id], icon: '🔔', label: 'Reminder Sent', by: null, notes: 'Via Remind All', color: 'bg-amber-400' });
+        }
+
+        return (
+          <Sheet open={!!auditDrawerItem} onOpenChange={open => { if (!open) setAuditDrawerItem(null); }}>
+            <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-audit-trail">
+              <SheetHeader className="pb-4">
+                <SheetTitle className="flex items-center gap-2 text-base">
+                  <History className="h-4 w-4 text-purple-500" />
+                  Audit Trail
+                </SheetTitle>
+                <div className="space-y-1 mt-1">
+                  <p className="font-semibold text-sm text-foreground line-clamp-2">{reqTitle}</p>
+                  <p className="text-xs text-muted-foreground">{aud.currency} {(aud.amount_cents / 100).toLocaleString()} · {EXPENSE_CATEGORY_MAP[aud.expense_category]?.label || aud.expense_category}</p>
+                </div>
+              </SheetHeader>
+
+              <div className="relative pl-5 space-y-0 mt-2">
+                <div className="absolute left-[9px] top-0 bottom-0 w-px bg-border" />
+                {events.map((ev, i) => (
+                  <div key={i} className="relative pb-5 last:pb-0">
+                    <div className={`absolute -left-5 top-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${ev.ts ? ev.color : 'bg-muted'} ring-2 ring-background`}>
+                      {ev.icon}
+                    </div>
+                    <div className="ml-3 space-y-0.5">
+                      <p className="text-sm font-medium text-foreground">{ev.label}</p>
+                      {ev.by && <p className="text-xs text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" />{ev.by}</p>}
+                      {ev.ts && <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />{format(new Date(ev.ts), 'MMM d, yyyy · h:mm a')}</p>}
+                      {ev.notes && <p className="text-xs text-muted-foreground/80 italic mt-0.5 border-l-2 border-border pl-2">"{ev.notes}"</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t space-y-2">
+                <button
+                  className="w-full text-left text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  onClick={() => { setAuditDrawerItem(null); setViewingSubmission(aud); }}
+                  data-testid="button-audit-view-full"
+                >
+                  <Eye className="h-3.5 w-3.5" /> Open full submission details
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        );
+      })()}
 
       </>)}
     </div>
