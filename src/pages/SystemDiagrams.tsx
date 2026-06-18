@@ -3,7 +3,7 @@ import mermaid from "mermaid";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Download, ChevronDown, Network, Check } from "lucide-react";
-import { useAuthorization } from "@/hooks/useAuthorization";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { useNavigate } from "react-router-dom";
 
 mermaid.initialize({
