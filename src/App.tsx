@@ -89,6 +89,7 @@ const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 const SuperAdminDataManagement = lazy(() => import('./components/superAdmin/SuperAdminDataManagement').then(module => ({ default: module.SuperAdminDataManagement })));
+const SystemDiagrams = lazy(() => import('./pages/SystemDiagrams'));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const HubManagement = lazy(() => import('./pages/HubManagement'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
@@ -560,6 +561,7 @@ const AppRoutes = () => {
         <Route path="/positions" element={<Navigate to="/hr?tab=positions" replace />} />
         <Route path="/training-certifications" element={<Navigate to="/hr?tab=training" replace />} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
+        <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
         <Route path="/accounting/coa" element={<Navigate to="/accounting?tab=coa" replace />} />
         <Route path="/accounting/journals" element={<Navigate to="/accounting?tab=journals" replace />} />

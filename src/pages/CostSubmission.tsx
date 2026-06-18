@@ -6138,112 +6138,103 @@ const CostSubmission = () => {
                             </div>
                           )}
                           </div>)}
-                          {/* ── Compact action bar — always visible ── */}
-                          <div className="flex items-center gap-1 px-3 py-1.5 border-t bg-muted/10 flex-wrap" data-testid={`action-bar-${oc.id}`}>
-                            <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                              onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
-                              <Eye className="h-3 w-3" />View
+                          {/* ── Action bar — always visible ── */}
+                          {(() => {
+                            const btnGhost = "h-8 inline-flex items-center gap-1.5 px-3 text-xs font-medium rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 shadow-sm hover:shadow transition-all";
+                            const btnPrimary = "h-8 inline-flex items-center gap-1.5 px-3 text-xs font-semibold rounded-md bg-[#0F2041] hover:bg-[#1a3460] text-white shadow-sm hover:shadow-md active:scale-[0.98] transition-all";
+                            const btnDanger = "h-8 inline-flex items-center gap-1.5 px-3 text-xs font-semibold rounded-md bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md active:scale-[0.98] transition-all";
+                            const btnSuccess = "h-8 inline-flex items-center gap-1.5 px-3 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow-md active:scale-[0.98] transition-all";
+                            const btnBlue = "h-8 inline-flex items-center gap-1.5 px-3 text-xs font-medium rounded-md border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 shadow-sm transition-all";
+                            const btnAudit = "h-8 inline-flex items-center gap-1.5 px-3 text-xs font-medium rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 shadow-sm transition-all";
+                            return (
+                          <div className="flex items-center gap-1.5 px-3 py-2 border-t bg-gray-50/60 dark:bg-gray-900/30 flex-wrap" data-testid={`action-bar-${oc.id}`}>
+                            <button className={btnGhost} onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
+                              <Eye className="h-3.5 w-3.5" />View
                             </button>
                             {canTier1Approve(oc) && (<>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'approve', 1)} data-testid={`button-tier1-approve-${oc.id}`}>
-                                <ThumbsUp className="h-3 w-3" />Approve T1
+                              <button className={btnPrimary} onClick={() => openApprovalDialog(oc, 'approve', 1)} data-testid={`button-tier1-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3.5 w-3.5" />Approve T1
                               </button>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'reject', 1)} data-testid={`button-tier1-reject-${oc.id}`}>
-                                <ThumbsDown className="h-3 w-3" />Reject
+                              <button className={btnDanger} onClick={() => openApprovalDialog(oc, 'reject', 1)} data-testid={`button-tier1-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3.5 w-3.5" />Reject
                               </button>
                             </>)}
                             {canTier2Approve(oc) && (<>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'approve', 2)} data-testid={`button-tier2-approve-${oc.id}`}>
-                                <ThumbsUp className="h-3 w-3" />{hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'}
+                              <button className={btnPrimary} onClick={() => openApprovalDialog(oc, 'approve', 2)} data-testid={`button-tier2-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3.5 w-3.5" />{hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'}
                               </button>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'reject', 2)} data-testid={`button-tier2-reject-${oc.id}`}>
-                                <ThumbsDown className="h-3 w-3" />Reject
+                              <button className={btnDanger} onClick={() => openApprovalDialog(oc, 'reject', 2)} data-testid={`button-tier2-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3.5 w-3.5" />Reject
                               </button>
                             </>)}
                             {canTier3Approve(oc) && (<>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-tier3-approve-${oc.id}`}>
-                                <ThumbsUp className="h-3 w-3" />{hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
+                              <button className={btnPrimary} onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-tier3-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3.5 w-3.5" />{hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
                               </button>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-tier3-reject-${oc.id}`}>
-                                <ThumbsDown className="h-3 w-3" />Reject
+                              <button className={btnDanger} onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-tier3-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3.5 w-3.5" />Reject
                               </button>
                             </>)}
                             {canTier4Approve(oc) && (<>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'approve', 4)} data-testid={`button-tier4-approve-${oc.id}`}>
-                                <ThumbsUp className="h-3 w-3" />Final Approve T4
+                              <button className={btnPrimary} onClick={() => openApprovalDialog(oc, 'approve', 4)} data-testid={`button-tier4-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3.5 w-3.5" />Final Approve T4
                               </button>
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-                                onClick={() => openApprovalDialog(oc, 'reject', 4)} data-testid={`button-tier4-reject-${oc.id}`}>
-                                <ThumbsDown className="h-3 w-3" />Reject
+                              <button className={btnDanger} onClick={() => openApprovalDialog(oc, 'reject', 4)} data-testid={`button-tier4-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3.5 w-3.5" />Reject
                               </button>
                             </>)}
                             {getOperationalDerivedStatus(oc) === 'approved' && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
-                                onClick={() => handleDownloadCertificate(oc)} data-testid={`button-download-certificate-${oc.id}`}>
-                                <Download className="h-3 w-3" />PDF
+                              <button className={btnGhost} onClick={() => handleDownloadCertificate(oc)} data-testid={`button-download-certificate-${oc.id}`}>
+                                <Download className="h-3.5 w-3.5" />PDF
                               </button>
                             )}
                             {canRequestPayment(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
-                                onClick={() => openPaymentRequestDialog(oc)} data-testid={`button-request-payment-${oc.id}`}>
-                                <Mail className="h-3 w-3" />Request Payment
+                              <button className={btnBlue} onClick={() => openPaymentRequestDialog(oc)} data-testid={`button-request-payment-${oc.id}`}>
+                                <Mail className="h-3.5 w-3.5" />Request Payment
                               </button>
                             )}
                             {canMarkAsPaid(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-green-600 hover:bg-green-700 text-white transition-colors"
-                                onClick={() => handleMarkAsPaid(oc)} data-testid={`button-mark-paid-${oc.id}`}>
-                                <Wallet className="h-3 w-3" />Mark Paid
+                              <button className={btnSuccess} onClick={() => handleMarkAsPaid(oc)} data-testid={`button-mark-paid-${oc.id}`}>
+                                <Wallet className="h-3.5 w-3.5" />Mark Paid
                               </button>
                             )}
                             {derivedStatus === 'paid' && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
-                                onClick={() => { setActiveReconciliation(oc); setActiveTab("reconciliation"); }} data-testid={`button-reconcile-${oc.id}`}>
-                                <Receipt className="h-3 w-3" />Reconcile
+                              <button className={btnGhost} onClick={() => { setActiveReconciliation(oc); setActiveTab("reconciliation"); }} data-testid={`button-reconcile-${oc.id}`}>
+                                <Receipt className="h-3.5 w-3.5" />Reconcile
                               </button>
                             )}
                             {(isSuperAdmin || isAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 transition-colors"
-                                onClick={() => openBulkCostEmailDialog(oc)} data-testid={`button-send-finance-${oc.id}`}>
-                                <Mail className="h-3 w-3" />Send to Finance
+                              <button className={btnBlue} onClick={() => openBulkCostEmailDialog(oc)} data-testid={`button-send-finance-${oc.id}`}>
+                                <Mail className="h-3.5 w-3.5" />Send to Finance
                               </button>
                             )}
-                            <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
-                              onClick={() => setAuditDrawerItem(oc)} data-testid={`button-audit-trail-${oc.id}`}>
-                              <History className="h-3 w-3" />Audit
+                            <button className={btnAudit} onClick={() => setAuditDrawerItem(oc)} data-testid={`button-audit-trail-${oc.id}`}>
+                              <History className="h-3.5 w-3.5" />Audit
                             </button>
                             <div className="flex-1" />
                             {canEditSubmission(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
-                                onClick={() => handleEditSubmission(oc)} data-testid={`button-edit-submission-${oc.id}`}>
-                                <Pencil className="h-3 w-3" />Edit
+                              <button className={btnGhost} onClick={() => handleEditSubmission(oc)} data-testid={`button-edit-submission-${oc.id}`}>
+                                <Pencil className="h-3.5 w-3.5" />Edit
                               </button>
                             )}
                             {canResubmitSubmission(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
-                                onClick={() => handleEditSubmission(oc)} data-testid={`button-resubmit-submission-${oc.id}`}>
-                                <SendHorizonal className="h-3 w-3" />Resubmit
+                              <button className={btnPrimary} onClick={() => handleEditSubmission(oc)} data-testid={`button-resubmit-submission-${oc.id}`}>
+                                <SendHorizonal className="h-3.5 w-3.5" />Resubmit
                               </button>
                             )}
                             {canRecallSubmission(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
-                                onClick={() => setRecallConfirm(oc)} data-testid={`button-recall-submission-${oc.id}`}>
-                                <RotateCcw className="h-3 w-3" />Recall
+                              <button className={btnGhost} onClick={() => setRecallConfirm(oc)} data-testid={`button-recall-submission-${oc.id}`}>
+                                <RotateCcw className="h-3.5 w-3.5" />Recall
                               </button>
                             )}
                             {canDeleteSubmission(oc) && (
-                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-                                onClick={() => setDeleteConfirm(oc)} data-testid={`button-delete-submission-${oc.id}`}>
-                                <Trash2 className="h-3 w-3" />Delete
+                              <button className={btnDanger} onClick={() => setDeleteConfirm(oc)} data-testid={`button-delete-submission-${oc.id}`}>
+                                <Trash2 className="h-3.5 w-3.5" />Delete
                               </button>
                             )}
                           </div>
+                            );
+                          })()}
                       </div>
                     );
                     }); // end itemElements map

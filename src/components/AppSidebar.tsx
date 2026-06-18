@@ -14,6 +14,7 @@
     ChevronUp,
     Shield,
     ShieldCheck,
+    Network,
     Calendar,
     CalendarOff,
     Archive,
@@ -554,6 +555,9 @@
       const superAdminItems: MenuGroup['items'] = [];
       if (!isHidden('/super-admin-hub')) {
         superAdminItems.push({ id: 'super-admin-hub', title: "Super Admin Hub", url: "/super-admin-hub", icon: ShieldCheck, priority: 1, isPinned: isPinned('/super-admin-hub') });
+      }
+      if (!isHidden('/system-diagrams')) {
+        superAdminItems.push({ id: 'system-diagrams', title: "System Diagrams", url: "/system-diagrams", icon: Network, priority: 2, isPinned: isPinned('/system-diagrams') });
       }
       if (superAdminItems.length) groups.push({ id: 'super-admin', label: "Super Admin", order: 9, items: superAdminItems });
     }
