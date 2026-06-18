@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, WheelEvent, MouseEvent, TouchEvent } from "react";
 import mermaid from "mermaid";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Download, ChevronDown, Network, Check } from "lucide-react";
+import {
+  Copy, Download, ChevronDown, Network, Check,
+  ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, X,
+} from "lucide-react";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useNavigate } from "react-router-dom";
 
@@ -13,7 +16,7 @@ mermaid.initialize({
   fontSize: 13,
   flowchart: { curve: "basis", padding: 20 },
   sequence: { actorMargin: 60, messageMargin: 40 },
-  er: { useMaxWidth: true },
+  er: { useMaxWidth: false },
 });
 
 const DIAGRAMS: { id: string; label: string; color: string; code: string }[] = [
@@ -434,23 +437,180 @@ const DIAGRAMS: { id: string; label: string; color: string; code: string }[] = [
   },
 ];
 
+const MIN_SCALE = 0.15;
+const MAX_SCALE = 8;
+const ZOOM_STEP = 0.15;
+
+function InteractiveDiagram({ id, code, fullscreen }: { id: string; code: string; fullscreen: boolean }) {
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState("");
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const dragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const lastTouchDist = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setScale(1); setTx(0); setTy(0);
+    setSvg(""); setError("");
+    const render = async () => {
+      try {
+        const uid = `mermaid-${id}-${Date.now()}`;
+        const { svg: rendered } = await mermaid.render(uid, code);
+        if (!cancelled) setSvg(rendered);
+      } catch (e: unknown) {
+        if (!cancelled) setError(String(e));
+      }
+    };
+    render();
+    return () => { cancelled = true; };
+  }, [id, code]);
+
+  const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+  const onWheel = useCallback((e: WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const rect = containerRef.current!.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+    setScale(prev => {
+      const next = clampScale(prev + delta * prev);
+      const ratio = next / prev;
+      setTx(t => mx - ratio * (mx - t));
+      setTy(t => my - ratio * (my - t));
+      return next;
+    });
+  }, []);
+
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    dragging.current = true;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+  };
+  const onMouseMove = (e: MouseEvent) => {
+    if (!dragging.current) return;
+    setTx(t => t + e.clientX - lastPos.current.x);
+    setTy(t => t + e.clientY - lastPos.current.y);
+    lastPos.current = { x: e.clientX, y: e.clientY };
+  };
+  const onMouseUp = () => { dragging.current = false; };
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length === 1) {
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist.current = Math.sqrt(dx * dx + dy * dy);
+    }
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      setTx(t => t + e.touches[0].clientX - lastPos.current.x);
+      setTy(t => t + e.touches[0].clientY - lastPos.current.y);
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2 && lastTouchDist.current) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const ratio = dist / lastTouchDist.current;
+      setScale(s => clampScale(s * ratio));
+      lastTouchDist.current = dist;
+    }
+  };
+  const onTouchEnd = () => { lastTouchDist.current = null; };
+
+  const zoom = (delta: number) =>
+    setScale(s => clampScale(s + delta * s));
+  const reset = () => { setScale(1); setTx(0); setTy(0); };
+
+  const pct = Math.round(scale * 100);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Zoom toolbar */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b bg-gray-50 dark:bg-gray-900/50">
+        <button onClick={() => zoom(-ZOOM_STEP)}
+          className="h-7 w-7 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 shadow-sm transition-all"
+          title="Zoom out">
+          <ZoomOut className="h-3.5 w-3.5" />
+        </button>
+        <span className="text-xs font-mono w-12 text-center text-muted-foreground">{pct}%</span>
+        <button onClick={() => zoom(ZOOM_STEP)}
+          className="h-7 w-7 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 shadow-sm transition-all"
+          title="Zoom in">
+          <ZoomIn className="h-3.5 w-3.5" />
+        </button>
+        <div className="h-4 w-px bg-border mx-1" />
+        <button onClick={reset}
+          className="h-7 px-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center gap-1 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 shadow-sm transition-all"
+          title="Reset view">
+          <RotateCcw className="h-3 w-3" />Reset
+        </button>
+        <span className="ml-1 text-[10px] text-muted-foreground/60 hidden sm:block">Scroll to zoom · Drag to pan</span>
+      </div>
+
+      {/* Canvas */}
+      <div
+        ref={containerRef}
+        className={`flex-1 overflow-hidden bg-[radial-gradient(circle,#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(circle,#374151_1px,transparent_1px)] bg-[size:20px_20px] ${dragging.current ? "cursor-grabbing" : "cursor-grab"}`}
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{ minHeight: fullscreen ? "calc(100vh - 160px)" : "400px" }}
+      >
+        {error ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-lg border border-red-200">
+              Render error: {error}
+            </p>
+          </div>
+        ) : !svg ? (
+          <div className="flex items-center justify-center h-full gap-2 text-muted-foreground text-sm">
+            <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            Rendering diagram…
+          </div>
+        ) : (
+          <div
+            style={{
+              transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+              transformOrigin: "0 0",
+              display: "inline-block",
+              padding: "24px",
+              userSelect: "none",
+            }}
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DiagramBlock({ id, code }: { id: string; code: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [svg, setSvg] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [copied, setCopied] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [svgText, setSvgText] = useState("");
+  const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const render = async () => {
       try {
-        const uniqueId = `mermaid-${id}-${Date.now()}`;
-        const { svg: rendered } = await mermaid.render(uniqueId, code);
-        if (!cancelled) setSvg(rendered);
-      } catch (e: unknown) {
-        if (!cancelled) setError(String(e));
-      }
+        const uid = `dl-${id}-${Date.now()}`;
+        const { svg } = await mermaid.render(uid, code);
+        if (!cancelled) setSvgText(svg);
+      } catch { /* ignore */ }
     };
     render();
     return () => { cancelled = true; };
@@ -463,8 +623,8 @@ function DiagramBlock({ id, code }: { id: string; code: string }) {
   };
 
   const handleDownload = () => {
-    if (!svg) return;
-    const blob = new Blob([svg], { type: "image/svg+xml" });
+    if (!svgText) return;
+    const blob = new Blob([svgText], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -474,43 +634,65 @@ function DiagramBlock({ id, code }: { id: string; code: string }) {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => setShowCode(v => !v)} className="gap-1.5 text-xs h-8">
-          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCode ? "rotate-180" : ""}`} />
-          {showCode ? "Hide" : "View"} Code
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5 text-xs h-8">
-          {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-          {copied ? "Copied!" : "Copy"}
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleDownload} disabled={!svg} className="gap-1.5 text-xs h-8">
-          <Download className="h-3.5 w-3.5" />SVG
-        </Button>
-      </div>
-
-      {showCode && (
-        <pre className="bg-gray-950 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto leading-relaxed border border-gray-800 max-h-72 overflow-y-auto">
-          {code}
-        </pre>
+    <>
+      {/* Fullscreen overlay */}
+      {maximized && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 border-b bg-white dark:bg-gray-950 shrink-0">
+            <div className="flex items-center gap-2">
+              <Network className="h-4 w-4 text-violet-500" />
+              <span className="font-semibold text-sm">System Diagrams — Fullscreen</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5 text-xs h-8">
+                {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? "Copied!" : "Copy Code"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownload} disabled={!svgText} className="gap-1.5 text-xs h-8">
+                <Download className="h-3.5 w-3.5" />SVG
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setMaximized(false)} className="h-8 w-8">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0">
+            <InteractiveDiagram id={`${id}-fs`} code={code} fullscreen />
+          </div>
+        </div>
       )}
 
-      <div
-        ref={ref}
-        className="rounded-xl border border-border bg-white dark:bg-gray-950 p-4 overflow-x-auto min-h-[200px] flex items-center justify-center"
-      >
-        {error ? (
-          <p className="text-sm text-red-500">Render error: {error}</p>
-        ) : svg ? (
-          <div dangerouslySetInnerHTML={{ __html: svg }} className="max-w-full" />
-        ) : (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            Rendering diagram…
-          </div>
+      {/* Normal card */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowCode(v => !v)} className="gap-1.5 text-xs h-8">
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCode ? "rotate-180" : ""}`} />
+            {showCode ? "Hide" : "View"} Code
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5 text-xs h-8">
+            {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "Copied!" : "Copy"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownload} disabled={!svgText} className="gap-1.5 text-xs h-8">
+            <Download className="h-3.5 w-3.5" />SVG
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setMaximized(true)} className="gap-1.5 text-xs h-8">
+            <Maximize2 className="h-3.5 w-3.5" />Maximize
+          </Button>
+        </div>
+
+        {showCode && (
+          <pre className="bg-gray-950 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto leading-relaxed border border-gray-800 max-h-72 overflow-y-auto">
+            {code}
+          </pre>
         )}
+
+        {/* Interactive inline diagram */}
+        <div className="rounded-xl border border-border overflow-hidden shadow-sm">
+          <InteractiveDiagram id={id} code={code} fullscreen={false} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -529,7 +711,7 @@ export default function SystemDiagrams() {
   return (
     <div className="flex flex-col h-full min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b bg-white dark:bg-gray-950 px-6 py-4 flex items-center gap-3">
+      <div className="border-b bg-white dark:bg-gray-950 px-6 py-4 flex items-center gap-3 shrink-0">
         <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm">
           <Network className="h-5 w-5 text-white" />
         </div>
@@ -544,7 +726,7 @@ export default function SystemDiagrams() {
 
       <div className="flex flex-1 min-h-0">
         {/* Sidebar tabs */}
-        <nav className="w-56 shrink-0 border-r bg-gray-50/60 dark:bg-gray-900/40 py-3 flex flex-col gap-0.5 px-2">
+        <nav className="w-56 shrink-0 border-r bg-gray-50/60 dark:bg-gray-900/40 py-3 flex flex-col gap-0.5 px-2 overflow-y-auto">
           {DIAGRAMS.map(d => (
             <button
               key={d.id}
@@ -555,7 +737,7 @@ export default function SystemDiagrams() {
                   : "text-muted-foreground hover:bg-white/70 dark:hover:bg-gray-800/60 hover:text-foreground"
               }`}
             >
-              <span className={`inline-flex items-center gap-2`}>
+              <span className="inline-flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${active === d.id ? "bg-violet-500" : "bg-gray-300 dark:bg-gray-600"}`} />
                 {d.label}
               </span>
@@ -570,6 +752,7 @@ export default function SystemDiagrams() {
               <Badge className={current.color + " text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"}>
                 {current.label}
               </Badge>
+              <span className="text-xs text-muted-foreground">Scroll to zoom · drag to pan · maximize for fullscreen</span>
             </div>
             <DiagramBlock key={current.id} id={current.id} code={current.code} />
           </div>
