@@ -423,6 +423,13 @@ const CostSubmission = () => {
   // Inverted logic: stores which categories are COLLAPSED. Empty set = all expanded.
   // This correctly handles any category key, including custom/unknown ones.
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  // In-card status chips: empty = show all; values are 'pending'|'approved'|'paid'|'rejected'
+  const [ocStatusFilter, setOcStatusFilter] = useState<Set<string>>(new Set());
+  const toggleOcStatus = (s: string) => setOcStatusFilter(prev => {
+    const next = new Set(prev);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    return next;
+  });
   const toggleCategory = (cat: string) => setCollapsedCategories(prev => {
     const next = new Set(prev);
     if (next.has(cat)) next.delete(cat); else next.add(cat);
@@ -573,10 +580,11 @@ const CostSubmission = () => {
     fetchOperationalCosts();
   }, [fetchOperationalCosts]);
 
-  // Clear cost search whenever the status filter changes so stale search
-  // terms don't silently hide results in a different filter bucket
+  // Clear cost search and in-card status chips whenever the global status
+  // filter tab changes so stale filters don't hide results in a new bucket
   useEffect(() => {
     setCostSearch('');
+    setOcStatusFilter(new Set());
   }, [statusFilter]);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
@@ -3958,8 +3966,27 @@ const CostSubmission = () => {
               ? filteredOperationalCosts
               : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
 
+            // In-card status chip counts (computed before the chip filter so badges
+            // always reflect the full statusFiltered pool, not the filtered slice)
+            const ocStatusCounts = {
+              pending: statusFiltered.filter(o => { const d = getOperationalDerivedStatus(o); return d === 'pending' || d === 'under_review'; }).length,
+              approved: statusFiltered.filter(o => getOperationalDerivedStatus(o) === 'approved').length,
+              paid: statusFiltered.filter(o => { const d = getOperationalDerivedStatus(o); return d === 'paid' || d === 'reconciled'; }).length,
+              rejected: statusFiltered.filter(o => getOperationalDerivedStatus(o) === 'rejected').length,
+            };
+
+            // Apply in-card status chip filter on top of the global tab filter
+            const ocChipFiltered = ocStatusFilter.size === 0 ? statusFiltered : statusFiltered.filter(oc => {
+              const d = getOperationalDerivedStatus(oc);
+              if (ocStatusFilter.has('pending') && (d === 'pending' || d === 'under_review')) return true;
+              if (ocStatusFilter.has('approved') && d === 'approved') return true;
+              if (ocStatusFilter.has('paid') && (d === 'paid' || d === 'reconciled')) return true;
+              if (ocStatusFilter.has('rejected') && d === 'rejected') return true;
+              return false;
+            });
+
             const searchTerm = costSearch.trim().toLowerCase();
-            const searchFiltered = searchTerm ? statusFiltered.filter(oc =>
+            const searchFiltered = searchTerm ? ocChipFiltered.filter(oc =>
               (oc.description || '').toLowerCase().includes(searchTerm) ||
               (oc.vendor || '').toLowerCase().includes(searchTerm) ||
               (oc.reference_number || '').toLowerCase().includes(searchTerm) ||
@@ -4063,6 +4090,40 @@ const CostSubmission = () => {
                     {costSearch && (
                       <button className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground" onClick={() => setCostSearch('')} data-testid="button-clear-cost-search">
                         <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  {/* In-card status chips — multi-select; empty = show all */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {([
+                      { key: 'pending',  label: 'Pending',  count: ocStatusCounts.pending,  activeClass: 'bg-amber-100 dark:bg-amber-900/40 border-amber-400 text-amber-800 dark:text-amber-300' },
+                      { key: 'approved', label: 'Approved', count: ocStatusCounts.approved, activeClass: 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-400 text-emerald-800 dark:text-emerald-300' },
+                      { key: 'paid',     label: 'Paid',     count: ocStatusCounts.paid,     activeClass: 'bg-blue-100 dark:bg-blue-900/40 border-blue-400 text-blue-800 dark:text-blue-300' },
+                      { key: 'rejected', label: 'Rejected', count: ocStatusCounts.rejected, activeClass: 'bg-red-100 dark:bg-red-900/40 border-red-400 text-red-800 dark:text-red-300' },
+                    ] as const).filter(c => c.count > 0).map(({ key, label, count, activeClass }) => {
+                      const active = ocStatusFilter.has(key);
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => toggleOcStatus(key)}
+                          data-testid={`chip-oc-status-${key}`}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
+                            ${active ? activeClass : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted'}`}
+                        >
+                          {label}
+                          <span className={`rounded-full px-1 text-[10px] font-semibold ${active ? 'bg-white/40 dark:bg-black/30' : 'bg-muted-foreground/20'}`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {ocStatusFilter.size > 0 && (
+                      <button
+                        onClick={() => setOcStatusFilter(new Set())}
+                        className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                        data-testid="button-clear-oc-status-filter"
+                      >
+                        Clear
                       </button>
                     )}
                   </div>
