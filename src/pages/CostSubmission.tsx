@@ -420,10 +420,10 @@ const CostSubmission = () => {
     return next;
   });
   const [costSearch, setCostSearch] = useState('');
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    () => new Set([...Object.keys(EXPENSE_CATEGORY_MAP), 'unknown'])
-  );
-  const toggleCategory = (cat: string) => setExpandedCategories(prev => {
+  // Inverted logic: stores which categories are COLLAPSED. Empty set = all expanded.
+  // This correctly handles any category key, including custom/unknown ones.
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const toggleCategory = (cat: string) => setCollapsedCategories(prev => {
     const next = new Set(prev);
     if (next.has(cat)) next.delete(cat); else next.add(cat);
     return next;
@@ -572,6 +572,12 @@ const CostSubmission = () => {
   useEffect(() => {
     fetchOperationalCosts();
   }, [fetchOperationalCosts]);
+
+  // Clear cost search whenever the status filter changes so stale search
+  // terms don't silently hide results in a different filter bucket
+  useEffect(() => {
+    setCostSearch('');
+  }, [statusFilter]);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
   // - Admins/Supervisors: Fetch all submissions (enabled), skip user-specific query (empty userId)
@@ -3853,42 +3859,30 @@ const CostSubmission = () => {
             </Button>
           </div>
 
-          {/* Batch Pay selection bar — visible whenever ≥1 payable submission exists, sticky so it stays in view while scrolling */}
+          {/* Batch Pay selection bar — shown when ≥1 item is selected, sticky */}
           {(() => {
             const payableOcs = filteredOperationalCosts.filter(canMarkAsPaid);
             const selectedPayable = payableOcs.filter(oc => selectedCostIds.has(oc.id));
-            if (payableOcs.length === 0) return null;
+            if (selectedPayable.length === 0) return null;
             return (
               <div className="sticky top-0 z-20 flex items-center justify-between gap-2 flex-wrap rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 shadow-sm">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                    {selectedPayable.length} selected · {selectedPayable[0].currency} {selectedPayable.reduce((s, oc) => s + oc.amount_cents / 100, 0).toLocaleString()} total
+                  </span>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => {
-                      if (selectedPayable.length === payableOcs.length) {
-                        setSelectedCostIds(prev => {
-                          const next = new Set(prev);
-                          payableOcs.forEach(oc => next.delete(oc.id));
-                          return next;
-                        });
-                      } else {
-                        setSelectedCostIds(prev => {
-                          const next = new Set(prev);
-                          payableOcs.forEach(oc => next.add(oc.id));
-                          return next;
-                        });
-                      }
-                    }}
-                    data-testid="button-select-all-payable"
+                    className="h-6 px-2 text-xs text-emerald-700 hover:text-emerald-900"
+                    onClick={() => setSelectedCostIds(prev => {
+                      const next = new Set(prev);
+                      selectedPayable.forEach(oc => next.delete(oc.id));
+                      return next;
+                    })}
+                    data-testid="button-deselect-all-payable"
                   >
-                    {selectedPayable.length === payableOcs.length ? 'Deselect All' : `Select All Approved (${payableOcs.length})`}
+                    Clear selection
                   </Button>
-                  {selectedPayable.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {selectedPayable.length} selected · {selectedPayable[0].currency} {selectedPayable.reduce((s, oc) => s + oc.amount_cents / 100, 0).toLocaleString()} total
-                    </span>
-                  )}
                 </div>
                 {selectedPayable.length >= 2 && (
                   <Button
@@ -4010,7 +4004,7 @@ const CostSubmission = () => {
               <CardHeader className="pb-3">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Receipt className="h-5 w-5 text-blue-600" />
                       <CardTitle className="text-base">Operational Cost Requests</CardTitle>
                       <Badge variant="secondary">{ocGroups.length}</Badge>
@@ -4018,23 +4012,44 @@ const CostSubmission = () => {
                         <span className="text-xs text-muted-foreground">({searchFiltered.length} items)</span>
                       )}
                     </div>
-                    {allPayableFiltered.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      {allPayableFiltered.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => {
+                            setSelectedCostIds(prev => {
+                              const next = new Set(prev);
+                              allPayableFiltered.forEach(o => { if (allPayableSelected) next.delete(o.id); else next.add(o.id); });
+                              return next;
+                            });
+                          }}
+                          data-testid="button-select-all-visible"
+                        >
+                          {allPayableSelected ? 'Deselect All' : `Select All (${allPayableFiltered.length})`}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-7 px-2.5 text-xs"
+                        variant="ghost"
+                        className="h-7 px-2.5 text-xs text-muted-foreground"
                         onClick={() => {
-                          setSelectedCostIds(prev => {
-                            const next = new Set(prev);
-                            allPayableFiltered.forEach(o => { if (allPayableSelected) next.delete(o.id); else next.add(o.id); });
-                            return next;
-                          });
+                          if (collapsedCategories.size > 0) {
+                            setCollapsedCategories(new Set());
+                          } else {
+                            setCollapsedCategories(new Set(sortedCatKeys));
+                          }
                         }}
-                        data-testid="button-select-all-visible"
+                        data-testid="button-toggle-all-categories"
                       >
-                        {allPayableSelected ? 'Deselect All' : `Select All (${allPayableFiltered.length})`}
+                        {collapsedCategories.size > 0 ? (
+                          <><ChevronDown className="h-3.5 w-3.5 mr-1" />Expand All</>
+                        ) : (
+                          <><ChevronRight className="h-3.5 w-3.5 mr-1" />Collapse All</>
+                        )}
                       </Button>
-                    )}
+                    </div>
                   </div>
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -4070,7 +4085,7 @@ const CostSubmission = () => {
                     const catRejectedCnt = catAllItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
                     const catTotalCents = catAllItems.reduce((s, o) => s + o.amount_cents, 0);
                     const catCurrency = catAllItems[0]?.currency || 'USD';
-                    const isCatExpanded = expandedCategories.has(cat);
+                    const isCatExpanded = !collapsedCategories.has(cat);
                     return (
                       <div key={cat} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0" data-testid={`category-section-${cat}`}>
                         {/* ── Category Header ── */}
