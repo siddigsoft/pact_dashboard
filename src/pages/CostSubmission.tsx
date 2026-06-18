@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X, Search } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -417,6 +417,15 @@ const CostSubmission = () => {
   const toggleGroup = (groupId: string) => setExpandedGroups(prev => {
     const next = new Set(prev);
     if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
+    return next;
+  });
+  const [costSearch, setCostSearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    () => new Set([...Object.keys(EXPENSE_CATEGORY_MAP), 'unknown'])
+  );
+  const toggleCategory = (cat: string) => setExpandedCategories(prev => {
+    const next = new Set(prev);
+    if (next.has(cat)) next.delete(cat); else next.add(cat);
     return next;
   });
   const [editingItem, setEditingItem] = useState<OperationalCostSubmission | null>(null);
@@ -3955,38 +3964,185 @@ const CostSubmission = () => {
               ? filteredOperationalCosts
               : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
 
+            const searchTerm = costSearch.trim().toLowerCase();
+            const searchFiltered = searchTerm ? statusFiltered.filter(oc =>
+              (oc.description || '').toLowerCase().includes(searchTerm) ||
+              (oc.vendor || '').toLowerCase().includes(searchTerm) ||
+              (oc.reference_number || '').toLowerCase().includes(searchTerm) ||
+              (EXPENSE_CATEGORY_MAP[oc.expense_category]?.label || '').toLowerCase().includes(searchTerm) ||
+              (oc.expense_category || '').toLowerCase().includes(searchTerm) ||
+              (oc.id || '').toLowerCase().includes(searchTerm)
+            ) : statusFiltered;
+
             // Build ordered group list — items sharing request_group_id become one entry
-            type OcGroup = { groupId: string | null; items: typeof statusFiltered };
+            type OcGroup = { groupId: string | null; items: typeof searchFiltered };
             const ocGroups: OcGroup[] = [];
             const seenGroupIds = new Set<string>();
-            for (const oc of statusFiltered) {
+            for (const oc of searchFiltered) {
               const gid = oc.request_group_id ?? null;
               if (gid && seenGroupIds.has(gid)) continue;
               if (gid) {
                 seenGroupIds.add(gid);
-                ocGroups.push({ groupId: gid, items: statusFiltered.filter(o => o.request_group_id === gid) });
+                ocGroups.push({ groupId: gid, items: searchFiltered.filter(o => o.request_group_id === gid) });
               } else {
                 ocGroups.push({ groupId: null, items: [oc] });
               }
             }
 
-            return statusFiltered.length > 0 ? (
+            // Build category groups from ocGroups
+            const catOrderKeys = Object.keys(EXPENSE_CATEGORY_MAP);
+            const catGroupMap = new Map<string, typeof ocGroups>();
+            for (const g of ocGroups) {
+              const cat = g.items[0]?.expense_category || 'other';
+              if (!catGroupMap.has(cat)) catGroupMap.set(cat, []);
+              catGroupMap.get(cat)!.push(g);
+            }
+            const sortedCatKeys = Array.from(catGroupMap.keys()).sort((a, b) => {
+              const ai = catOrderKeys.indexOf(a);
+              const bi = catOrderKeys.indexOf(b);
+              return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+            });
+            const allPayableFiltered = searchFiltered.filter(canMarkAsPaid);
+            const allPayableSelected = allPayableFiltered.length > 0 && allPayableFiltered.every(o => selectedCostIds.has(o.id));
+
+            return searchFiltered.length > 0 ? (
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Receipt className="h-5 w-5 text-blue-600" />
-                    <CardTitle className="text-base">Operational Cost Requests</CardTitle>
-                    <Badge variant="secondary">{ocGroups.length}</Badge>
-                    {ocGroups.length !== statusFiltered.length && (
-                      <span className="text-xs text-muted-foreground">({statusFiltered.length} items)</span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Receipt className="h-5 w-5 text-blue-600" />
+                      <CardTitle className="text-base">Operational Cost Requests</CardTitle>
+                      <Badge variant="secondary">{ocGroups.length}</Badge>
+                      {ocGroups.length !== searchFiltered.length && (
+                        <span className="text-xs text-muted-foreground">({searchFiltered.length} items)</span>
+                      )}
+                    </div>
+                    {allPayableFiltered.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2.5 text-xs"
+                        onClick={() => {
+                          setSelectedCostIds(prev => {
+                            const next = new Set(prev);
+                            allPayableFiltered.forEach(o => { if (allPayableSelected) next.delete(o.id); else next.add(o.id); });
+                            return next;
+                          });
+                        }}
+                        data-testid="button-select-all-visible"
+                      >
+                        {allPayableSelected ? 'Deselect All' : `Select All (${allPayableFiltered.length})`}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Search by description, vendor, reference, category..."
+                      value={costSearch}
+                      onChange={e => setCostSearch(e.target.value)}
+                      className="pl-8 h-9 text-sm"
+                      data-testid="input-cost-search"
+                    />
+                    {costSearch && (
+                      <button className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground" onClick={() => setCostSearch('')} data-testid="button-clear-cost-search">
+                        <X className="h-4 w-4" />
+                      </button>
                     )}
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {ocGroups.map(({ groupId, items: groupItems }) => {
+              <CardContent className="p-0">
+                <div>
+                  {sortedCatKeys.map(cat => {
+                    const catGroups = catGroupMap.get(cat)!;
+                    const catMetaH = EXPENSE_CATEGORY_MAP[cat];
+                    const CatIconH = catMetaH?.icon;
+                    const catLabelH = catMetaH?.label || cat.replace(/_/g, ' ');
+                    const catAllItems = catGroups.flatMap(g => g.items);
+                    const catPayable = catAllItems.filter(canMarkAsPaid);
+                    const catAllSelected = catPayable.length > 0 && catPayable.every(o => selectedCostIds.has(o.id));
+                    const catSomeSelected = catPayable.some(o => selectedCostIds.has(o.id));
+                    const catPendingCnt = catAllItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'pending' || ds === 'under_review'; }).length;
+                    const catApprovedOnlyCnt = catAllItems.filter(o => getOperationalDerivedStatus(o) === 'approved').length;
+                    const catPaidCnt = catAllItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'paid' || ds === 'reconciled'; }).length;
+                    const catRejectedCnt = catAllItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
+                    const catTotalCents = catAllItems.reduce((s, o) => s + o.amount_cents, 0);
+                    const catCurrency = catAllItems[0]?.currency || 'USD';
+                    const isCatExpanded = expandedCategories.has(cat);
+                    return (
+                      <div key={cat} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0" data-testid={`category-section-${cat}`}>
+                        {/* ── Category Header ── */}
+                        <div
+                          className="flex items-center gap-2.5 px-4 py-3 bg-slate-50/80 dark:bg-slate-900/40 cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                          onClick={() => toggleCategory(cat)}
+                          data-testid={`button-category-toggle-${cat}`}
+                        >
+                          {catPayable.length > 0 && (
+                            <div
+                              className={`h-5 w-5 rounded border-2 flex items-center justify-center flex-none transition-colors ${
+                                catAllSelected
+                                  ? 'bg-emerald-500 border-emerald-400'
+                                  : catSomeSelected
+                                  ? 'bg-emerald-400/60 border-emerald-400'
+                                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 hover:border-emerald-400'
+                              }`}
+                              onClick={e => {
+                                e.stopPropagation();
+                                setSelectedCostIds(prev => {
+                                  const next = new Set(prev);
+                                  catPayable.forEach(o => { if (catAllSelected) next.delete(o.id); else next.add(o.id); });
+                                  return next;
+                                });
+                              }}
+                              title={catAllSelected ? 'Deselect all approved in this category' : 'Select all approved in this category'}
+                              data-testid={`checkbox-category-${cat}`}
+                            >
+                              {catAllSelected && <Check className="h-3 w-3 text-white" />}
+                              {catSomeSelected && !catAllSelected && <div className="h-2 w-2 rounded-sm bg-emerald-500" />}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="flex-none h-7 w-7 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                              {CatIconH && <CatIconH className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm text-gray-900 dark:text-white leading-none">{catLabelH}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{catAllItems.length} item{catAllItems.length !== 1 ? 's' : ''} · {catCurrency} {(catTotalCents / 100).toLocaleString()}</p>
+                            </div>
+                          </div>
+                          <div className="hidden sm:flex items-center gap-1 flex-wrap">
+                            {catPendingCnt > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                                <Clock className="h-2.5 w-2.5" /> {catPendingCnt} pending
+                              </span>
+                            )}
+                            {catApprovedOnlyCnt > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-400">
+                                <CheckCircle2 className="h-2.5 w-2.5" /> {catApprovedOnlyCnt} approved
+                              </span>
+                            )}
+                            {catPaidCnt > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">
+                                <Wallet className="h-2.5 w-2.5" /> {catPaidCnt} paid
+                              </span>
+                            )}
+                            {catRejectedCnt > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-400">
+                                <XCircle className="h-2.5 w-2.5" /> {catRejectedCnt} rejected
+                              </span>
+                            )}
+                          </div>
+                          {isCatExpanded
+                            ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-none" />
+                            : <ChevronRight className="h-4 w-4 text-muted-foreground flex-none" />
+                          }
+                        </div>
+                        {/* ── Category items (when expanded) ── */}
+                        {isCatExpanded && (
+                        <div className="space-y-3 p-3">
+                  {catGroups.map(({ groupId, items: groupItems }) => {
                     const isMultiItem = groupItems.length > 1;
 
                     // Outer-scope group stats (reused by GroupHeader, item rows, and footer)
@@ -5839,14 +5995,19 @@ const CostSubmission = () => {
                       </div>
                     );
                   })}
+                        </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
             ) : !operationalCostsLoading ? (
               <div className="text-center py-8 text-muted-foreground" data-testid="text-no-results">
                 <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No {statusFilter === 'all' ? '' : statusFilter.replace('_', ' ')} submissions found</p>
-                <p className="text-xs">لا توجد طلبات {statusFilter !== 'all' ? 'بهذه الحالة' : ''}</p>
+                <p className="text-sm">{costSearch ? `No results for "${costSearch}"` : `No ${statusFilter === 'all' ? '' : statusFilter.replace('_', ' ')} submissions found`}</p>
+                <p className="text-xs">{costSearch ? '' : `لا توجد طلبات ${statusFilter !== 'all' ? 'بهذه الحالة' : ''}`}</p>
               </div>
             ) : null;
           })()}
