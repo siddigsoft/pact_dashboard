@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X, Search } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X, Search, Zap, ChevronsUpDown } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -432,6 +432,22 @@ const CostSubmission = () => {
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+  const [showMyActionOnly, setShowMyActionOnly] = useState(false);
+  // Auto-expand flows where the current user is the active approver
+  useEffect(() => {
+    if (!operationalCosts.length || !currentUser?.id) return;
+    const toExpand = operationalCosts
+      .filter(oc => canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc) || canTier4Approve(oc))
+      .map(oc => oc.id);
+    if (toExpand.length > 0) {
+      setExpandedFlows(prev => {
+        const next = new Set(prev);
+        toExpand.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operationalCosts.length, currentUser?.id]);
   const toggleOcStatus = (s: string) => setOcStatusFilter(prev => {
     const next = new Set(prev);
     if (next.has(s)) next.delete(s); else next.add(s);
@@ -3981,16 +3997,25 @@ const CostSubmission = () => {
               paid: statusFiltered.filter(o => { const d = getOperationalDerivedStatus(o); return d === 'paid' || d === 'reconciled'; }).length,
               rejected: statusFiltered.filter(o => getOperationalDerivedStatus(o) === 'rejected').length,
             };
+            const myActionCount = statusFiltered.filter(o =>
+              canTier1Approve(o) || canTier2Approve(o) || canTier3Approve(o) || canTier4Approve(o)
+            ).length;
 
-            // Apply in-card status chip filter on top of the global tab filter
-            const ocChipFiltered = ocStatusFilter.size === 0 ? statusFiltered : statusFiltered.filter(oc => {
-              const d = getOperationalDerivedStatus(oc);
-              if (ocStatusFilter.has('pending') && (d === 'pending' || d === 'under_review')) return true;
-              if (ocStatusFilter.has('approved') && d === 'approved') return true;
-              if (ocStatusFilter.has('paid') && (d === 'paid' || d === 'reconciled')) return true;
-              if (ocStatusFilter.has('rejected') && d === 'rejected') return true;
-              return false;
-            });
+            // Apply in-card status chip filter + "my action" filter on top of the global tab filter
+            const ocChipFiltered = (() => {
+              let result = ocStatusFilter.size === 0 ? statusFiltered : statusFiltered.filter(oc => {
+                const d = getOperationalDerivedStatus(oc);
+                if (ocStatusFilter.has('pending') && (d === 'pending' || d === 'under_review')) return true;
+                if (ocStatusFilter.has('approved') && d === 'approved') return true;
+                if (ocStatusFilter.has('paid') && (d === 'paid' || d === 'reconciled')) return true;
+                if (ocStatusFilter.has('rejected') && d === 'rejected') return true;
+                return false;
+              });
+              if (showMyActionOnly) result = result.filter(oc =>
+                canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc) || canTier4Approve(oc)
+              );
+              return result;
+            })();
 
             const searchTerm = costSearch.trim().toLowerCase();
             const searchFiltered = searchTerm ? ocChipFiltered.filter(oc =>
@@ -4083,6 +4108,24 @@ const CostSubmission = () => {
                           <><ChevronRight className="h-3.5 w-3.5 mr-1" />Collapse All</>
                         )}
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2.5 text-xs text-muted-foreground"
+                        onClick={() => {
+                          const allIds = searchFiltered.map(o => o.id);
+                          const allExpanded = allIds.every(id => expandedFlows.has(id));
+                          if (allExpanded) {
+                            setExpandedFlows(new Set());
+                          } else {
+                            setExpandedFlows(new Set(allIds));
+                          }
+                        }}
+                        data-testid="button-toggle-all-flows"
+                      >
+                        <ChevronsUpDown className="h-3.5 w-3.5 mr-1" />
+                        {searchFiltered.every(o => expandedFlows.has(o.id)) ? 'Collapse Flows' : 'Expand Flows'}
+                      </Button>
                     </div>
                   </div>
                   <div className="relative">
@@ -4124,9 +4167,23 @@ const CostSubmission = () => {
                         </button>
                       );
                     })}
-                    {ocStatusFilter.size > 0 && (
+                    {myActionCount > 0 && (
                       <button
-                        onClick={() => setOcStatusFilter(new Set())}
+                        onClick={() => setShowMyActionOnly(p => !p)}
+                        data-testid="chip-oc-my-action"
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer select-none
+                          ${showMyActionOnly ? 'bg-violet-100 dark:bg-violet-900/40 border-violet-400 text-violet-800 dark:text-violet-300' : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted'}`}
+                      >
+                        <Zap className="h-3 w-3" />
+                        My Action
+                        <span className={`rounded-full px-1 text-[10px] font-semibold ${showMyActionOnly ? 'bg-white/40 dark:bg-black/30' : 'bg-muted-foreground/20'}`}>
+                          {myActionCount}
+                        </span>
+                      </button>
+                    )}
+                    {(ocStatusFilter.size > 0 || showMyActionOnly) && (
+                      <button
+                        onClick={() => { setOcStatusFilter(new Set()); setShowMyActionOnly(false); }}
                         className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
                         data-testid="button-clear-oc-status-filter"
                       >
@@ -4632,6 +4689,7 @@ const CostSubmission = () => {
                               label: string; stepNum: string; person: string; role: string;
                               status: StepStatus; timestamp?: string | null; notes?: string;
                               notifIcon: string; notifText: string;
+                              waitingSince?: string | null;
                               expectedApprovers?: Array<{ id: string; name?: string; email?: string; role?: string }>;
                             }
 
@@ -4711,6 +4769,7 @@ const CostSubmission = () => {
                               person: tier1Approver?.name || tier1Approver?.email || '',
                               role: fmtRoleC((tier1Approver as any)?.role) || t1RoleLabelC,
                               status: t1StatusC, timestamp: oc.tier1_approved_at,
+                              waitingSince: t1StatusC === 'active' ? (oc.submitted_at || oc.created_at) : null,
                               notes: cleanTier1Notes || undefined,
                               notifIcon: '📧',
                               notifText: t1StatusC === 'done'
@@ -4735,6 +4794,7 @@ const CostSubmission = () => {
                                 person: tier2Approver?.name || tier2Approver?.email || '',
                                 role: fmtRoleC((tier2Approver as any)?.role) || t2RoleLabelC,
                                 status: t2StatusC, timestamp: oc.tier2_approved_at,
+                                waitingSince: t2StatusC === 'active' ? oc.tier1_approved_at : null,
                                 notes: cleanTier2Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t2StatusC === 'done'
@@ -4754,6 +4814,7 @@ const CostSubmission = () => {
                                 person: tier3Approver?.name || tier3Approver?.email || '',
                                 role: fmtRoleC((tier3Approver as any)?.role) || (fourTier ? 'Country Director' : 'Admin / Super Admin'),
                                 status: t3StatusC, timestamp: oc.tier3_approved_at,
+                                waitingSince: t3StatusC === 'active' ? oc.tier2_approved_at : null,
                                 notes: cleanTier3Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t3StatusC === 'done'
@@ -4772,6 +4833,7 @@ const CostSubmission = () => {
                                 person: tier4Approver?.name || tier4Approver?.email || '',
                                 role: fmtRoleC((tier4Approver as any)?.role) || 'Admin / Super Admin',
                                 status: t4StatusC, timestamp: oc.tier4_approved_at,
+                                waitingSince: t4StatusC === 'active' ? oc.tier3_approved_at : null,
                                 notes: cleanTier4Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t4StatusC === 'done'
@@ -4794,6 +4856,13 @@ const CostSubmission = () => {
                               notifIcon: '📧', notifText: `Email sent to: ${submitterName}`,
                               expectedApprovers: finExpectedC.length > 0 ? finExpectedC : undefined,
                             });
+
+                            const doneStepsC = stepsC.filter(s => s.status === 'done').length;
+                            const totalStepsC = stepsC.length;
+                            const isFlowOverdueC = stepsC.some(s =>
+                              s.status === 'active' && s.waitingSince &&
+                              Math.floor((Date.now() - new Date(s.waitingSince).getTime()) / (1000 * 60 * 60 * 24)) >= 3
+                            );
 
                             const dotClsC = (s: StepStatus) =>
                               s === 'done'     ? 'bg-green-500 dark:bg-green-500'
@@ -4838,15 +4907,24 @@ const CostSubmission = () => {
                             return (
                               <div className="border-t px-4 bg-gray-50/30 dark:bg-gray-900/10" data-testid={`approval-flow-compact-${oc.id}`}>
                                 <button
-                                  className="w-full flex items-center justify-between gap-2 py-2.5 flex-wrap group"
+                                  className="w-full flex items-center justify-between gap-2 py-2 flex-wrap group"
                                   onClick={() => toggleFlow(oc.id)}
                                   data-testid={`button-toggle-flow-${oc.id}`}
                                 >
-                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                                    <ClipboardCheck className="h-3 w-3" />
-                                    Approval Flow / مسار الموافقة
-                                  </p>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1 shrink-0">
+                                      <ClipboardCheck className="h-3 w-3" />
+                                      Approval Flow
+                                    </p>
+                                    {derivedStatus === 'rejected' && oc.rejection_reason && (
+                                      <span className="text-[9px] text-red-500 truncate italic">↩ {oc.rejection_reason.slice(0, 55)}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[9px] text-muted-foreground/50 tabular-nums">{doneStepsC}/{totalStepsC}</span>
+                                    {isFlowOverdueC && (
+                                      <span className="text-[9px] font-bold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded-full">⚠ Overdue</span>
+                                    )}
                                     <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummaryC.cls}`}>
                                       {statusSummaryC.label}
                                     </span>
@@ -4864,10 +4942,15 @@ const CostSubmission = () => {
                                     const isActiveC = step.status === 'active';
                                     const isPendingC = step.status === 'pending';
                                     const isRejectedC = step.status === 'rejected';
+                                    const daysWaitingC = isActiveC && step.waitingSince
+                                      ? Math.floor((Date.now() - new Date(step.waitingSince).getTime()) / (1000 * 60 * 60 * 24))
+                                      : 0;
+                                    const overdueC = daysWaitingC >= 3;
                                     return (
                                       <div key={i} className="relative flex gap-2.5 pb-2 last:pb-0">
                                         <div className={`absolute left-[-13px] top-[6px] h-2.5 w-2.5 rounded-full shrink-0 z-10 border-2 border-background ${dotClsC(step.status)}`} />
                                         <div className={`flex-1 min-w-0 rounded-md px-2.5 py-1.5 transition-colors ${
+                                          isActiveC && overdueC ? 'bg-red-50/70 dark:bg-red-950/30 border border-red-200/70 dark:border-red-800/50 shadow-sm' :
                                           isActiveC  ? 'bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 shadow-sm' :
                                           isPendingC ? 'opacity-45' : ''
                                         }`}>
@@ -4883,8 +4966,12 @@ const CostSubmission = () => {
                                                 </span>
                                               )}
                                               {isActiveC && (
-                                                <span className="text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                                  ⏳ Awaiting
+                                                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                                  overdueC
+                                                    ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                                    : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                                                }`}>
+                                                  {overdueC ? `⚠ ${daysWaitingC}d overdue` : daysWaitingC > 0 ? `⏳ ${daysWaitingC}d` : '⏳ Awaiting'}
                                                 </span>
                                               )}
                                               {isRejectedC && (
@@ -5039,6 +5126,54 @@ const CostSubmission = () => {
                                 <Mail className="h-3 w-3 mr-1" />
                                 Send to Finance
                               </Button>
+                            )}
+                            {canTier1Approve(oc) && (
+                              <>
+                                <Button size="sm" className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 1)} data-testid={`button-approve-bar-t1-${oc.id}`}>
+                                  <ThumbsUp className="h-3 w-3 mr-1" />Approve T1
+                                </Button>
+                                <button className="flex items-center gap-0.5 rounded-md h-7 px-2 text-xs font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 1)} data-testid={`button-reject-bar-t1-${oc.id}`}>
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {canTier2Approve(oc) && (
+                              <>
+                                <Button size="sm" className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 2)} data-testid={`button-approve-bar-t2-${oc.id}`}>
+                                  <ThumbsUp className="h-3 w-3 mr-1" />{hasThreeTiers(oc) || hasFourTiers(oc) ? 'Approve T2' : 'Final Approve'}
+                                </Button>
+                                <button className="flex items-center gap-0.5 rounded-md h-7 px-2 text-xs font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 2)} data-testid={`button-reject-bar-t2-${oc.id}`}>
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {canTier3Approve(oc) && (
+                              <>
+                                <Button size="sm" className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-approve-bar-t3-${oc.id}`}>
+                                  <ThumbsUp className="h-3 w-3 mr-1" />{hasFourTiers(oc) ? 'Approve T3' : 'Final Approve'}
+                                </Button>
+                                <button className="flex items-center gap-0.5 rounded-md h-7 px-2 text-xs font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-reject-bar-t3-${oc.id}`}>
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {canTier4Approve(oc) && (
+                              <>
+                                <Button size="sm" className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 4)} data-testid={`button-approve-bar-t4-${oc.id}`}>
+                                  <ThumbsUp className="h-3 w-3 mr-1" />Final Approve
+                                </Button>
+                                <button className="flex items-center gap-0.5 rounded-md h-7 px-2 text-xs font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 4)} data-testid={`button-reject-bar-t4-${oc.id}`}>
+                                  Reject
+                                </button>
+                              </>
                             )}
                             <div className="flex-1" />
                             {canEditSubmission(oc) && (
@@ -5324,6 +5459,7 @@ const CostSubmission = () => {
                               notes?: string;
                               notifIcon: string;
                               notifText: string;
+                              waitingSince?: string | null;
                               expectedApprovers?: Array<{ id: string; name?: string; email?: string; role?: string }>;
                             }
 
@@ -5418,6 +5554,7 @@ const CostSubmission = () => {
                               role: fmtRole((tier1Approver as any)?.role) || t1RoleLabel,
                               status: t1Status,
                               timestamp: oc.tier1_approved_at,
+                              waitingSince: t1Status === 'active' ? (oc.submitted_at || oc.created_at) : null,
                               notes: cleanTier1Notes || undefined,
                               notifIcon: '📧',
                               notifText: t1Status === 'done'
@@ -5444,6 +5581,7 @@ const CostSubmission = () => {
                                 role: fmtRole((tier2Approver as any)?.role) || t2RoleLabel,
                                 status: t2Status,
                                 timestamp: oc.tier2_approved_at,
+                                waitingSince: t2Status === 'active' ? oc.tier1_approved_at : null,
                                 notes: cleanTier2Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t2Status === 'done'
@@ -5466,6 +5604,7 @@ const CostSubmission = () => {
                                 role: fmtRole((tier3Approver as any)?.role) || t3RoleLabel,
                                 status: t3Status,
                                 timestamp: oc.tier3_approved_at,
+                                waitingSince: t3Status === 'active' ? oc.tier2_approved_at : null,
                                 notes: cleanTier3Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t3Status === 'done'
@@ -5487,6 +5626,7 @@ const CostSubmission = () => {
                                 role: fmtRole((tier4Approver as any)?.role) || 'Admin / Super Admin',
                                 status: t4Status,
                                 timestamp: oc.tier4_approved_at,
+                                waitingSince: t4Status === 'active' ? oc.tier3_approved_at : null,
                                 notes: cleanTier4Notes || undefined,
                                 notifIcon: '📧',
                                 notifText: t4Status === 'done'
@@ -5515,6 +5655,13 @@ const CostSubmission = () => {
                             });
 
                             // ── Style helpers ──
+                            const doneSteps = steps.filter(s => s.status === 'done').length;
+                            const totalSteps = steps.length;
+                            const isFlowOverdue = steps.some(s =>
+                              s.status === 'active' && s.waitingSince &&
+                              Math.floor((Date.now() - new Date(s.waitingSince).getTime()) / (1000 * 60 * 60 * 24)) >= 3
+                            );
+
                             const dotCls = (s: StepStatus) =>
                               s === 'done'     ? 'bg-green-500 dark:bg-green-500'
                             : s === 'rejected' ? 'bg-red-500 dark:bg-red-400'
@@ -5566,15 +5713,24 @@ const CostSubmission = () => {
                               <div className="border-t" data-testid={`approval-flow-${oc.id}`}>
                                 {/* ── Collapsible header ── */}
                                 <button
-                                  className="w-full flex items-center justify-between gap-2 py-2.5 px-0 flex-wrap group"
+                                  className="w-full flex items-center justify-between gap-2 py-2 px-0 flex-wrap group"
                                   onClick={() => toggleFlow(oc.id)}
                                   data-testid={`button-toggle-flow-${oc.id}`}
                                 >
-                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                                    <ClipboardCheck className="h-3 w-3" />
-                                    Approval Flow / مسار الموافقة
-                                  </p>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1 shrink-0">
+                                      <ClipboardCheck className="h-3 w-3" />
+                                      Approval Flow
+                                    </p>
+                                    {derivedStatus === 'rejected' && oc.rejection_reason && (
+                                      <span className="text-[9px] text-red-500 truncate italic">↩ {oc.rejection_reason.slice(0, 55)}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[9px] text-muted-foreground/50 tabular-nums">{doneSteps}/{totalSteps}</span>
+                                    {isFlowOverdue && (
+                                      <span className="text-[9px] font-bold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded-full">⚠ Overdue</span>
+                                    )}
                                     <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummary.cls}`}>
                                       {statusSummary.label}
                                     </span>
@@ -5601,7 +5757,14 @@ const CostSubmission = () => {
                                         <div className={`absolute left-[-13px] top-[6px] h-2.5 w-2.5 rounded-full shrink-0 z-10 border-2 border-background ${dotCls(step.status)}`} />
 
                                         {/* Content card */}
+                                        {(() => {
+                                          const daysWaiting = isActive && step.waitingSince
+                                            ? Math.floor((Date.now() - new Date(step.waitingSince).getTime()) / (1000 * 60 * 60 * 24))
+                                            : 0;
+                                          const overdue = daysWaiting >= 3;
+                                          return (
                                         <div className={`flex-1 min-w-0 rounded-md px-2.5 py-1.5 transition-colors ${
+                                          isActive && overdue ? 'bg-red-50/70 dark:bg-red-950/30 border border-red-200/70 dark:border-red-800/50 shadow-sm' :
                                           isActive  ? 'bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 shadow-sm' :
                                           isPending ? 'opacity-45' : ''
                                         }`}>
@@ -5617,8 +5780,12 @@ const CostSubmission = () => {
                                                 </span>
                                               )}
                                               {isActive && (
-                                                <span className="text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                                  ⏳ Awaiting
+                                                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                                  overdue
+                                                    ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                                    : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                                                }`}>
+                                                  {overdue ? `⚠ ${daysWaiting}d overdue` : daysWaiting > 0 ? `⏳ ${daysWaiting}d` : '⏳ Awaiting'}
                                                 </span>
                                               )}
                                               {isRejected && (
@@ -5694,6 +5861,8 @@ const CostSubmission = () => {
                                             </div>
                                           )}
                                         </div>
+                                          );
+                                        })()}
                                       </div>
                                     );
                                   })}

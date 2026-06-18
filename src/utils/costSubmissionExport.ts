@@ -129,6 +129,127 @@ function safeDateShort(d: string | null): string {
   try { return format(new Date(d), 'MMM d, yyyy'); } catch { return d; }
 }
 
+// ── Shared Excel helpers ────────────────────────────────────────────────────
+
+/** Bold navy header row (row 0) across numCols columns. */
+function applyHeaderStyle(ws: XLSX.WorkSheet, numCols: number, fillHex = '1D3461'): void {
+  for (let c = 0; c < numCols; c++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c });
+    if (!ws[addr]) continue;
+    ws[addr].s = {
+      fill: { patternType: 'solid', fgColor: { rgb: fillHex } },
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
+      alignment: { horizontal: 'center', wrapText: false },
+      border: { bottom: { style: 'thin', color: { rgb: 'FFFFFF' } } },
+    };
+  }
+}
+
+/** Content-aware column widths: max of header length and longest cell value, capped at 45. */
+function smartColWidths(data: Record<string, unknown>[]): { wch: number }[] {
+  if (data.length === 0) return [];
+  const keys = Object.keys(data[0]);
+  return keys.map(k => {
+    const maxLen = data.reduce((m, row) => Math.max(m, String(row[k] ?? '').length), k.length);
+    return { wch: Math.min(Math.max(maxLen + 2, 10), 45) };
+  });
+}
+
+/** Builds a Pivot / Summary sheet from submission data. */
+function buildPivotSheet(
+  submissions: ExportableSubmission[],
+  users: UserLookup[],
+  projects: ProjectLookup[]
+): XLSX.WorkSheet {
+  const pivot: Array<Record<string, unknown>> = [];
+  const currency = submissions[0]?.currency || 'SDG';
+  const amtCol = `Total (${currency})`;
+
+  type Bucket = { count: number; total: number };
+  const byCategory = new Map<string, Bucket>();
+  const byStatus   = new Map<string, Bucket>();
+  const bySubmitter = new Map<string, Bucket>();
+  const byMonth    = new Map<string, Bucket>();
+  const byProject  = new Map<string, Bucket>();
+
+  submissions.forEach(oc => {
+    const cat  = CATEGORY_LABELS[oc.expense_category] || oc.expense_category;
+    const stat = getDerivedStatus(oc);
+    const sub  = getUserName(oc.submitted_by, users);
+    const mon  = oc.expense_date
+      ? (() => { try { return format(new Date(oc.expense_date!), 'yyyy-MM'); } catch { return 'N/A'; } })()
+      : 'N/A';
+    const proj = getProjectName(oc.project_id, projects);
+    const amt  = oc.amount_cents / 100;
+
+    const bump = (m: Map<string, Bucket>, k: string) => {
+      const e = m.get(k) || { count: 0, total: 0 };
+      e.count++; e.total += amt; m.set(k, e);
+    };
+    bump(byCategory, cat);
+    bump(byStatus, stat);
+    bump(bySubmitter, sub);
+    bump(byMonth, mon);
+    bump(byProject, proj);
+  });
+
+  const addSection = (title: string, dimension: string, m: Map<string, Bucket>) => {
+    pivot.push({ Dimension: `── ${title} ──`, Breakdown: '', '# Requests': '', [amtCol]: '' });
+    [...m.entries()]
+      .sort((a, b) => b[1].total - a[1].total)
+      .forEach(([k, v]) => {
+        pivot.push({ Dimension: dimension, Breakdown: k, '# Requests': v.count, [amtCol]: v.total.toFixed(2) });
+      });
+    pivot.push({ Dimension: '', Breakdown: '', '# Requests': '', [amtCol]: '' });
+  };
+
+  const totalAmt = submissions.reduce((s, o) => s + o.amount_cents / 100, 0);
+  pivot.push({ Dimension: 'Summary', Breakdown: 'Grand Total', '# Requests': submissions.length, [amtCol]: totalAmt.toFixed(2) });
+  pivot.push({ Dimension: '', Breakdown: '', '# Requests': '', [amtCol]: '' });
+
+  addSection('By Category', 'Category', byCategory);
+  addSection('By Status', 'Status', byStatus);
+  addSection('By Month', 'Month', byMonth);
+  addSection('By Submitter', 'Submitter', bySubmitter);
+  addSection('By Project', 'Project', byProject);
+
+  const ws = XLSX.utils.json_to_sheet(pivot);
+  ws['!cols'] = [{ wch: 22 }, { wch: 30 }, { wch: 12 }, { wch: 18 }];
+
+  // Style header row
+  const numCols = 4;
+  applyHeaderStyle(ws, numCols, '1D3461');
+
+  // Style section title rows (cells where Dimension starts with '──')
+  pivot.forEach((row, ri) => {
+    if (String(row.Dimension).startsWith('──')) {
+      for (let c = 0; c < numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: ri + 1, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = {
+          fill: { patternType: 'solid', fgColor: { rgb: 'E8EDF5' } },
+          font: { bold: true, sz: 9, color: { rgb: '1D3461' } },
+        };
+      }
+    }
+    // Grand total row
+    if (String(row.Breakdown) === 'Grand Total') {
+      for (let c = 0; c < numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: ri + 1, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = {
+          fill: { patternType: 'solid', fgColor: { rgb: 'D2E4FF' } },
+          font: { bold: true, sz: 10, color: { rgb: '0F2041' } },
+        };
+      }
+    }
+  });
+
+  return ws;
+}
+
+// ── Main submission export ───────────────────────────────────────────────────
+
 export function exportSubmissionsToExcel(
   submissions: ExportableSubmission[],
   users: UserLookup[],
@@ -168,12 +289,16 @@ export function exportSubmissionsToExcel(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, tabLabel.slice(0, 31));
 
-  const colWidths = Object.keys(data[0] || {}).map(k => ({
-    wch: Math.max(k.length, 15),
-  }));
-  ws['!cols'] = colWidths;
+  // Content-aware column widths
+  ws['!cols'] = smartColWidths(data as Record<string, unknown>[]);
 
-  // Apply project-colour row fills
+  // Freeze header row
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 } as any;
+
+  // Bold header row
+  applyHeaderStyle(ws, Object.keys(data[0] || {}).length);
+
+  // Project-colour row fills for data rows
   const numCols = Object.keys(data[0] || {}).length;
   submissions.forEach((oc, rowIdx) => {
     const hex = getProjectHex(oc.project_id).replace('#', '');
@@ -186,6 +311,10 @@ export function exportSubmissionsToExcel(
       };
     }
   });
+
+  // Pivot / Summary sheet
+  const pivotWs = buildPivotSheet(submissions, users, projects);
+  XLSX.utils.book_append_sheet(wb, pivotWs, 'Summary');
 
   XLSX.writeFile(wb, `${filename}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
 }
@@ -319,10 +448,20 @@ export function exportOutstandingToExcel(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Outstanding Advances');
 
-  const colWidths = Object.keys(data[0] || {}).map(k => ({
-    wch: Math.max(k.length, 15),
-  }));
-  ws['!cols'] = colWidths;
+  ws['!cols'] = smartColWidths(data as Record<string, unknown>[]);
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 } as any;
+  applyHeaderStyle(ws, Object.keys(data[0] || {}).length, 'D97706');
+
+  // Alternating amber tint for data rows
+  const numCols = Object.keys(data[0] || {}).length;
+  data.forEach((_, rowIdx) => {
+    const hex = rowIdx % 2 === 0 ? 'FFFBEB' : 'FEF3C7';
+    for (let c = 0; c < numCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c });
+      if (!ws[addr]) continue;
+      ws[addr].s = { fill: { patternType: 'solid', fgColor: { rgb: hex } }, alignment: { wrapText: false } };
+    }
+  });
 
   XLSX.writeFile(wb, `${filename}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
 }
@@ -427,10 +566,20 @@ export function exportReconciledToExcel(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Reconciliation');
 
-  const colWidths = Object.keys(data[0] || {}).map(k => ({
-    wch: Math.max(k.length, 15),
-  }));
-  ws['!cols'] = colWidths;
+  ws['!cols'] = smartColWidths(data as Record<string, unknown>[]);
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 } as any;
+  applyHeaderStyle(ws, Object.keys(data[0] || {}).length, '7C3AED');
+
+  // Alternating violet tint for data rows
+  const numCols = Object.keys(data[0] || {}).length;
+  data.forEach((_, rowIdx) => {
+    const hex = rowIdx % 2 === 0 ? 'F5F3FF' : 'EDE9FE';
+    for (let c = 0; c < numCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c });
+      if (!ws[addr]) continue;
+      ws[addr].s = { fill: { patternType: 'solid', fgColor: { rgb: hex } }, alignment: { wrapText: false } };
+    }
+  });
 
   XLSX.writeFile(wb, `${filename}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
 }
