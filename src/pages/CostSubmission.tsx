@@ -4912,6 +4912,20 @@ const CostSubmission = () => {
                                             </p>
                                           )}
 
+                                          {/* Email / WhatsApp notification audit line — shown for done & active steps */}
+                                          {(isDoneC || isActiveC) && (
+                                            <p className="mt-0.5 text-[9px] text-muted-foreground/50 flex items-center gap-1 flex-wrap">
+                                              <span>{step.notifIcon}</span>
+                                              <span>{step.notifText}</span>
+                                              {step.timestamp && isDoneC && (
+                                                <span className="tabular-nums">· sent {format(new Date(step.timestamp), 'MMM d · h:mm a')}</span>
+                                              )}
+                                              {i === stepsC.length - 1 && (
+                                                <span>· 💬 WhatsApp (if opted-in)</span>
+                                              )}
+                                            </p>
+                                          )}
+
                                           {/* Send Reminder (active step only) */}
                                           {isActiveC && (
                                             <div className="mt-1.5">
@@ -5617,6 +5631,20 @@ const CostSubmission = () => {
                                           {step.notes && (
                                             <p className="mt-1 text-[10px] text-muted-foreground/80 italic pl-2 border-l-2 border-border">
                                               "{step.notes}"
+                                            </p>
+                                          )}
+
+                                          {/* Email / WhatsApp notification audit line — shown for done & active steps */}
+                                          {(isDone || isActive) && (
+                                            <p className="mt-0.5 text-[9px] text-muted-foreground/50 flex items-center gap-1 flex-wrap">
+                                              <span>{step.notifIcon}</span>
+                                              <span>{step.notifText}</span>
+                                              {step.timestamp && isDone && (
+                                                <span className="tabular-nums">· sent {format(new Date(step.timestamp), 'MMM d · h:mm a')}</span>
+                                              )}
+                                              {i === steps.length - 1 && (
+                                                <span>· 💬 WhatsApp (if opted-in)</span>
+                                              )}
                                             </p>
                                           )}
 
