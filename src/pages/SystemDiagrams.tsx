@@ -447,7 +447,7 @@ function InteractiveDiagram({ id, code, fullscreen }: { id: string; code: string
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
-  const dragging = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const lastTouchDist = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -486,18 +486,28 @@ function InteractiveDiagram({ id, code, fullscreen }: { id: string; code: string
     });
   }, []);
 
-  const onMouseDown = (e: MouseEvent) => {
+  // Document-level drag — never drops the drag even if cursor leaves the container
+  const onMouseDown = useCallback((e: MouseEvent) => {
     if (e.button !== 0) return;
-    dragging.current = true;
+    e.preventDefault();
     lastPos.current = { x: e.clientX, y: e.clientY };
-  };
-  const onMouseMove = (e: MouseEvent) => {
-    if (!dragging.current) return;
-    setTx(t => t + e.clientX - lastPos.current.x);
-    setTy(t => t + e.clientY - lastPos.current.y);
-    lastPos.current = { x: e.clientX, y: e.clientY };
-  };
-  const onMouseUp = () => { dragging.current = false; };
+    setIsDragging(true);
+
+    const handleMove = (ev: globalThis.MouseEvent) => {
+      const dx = ev.clientX - lastPos.current.x;
+      const dy = ev.clientY - lastPos.current.y;
+      setTx(t => t + dx);
+      setTy(t => t + dy);
+      lastPos.current = { x: ev.clientX, y: ev.clientY };
+    };
+    const handleUp = () => {
+      setIsDragging(false);
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("mouseup", handleUp);
+    };
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleUp);
+  }, []);
 
   const onTouchStart = (e: TouchEvent) => {
     if (e.touches.length === 1) {
@@ -511,8 +521,10 @@ function InteractiveDiagram({ id, code, fullscreen }: { id: string; code: string
   const onTouchMove = (e: TouchEvent) => {
     e.preventDefault();
     if (e.touches.length === 1) {
-      setTx(t => t + e.touches[0].clientX - lastPos.current.x);
-      setTy(t => t + e.touches[0].clientY - lastPos.current.y);
+      const dx = e.touches[0].clientX - lastPos.current.x;
+      const dy = e.touches[0].clientY - lastPos.current.y;
+      setTx(t => t + dx);
+      setTy(t => t + dy);
       lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     } else if (e.touches.length === 2 && lastTouchDist.current) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -525,8 +537,7 @@ function InteractiveDiagram({ id, code, fullscreen }: { id: string; code: string
   };
   const onTouchEnd = () => { lastTouchDist.current = null; };
 
-  const zoom = (delta: number) =>
-    setScale(s => clampScale(s + delta * s));
+  const zoom = (delta: number) => setScale(s => clampScale(s + delta * s));
   const reset = () => { setScale(1); setTx(0); setTy(0); };
 
   const pct = Math.round(scale * 100);
@@ -555,15 +566,12 @@ function InteractiveDiagram({ id, code, fullscreen }: { id: string; code: string
         <span className="ml-1 text-[10px] text-muted-foreground/60 hidden sm:block">Scroll to zoom · Drag to pan</span>
       </div>
 
-      {/* Canvas */}
+      {/* Canvas — document-level drag listeners mean no lost events on fast move */}
       <div
         ref={containerRef}
-        className={`flex-1 overflow-hidden bg-[radial-gradient(circle,#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(circle,#374151_1px,transparent_1px)] bg-[size:20px_20px] ${dragging.current ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`flex-1 overflow-hidden bg-[radial-gradient(circle,#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(circle,#374151_1px,transparent_1px)] bg-[size:20px_20px] select-none ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
         onWheel={onWheel}
         onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
