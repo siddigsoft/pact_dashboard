@@ -425,6 +425,13 @@ const CostSubmission = () => {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   // In-card status chips: empty = show all; values are 'pending'|'approved'|'paid'|'rejected'
   const [ocStatusFilter, setOcStatusFilter] = useState<Set<string>>(new Set());
+  // Approval flow expand/collapse — keyed by oc.id; empty = all collapsed (default)
+  const [expandedFlows, setExpandedFlows] = useState<Set<string>>(new Set());
+  const toggleFlow = (id: string) => setExpandedFlows(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const toggleOcStatus = (s: string) => setOcStatusFilter(prev => {
     const next = new Set(prev);
     if (next.has(s)) next.delete(s); else next.add(s);
@@ -4829,18 +4836,29 @@ const CostSubmission = () => {
                             };
 
                             return (
-                              <div className="border-t pt-3 pb-2 px-4 bg-gray-50/30 dark:bg-gray-900/10" data-testid={`approval-flow-compact-${oc.id}`}>
-                                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                              <div className="border-t px-4 bg-gray-50/30 dark:bg-gray-900/10" data-testid={`approval-flow-compact-${oc.id}`}>
+                                <button
+                                  className="w-full flex items-center justify-between gap-2 py-2.5 flex-wrap group"
+                                  onClick={() => toggleFlow(oc.id)}
+                                  data-testid={`button-toggle-flow-${oc.id}`}
+                                >
                                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                                     <ClipboardCheck className="h-3 w-3" />
                                     Approval Flow / مسار الموافقة
                                   </p>
-                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummaryC.cls}`}>
-                                    {statusSummaryC.label}
-                                  </span>
-                                </div>
-                                <div className="relative pl-5 space-y-0">
-                                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border/60" />
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummaryC.cls}`}>
+                                      {statusSummaryC.label}
+                                    </span>
+                                    {expandedFlows.has(oc.id)
+                                      ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
+                                      : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
+                                    }
+                                  </div>
+                                </button>
+                                {expandedFlows.has(oc.id) && (
+                                  <div className="pb-3 relative pl-5 space-y-0">
+                                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border/60" />
                                   {stepsC.map((step, i) => {
                                     const isDoneC = step.status === 'done';
                                     const isActiveC = step.status === 'active';
@@ -4943,7 +4961,8 @@ const CostSubmission = () => {
                                       </div>
                                     );
                                   })}
-                                </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()}
@@ -5544,21 +5563,32 @@ const CostSubmission = () => {
                             };
 
                             return (
-                              <div className="border-t pt-3 pb-2" data-testid={`approval-flow-${oc.id}`}>
-                                {/* ── Header: title + current status ── */}
-                                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                              <div className="border-t" data-testid={`approval-flow-${oc.id}`}>
+                                {/* ── Collapsible header ── */}
+                                <button
+                                  className="w-full flex items-center justify-between gap-2 py-2.5 px-0 flex-wrap group"
+                                  onClick={() => toggleFlow(oc.id)}
+                                  data-testid={`button-toggle-flow-${oc.id}`}
+                                >
                                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                                     <ClipboardCheck className="h-3 w-3" />
                                     Approval Flow / مسار الموافقة
                                   </p>
-                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummary.cls}`}>
-                                    {statusSummary.label}
-                                  </span>
-                                </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${statusSummary.cls}`}>
+                                      {statusSummary.label}
+                                    </span>
+                                    {expandedFlows.has(oc.id)
+                                      ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
+                                      : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors" />
+                                    }
+                                  </div>
+                                </button>
 
-                                {/* ── Vertical timeline ── */}
-                                <div className="relative pl-5 space-y-0">
-                                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border/60" />
+                                {/* ── Vertical timeline (shown only when expanded) ── */}
+                                {expandedFlows.has(oc.id) && (
+                                  <div className="pb-3 relative pl-5 space-y-0">
+                                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border/60" />
 
                                   {steps.map((step, i) => {
                                     const isDone = step.status === 'done';
@@ -5667,7 +5697,8 @@ const CostSubmission = () => {
                                       </div>
                                     );
                                   })}
-                                </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()}
