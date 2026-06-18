@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, ShieldCheck, MessageSquare, CornerUpLeft, Layers, Send, Bell, ExternalLink, X } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -396,11 +396,11 @@ const CostSubmission = () => {
   const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
     open: boolean;
     submission: OperationalCostSubmission | null;
-    proofFile: File | null;
-    proofPreviewUrl: string | null;
+    proofFiles: File[];
+    proofPreviews: Array<{ url: string | null; name: string }>;
     notes: string;
     uploading: boolean;
-  }>({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
 
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
@@ -1682,39 +1682,49 @@ const CostSubmission = () => {
   };
 
   const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
-    setMarkAsPaidDialog({ open: true, submission: oc, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
   };
 
   const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
-    setMarkAsPaidDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newPreviews = files.map(f => ({
+      url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
+      name: f.name,
+    }));
+    setMarkAsPaidDialog(prev => ({
+      ...prev,
+      proofFiles: [...prev.proofFiles, ...files],
+      proofPreviews: [...prev.proofPreviews, ...newPreviews],
+    }));
+    e.target.value = '';
   };
 
   const handleConfirmMarkAsPaid = async () => {
-    const { submission: oc, proofFile, notes } = markAsPaidDialog;
+    const { submission: oc, proofFiles, notes } = markAsPaidDialog;
     if (!oc || !currentUser?.id) return;
-    if (!proofFile) {
-      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.", variant: "destructive" });
+    if (!proofFiles.length) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach at least one payment receipt before confirming. / يرجى إرفاق إيصال دفع واحد على الأقل قبل التأكيد.", variant: "destructive" });
       return;
     }
     setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setActionProcessing(true);
     try {
-      let proofUrl: string | null = null;
-
-      if (proofFile) {
+      const uploadedUrls: string[] = [];
+      for (const file of proofFiles) {
         const timestamp = Date.now();
         const random = Math.random().toString(36).substring(2, 8);
-        const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+        const extension = file.name.split('.').pop()?.toLowerCase() || 'file';
         const filePath = `payment-proofs/${timestamp}_${random}.${extension}`;
         const { error: uploadErr } = await supabase.storage
           .from('mmp-files')
-          .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+          .upload(filePath, file, { cacheControl: '3600', upsert: false });
         if (uploadErr) throw new Error(uploadErr.message);
-        proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+        uploadedUrls.push(supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl);
       }
+      const proofUrl: string | null = uploadedUrls.length === 1
+        ? uploadedUrls[0]
+        : uploadedUrls.length > 1 ? JSON.stringify(uploadedUrls) : null;
 
       const now = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
@@ -1766,7 +1776,8 @@ const CostSubmission = () => {
           oc.id,
           currentUser?.id
         );
-        setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+        markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
         fetchOperationalCosts();
       }
     } catch (err: any) {
@@ -5965,14 +5976,14 @@ const CostSubmission = () => {
                                     </TableCell>
                                     <TableCell>
                                       {sub.payment_proof_url ? (
-                                        <a
-                                          href={sub.payment_proof_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                                        >
-                                          <Eye className="h-3 w-3" />View
-                                        </a>
+                                        <div className="flex flex-col gap-0.5">
+                                          {(() => { let urls: string[] = []; try { const p = JSON.parse(sub.payment_proof_url!); urls = Array.isArray(p) ? p : [sub.payment_proof_url!]; } catch { urls = [sub.payment_proof_url!]; } return urls.map((u, i) => (
+                                            <a key={i} href={u} target="_blank" rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                              <Eye className="h-3 w-3" />{urls.length > 1 ? `Receipt ${i + 1}` : 'View'}
+                                            </a>
+                                          )); })()}
+                                        </div>
                                       ) : (
                                         <span className="text-xs text-muted-foreground">—</span>
                                       )}
@@ -6382,11 +6393,13 @@ const CostSubmission = () => {
                           </p>
                         </div>
                         {oc.payment_proof_url && (
-                          <div className="px-3 py-2">
-                            <a href={oc.payment_proof_url} target="_blank" rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:underline text-xs flex items-center gap-1">
-                              <Eye className="h-3.5 w-3.5" /> View Payment Proof
-                            </a>
+                          <div className="px-3 py-2 flex flex-col gap-0.5">
+                            {(() => { let urls: string[] = []; try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; } return urls.map((u, i) => (
+                              <a key={i} href={u} target="_blank" rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:underline text-xs flex items-center gap-1">
+                                <Eye className="h-3.5 w-3.5" /> {urls.length > 1 ? `Receipt ${i + 1}` : 'View Payment Proof'}
+                              </a>
+                            )); })()}
                           </div>
                         )}
                       </div>
@@ -7984,29 +7997,31 @@ const CostSubmission = () => {
                         {format(new Date(oc.paid_at), 'MMM d, yyyy HH:mm')}
                       </p>
                       {oc.payment_proof_url && (
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-2 space-y-1.5">
                           <p className="text-xs font-medium text-purple-700 dark:text-purple-300">
-                            Payment Receipt / إيصال الدفع:
+                            Payment Receipt(s) / إيصالات الدفع:
                           </p>
-                          {oc.payment_proof_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                            <a href={oc.payment_proof_url} target="_blank" rel="noopener noreferrer">
-                              <img
-                                src={oc.payment_proof_url}
-                                alt="Payment receipt"
-                                className="max-h-32 rounded border border-purple-200 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                              />
-                            </a>
-                          ) : (
-                            <a
-                              href={oc.payment_proof_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 underline hover:no-underline"
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                              View Payment Receipt / عرض الإيصال
-                            </a>
-                          )}
+                          {(() => {
+                            let urls: string[] = [];
+                            try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; }
+                            return (
+                              <div className="flex flex-wrap gap-2">
+                                {urls.map((u, i) => u.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                                  <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="block">
+                                    <img src={u} alt={`Receipt ${i + 1}`}
+                                      className="max-h-28 max-w-[120px] rounded border border-purple-200 object-contain cursor-pointer hover:opacity-90 transition-opacity" />
+                                    {urls.length > 1 && <p className="text-[10px] text-center text-muted-foreground mt-0.5">Receipt {i + 1}</p>}
+                                  </a>
+                                ) : (
+                                  <a key={i} href={u} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 underline hover:no-underline">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    {urls.length > 1 ? `Receipt ${i + 1}` : 'View Payment Receipt / عرض الإيصال'}
+                                  </a>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {oc.payment_proof_notes && (
                             <p className="text-xs text-muted-foreground italic">"{oc.payment_proof_notes}"</p>
                           )}
@@ -8133,87 +8148,140 @@ const CostSubmission = () => {
         />
       )}
 
-      {/* Mark as Paid dialog with optional payment proof upload */}
+      {/* Mark as Paid dialog — multi-receipt upload */}
       <Dialog
         open={markAsPaidDialog.open}
         onOpenChange={(open) => {
           if (!open && !markAsPaidDialog.uploading) {
-            if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
-            setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+            markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-green-600" />
-              Mark as Paid / تحديد كمدفوع
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                <Wallet className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+              <span>Mark as Paid / تحديد كمدفوع</span>
             </DialogTitle>
-            <DialogDescription>
-              Attach a payment receipt before confirming. A receipt is required. / أرفق إيصال الدفع قبل التأكيد. الإيصال مطلوب.
+            <DialogDescription className="text-xs">
+              Attach one or more payment receipts before confirming. At least one receipt is required. / أرفق إيصالًا أو أكثر قبل التأكيد. مطلوب إيصال واحد على الأقل.
             </DialogDescription>
           </DialogHeader>
 
           {markAsPaidDialog.submission && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
-                <p className="font-medium">{markAsPaidDialog.submission.expense_category.replace(/_/g, ' ')}</p>
-                <p className="text-lg font-bold tabular-nums">
-                  {markAsPaidDialog.submission.currency} {(markAsPaidDialog.submission.amount_cents / 100).toLocaleString()}
-                </p>
-                {markAsPaidDialog.submission.vendor && (
-                  <p className="text-muted-foreground text-xs">Vendor: {markAsPaidDialog.submission.vendor}</p>
-                )}
+              {/* Submission summary */}
+              <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50/60 dark:bg-green-950/20 p-3.5 flex items-start gap-3">
+                <div className="h-9 w-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="h-4.5 w-4.5 text-green-700 dark:text-green-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-sm text-green-900 dark:text-green-100 capitalize">
+                    {markAsPaidDialog.submission.expense_category.replace(/_/g, ' ')}
+                  </p>
+                  <p className="text-xl font-bold tabular-nums text-green-700 dark:text-green-300 leading-tight">
+                    {markAsPaidDialog.submission.currency} {(markAsPaidDialog.submission.amount_cents / 100).toLocaleString()}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                    {markAsPaidDialog.submission.reference_number && (
+                      <span className="text-[11px] text-muted-foreground font-mono">#{markAsPaidDialog.submission.reference_number}</span>
+                    )}
+                    {markAsPaidDialog.submission.vendor && (
+                      <span className="text-[11px] text-muted-foreground">Vendor: {markAsPaidDialog.submission.vendor}</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
+              {/* Receipt upload zone */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
-                </Label>
-                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-green-400 transition-colors relative">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    Payment Receipts / إيصالات الدفع <span className="text-red-500">*</span>
+                  </Label>
+                  {markAsPaidDialog.proofFiles.length > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/40 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-300">
+                      <CheckCircle className="h-3 w-3" />
+                      {markAsPaidDialog.proofFiles.length} {markAsPaidDialog.proofFiles.length === 1 ? 'receipt' : 'receipts'} added
+                    </span>
+                  )}
+                </div>
+
+                {/* Thumbnail grid of added files */}
+                {markAsPaidDialog.proofFiles.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {markAsPaidDialog.proofPreviews.map((preview, idx) => (
+                      <div key={idx} className="relative group rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50">
+                        {preview.url ? (
+                          <img src={preview.url} alt={preview.name} className="w-full h-20 object-cover" />
+                        ) : (
+                          <div className="w-full h-20 flex flex-col items-center justify-center gap-1 p-1">
+                            <FileText className="h-7 w-7 text-red-500 flex-shrink-0" />
+                            <span className="text-[10px] text-muted-foreground text-center leading-tight line-clamp-2 break-all">{preview.name}</span>
+                          </div>
+                        )}
+                        {/* Remove button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (preview.url) URL.revokeObjectURL(preview.url);
+                            setMarkAsPaidDialog(prev => ({
+                              ...prev,
+                              proofFiles: prev.proofFiles.filter((_, i) => i !== idx),
+                              proofPreviews: prev.proofPreviews.filter((_, i) => i !== idx),
+                            }));
+                          }}
+                          disabled={markAsPaidDialog.uploading}
+                          className="absolute top-1 right-1 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-600"
+                          data-testid={`button-remove-receipt-${idx}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <div className="absolute bottom-0 inset-x-0 bg-black/40 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <p className="text-[9px] text-white truncate">{preview.name}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Drop zone */}
+                <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-muted-foreground/25 rounded-xl p-4 cursor-pointer hover:border-green-400 hover:bg-green-50/40 dark:hover:bg-green-950/20 transition-colors group">
                   <input
                     type="file"
                     accept="image/*,application/pdf"
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    multiple
+                    className="sr-only"
                     onChange={handleMarkAsPaidProofFileChange}
                     disabled={markAsPaidDialog.uploading}
                     data-testid="input-payment-proof"
                   />
-                  {markAsPaidDialog.proofFile ? (
-                    <div className="space-y-2">
-                      {markAsPaidDialog.proofPreviewUrl ? (
-                        <img
-                          src={markAsPaidDialog.proofPreviewUrl}
-                          alt="Receipt preview"
-                          className="max-h-32 mx-auto rounded object-contain"
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <FileText className="h-8 w-8 text-red-500" />
-                          <span>{markAsPaidDialog.proofFile.name}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">
-                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
-                      <p className="text-sm">Upload receipt image or PDF / ارفع صورة أو PDF</p>
-                      <p className="text-xs opacity-60">Click to browse / انقر للتصفح</p>
-                    </div>
-                  )}
-                </div>
+                  <div className="h-9 w-9 rounded-full bg-muted group-hover:bg-green-100 dark:group-hover:bg-green-900/40 flex items-center justify-center transition-colors">
+                    <Upload className="h-4 w-4 text-muted-foreground group-hover:text-green-600 transition-colors" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-muted-foreground group-hover:text-green-700 dark:group-hover:text-green-300 transition-colors">
+                      {markAsPaidDialog.proofFiles.length > 0 ? 'Add more receipts / أضف المزيد' : 'Upload receipts / ارفع الإيصالات'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/60">Images or PDFs — multiple files allowed / صور أو PDF - متعدد</p>
+                  </div>
+                </label>
               </div>
 
+              {/* Payment notes */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
-                  Payment Notes / ملاحظات الدفع <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                  Payment Notes / ملاحظات الدفع{' '}
+                  <span className="text-muted-foreground font-normal text-xs">(optional / اختياري)</span>
                 </Label>
                 <Textarea
                   value={markAsPaidDialog.notes}
                   onChange={(e) => setMarkAsPaidDialog(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="e.g. Bank transfer ref: TXN123... / مثال: رقم التحويل: TXN123..."
-                  className="resize-none h-20 text-sm"
+                  className="resize-none h-18 text-sm"
                   disabled={markAsPaidDialog.uploading}
                   data-testid="input-payment-notes"
                 />
@@ -8221,13 +8289,13 @@ const CostSubmission = () => {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 pt-1">
             <Button
               type="button"
               variant="outline"
               onClick={() => {
-                if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
-                setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+                markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
               }}
               disabled={markAsPaidDialog.uploading}
               data-testid="button-cancel-mark-paid"
@@ -8237,12 +8305,12 @@ const CostSubmission = () => {
             <Button
               type="button"
               onClick={handleConfirmMarkAsPaid}
-              disabled={markAsPaidDialog.uploading}
+              disabled={markAsPaidDialog.uploading || markAsPaidDialog.proofFiles.length === 0}
               className="bg-green-600 hover:bg-green-700 text-white"
               data-testid="button-confirm-mark-paid"
             >
               {markAsPaidDialog.uploading ? (
-                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> {markAsPaidDialog.proofFile ? 'Uploading...' : 'Saving...'}</>
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Uploading {markAsPaidDialog.proofFiles.length} receipt{markAsPaidDialog.proofFiles.length > 1 ? 's' : ''}...</>
               ) : (
                 <><CheckCircle className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
               )}
