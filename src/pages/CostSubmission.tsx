@@ -426,6 +426,13 @@ const CostSubmission = () => {
   // In-card status chips: empty = show all; values are 'pending'|'approved'|'paid'|'rejected'
   const [ocStatusFilter, setOcStatusFilter] = useState<Set<string>>(new Set());
   // Approval flow expand/collapse — keyed by oc.id; empty = all collapsed (default)
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const toggleCard = (id: string) => setExpandedCards(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
   const [expandedFlows, setExpandedFlows] = useState<Set<string>>(new Set());
   const toggleFlow = (id: string) => setExpandedFlows(prev => {
     const next = new Set(prev);
@@ -5426,36 +5433,26 @@ const CostSubmission = () => {
                     return (
                       <div
                         key={oc.id}
-                        className={`p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
+                        className={`transition-colors border-b last:border-b-0 ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''} ${derivedStatus === 'rejected' ? 'border-l-2 border-l-red-400' : ''}`}
                         data-testid={`operational-cost-${oc.id}`}
                       >
-                          {derivedStatus === 'rejected' && (
-                            <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-2 py-1" data-testid={`alert-cost-needs-attention-${oc.id}`}>
-                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                              <span>Needs Attention — Submission rejected. Review and resubmit if needed.</span>
-                            </div>
-                          )}
-                          {canMarkAsPaid(oc) ? (
-                            <div className="flex items-center gap-2 mb-1">
+                          {/* ── Collapsed header row — always visible, click to toggle ── */}
+                          <button
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+                            onClick={() => toggleCard(oc.id)}
+                            data-testid={`button-toggle-card-${oc.id}`}
+                          >
+                            {canMarkAsPaid(oc) && (
                               <Checkbox
                                 id={`select-cost-${oc.id}`}
                                 checked={selectedCostIds.has(oc.id)}
                                 onCheckedChange={() => toggleCostSelection(oc.id)}
+                                onClick={e => e.stopPropagation()}
                                 data-testid={`checkbox-select-cost-${oc.id}`}
+                                className="shrink-0"
                               />
-                              <label htmlFor={`select-cost-${oc.id}`} className="text-xs text-muted-foreground cursor-pointer">Select for batch payment</label>
-                            </div>
-                          ) : !['rejected', 'cancelled', 'reconciled', 'paid'].includes(derivedStatus) && (isSuperAdmin || isAdmin || isFinanceAdmin) ? (
-                            <div className="flex items-center gap-1.5 mb-1 text-[11px] text-muted-foreground/70 select-none" title="Cannot select — awaiting approval before payment">
-                              <Checkbox id={`select-cost-disabled-${oc.id}`} checked={false} disabled className="opacity-30 cursor-not-allowed" data-testid={`checkbox-select-cost-${oc.id}`} />
-                              <span className="italic">
-                                {derivedStatus === 'pending' ? 'Pending Tier 1 approval' : derivedStatus === 'under_review' ? 'Pending Tier 2 approval' : 'Awaiting approval'} — cannot select for payment yet
-                              </span>
-                            </div>
-                          ) : null}
-                          <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="flex-1 min-w-0 space-y-1.5">
-                              {/* Title — large bold headline for full card */}
+                            )}
+                            <div className="flex-1 min-w-0 space-y-1">
                               {(() => {
                                 const raw = oc.description || '';
                                 const titleMatch = raw.match(/<<([^>>]+)>>/);
@@ -5466,72 +5463,61 @@ const CostSubmission = () => {
                                   Math.abs(new Date(o.submitted_at || o.created_at).getTime() - new Date(oc.submitted_at || oc.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000
                                 );
                                 return (
-                                  <div className="flex items-start gap-2">
-                                    <h3 className="text-base font-bold text-gray-900 dark:text-white leading-tight">{reqTitle}</h3>
+                                  <div className="flex items-center gap-1.5">
+                                    <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-snug truncate">{reqTitle}</h3>
                                     {isDuplicate && (
-                                      <span className="shrink-0 mt-0.5 inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 text-[9px] font-semibold text-orange-700 dark:text-orange-300" title="Possible duplicate: same amount & vendor within 30 days">⚠ Dup?</span>
+                                      <span className="shrink-0 inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 text-[9px] font-semibold text-orange-700 dark:text-orange-300">⚠ Dup?</span>
                                     )}
                                   </div>
                                 );
                               })()}
-                              {/* Meta chips: category · submitter · time · vendor · ID */}
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400">
-                                  {CatIcon && <CatIcon className="h-3 w-3" />}{catMeta?.label || oc.expense_category}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 dark:text-slate-400">
+                                  {CatIcon && <CatIcon className="h-2.5 w-2.5" />}{catMeta?.label || oc.expense_category}
                                 </span>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
-                                  <User className="h-3 w-3" />{submitterName}
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 text-[9px] font-medium text-blue-700 dark:text-blue-300">
+                                  <User className="h-2.5 w-2.5" />{submitterName}
                                 </span>
-                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-                                  <Clock className="h-3 w-3" />{format(new Date(oc.submitted_at || oc.created_at), 'MMM d, yyyy · h:mm a')}
+                                <span className="hidden sm:inline-flex items-center gap-0.5 border border-gray-200 dark:border-gray-700 rounded-full px-1.5 py-0.5 text-[9px] text-gray-500 dark:text-gray-400">
+                                  <Clock className="h-2.5 w-2.5" />{format(new Date(oc.submitted_at || oc.created_at), 'MMM d, yyyy')}
                                 </span>
                                 {oc.vendor && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-                                    <Building2 className="h-3 w-3" />{oc.vendor}
+                                  <span className="hidden md:inline-flex items-center gap-0.5 border border-gray-200 dark:border-gray-700 rounded-full px-1.5 py-0.5 text-[9px] text-gray-500 dark:text-gray-400">
+                                    <Building2 className="h-2.5 w-2.5" />{oc.vendor}
                                   </span>
                                 )}
-                                <span className="text-[10px] text-gray-400/70 tabular-nums">#{requestId}</span>
+                                <span className="text-[9px] text-gray-400/60 tabular-nums">#{requestId}</span>
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1.5 shrink-0">
-                              <span className="font-bold text-lg tabular-nums" data-testid={`text-amount-${oc.id}`}>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <span className="font-bold text-sm tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
                                 {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
                               </span>
-                              <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
+                              <Badge className={`text-[10px] border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
                                 {statusLabels[derivedStatus] || derivedStatus}
                               </Badge>
-                              {/* Quick action buttons — visible at top of card for admins */}
-                              {canMarkAsPaid(oc) && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  onClick={() => handleMarkAsPaid(oc)}
-                                  disabled={actionProcessing}
-                                  data-testid={`button-quick-mark-paid-${oc.id}`}
-                                  className="h-7 px-2.5 text-xs bg-green-600 hover:bg-green-700 text-white"
-                                >
-                                  <Wallet className="h-3 w-3 mr-1" />
-                                  Mark Paid
-                                </Button>
-                              )}
-                              {canRequestPayment(oc) && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => openPaymentRequestDialog(oc)}
-                                  disabled={actionProcessing}
-                                  data-testid={`button-quick-request-payment-${oc.id}`}
-                                  className="h-7 px-2.5 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
-                                >
-                                  <Mail className="h-3 w-3 mr-1" />
-                                  Send to Finance
-                                </Button>
-                              )}
                             </div>
-                          </div>
+                            {expandedCards.has(oc.id)
+                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                            }
+                          </button>
 
-                          <div className="flex items-center gap-2" data-testid={`status-progress-${oc.id}`}>
+                          {/* ── Collapsible body — hidden when card is collapsed ── */}
+                          {expandedCards.has(oc.id) && (
+                          <div className="px-3 pb-3 space-y-3 border-t bg-background/50">
+                          {derivedStatus === 'rejected' && (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-2 py-1.5 mt-2" data-testid={`alert-cost-needs-attention-${oc.id}`}>
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                              <span>Needs Attention — Submission rejected. Review and resubmit if needed.</span>
+                            </div>
+                          )}
+                          {!['rejected', 'cancelled', 'reconciled', 'paid'].includes(derivedStatus) && (isSuperAdmin || isAdmin || isFinanceAdmin) && !canMarkAsPaid(oc) && (
+                            <p className="text-[11px] text-muted-foreground/60 italic mt-1">
+                              {derivedStatus === 'pending' ? 'Pending Tier 1 approval' : derivedStatus === 'under_review' ? 'Pending Tier 2 approval' : 'Awaiting approval'} — cannot select for payment yet
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 pt-2" data-testid={`status-progress-${oc.id}`}>
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
                               {(() => {
                                 const tierStatusBadge = (status: string | null, label: string, testId: string) => (
@@ -5872,10 +5858,17 @@ const CostSubmission = () => {
                             );
 
                             const dotCls = (s: StepStatus) =>
-                              s === 'done'     ? 'bg-green-500 dark:bg-green-500'
-                            : s === 'rejected' ? 'bg-red-500 dark:bg-red-400'
-                            : s === 'active'   ? 'bg-amber-400 dark:bg-amber-400 ring-4 ring-amber-200 dark:ring-amber-900'
+                              s === 'done'     ? 'bg-green-500 ring-2 ring-green-200 dark:ring-green-800'
+                            : s === 'rejected' ? 'bg-red-500 ring-2 ring-red-200 dark:ring-red-800'
+                            : s === 'active'   ? 'bg-amber-400 ring-4 ring-amber-200 dark:ring-amber-900 animate-pulse'
                             :                   'bg-border dark:bg-muted';
+
+                            const cardCls = (s: StepStatus, overdue: boolean) =>
+                              s === 'done'     ? 'bg-green-50/60 dark:bg-green-950/20 border-l-[3px] border-l-green-500'
+                            : s === 'rejected' ? 'bg-red-50/60 dark:bg-red-950/20 border-l-[3px] border-l-red-500'
+                            : s === 'active' && overdue ? 'bg-red-50/80 dark:bg-red-950/30 border-l-[3px] border-l-red-400 border border-red-200/60 shadow-sm'
+                            : s === 'active'   ? 'bg-amber-50/80 dark:bg-amber-950/30 border-l-[3px] border-l-amber-400 border border-amber-200/60 shadow-sm'
+                            :                   'opacity-40';
 
                             const labelCls = (s: StepStatus) =>
                               s === 'done'     ? 'text-green-700 dark:text-green-400'
@@ -5884,7 +5877,7 @@ const CostSubmission = () => {
                             :                   'text-muted-foreground/60';
 
                             const lineCls = (s: StepStatus) =>
-                              s === 'done' ? 'bg-green-300 dark:bg-green-700' : 'bg-border';
+                              s === 'done' ? 'bg-green-400 dark:bg-green-600' : 'bg-border';
 
                             // ── Current status summary ──
                             const activeStep = steps.find(s => s.status === 'active');
@@ -5963,7 +5956,7 @@ const CostSubmission = () => {
                                     return (
                                       <div key={i} className="relative flex gap-2.5 pb-2 last:pb-0">
                                         {/* Status dot */}
-                                        <div className={`absolute left-[-13px] top-[6px] h-2.5 w-2.5 rounded-full shrink-0 z-10 border-2 border-background ${dotCls(step.status)}`} />
+                                        <div className={`absolute left-[-14px] top-[5px] h-3.5 w-3.5 rounded-full shrink-0 z-10 border-2 border-background ${dotCls(step.status)}`} />
 
                                         {/* Content card */}
                                         {(() => {
@@ -5972,11 +5965,7 @@ const CostSubmission = () => {
                                             : 0;
                                           const overdue = daysWaiting >= 3;
                                           return (
-                                        <div className={`flex-1 min-w-0 rounded-md px-2.5 py-1.5 transition-colors ${
-                                          isActive && overdue ? 'bg-red-50/70 dark:bg-red-950/30 border border-red-200/70 dark:border-red-800/50 shadow-sm' :
-                                          isActive  ? 'bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 shadow-sm' :
-                                          isPending ? 'opacity-45' : ''
-                                        }`}>
+                                        <div className={`flex-1 min-w-0 rounded-md px-2.5 py-1.5 transition-colors ${cardCls(step.status, overdue)}`}>
                                           {/* Label + badge + timestamp */}
                                           <div className="flex items-center justify-between gap-2 flex-wrap">
                                             <span className={`text-[11px] font-semibold leading-tight ${labelCls(step.status)}`}>
@@ -6148,211 +6137,111 @@ const CostSubmission = () => {
                               </div>
                             </div>
                           )}
-
-                          <div className="flex items-center gap-2 pt-1 border-t flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => setViewingSubmission(oc)}
-                              data-testid={`button-view-details-${oc.id}`}
-                            >
-                              <Eye className="h-3.5 w-3.5 mr-1" />
-                              View Details
-                            </Button>
-                            {canTier1Approve(oc) && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => openApprovalDialog(oc, 'approve', 1)}
-                                  data-testid={`button-tier1-approve-${oc.id}`}
-                                >
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                  Approve T1
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => openApprovalDialog(oc, 'reject', 1)}
-                                  data-testid={`button-tier1-reject-${oc.id}`}
-                                >
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            {canTier2Approve(oc) && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => openApprovalDialog(oc, 'approve', 2)}
-                                  data-testid={`button-tier2-approve-${oc.id}`}
-                                >
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                  {hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => openApprovalDialog(oc, 'reject', 2)}
-                                  data-testid={`button-tier2-reject-${oc.id}`}
-                                >
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            {canTier3Approve(oc) && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => openApprovalDialog(oc, 'approve', 3)}
-                                  data-testid={`button-tier3-approve-${oc.id}`}
-                                >
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                  {hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => openApprovalDialog(oc, 'reject', 3)}
-                                  data-testid={`button-tier3-reject-${oc.id}`}
-                                >
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            {canTier4Approve(oc) && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => openApprovalDialog(oc, 'approve', 4)}
-                                  data-testid={`button-tier4-approve-${oc.id}`}
-                                >
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                  Final Approve T4
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => openApprovalDialog(oc, 'reject', 4)}
-                                  data-testid={`button-tier4-reject-${oc.id}`}
-                                >
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
-                                  Reject
-                                </Button>
-                              </>
-                            )}
+                          </div>)}
+                          {/* ── Compact action bar — always visible ── */}
+                          <div className="flex items-center gap-1 px-3 py-1.5 border-t bg-muted/10 flex-wrap" data-testid={`action-bar-${oc.id}`}>
+                            <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
+                              <Eye className="h-3 w-3" />View
+                            </button>
+                            {canTier1Approve(oc) && (<>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'approve', 1)} data-testid={`button-tier1-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3 w-3" />Approve T1
+                              </button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'reject', 1)} data-testid={`button-tier1-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3 w-3" />Reject
+                              </button>
+                            </>)}
+                            {canTier2Approve(oc) && (<>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'approve', 2)} data-testid={`button-tier2-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3 w-3" />{hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'}
+                              </button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'reject', 2)} data-testid={`button-tier2-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3 w-3" />Reject
+                              </button>
+                            </>)}
+                            {canTier3Approve(oc) && (<>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-tier3-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3 w-3" />{hasFourTiers(oc) ? 'Approve T3' : 'Final Approve T3'}
+                              </button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-tier3-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3 w-3" />Reject
+                              </button>
+                            </>)}
+                            {canTier4Approve(oc) && (<>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'approve', 4)} data-testid={`button-tier4-approve-${oc.id}`}>
+                                <ThumbsUp className="h-3 w-3" />Final Approve T4
+                              </button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                onClick={() => openApprovalDialog(oc, 'reject', 4)} data-testid={`button-tier4-reject-${oc.id}`}>
+                                <ThumbsDown className="h-3 w-3" />Reject
+                              </button>
+                            </>)}
                             {getOperationalDerivedStatus(oc) === 'approved' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDownloadCertificate(oc)}
-                                data-testid={`button-download-certificate-${oc.id}`}
-                              >
-                                <Download className="h-3.5 w-3.5 mr-1" />
-                                PDF
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
+                                onClick={() => handleDownloadCertificate(oc)} data-testid={`button-download-certificate-${oc.id}`}>
+                                <Download className="h-3 w-3" />PDF
+                              </button>
                             )}
                             {canRequestPayment(oc) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openPaymentRequestDialog(oc)}
-                                disabled={actionProcessing}
-                                data-testid={`button-request-payment-${oc.id}`}
-                              >
-                                <Mail className="h-3.5 w-3.5 mr-1" />
-                                Request Payment
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40 transition-colors"
+                                onClick={() => openPaymentRequestDialog(oc)} data-testid={`button-request-payment-${oc.id}`}>
+                                <Mail className="h-3 w-3" />Request Payment
+                              </button>
                             )}
                             {canMarkAsPaid(oc) && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handleMarkAsPaid(oc)}
-                                disabled={actionProcessing}
-                                data-testid={`button-mark-paid-${oc.id}`}
-                              >
-                                <Wallet className="h-3.5 w-3.5 mr-1" />
-                                Mark Paid
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2.5 text-[11px] rounded font-medium bg-green-600 hover:bg-green-700 text-white transition-colors"
+                                onClick={() => handleMarkAsPaid(oc)} data-testid={`button-mark-paid-${oc.id}`}>
+                                <Wallet className="h-3 w-3" />Mark Paid
+                              </button>
                             )}
                             {derivedStatus === 'paid' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setActiveReconciliation(oc);
-                                  setActiveTab("reconciliation");
-                                }}
-                                data-testid={`button-reconcile-${oc.id}`}
-                              >
-                                <Receipt className="h-3.5 w-3.5 mr-1" />
-                                Reconcile
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
+                                onClick={() => { setActiveReconciliation(oc); setActiveTab("reconciliation"); }} data-testid={`button-reconcile-${oc.id}`}>
+                                <Receipt className="h-3 w-3" />Reconcile
+                              </button>
                             )}
                             {(isSuperAdmin || isAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openBulkCostEmailDialog(oc)}
-                                data-testid={`button-send-finance-${oc.id}`}
-                                className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                              >
-                                <Mail className="h-3.5 w-3.5 mr-1" />
-                                Send to Finance
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 transition-colors"
+                                onClick={() => openBulkCostEmailDialog(oc)} data-testid={`button-send-finance-${oc.id}`}>
+                                <Mail className="h-3 w-3" />Send to Finance
+                              </button>
                             )}
+                            <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
+                              onClick={() => setAuditDrawerItem(oc)} data-testid={`button-audit-trail-${oc.id}`}>
+                              <History className="h-3 w-3" />Audit
+                            </button>
                             <div className="flex-1" />
                             {canEditSubmission(oc) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEditSubmission(oc)}
-                                data-testid={`button-edit-submission-${oc.id}`}
-                              >
-                                <Pencil className="h-3.5 w-3.5 mr-1" />
-                                Edit
-                              </Button>
-                            )}
-                            {canDeleteSubmission(oc) && (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => setDeleteConfirm(oc)}
-                                data-testid={`button-delete-submission-${oc.id}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                Delete
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
+                                onClick={() => handleEditSubmission(oc)} data-testid={`button-edit-submission-${oc.id}`}>
+                                <Pencil className="h-3 w-3" />Edit
+                              </button>
                             )}
                             {canResubmitSubmission(oc) && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handleEditSubmission(oc)}
-                                data-testid={`button-resubmit-submission-${oc.id}`}
-                              >
-                                <SendHorizonal className="h-3.5 w-3.5 mr-1" />
-                                Resubmit
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded font-medium bg-[#0F2041] hover:bg-[#1D3461] text-white transition-colors"
+                                onClick={() => handleEditSubmission(oc)} data-testid={`button-resubmit-submission-${oc.id}`}>
+                                <SendHorizonal className="h-3 w-3" />Resubmit
+                              </button>
                             )}
                             {canRecallSubmission(oc) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setRecallConfirm(oc)}
-                                data-testid={`button-recall-submission-${oc.id}`}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                                Recall
-                              </Button>
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded border border-border hover:bg-muted/60 transition-colors"
+                                onClick={() => setRecallConfirm(oc)} data-testid={`button-recall-submission-${oc.id}`}>
+                                <RotateCcw className="h-3 w-3" />Recall
+                              </button>
+                            )}
+                            {canDeleteSubmission(oc) && (
+                              <button className="h-7 inline-flex items-center gap-1 px-2 text-[11px] rounded font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                onClick={() => setDeleteConfirm(oc)} data-testid={`button-delete-submission-${oc.id}`}>
+                                <Trash2 className="h-3 w-3" />Delete
+                              </button>
                             )}
                           </div>
                       </div>
