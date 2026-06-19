@@ -233,38 +233,67 @@ export default function MmpStateReport({
   useEffect(() => {
     if (!open || rawEntries.length === 0) return;
     const siteIds = rawEntries.map((e: any) => e.id).filter(Boolean);
+    if (siteIds.length === 0) return;
+
+    // Helper: paginate a query builder past the server's 1000-row cap
+    const fetchAllPages = async (builder: any): Promise<any[]> => {
+      const PAGE = 1000;
+      const rows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await builder.range(from, from + PAGE - 1);
+        if (error) { console.error('[MmpStateReport] page error:', error); break; }
+        if (data && data.length > 0) rows.push(...data);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      return rows;
+    };
+
+    // Helper: run an IN query in chunks to avoid URL-length limits
+    const inChunks = async (table: string, select: string, col: string, ids: string[], extra?: (q: any) => any): Promise<any[]> => {
+      const CHUNK = 200;
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+      const results = await Promise.all(chunks.map(chunk => {
+        let q = supabase.from(table).select(select).in(col, chunk);
+        if (extra) q = extra(q);
+        return fetchAllPages(q);
+      }));
+      return results.flat();
+    };
 
     const run = async () => {
       setLoading(true);
       try {
-        const [logsRes, advRes, entriesRes, cycleRes] = await Promise.all([
-          supabase
-            .from('audit_logs')
-            .select('id,entity_id,entity_name,actor_id,actor_name,action,description,changes,timestamp')
-            .in('entity_id', siteIds)
-            .eq('module', 'mmp')
-            .order('timestamp', { ascending: true })
-            .limit(5000),
-          supabase
-            .from('down_payment_requests')
-            .select('id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,requested_by,requested_at,hub_name')
-            .in('mmp_site_entry_id', siteIds),
-          // Fetch accepted_by (primary collector field) for all site entries —
-          // SiteStatusDetail only carries claimedBy (claimed_by UUID) but most
-          // sites store the collector in accepted_by (text: UUID, email or name)
-          supabase
-            .from('mmp_site_entries')
-            .select('id,accepted_by,claimed_by,visit_started_by,additional_data')
-            .in('id', siteIds),
-          // Fetch cycle status for this MMP
+        const [logs, adv, entries, cycleRes] = await Promise.all([
+          // Audit logs — paginate past the 1000-row server cap
+          inChunks(
+            'audit_logs',
+            'id,entity_id,entity_name,actor_id,actor_name,action,description,changes,timestamp',
+            'entity_id',
+            siteIds,
+            q => q.eq('module', 'mmp').order('timestamp', { ascending: true })
+          ),
+          // Down-payment requests
+          inChunks(
+            'down_payment_requests',
+            'id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,requested_by,requested_at,hub_name',
+            'mmp_site_entry_id',
+            siteIds,
+          ),
+          // Extra collector fields not in the context snapshot
+          inChunks(
+            'mmp_site_entries',
+            'id,accepted_by,claimed_by,visit_started_by,additional_data',
+            'id',
+            siteIds,
+          ),
+          // Cycle status for this MMP
           mmpId
             ? supabase.from('mmp_files').select('cycle_status').eq('id', mmpId).single()
             : Promise.resolve({ data: null, error: null }),
         ]);
-
-        const logs    = logsRes.data    || [];
-        const adv     = advRes.data     || [];
-        const entries = entriesRes.data || [];
         setAuditLogs(logs);
         setAdvancesDetail(adv);
 
@@ -804,6 +833,12 @@ export default function MmpStateReport({
 
         {/* ── Scrollable tab content ── */}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+        {rawEntries.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground py-20">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <p className="text-sm">Loading site data… please wait a moment then reopen the report.</p>
+          </div>
+        ) : (<>
 
           {/* Summary */}
           {activeTab === 'summary' && (
@@ -1464,6 +1499,7 @@ export default function MmpStateReport({
             </div>
           )}
 
+        </>)}
         </div>
 
         </div>{/* end inner flex wrapper */}
