@@ -227,6 +227,7 @@ export default function MmpStateReport({
   const [activeTab, setActiveTab]           = useState('summary');
   const [expandedCollector, setExpandedCollector] = useState<string | null>(null);
   const [expandedActivityType, setExpandedActivityType] = useState<string | null>(null);
+  const [expandedLocalities,   setExpandedLocalities]   = useState<Set<string>>(new Set());
 
   // ── Fetch supplementary data when modal opens ──────────────────────────────
   useEffect(() => {
@@ -924,49 +925,101 @@ export default function MmpStateReport({
                                     </div>
                                   </td>
                                 </tr>
-                                {isExpanded && (
-                                  <tr key={`${type}-sites`} className="bg-muted/10">
-                                    <td colSpan={7} className="px-4 py-2">
-                                      <div className="rounded border border-border/30 overflow-hidden">
-                                        <table className="w-full text-xs">
-                                          <thead>
-                                            <tr className="bg-muted/60 text-muted-foreground">
-                                              <th className="text-left px-3 py-1.5 font-medium">#</th>
-                                              <th className="text-left px-3 py-1.5 font-medium">Site Name</th>
-                                              <th className="text-left px-3 py-1.5 font-medium">Code</th>
-                                              <th className="text-left px-3 py-1.5 font-medium">Locality</th>
-                                              <th className="text-left px-3 py-1.5 font-medium">Data Collector</th>
-                                              <th className="text-left px-3 py-1.5 font-medium">Status</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {[...typeSites].sort((a, b) => a.siteName.localeCompare(b.siteName)).map((s, idx) => (
-                                              <tr key={s.id} className="border-t border-border/20 hover:bg-muted/20">
-                                                <td className="px-3 py-1.5 text-muted-foreground">{idx + 1}</td>
-                                                <td className="px-3 py-1.5 font-medium max-w-[180px] truncate">{s.siteName}</td>
-                                                <td className="px-3 py-1.5 text-muted-foreground">{s.siteCode || '—'}</td>
-                                                <td className="px-3 py-1.5">{s.locality || '—'}</td>
-                                                <td className="px-3 py-1.5">{s.dataCollectorName || '—'}</td>
-                                                <td className="px-3 py-1.5">
-                                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                                    s.statusCategory === 'verified'          ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
-                                                    s.statusCategory === 'in_progress'       ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-                                                    s.statusCategory === 'awaiting_dispatch' ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' :
-                                                    s.statusCategory === 'returned'          ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' :
-                                                    s.statusCategory === 'rejected'          ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' :
-                                                    'bg-muted text-muted-foreground'
-                                                  }`}>
-                                                    {s.status.replace(/_/g, ' ')}
-                                                  </span>
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
+                                {isExpanded && (() => {
+                                  // Group sites by locality, sorted alphabetically
+                                  const localityMap = new Map<string, ReportSiteRow[]>();
+                                  typeSites.forEach(s => {
+                                    const loc = s.locality || 'Unknown Locality';
+                                    if (!localityMap.has(loc)) localityMap.set(loc, []);
+                                    localityMap.get(loc)!.push(s);
+                                  });
+                                  const localities = [...localityMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+                                  let globalIdx = 0;
+                                  return (
+                                    <tr key={`${type}-localities`} className="bg-muted/10">
+                                      <td colSpan={7} className="px-4 py-2">
+                                        <div className="space-y-2">
+                                          {localities.map(([loc, locSites]) => {
+                                            const locKey = `${type}::${loc}`;
+                                            const locExpanded = expandedLocalities.has(locKey);
+                                            const locVerified = locSites.filter(s => s.statusCategory === 'verified').length;
+                                            const locPct = locSites.length > 0 ? Math.round((locVerified / locSites.length) * 100) : 0;
+                                            const toggleLoc = () => setExpandedLocalities(prev => {
+                                              const next = new Set(prev);
+                                              next.has(locKey) ? next.delete(locKey) : next.add(locKey);
+                                              return next;
+                                            });
+                                            return (
+                                              <div key={loc} className="rounded border border-border/40 overflow-hidden">
+                                                {/* Locality header row */}
+                                                <button
+                                                  onClick={toggleLoc}
+                                                  className="w-full flex items-center gap-2 px-3 py-2 bg-muted/50 hover:bg-muted/80 transition-colors text-left"
+                                                >
+                                                  {locExpanded
+                                                    ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                                                    : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
+                                                  <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-teal-600" />
+                                                  <span className="font-semibold text-xs flex-1">{loc}</span>
+                                                  <span className="text-[10px] text-muted-foreground">{locSites.length} site{locSites.length !== 1 ? 's' : ''}</span>
+                                                  <span className="text-[10px] text-green-700 dark:text-green-400 ml-2">{locVerified} verified</span>
+                                                  <span className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 ml-2 w-8 text-right">{locPct}%</span>
+                                                  <div className="ml-2 w-16 h-1.5 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                                                    <div className="h-full bg-teal-500 rounded-full" style={{ width: `${locPct}%` }} />
+                                                  </div>
+                                                </button>
+                                                {/* Sites inside the locality */}
+                                                {locExpanded && (
+                                                  <table className="w-full text-xs">
+                                                    <thead>
+                                                      <tr className="bg-muted/30 text-muted-foreground border-t border-border/30">
+                                                        <th className="text-left px-3 py-1.5 font-medium w-7">#</th>
+                                                        <th className="text-left px-3 py-1.5 font-medium">Site Name</th>
+                                                        <th className="text-left px-3 py-1.5 font-medium">Code</th>
+                                                        <th className="text-left px-3 py-1.5 font-medium">Coordinator</th>
+                                                        <th className="text-left px-3 py-1.5 font-medium">Data Collector</th>
+                                                        <th className="text-left px-3 py-1.5 font-medium">Status</th>
+                                                        <th className="text-left px-3 py-1.5 font-medium">Next Step</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {[...locSites].sort((a, b) => a.siteName.localeCompare(b.siteName)).map(s => {
+                                                        globalIdx++;
+                                                        return (
+                                                          <tr key={s.id} className={`border-t border-border/20 hover:bg-muted/20 ${STATUS_ROW[s.statusCategory]}`}>
+                                                            <td className="px-3 py-1.5 text-muted-foreground">{globalIdx}</td>
+                                                            <td className="px-3 py-1.5 font-medium max-w-[180px]">
+                                                              <div className="truncate">{s.siteName}</div>
+                                                            </td>
+                                                            <td className="px-3 py-1.5 text-muted-foreground text-[10px]">{s.siteCode || '—'}</td>
+                                                            <td className="px-3 py-1.5 max-w-[120px]">
+                                                              <div className="truncate">{s.coordinatorName || '—'}</div>
+                                                            </td>
+                                                            <td className="px-3 py-1.5 max-w-[120px]">
+                                                              <div className="truncate">{s.dataCollectorName || '—'}</div>
+                                                            </td>
+                                                            <td className="px-3 py-1.5">
+                                                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${STATUS_BADGE[s.statusCategory] || 'bg-muted text-muted-foreground'}`}>
+                                                                {statusLabel(s.status)}
+                                                              </span>
+                                                            </td>
+                                                            <td className="px-3 py-1.5 text-muted-foreground max-w-[200px]">
+                                                              <div className="truncate text-[10px]">{s.nextStep}</div>
+                                                            </td>
+                                                          </tr>
+                                                        );
+                                                      })}
+                                                    </tbody>
+                                                  </table>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })()}
                               </React.Fragment>
                             );
                           })}
