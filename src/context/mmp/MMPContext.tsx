@@ -158,96 +158,95 @@ export const useMMPProvider = () => {
     await queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
   }, [queryClient]);
 
-  // Load site entries in parallel batches for speed
+  // Load site entries using a single bulk IN query — much faster than one query per MMP
   const loadSiteEntriesInBackground = useCallback(async (mmpIds: string[]) => {
     if (mmpIds.length === 0) return;
-    
-    // Process in parallel batches of 5 for optimal speed
-    const BATCH_SIZE = 5;
-    const batches = [];
-    for (let i = 0; i < mmpIds.length; i += BATCH_SIZE) {
-      batches.push(mmpIds.slice(i, i + BATCH_SIZE));
+
+    const SELECT_COLS = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, verified_by, verified_at, verification_notes, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at, updated_at';
+
+    // Supabase IN clause works well up to ~500 IDs; chunk at 200 and run ALL chunks in parallel
+    const CHUNK = 200;
+    const chunks: string[][] = [];
+    for (let i = 0; i < mmpIds.length; i += CHUNK) {
+      chunks.push(mmpIds.slice(i, i + CHUNK));
     }
-    
-    for (const batch of batches) {
-      const results = await Promise.all(
-        batch.map(async (mmpId) => {
-          try {
-            const { data, error } = await supabase
-              .from('mmp_site_entries')
-              .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, verified_by, verified_at, verification_notes, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
-              .eq('mmp_file_id', mmpId)
-              .order('created_at', { ascending: true })
-              .limit(10000);
 
-            if (error) {
-              console.error('Background load error for MMP:', mmpId, error);
-              return null;
-            }
+    try {
+      // All chunks fire simultaneously — no sequential waiting between batches
+      const chunkResults = await Promise.all(
+        chunks.map(chunk =>
+          supabase
+            .from('mmp_site_entries')
+            .select(SELECT_COLS)
+            .in('mmp_file_id', chunk)
+            .order('created_at', { ascending: true })
+            .limit(20000)
+        )
+      );
 
-            const entries = (data || []).map((entry: any) => {
-              const migrated = migrateAdditionalDataToColumns(entry);
-              return {
-                id: migrated.id,
-                siteCode: migrated.site_code,
-                hubOffice: migrated.hub_office,
-                state: migrated.state,
-                locality: migrated.locality,
-                siteName: migrated.site_name,
-                cpName: migrated.cp_name,
-                visitType: migrated.visit_type,
-                visitDate: migrated.visit_date,
-                mainActivity: migrated.main_activity,
-                siteActivity: migrated.activity_at_site,
-                monitoringBy: migrated.monitoring_by,
-                surveyTool: migrated.survey_tool,
-                useMarketDiversion: migrated.use_market_diversion,
-                useWarehouseMonitoring: migrated.use_warehouse_monitoring,
-                comments: migrated.comments,
-                cost: migrated.cost,
-                enumerator_fee: migrated.enumerator_fee,
-                transport_fee: migrated.transport_fee,
-                verified_by: migrated.verified_by,
-                verified_at: migrated.verified_at,
-                verification_notes: migrated.verification_notes,
-                dispatched_by: migrated.dispatched_by,
-                dispatched_at: migrated.dispatched_at,
-                accepted_by: migrated.accepted_by,
-                accepted_at: migrated.accepted_at,
-                claimed_by: (migrated.additional_data || {})?.claimed_by || null,
-                claimed_at: (migrated.additional_data || {})?.claimed_at || null,
-                cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
-                additionalData: migrated.additional_data || {},
-                status: migrated.status,
-                forwardedToUserId: migrated.forwarded_to_user_id,
-                mmp_file_id: migrated.mmp_file_id,
-              };
-            });
+      // Collect and transform all rows
+      const allRaw: any[] = chunkResults.flatMap(r => r.data || []);
 
-            return { mmpId, entries };
-          } catch (e) {
-            console.error('Background load failed for MMP:', mmpId, e);
-            return null;
-          }
+      // Group by mmp_file_id for efficient state update
+      const byMmpId = new Map<string, any[]>();
+      for (const entry of allRaw) {
+        const migrated = migrateAdditionalDataToColumns(entry);
+        const transformed = {
+          id: migrated.id,
+          siteCode: migrated.site_code,
+          hubOffice: migrated.hub_office,
+          state: migrated.state,
+          locality: migrated.locality,
+          siteName: migrated.site_name,
+          cpName: migrated.cp_name,
+          visitType: migrated.visit_type,
+          visitDate: migrated.visit_date,
+          mainActivity: migrated.main_activity,
+          siteActivity: migrated.activity_at_site,
+          monitoringBy: migrated.monitoring_by,
+          surveyTool: migrated.survey_tool,
+          useMarketDiversion: migrated.use_market_diversion,
+          useWarehouseMonitoring: migrated.use_warehouse_monitoring,
+          comments: migrated.comments,
+          cost: migrated.cost,
+          enumerator_fee: migrated.enumerator_fee,
+          transport_fee: migrated.transport_fee,
+          verified_by: migrated.verified_by,
+          verified_at: migrated.verified_at,
+          verification_notes: migrated.verification_notes,
+          dispatched_by: migrated.dispatched_by,
+          dispatched_at: migrated.dispatched_at,
+          accepted_by: migrated.accepted_by,
+          accepted_at: migrated.accepted_at,
+          updated_at: migrated.updated_at,
+          claimed_by: (migrated.additional_data || {})?.claimed_by || null,
+          claimed_at: (migrated.additional_data || {})?.claimed_at || null,
+          cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
+          additionalData: migrated.additional_data || {},
+          status: migrated.status,
+          forwardedToUserId: migrated.forwarded_to_user_id,
+          mmp_file_id: migrated.mmp_file_id,
+        };
+        const mid = migrated.mmp_file_id;
+        if (!byMmpId.has(mid)) byMmpId.set(mid, []);
+        byMmpId.get(mid)!.push(transformed);
+      }
+
+      // Single state update for all MMPs at once
+      setMMPFiles((prev: MMPFile[]) =>
+        prev.map((mmp) => {
+          const entries = byMmpId.get(mmp.id);
+          if (!entries) return mmp;
+          const enriched = entries.map((e: any) => ({
+            ...e,
+            cpName: e.cpName || mmp.projectName || '',
+            cp_name: e.cp_name || mmp.projectName || '',
+          }));
+          return { ...mmp, siteEntries: enriched };
         })
       );
-      
-      // Batch update state once per batch for efficiency
-      const validResults = results.filter((r): r is { mmpId: string; entries: any[] } => r !== null);
-      if (validResults.length > 0) {
-        setMMPFiles((prev: MMPFile[]) =>
-          prev.map((mmp) => {
-            const found = validResults.find((r) => r.mmpId === mmp.id);
-            if (!found) return mmp;
-            const enrichedEntries = found.entries.map((entry: any) => ({
-              ...entry,
-              cpName: entry.cpName || mmp.projectName || '',
-              cp_name: entry.cp_name || mmp.projectName || '',
-            }));
-            return { ...mmp, siteEntries: enrichedEntries };
-          })
-        );
-      }
+    } catch (e) {
+      console.error('[MMP] Bulk site-entries load failed:', e);
     }
   }, []);
 

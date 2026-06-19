@@ -3756,390 +3756,123 @@ const MMP = () => {
     setSmartAssignedCount(formattedEntries.length);
   }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
-  // Load approved and costed site entries directly from database for fresh data
+  // ── Approved/Costed: derive from context (no extra DB round-trip) ──────────
   useEffect(() => {
-      if (verifiedSubTab !== 'approvedCosted') {
-        // Keep cached data — don't clear it so switching back is instant.
-        setLoadingApprovedCosted(false);
-        return;
-      }
+    if (verifiedSubTab !== 'approvedCosted') {
+      setLoadingApprovedCosted(false);
+      return;
+    }
+    setLoadingApprovedCosted(false);
+    const APPROVED_COSTED_STATUSES = new Set([
+      'costed', 'approved and costed', 'approved',
+    ]);
+    const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
+    const formattedEntries = verifiedSiteEntries
+      .filter(e => APPROVED_COSTED_STATUSES.has(String(e.status || '').toLowerCase()))
+      .map(e => {
+        const formatted = formatSiteEntry(e);
+        return { ...formatted, mmp_file_id: e.mmp_file_id, mmpId: e.mmp_file_id, mmpName: mmpLookup.get(e.mmp_file_id) || '' };
+      })
+      .sort((a, b) => String((b as any).updated_at || (b as any).createdAt || '').localeCompare(String((a as any).updated_at || (a as any).createdAt || '')));
+    setApprovedCostedSiteEntries(formattedEntries);
+    setApprovedCostedCount(formattedEntries.length);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry, mmpFiles]);
 
-      const verifiedMmpIdsSorted = (categorizedMMPs.verified || []).map(m => m.id).sort().join(',');
-      const fetchKey = `${adminRefreshTrigger}::${verifiedMmpIdsSorted}`;
-      // Skip fetch if same data already loaded — avoids refetch on every tab switch.
-      if (approvedCostedLoadedKeyRef.current === fetchKey) {
-        setLoadingApprovedCosted(false);
-        return;
-      }
-
-      let cancelled = false;
-      const loadApprovedCostedFromDB = async () => {
-        setLoadingApprovedCosted(true);
-        try {
-          const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
-          if (verifiedMmpIds.length === 0) {
-            setApprovedCostedSiteEntries([]);
-            setApprovedCostedCount(0);
-            setLoadingApprovedCosted(false);
-            return;
-          }
-
-          const selectColumns = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at';
-          const batchSize = 100;
-
-          const batchPromises = [];
-          for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
-            const batch = verifiedMmpIds.slice(i, i + batchSize);
-            batchPromises.push(
-              supabase
-                .from('mmp_site_entries')
-                .select(selectColumns)
-                .in('mmp_file_id', batch)
-                .in('status', [
-                  'costed', 'Costed',
-                  'approved and costed', 'Approved and Costed', 'Approved And Costed',
-                  'approved', 'Approved'
-                ])
-                .order('created_at', { ascending: false })
-                .limit(2000)
-            );
-          }
-
-          const results = await Promise.all(batchPromises);
-          if (cancelled) return;
-
-          let allEntries: any[] = [];
-          for (const result of results) {
-            if (result.error) {
-              console.error('[ApprovedCosted] DB query error:', result.error);
-              continue;
-            }
-            if (result.data) allEntries = allEntries.concat(result.data);
-          }
-
-          const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
-          const formattedEntries = allEntries.map(entry => {
-            const formatted = formatSiteEntry(entry);
-            return {
-              ...formatted,
-              mmp_file_id: entry.mmp_file_id,
-              mmpId: entry.mmp_file_id,
-              mmpName: mmpLookup.get(entry.mmp_file_id) || '',
-            };
-          });
-
-          if (!cancelled) {
-            setApprovedCostedSiteEntries(formattedEntries);
-            setApprovedCostedCount(formattedEntries.length);
-            approvedCostedLoadedKeyRef.current = fetchKey;
-          }
-        } catch (err) {
-          console.error('[ApprovedCosted] Failed to load:', err);
-        } finally {
-          if (!cancelled) setLoadingApprovedCosted(false);
-        }
-      };
-
-      loadApprovedCostedFromDB();
-      return () => { cancelled = true; };
-  }, [verifiedSubTab, categorizedMMPs.verified, adminRefreshTrigger, formatSiteEntry]);
-
-  
-  // Load dispatched site entries directly from database for fresh data
-  // This ensures sites claimed by data collectors are immediately excluded
+  // ── Dispatched: derive from context (no extra DB round-trip) ────────────────
   useEffect(() => {
     if (verifiedSubTab !== 'dispatched') {
-      // Keep cached data — don't clear it so switching back is instant.
       setLoadingDispatched(false);
+      return;
+    }
+    setLoadingDispatched(false);
+    const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
+    const formattedEntries = verifiedSiteEntries
+      .filter(e => String(e.status || '').toLowerCase() === 'dispatched' && !e.accepted_by)
+      .map(e => {
+        const formatted = formatSiteEntry(e);
+        return { ...formatted, mmp_file_id: e.mmp_file_id, mmpId: e.mmp_file_id, mmpName: mmpLookup.get(e.mmp_file_id) || '' };
+      })
+      .sort((a, b) => String((b as any).dispatched_at || '').localeCompare(String((a as any).dispatched_at || '')));
+    setDispatchedSiteEntries(formattedEntries);
+    setDispatchedCount(formattedEntries.length);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry, mmpFiles]);
+
+  // ── Accepted: derive from context + single DP-enrichment query ─────────────
+  useEffect(() => {
+    if (verifiedSubTab !== 'accepted') {
+      setLoadingAccepted(false);
       return;
     }
 
     const verifiedMmpIdsSorted = (categorizedMMPs.verified || []).map(m => m.id).sort().join(',');
     const fetchKey = `${adminRefreshTrigger}::${verifiedMmpIdsSorted}`;
-    // Skip fetch if same data already loaded — avoids refetch on every tab switch.
-    if (dispatchedLoadedKeyRef.current === fetchKey) {
-      setLoadingDispatched(false);
+    if (acceptedLoadedKeyRef.current === fetchKey) {
+      setLoadingAccepted(false);
       return;
     }
 
     let cancelled = false;
-    const loadDispatchedFromDB = async () => {
-      setLoadingDispatched(true);
-      
+    const ACCEPTED_STATUSES = new Set([
+      'accepted', 'claimed', 'dispatched', 'ongoing', 'in progress', 'in_progress', 'assigned',
+    ]);
+
+    const run = async () => {
+      setLoadingAccepted(true);
       try {
-        const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
-        if (verifiedMmpIds.length === 0) {
-          setDispatchedSiteEntries([]);
-          setDispatchedCount(0);
-          setLoadingDispatched(false);
-          return;
-        }
+        // Site entries come from context — no extra DB fetch needed
+        const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
+        const baseEntries = verifiedSiteEntries.filter(e =>
+          ACCEPTED_STATUSES.has(String(e.status || '').toLowerCase()) && (e as any).accepted_by
+        );
 
-        const selectColumns = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at';
-        const batchSize = 100;
+        // Fetch down-payment requests for enrichment (one small query)
+        const { data: dpRequests } = await supabase
+          .from('down_payment_requests')
+          .select('mmp_site_entry_id, requested_by, site_name, requested_amount, total_transportation_budget')
+          .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
 
-        const batchPromises = [];
-        for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
-          const batch = verifiedMmpIds.slice(i, i + batchSize);
-          batchPromises.push(
-            supabase
-              .from('mmp_site_entries')
-              .select(selectColumns)
-              .in('mmp_file_id', batch)
-              .in('status', ['dispatched', 'Dispatched'])
-              .is('accepted_by', null)
-              .order('dispatched_at', { ascending: false })
-              .limit(2000)
-          );
-        }
-
-        const results = await Promise.all(batchPromises);
         if (cancelled) return;
 
-        let allEntries: any[] = [];
-        for (const result of results) {
-          if (result.error) {
-            console.error('[Dispatched] DB query error:', result.error);
-            continue;
-          }
-          if (result.data) allEntries = allEntries.concat(result.data);
-        }
-
-        const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
-        const formattedEntries = allEntries.map(entry => {
-          const formatted = formatSiteEntry(entry);
-          return {
-            ...formatted,
-            mmp_file_id: entry.mmp_file_id,
-            mmpId: entry.mmp_file_id,
-            mmpName: mmpLookup.get(entry.mmp_file_id) || '',
-          };
+        const dpLookupById  = new Map<string, any>();
+        const dpLookupByName = new Map<string, any>();
+        (dpRequests || []).forEach((dp: any) => {
+          if (dp.mmp_site_entry_id) dpLookupById.set(dp.mmp_site_entry_id, dp);
+          if (dp.site_name) dpLookupByName.set(dp.site_name.toLowerCase(), dp);
         });
 
+        const enrich = (entry: any) => {
+          const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
+          if (hasCost) return entry;
+          const dp = dpLookupById.get(entry.id) || dpLookupByName.get((entry.siteName || entry.site_name || '').toLowerCase());
+          if (!dp) return entry;
+          const dpAmount = dp.requested_amount || dp.total_transportation_budget;
+          if (!dpAmount) return entry;
+          return { ...entry, cost: Number(dpAmount), enumerator_fee: Number(dpAmount), transport_fee: 0 };
+        };
+
+        const formatted = baseEntries
+          .map(e => {
+            const enriched = enrich(e);
+            const f = formatSiteEntry(enriched);
+            return { ...f, mmp_file_id: e.mmp_file_id, mmpId: e.mmp_file_id, mmpName: mmpLookup.get(e.mmp_file_id) || '' };
+          })
+          .sort((a, b) => String((b as any).accepted_at || '').localeCompare(String((a as any).accepted_at || '')));
+
         if (!cancelled) {
-          setDispatchedSiteEntries(formattedEntries);
-          setDispatchedCount(formattedEntries.length);
-          dispatchedLoadedKeyRef.current = fetchKey;
+          setAcceptedSiteEntries(formatted);
+          setAcceptedCount(formatted.length);
+          acceptedLoadedKeyRef.current = fetchKey;
         }
       } catch (err) {
-        console.error('[Dispatched] Failed to load:', err);
+        console.error('[Accepted] Failed to load:', err);
       } finally {
-        if (!cancelled) setLoadingDispatched(false);
+        if (!cancelled) setLoadingAccepted(false);
       }
     };
-    
-    loadDispatchedFromDB();
+
+    run();
     return () => { cancelled = true; };
-  }, [verifiedSubTab, categorizedMMPs.verified, adminRefreshTrigger]);
-
-  // Load accepted site entries directly from database for fresh data
-  useEffect(() => {
-      if (verifiedSubTab !== 'accepted') {
-        // Keep cached data — don't clear it so switching back is instant.
-        setLoadingAccepted(false);
-        return;
-      }
-
-      const verifiedMmpIdsSorted = (categorizedMMPs.verified || []).map(m => m.id).sort().join(',');
-      const fetchKey = `${adminRefreshTrigger}::${verifiedMmpIdsSorted}`;
-      // Skip fetch if same data already loaded — avoids refetch on every tab switch.
-      if (acceptedLoadedKeyRef.current === fetchKey) {
-        setLoadingAccepted(false);
-        return;
-      }
-
-      let cancelled = false;
-      const acceptedStatuses = ['accepted', 'Accepted', 'claimed', 'Claimed', 'dispatched', 'Dispatched', 'ongoing', 'Ongoing', 'in progress', 'In Progress', 'in_progress', 'assigned', 'Assigned'];
-      const selectColumns = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at';
-
-      const loadAcceptedFromDB = async () => {
-        setLoadingAccepted(true);
-        try {
-          const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
-          if (verifiedMmpIds.length === 0) {
-            setAcceptedSiteEntries([]);
-            setAcceptedCount(0);
-            setLoadingAccepted(false);
-            return;
-          }
-
-          const batchSize = 100;
-          const batchPromises = [];
-          for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
-            const batch = verifiedMmpIds.slice(i, i + batchSize);
-            batchPromises.push(
-              supabase
-                .from('mmp_site_entries')
-                .select(selectColumns)
-                .in('mmp_file_id', batch)
-                .not('accepted_by', 'is', null)
-                .in('status', acceptedStatuses)
-                .order('accepted_at', { ascending: false })
-                .limit(2000)
-            );
-          }
-
-          const [batchResults, dpResult] = await Promise.all([
-            Promise.all(batchPromises),
-            supabase
-              .from('down_payment_requests')
-              .select('mmp_site_entry_id, requested_by, site_name, requested_amount, total_transportation_budget')
-              .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor'])
-          ]);
-
-          if (cancelled) return;
-
-          let allDbEntries: any[] = [];
-          for (const result of batchResults) {
-            if (result.error) {
-              console.error('[Accepted] DB query error:', result.error);
-              continue;
-            }
-            if (result.data) allDbEntries = allDbEntries.concat(result.data);
-          }
-
-          const dpRequests = dpResult.data;
-          if (dpResult.error) {
-            console.error('[Accepted] Down payment query error:', dpResult.error);
-          }
-
-          const acceptedIds = new Set(allDbEntries.map(e => e.id));
-          let dpSiteEntries: any[] = [];
-
-          if (dpRequests && dpRequests.length > 0) {
-            const withEntryId = dpRequests.filter((dp: any) => dp.mmp_site_entry_id && !acceptedIds.has(dp.mmp_site_entry_id));
-            const withoutEntryId = dpRequests.filter((dp: any) => !dp.mmp_site_entry_id && dp.site_name);
-
-            if (withEntryId.length > 0) {
-              const uniqueDpIds = [...new Set(withEntryId.map((dp: any) => dp.mmp_site_entry_id))];
-              const { data: dpEntries } = await supabase
-                .from('mmp_site_entries')
-                .select(selectColumns)
-                .in('id', uniqueDpIds)
-                .in('mmp_file_id', verifiedMmpIds)
-                .in('status', acceptedStatuses)
-                .limit(2000);
-
-              if (dpEntries) {
-                const dpRequestMap = new Map<string, any>();
-                withEntryId.forEach((dp: any) => {
-                  if (dp.mmp_site_entry_id) dpRequestMap.set(dp.mmp_site_entry_id, dp);
-                });
-                dpSiteEntries.push(...dpEntries.map(entry => {
-                  const dpReq = dpRequestMap.get(entry.id);
-                  const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
-                  const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
-                  return {
-                    ...entry,
-                    accepted_by: entry.accepted_by || dpReq?.requested_by,
-                    cost: hasCost ? (entry.cost || (Number(entry.enumerator_fee || 0) + Number(entry.transport_fee || 0))) : (dpAmount ? Number(dpAmount) : entry.cost),
-                    enumerator_fee: entry.enumerator_fee != null ? entry.enumerator_fee : (dpAmount ? Number(dpAmount) : null),
-                    transport_fee: entry.transport_fee != null ? entry.transport_fee : 0,
-                    _from_down_payment: true
-                  };
-                }));
-              }
-            }
-
-            if (withoutEntryId.length > 0) {
-              const siteNames = [...new Set(withoutEntryId.map((dp: any) => dp.site_name).filter(Boolean))];
-              const nameToRequest = new Map<string, any>();
-              withoutEntryId.forEach((dp: any) => {
-                if (dp.site_name) nameToRequest.set(dp.site_name.toLowerCase(), dp);
-              });
-
-              const alreadyFoundIds = new Set([...acceptedIds, ...dpSiteEntries.map(e => e.id)]);
-              for (let i = 0; i < siteNames.length; i += 50) {
-                if (cancelled) return;
-                const batch = siteNames.slice(i, i + 50);
-                let nameMatches: any[] = [];
-                for (let _mf = 0; ; _mf += 1000) {
-                  const { data: _mp } = await supabase.from('mmp_site_entries').select(selectColumns).in('mmp_file_id', verifiedMmpIds).in('site_name', batch).in('status', acceptedStatuses).range(_mf, _mf + 999);
-                  if (!_mp) break;
-                  nameMatches = [...nameMatches, ..._mp];
-                  if (_mp.length < 1000) break;
-                }
-
-                if (nameMatches.length > 0) {
-                  nameMatches
-                    .filter(entry => !alreadyFoundIds.has(entry.id))
-                    .forEach(entry => {
-                      const dpReq = nameToRequest.get((entry.site_name || '').toLowerCase());
-                      const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
-                      const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
-                      dpSiteEntries.push({
-                        ...entry,
-                        accepted_by: entry.accepted_by || dpReq?.requested_by,
-                        cost: hasCost ? (entry.cost || (Number(entry.enumerator_fee || 0) + Number(entry.transport_fee || 0))) : (dpAmount ? Number(dpAmount) : entry.cost),
-                        enumerator_fee: entry.enumerator_fee != null ? entry.enumerator_fee : (dpAmount ? Number(dpAmount) : null),
-                        transport_fee: entry.transport_fee != null ? entry.transport_fee : 0,
-                        _from_down_payment: true
-                      });
-                      alreadyFoundIds.add(entry.id);
-                    });
-                }
-              }
-            }
-          }
-
-          const dpRequestLookup = new Map<string, any>();
-          (dpRequests || []).forEach((dp: any) => {
-            if (dp.mmp_site_entry_id) dpRequestLookup.set(dp.mmp_site_entry_id, dp);
-            if (dp.site_name) dpRequestLookup.set(`name:${dp.site_name.toLowerCase()}`, dp);
-          });
-
-          const enrichedDbEntries = allDbEntries.map(entry => {
-            const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
-            if (hasCost) return entry;
-            const matchingDp = dpRequestLookup.get(entry.id) || dpRequestLookup.get(`name:${(entry.site_name || '').toLowerCase()}`);
-            if (matchingDp) {
-              const dpAmount = matchingDp.requested_amount || matchingDp.total_transportation_budget;
-              if (dpAmount) {
-                return {
-                  ...entry,
-                  cost: Number(dpAmount),
-                  enumerator_fee: Number(dpAmount),
-                  transport_fee: 0,
-                };
-              }
-            }
-            return entry;
-          });
-
-          const allEntries = [...enrichedDbEntries, ...dpSiteEntries];
-          const seenIds = new Set<string>();
-          const deduped = allEntries.filter(e => {
-            if (seenIds.has(e.id)) return false;
-            seenIds.add(e.id);
-            return true;
-          });
-
-          const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
-          const formattedEntries = deduped.map(entry => {
-            const formatted = formatSiteEntry(entry);
-            return {
-              ...formatted,
-              mmp_file_id: entry.mmp_file_id,
-              mmpId: entry.mmp_file_id,
-              mmpName: mmpLookup.get(entry.mmp_file_id) || '',
-            };
-          });
-
-          if (!cancelled) {
-            setAcceptedSiteEntries(formattedEntries);
-            setAcceptedCount(formattedEntries.length);
-            acceptedLoadedKeyRef.current = fetchKey;
-          }
-        } catch (err) {
-          console.error('[Accepted] Failed to load:', err);
-        } finally {
-          if (!cancelled) setLoadingAccepted(false);
-        }
-      };
-
-      loadAcceptedFromDB();
-      return () => { cancelled = true; };
-  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry, adminRefreshTrigger]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry, mmpFiles, categorizedMMPs.verified, adminRefreshTrigger]);
 
   // Load ongoing site entries only when the tab is active
   // Uses verifiedSiteEntries (only from verified MMPs) for consistency
