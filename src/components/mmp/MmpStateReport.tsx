@@ -59,18 +59,99 @@ const cleanName = (raw: any): string => {
   return String(raw).trim().replace(/^["']|["']$/g, '').trim();
 };
 
+const statusLabel = (status: string): string => {
+  const s = (status || '').toLowerCase().trim();
+  const MAP: Record<string, string> = {
+    pending:                  'Pending / Not Started',
+    not_covered:              'Not Covered',
+    new:                      'New',
+    cancelled:                'Cancelled',
+    written_off:              'Written Off',
+    assigned:                 'Assigned to Coordinator',
+    forwarded:                'Forwarded to Coordinator',
+    forwarded_to_fom:         'Forwarded to FOM',
+    forwarded_fom:            'Forwarded to FOM',
+    forwarded_to_coordinator: 'Forwarded to Coordinator',
+    forwarded_to_coordinators:'Forwarded to Coordinators',
+    with_coordinators:        'With Coordinators',
+    dispatched:               'Dispatched to Collector',
+    accepted:                 'Accepted by Collector',
+    acknowledged:             'Acknowledged by Collector',
+    claimed:                  'Claimed by Collector',
+    site_claim:               'Site Claimed',
+    ongoing:                  'Visit In Progress',
+    in_progress:              'Visit In Progress',
+    inprogress:               'Visit In Progress',
+    permits_attached:         'Permits Attached',
+    submitted:                'Submitted for Review',
+    submitted_for_review:     'Submitted for Review',
+    cp_verified:              'CP Verified',
+    verified:                 'Verified ✓',
+    approved:                 'Approved ✓',
+    'approved and costed':    'Approved & Costed ✓',
+    costed:                   'Costed ✓',
+    completed:                'Completed ✓',
+    wfp_confirmed:            'WFP Confirmed ✓',
+    returned:                 'Returned',
+    returned_to_fom:          'Returned to FOM',
+    recalled:                 'Recalled',
+    sent_back:                'Sent Back',
+    sent_back_to_fom:         'Sent Back to FOM',
+    rejected:                 'Rejected',
+    declined:                 'Declined',
+  };
+  return MAP[s] || status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+// Returns stage number (1–6) and stage name for pipeline position display
+const stageInfo = (cat: string): { stage: number; total: number; label: string } => {
+  const MAP: Record<string, { stage: number; label: string }> = {
+    pending:           { stage: 1, label: 'Not Started'       },
+    awaiting_dispatch: { stage: 2, label: 'Awaiting Dispatch' },
+    in_progress:       { stage: 3, label: 'Active Field Work' },
+    returned:          { stage: 2, label: 'Returned'          },
+    rejected:          { stage: 0, label: 'Rejected'          },
+    verified:          { stage: 4, label: 'Complete'          },
+  };
+  const info = MAP[cat] || { stage: 1, label: 'Not Started' };
+  return { ...info, total: 4 };
+};
+
 const nextStep = (status: string): string => {
-  const s = status.toLowerCase();
-  if (['verified', 'approved', 'approved and costed', 'completed', 'wfp_confirmed'].includes(s)) return 'Complete ✓';
-  if (s === 'pending' || s === '' || s === 'not_covered') return 'Assign coordinator and dispatch';
-  if (s === 'dispatched') return 'Waiting for collector to accept';
-  if (['forwarded_to_coordinator', 'forwarded_to_coordinators', 'forwarded', 'assigned'].includes(s)) return 'Coordinator should dispatch to collector';
-  if (s === 'accepted') return 'Collector should start visit';
-  if (['in_progress', 'permits_attached'].includes(s)) return 'Complete visit and submit for verification';
-  if (s === 'submitted' || s === 'submitted_for_review') return 'Pending supervisor verification';
-  if (['returned', 'returned_to_fom', 'recalled', 'sent_back', 'sent_back_to_fom'].includes(s)) return 'Re-dispatch required';
-  if (s === 'rejected') return 'Escalate or close — rejected';
-  return 'Review status manually';
+  const s = (status || '').toLowerCase().trim();
+  // Complete
+  if (['verified','approved','approved and costed','costed','completed','wfp_confirmed','cp_verified'].includes(s))
+    return 'No action needed — complete';
+  // Pending supervisor sign-off
+  if (['submitted','submitted_for_review'].includes(s))
+    return 'Supervisor: verify and approve the submitted data';
+  // Pre-dispatch: not assigned yet
+  if (s === 'pending' || s === '' || s === 'not_covered' || s === 'new' || s === 'cancelled' || s === 'written_off')
+    return 'FOM / Coordinator: assign a coordinator and dispatch';
+  // Pre-dispatch: forwarded to FOM
+  if (['forwarded_to_fom','forwarded_fom'].includes(s))
+    return 'FOM: review and forward to coordinator for dispatch';
+  // Pre-dispatch: with coordinator, not dispatched
+  if (['forwarded','forwarded_to_coordinator','forwarded_to_coordinators','assigned','with_coordinators'].includes(s))
+    return 'Coordinator: dispatch site to a data collector';
+  // Collector must accept
+  if (s === 'dispatched')
+    return 'Collector: accept the site assignment on mobile';
+  // Collector must start
+  if (['accepted','acknowledged'].includes(s))
+    return 'Collector: start the site visit';
+  // Collector has it, visit underway
+  if (['claimed','site_claim'].includes(s))
+    return 'Collector: complete the visit and submit for verification';
+  if (['in_progress','inprogress','ongoing','permits_attached'].includes(s))
+    return 'Collector: complete visit and submit for verification';
+  // Returned / recalled
+  if (['returned','returned_to_fom','recalled','sent_back','sent_back_to_fom'].includes(s))
+    return 'Coordinator: review the return reason and re-dispatch';
+  // Rejected / declined
+  if (s === 'rejected' || s === 'declined')
+    return 'Manager: escalate, reassign or close the site';
+  return 'Review status with field team';
 };
 
 const VERIFIED_STATUSES = new Set([
@@ -1142,7 +1223,16 @@ export default function MmpStateReport({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[...sites].sort((a, b) => a.siteName.localeCompare(b.siteName)).map((site, idx) => (
+                  {[...sites].sort((a, b) => a.siteName.localeCompare(b.siteName)).map((site, idx) => {
+                    const si = stageInfo(site.statusCategory);
+                    const d  = site.daysInCurrentStatus;
+                    const daysBadgeCls =
+                      (site.statusCategory === 'in_progress'       && d > 7)  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                      (site.statusCategory === 'awaiting_dispatch'  && d > 3)  ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' :
+                      (site.statusCategory === 'returned'           && d > 3)  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                      (site.statusCategory === 'pending'            && d > 14) ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                      '';
+                    return (
                     <TableRow key={site.id} className={STATUS_ROW[site.statusCategory]}>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell className="font-medium text-sm max-w-[180px]">
@@ -1151,10 +1241,15 @@ export default function MmpStateReport({
                       </TableCell>
                       <TableCell className="text-xs">{site.locality || '—'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{site.activityType || '—'}</TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_BADGE[site.statusCategory] || ''}`}>
-                          {site.status.replace(/_/g, ' ')}
+                      <TableCell className="min-w-[160px]">
+                        <Badge className={`text-[10px] px-1.5 py-0 whitespace-nowrap ${STATUS_BADGE[site.statusCategory] || ''}`}>
+                          {statusLabel(site.status)}
                         </Badge>
+                        {si.stage > 0 && (
+                          <div className="text-[9px] text-muted-foreground mt-0.5">
+                            Stage {si.stage}/{si.total} · {si.label}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs max-w-[140px]">
                         <div className="truncate">{site.coordinatorName}</div>
@@ -1163,9 +1258,9 @@ export default function MmpStateReport({
                         <div className="truncate">{site.dataCollectorName}</div>
                       </TableCell>
                       <TableCell className="text-center text-xs">
-                        {site.daysInCurrentStatus > 7 && site.statusCategory === 'in_progress'
-                          ? <Badge className="bg-orange-100 text-orange-700 text-[10px]">{site.daysInCurrentStatus}d</Badge>
-                          : site.daysInCurrentStatus || '—'}
+                        {daysBadgeCls
+                          ? <Badge className={`text-[10px] ${daysBadgeCls}`}>{d}d ⚠</Badge>
+                          : (d || '—')}
                       </TableCell>
                       <TableCell className="text-xs">{site.dispatchedAt    ? fmtShort(site.dispatchedAt)    : '—'}</TableCell>
                       <TableCell className="text-xs">{site.acceptedAt      ? fmtShort(site.acceptedAt)      : '—'}</TableCell>
@@ -1181,11 +1276,12 @@ export default function MmpStateReport({
                         ) : <span className="text-[10px] text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-xs text-right">{site.advanceRequested > 0 ? site.advanceRequested.toLocaleString() : '—'}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px]">
-                        <div className="truncate" title={site.nextStep}>{site.nextStep}</div>
+                      <TableCell className="text-xs max-w-[220px]">
+                        <div className="truncate font-medium text-foreground" title={site.nextStep}>{site.nextStep}</div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
