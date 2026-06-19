@@ -37,7 +37,7 @@ interface SiteStatusDetail {
   siteCode: string;
   status: string;
   statusLabel: string;
-  statusCategory: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending';
+  statusCategory: 'verified' | 'returned' | 'rejected' | 'awaiting_dispatch' | 'in_progress' | 'pending';
   locality: string;
   stateName: string;
   hubName: string;
@@ -68,6 +68,7 @@ interface StateCoordinatorGroup {
   totalSites: number;
   verifiedSites: number;
   returnedSites: number;
+  awaitingDispatchSites: number;
   inProgressSites: number;
   pendingSites: number;
   /** Per-status counts for the whole state */
@@ -304,7 +305,7 @@ function StatusCategorySection({
   onRequestFund,
   onEditFund,
 }: { 
-  category: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending'; 
+  category: 'verified' | 'returned' | 'rejected' | 'awaiting_dispatch' | 'in_progress' | 'pending'; 
   sites: SiteStatusDetail[]; 
   userNames: Record<string, string>;
   advanceMap: Record<string, AdvanceInfo>;
@@ -314,11 +315,12 @@ function StatusCategorySection({
   if (sites.length === 0) return null;
 
   const categoryConfig: Record<string, { label: string; icon: any; colorClass: string }> = {
-    verified: { label: 'Verified', icon: CheckCircle2, colorClass: 'text-green-700 dark:text-green-400' },
-    returned: { label: 'Returned', icon: XCircle, colorClass: 'text-orange-700 dark:text-orange-400' },
-    rejected: { label: 'Rejected', icon: XCircle, colorClass: 'text-red-700 dark:text-red-400' },
-    in_progress: { label: 'In Progress', icon: Clock, colorClass: 'text-blue-700 dark:text-blue-400' },
-    pending: { label: 'Pending', icon: AlertCircle, colorClass: 'text-muted-foreground' },
+    verified:          { label: 'Verified',          icon: CheckCircle2,  colorClass: 'text-green-700 dark:text-green-400' },
+    returned:          { label: 'Returned',          icon: XCircle,       colorClass: 'text-orange-700 dark:text-orange-400' },
+    rejected:          { label: 'Rejected',          icon: XCircle,       colorClass: 'text-red-700 dark:text-red-400' },
+    awaiting_dispatch: { label: 'Awaiting Dispatch', icon: Clock,         colorClass: 'text-indigo-700 dark:text-indigo-400' },
+    in_progress:       { label: 'Active Field Work', icon: Clock,         colorClass: 'text-blue-700 dark:text-blue-400' },
+    pending:           { label: 'Pending',           icon: AlertCircle,   colorClass: 'text-muted-foreground' },
   };
 
   const config = categoryConfig[category];
@@ -326,18 +328,20 @@ function StatusCategorySection({
   const [open, setOpen] = useState(true);
 
   const bgMap: Record<string, string> = {
-    verified: 'bg-green-50/60 dark:bg-green-950/20 border-green-200/60 dark:border-green-800/40',
-    returned: 'bg-orange-50/60 dark:bg-orange-950/20 border-orange-200/60 dark:border-orange-800/40',
-    rejected: 'bg-red-50/60 dark:bg-red-950/20 border-red-200/60 dark:border-red-800/40',
-    in_progress: 'bg-blue-50/60 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40',
-    pending: 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/40',
+    verified:          'bg-green-50/60 dark:bg-green-950/20 border-green-200/60 dark:border-green-800/40',
+    returned:          'bg-orange-50/60 dark:bg-orange-950/20 border-orange-200/60 dark:border-orange-800/40',
+    rejected:          'bg-red-50/60 dark:bg-red-950/20 border-red-200/60 dark:border-red-800/40',
+    awaiting_dispatch: 'bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-200/60 dark:border-indigo-800/40',
+    in_progress:       'bg-blue-50/60 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40',
+    pending:           'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/40',
   };
   const stripMap: Record<string, string> = {
-    verified: 'bg-green-500',
-    returned: 'bg-orange-500',
-    rejected: 'bg-red-500',
-    in_progress: 'bg-blue-500',
-    pending: 'bg-amber-400',
+    verified:          'bg-green-500',
+    returned:          'bg-orange-500',
+    rejected:          'bg-red-500',
+    awaiting_dispatch: 'bg-indigo-500',
+    in_progress:       'bg-blue-500',
+    pending:           'bg-amber-400',
   };
 
   const byLocality = new Map<string, SiteStatusDetail[]>();
@@ -400,11 +404,12 @@ function CoordExpandedContent({
       ? coord.siteDetails
       : coord.siteDetails.filter(s => s.status === statusFilter);
 
-  const verifiedSites   = filteredDetails.filter(s => s.statusCategory === 'verified');
-  const returnedSites   = filteredDetails.filter(s => s.statusCategory === 'returned');
-  const rejectedSites   = filteredDetails.filter(s => s.statusCategory === 'rejected');
-  const inProgressSites = filteredDetails.filter(s => s.statusCategory === 'in_progress');
-  const pendingSites    = filteredDetails.filter(s => s.statusCategory === 'pending');
+  const verifiedSites          = filteredDetails.filter(s => s.statusCategory === 'verified');
+  const returnedSites          = filteredDetails.filter(s => s.statusCategory === 'returned');
+  const rejectedSites          = filteredDetails.filter(s => s.statusCategory === 'rejected');
+  const awaitingDispatchSites  = filteredDetails.filter(s => s.statusCategory === 'awaiting_dispatch');
+  const inProgressSites        = filteredDetails.filter(s => s.statusCategory === 'in_progress');
+  const pendingSites           = filteredDetails.filter(s => s.statusCategory === 'pending');
 
   return (
     <div className="px-2 pb-2 mt-2 space-y-3">
@@ -482,11 +487,12 @@ function CoordExpandedContent({
       })()}
       {/* ── Filtered sections ── */}
       <div className="space-y-1">
-        <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-        <StatusCategorySection category="pending"     sites={pendingSites}    userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-        <StatusCategorySection category="verified"    sites={verifiedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-        <StatusCategorySection category="returned"    sites={returnedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
-        <StatusCategorySection category="rejected"    sites={rejectedSites}   userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="in_progress"       sites={inProgressSites}       userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="awaiting_dispatch" sites={awaitingDispatchSites}  userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="pending"           sites={pendingSites}           userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="verified"          sites={verifiedSites}          userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="returned"          sites={returnedSites}          userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
+        <StatusCategorySection category="rejected"          sites={rejectedSites}          userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
       </div>
     </div>
   );
@@ -620,20 +626,23 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
     const stateMap = new Map<string, StateCoordinatorGroup>();
 
     // Normalise status to lowercase for reliable matching regardless of DB casing
-    // (DB stores: 'Accepted', 'Pending', 'Completed', 'Approved and Costed', 'In Progress', etc.)
+    // Keep these sets IDENTICAL to MmpStateReport's constants so both show the same counts
     const verifiedStatuses = new Set([
       'verified', 'approved', 'approved and costed', 'costed',
-      'completed', 'partially_paid', 'fully_paid',
-      'pending_admin', 'pending_supervisor',
-      'submitted', 'wfp_confirmed', 'not_covered',
+      'completed', 'wfp_confirmed', 'submitted', 'submitted_for_review', 'cp_verified',
     ]);
     const returnedStatuses = new Set([
       'returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom',
     ]);
-    const rejectedStatuses = new Set(['rejected']);
+    const rejectedStatuses = new Set(['rejected', 'declined']);
+    const awaitingDispatchStatuses = new Set([
+      'forwarded', 'forwarded_to_fom', 'forwarded_fom',
+      'forwarded_to_coordinator', 'forwarded_to_coordinators',
+      'assigned', 'with_coordinators',
+    ]);
     const inProgressStatuses = new Set([
-      'in_progress', 'accepted', 'permits_attached', 'assigned',
-      'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators',
+      'dispatched', 'accepted', 'claimed', 'ongoing', 'site_claim',
+      'in_progress', 'inprogress', 'permits_attached', 'acknowledged',
     ]);
 
     // Human-readable labels for every known status (keyed by normalised lowercase)
@@ -678,6 +687,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
           totalSites: 0,
           verifiedSites: 0,
           returnedSites: 0,
+          awaitingDispatchSites: 0,
           inProgressSites: 0,
           pendingSites: 0,
           statusCounts: {},
@@ -702,15 +712,17 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
                        entry.coordinator_name || 
                        entry.coordinatorName;
       const receivedAt = entry.forwarded_at || entry.forwardedAt || entry.dispatched_at || entry.dispatchedAt;
-      const isVerified = verifiedStatuses.has(entryStatus);
-      const isReturned = returnedStatuses.has(entryStatus);
-      const isRejected = rejectedStatuses.has(entryStatus);
-      const isInProgress = inProgressStatuses.has(entryStatus);
+      const isVerified          = verifiedStatuses.has(entryStatus);
+      const isReturned          = returnedStatuses.has(entryStatus);
+      const isRejected          = rejectedStatuses.has(entryStatus);
+      const isAwaitingDispatch  = awaitingDispatchStatuses.has(entryStatus);
+      const isInProgress        = inProgressStatuses.has(entryStatus);
       
       if (isVerified) stateData.verifiedSites++;
       if (isReturned || isRejected) stateData.returnedSites++;
+      if (isAwaitingDispatch) stateData.awaitingDispatchSites++;
       if (isInProgress) stateData.inProgressSites++;
-      if (!isVerified && !isReturned && !isRejected && !isInProgress) stateData.pendingSites++;
+      if (!isVerified && !isReturned && !isRejected && !isAwaitingDispatch && !isInProgress) stateData.pendingSites++;
 
       const ad = entry.additional_data || entry.additionalData || {};
       const statusCategory: SiteStatusDetail['statusCategory'] = isVerified
@@ -719,9 +731,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
           ? 'rejected'
           : isReturned
             ? 'returned'
-            : isInProgress
-              ? 'in_progress'
-              : 'pending';
+            : isAwaitingDispatch
+              ? 'awaiting_dispatch'
+              : isInProgress
+                ? 'in_progress'
+                : 'pending';
 
       const actionByRaw = isVerified 
         ? (entry.verified_by || '') 

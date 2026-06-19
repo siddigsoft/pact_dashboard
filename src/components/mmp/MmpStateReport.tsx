@@ -762,14 +762,15 @@ export default function MmpStateReport({
         {/* ── Quick-stat bar ── */}
         <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', padding: '6px 20px', fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '4px 16px', backgroundColor: 'var(--muted)/0.3' }} className="bg-muted/30">
           {[
-            { label: 'Total Sites',  value: cycleSummary.totalSites,   cls: 'font-bold text-foreground' },
-            { label: 'Verified',     value: cycleSummary.verified,      cls: 'text-green-700 dark:text-green-400' },
-            { label: 'In Progress',  value: cycleSummary.inProgress,    cls: 'text-blue-700 dark:text-blue-400' },
-            { label: 'Pending',      value: cycleSummary.pending,       cls: 'text-amber-700 dark:text-amber-400' },
-            { label: 'Returned',     value: cycleSummary.returned,      cls: 'text-orange-700 dark:text-orange-400' },
-            { label: 'Rejected',     value: cycleSummary.rejected,      cls: 'text-red-700 dark:text-red-400' },
-            { label: 'Coverage',     value: `${cycleSummary.coveragePct}%`, cls: 'text-purple-700 dark:text-purple-400 font-semibold' },
-            { label: '⚑ Attention', value: attentionItems.length,       cls: attentionItems.length > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-muted-foreground' },
+            { label: 'Total Sites',       value: cycleSummary.totalSites,        cls: 'font-bold text-foreground' },
+            { label: 'Verified',          value: cycleSummary.verified,           cls: 'text-green-700 dark:text-green-400' },
+            { label: 'Field Work',        value: cycleSummary.inProgress,         cls: 'text-blue-700 dark:text-blue-400' },
+            { label: 'Awaiting Dispatch', value: cycleSummary.awaitingDispatch,   cls: 'text-indigo-700 dark:text-indigo-400' },
+            { label: 'Pending',           value: cycleSummary.pending,            cls: 'text-amber-700 dark:text-amber-400' },
+            { label: 'Returned',          value: cycleSummary.returned,           cls: 'text-orange-700 dark:text-orange-400' },
+            { label: 'Rejected',          value: cycleSummary.rejected,           cls: 'text-red-700 dark:text-red-400' },
+            { label: 'Coverage',          value: `${cycleSummary.coveragePct}%`,  cls: 'text-purple-700 dark:text-purple-400 font-semibold' },
+            { label: '⚑ Attention',      value: attentionItems.length,            cls: attentionItems.length > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-muted-foreground' },
           ].map(({ label, value, cls }) => (
             <div key={label} className="flex items-center gap-1">
               <span className="text-muted-foreground">{label}:</span>
