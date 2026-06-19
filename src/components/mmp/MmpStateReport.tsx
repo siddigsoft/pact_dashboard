@@ -73,16 +73,28 @@ const nextStep = (status: string): string => {
   return 'Review status manually';
 };
 
-const VERIFIED_STATUSES         = new Set(['verified','approved','approved and costed','costed','completed','wfp_confirmed','submitted']);
-const AWAITING_DISPATCH_STATUSES = new Set(['forwarded','forwarded_to_fom','forwarded_to_coordinator','forwarded_to_coordinators','assigned']);
-const IN_PROGRESS_STATUSES       = new Set(['dispatched','accepted','claimed','ongoing','site_claim','in_progress','permits_attached']);
-const RETURNED_STATUSES          = new Set(['returned','returned_to_fom','recalled','sent_back','sent_back_to_fom']);
+const VERIFIED_STATUSES = new Set([
+  'verified', 'approved', 'approved and costed', 'costed',
+  'completed', 'wfp_confirmed', 'submitted', 'submitted_for_review', 'cp_verified',
+]);
+const AWAITING_DISPATCH_STATUSES = new Set([
+  'forwarded', 'forwarded_to_fom', 'forwarded_fom',
+  'forwarded_to_coordinator', 'forwarded_to_coordinators',
+  'assigned', 'with_coordinators',
+]);
+const IN_PROGRESS_STATUSES = new Set([
+  'dispatched', 'accepted', 'claimed', 'ongoing', 'site_claim',
+  'in_progress', 'inprogress', 'permits_attached', 'acknowledged',
+]);
+const RETURNED_STATUSES = new Set([
+  'returned', 'returned_to_fom', 'recalled', 'sent_back', 'sent_back_to_fom',
+]);
 
 function statusCategory(status: string): ReportSiteRow['statusCategory'] {
-  const s = status.toLowerCase();
+  const s = (status || '').toLowerCase().trim();
   if (VERIFIED_STATUSES.has(s))          return 'verified';
   if (RETURNED_STATUSES.has(s))          return 'returned';
-  if (s === 'rejected')                  return 'rejected';
+  if (s === 'rejected' || s === 'declined') return 'rejected';
   if (AWAITING_DISPATCH_STATUSES.has(s)) return 'awaiting_dispatch';
   if (IN_PROGRESS_STATUSES.has(s))       return 'in_progress';
   return 'pending';
