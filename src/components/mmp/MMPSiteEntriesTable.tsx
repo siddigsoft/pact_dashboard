@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink, ArrowUpDown, Users, Clock } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink, ArrowUpDown, Users, Clock } from 'lucide-react';
 import { formatDurationFromMs, diffMsBetween } from '@/utils/duration';
 import { useNavigate } from 'react-router-dom';
 import SiteDetailDialog from './SiteDetailDialog';
@@ -96,6 +96,7 @@ const MMPSiteEntriesTable = ({
   const [activityTypeFilter, setActivityTypeFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
   const [sortUnclaimedFirst, setSortUnclaimedFirst] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -487,13 +488,19 @@ const MMPSiteEntriesTable = ({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
+          <div
+            className="flex items-center gap-2 cursor-pointer select-none"
+            onClick={() => setIsCollapsed(c => !c)}
+          >
             <CardTitle>MMP Site Entries</CardTitle>
             <CardDescription>
               Showing {paginatedSites.length} of {filteredSites.length} sites
               {(debouncedSearchQuery || activeFilterCount > 0) && ` (filtered from ${siteEntries.length} total)`}
               {!debouncedSearchQuery && activeFilterCount === 0 && ` (${siteEntries.length} total)`}
             </CardDescription>
+            {isCollapsed
+              ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+              : <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -521,7 +528,7 @@ const MMPSiteEntriesTable = ({
             </div>
           </div>
         </div>
-        {showFilters && (
+        {!isCollapsed && showFilters && (
           <div className="mt-4 pt-4 border-t border-border/50">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1.5">
@@ -642,7 +649,7 @@ const MMPSiteEntriesTable = ({
           </div>
         )}
         {/* Dispatch Summary Bar */}
-        {siteEntries.length > 0 && (
+        {!isCollapsed && siteEntries.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-3 flex-1">
@@ -702,7 +709,7 @@ const MMPSiteEntriesTable = ({
           </div>
         )}
       </CardHeader>
-      <CardContent>
+      {!isCollapsed && <CardContent>
         {/* PDM/MDM Summary Section */}
         {(pdmMdmSummary.pdmSites > 0 || pdmMdmSummary.mdmSites > 0) && (
           <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1202,7 +1209,7 @@ const MMPSiteEntriesTable = ({
             </div>
           </div>
         )}
-      </CardContent>
+      </CardContent>}
 
       {/* Site Detail Dialog */}
       <SiteDetailDialog
