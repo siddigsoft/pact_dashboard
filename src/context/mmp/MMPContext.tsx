@@ -171,21 +171,32 @@ export const useMMPProvider = () => {
       chunks.push(mmpIds.slice(i, i + CHUNK));
     }
 
+    // Paginate through one chunk of MMP IDs — Supabase server caps at 1000 rows/request
+    const fetchAllPages = async (chunk: string[]): Promise<any[]> => {
+      const PAGE = 1000;
+      const rows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select(SELECT_COLS)
+          .in('mmp_file_id', chunk)
+          .order('created_at', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) { console.error('[MMPContext] page fetch error:', error); break; }
+        if (data && data.length > 0) rows.push(...data);
+        if (!data || data.length < PAGE) break;   // last page
+        from += PAGE;
+      }
+      return rows;
+    };
+
     try {
-      // All chunks fire simultaneously — no sequential waiting between batches
-      const chunkResults = await Promise.all(
-        chunks.map(chunk =>
-          supabase
-            .from('mmp_site_entries')
-            .select(SELECT_COLS)
-            .in('mmp_file_id', chunk)
-            .order('created_at', { ascending: true })
-            .limit(20000)
-        )
-      );
+      // All chunks fire simultaneously — each chunk paginates internally until exhausted
+      const chunkResults = await Promise.all(chunks.map(fetchAllPages));
 
       // Collect and transform all rows
-      const allRaw: any[] = chunkResults.flatMap(r => r.data || []);
+      const allRaw: any[] = chunkResults.flat();
 
       // Group by mmp_file_id for efficient state update
       const byMmpId = new Map<string, any[]>();
