@@ -13,7 +13,7 @@ export interface ReportSiteRow {
   cpName: string;
   activityType: string;
   status: string;
-  statusCategory: 'verified' | 'in_progress' | 'returned' | 'rejected' | 'pending';
+  statusCategory: 'verified' | 'awaiting_dispatch' | 'in_progress' | 'returned' | 'rejected' | 'pending';
   coordinatorName: string;
   dataCollectorName: string;
   daysInCurrentStatus: number;

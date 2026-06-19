@@ -73,32 +73,36 @@ const nextStep = (status: string): string => {
   return 'Review status manually';
 };
 
-const VERIFIED_STATUSES   = new Set(['verified','approved','approved and costed','costed','completed','wfp_confirmed','submitted']);
-const IN_PROGRESS_STATUSES = new Set(['in_progress','accepted','permits_attached','assigned','forwarded','forwarded_to_fom','forwarded_to_coordinator','forwarded_to_coordinators','dispatched']);
-const RETURNED_STATUSES   = new Set(['returned','returned_to_fom','recalled','sent_back','sent_back_to_fom']);
+const VERIFIED_STATUSES         = new Set(['verified','approved','approved and costed','costed','completed','wfp_confirmed','submitted']);
+const AWAITING_DISPATCH_STATUSES = new Set(['forwarded','forwarded_to_fom','forwarded_to_coordinator','forwarded_to_coordinators','assigned']);
+const IN_PROGRESS_STATUSES       = new Set(['dispatched','accepted','claimed','ongoing','site_claim','in_progress','permits_attached']);
+const RETURNED_STATUSES          = new Set(['returned','returned_to_fom','recalled','sent_back','sent_back_to_fom']);
 
 function statusCategory(status: string): ReportSiteRow['statusCategory'] {
   const s = status.toLowerCase();
-  if (VERIFIED_STATUSES.has(s))    return 'verified';
-  if (RETURNED_STATUSES.has(s))    return 'returned';
-  if (s === 'rejected')            return 'rejected';
-  if (IN_PROGRESS_STATUSES.has(s)) return 'in_progress';
+  if (VERIFIED_STATUSES.has(s))          return 'verified';
+  if (RETURNED_STATUSES.has(s))          return 'returned';
+  if (s === 'rejected')                  return 'rejected';
+  if (AWAITING_DISPATCH_STATUSES.has(s)) return 'awaiting_dispatch';
+  if (IN_PROGRESS_STATUSES.has(s))       return 'in_progress';
   return 'pending';
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  verified:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  returned:    'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  rejected:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  pending:     'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  verified:          'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  in_progress:       'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  awaiting_dispatch: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  returned:          'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  rejected:          'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  pending:           'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 const STATUS_ROW: Record<string, string> = {
-  verified:    'bg-green-50/40 dark:bg-green-950/10',
-  in_progress: 'bg-blue-50/40 dark:bg-blue-950/10',
-  returned:    'bg-orange-50/40 dark:bg-orange-950/10',
-  rejected:    'bg-red-50/40 dark:bg-red-950/10',
-  pending:     '',
+  verified:          'bg-green-50/40 dark:bg-green-950/10',
+  in_progress:       'bg-blue-50/40 dark:bg-blue-950/10',
+  awaiting_dispatch: 'bg-sky-50/40 dark:bg-sky-950/10',
+  returned:          'bg-orange-50/40 dark:bg-orange-950/10',
+  rejected:          'bg-red-50/40 dark:bg-red-950/10',
+  pending:           '',
 };
 
 const TABS = [
@@ -401,7 +405,7 @@ export default function MmpStateReport({
         name,
         sitesAssigned:  cs.length,
         completed:      cs.filter(s => s.statusCategory === 'verified').length,
-        inProgress:     cs.filter(s => s.statusCategory === 'in_progress').length,
+        inProgress:     cs.filter(s => s.statusCategory === 'in_progress' || s.statusCategory === 'awaiting_dispatch').length,
         pending:        cs.filter(s => s.statusCategory === 'pending').length,
         returned:       cs.filter(s => s.statusCategory === 'returned' || s.statusCategory === 'rejected').length,
         planReceivedAt: receivedAt,
@@ -487,12 +491,13 @@ export default function MmpStateReport({
 
   // ── Derived: summary numbers ───────────────────────────────────────────────
   const cycleSummary = useMemo(() => {
-    const verified   = sites.filter(s => s.statusCategory === 'verified').length;
-    const inProgress = sites.filter(s => s.statusCategory === 'in_progress').length;
-    const returned   = sites.filter(s => s.statusCategory === 'returned').length;
-    const rejected   = sites.filter(s => s.statusCategory === 'rejected').length;
-    const pending    = sites.filter(s => s.statusCategory === 'pending').length;
-    const total      = sites.length;
+    const verified         = sites.filter(s => s.statusCategory === 'verified').length;
+    const awaitingDispatch = sites.filter(s => s.statusCategory === 'awaiting_dispatch').length;
+    const inProgress       = sites.filter(s => s.statusCategory === 'in_progress').length;
+    const returned         = sites.filter(s => s.statusCategory === 'returned').length;
+    const rejected         = sites.filter(s => s.statusCategory === 'rejected').length;
+    const pending          = sites.filter(s => s.statusCategory === 'pending').length;
+    const total            = sites.length;
     // Only flag sites where a collector is already involved (accepted/in-progress/verified)
     // — pending/not-started sites don't need an advance yet
     const noAdvance  = sites.filter(s =>
@@ -520,7 +525,7 @@ export default function MmpStateReport({
       .sort((a, b) => b.count - a.count);
 
     return {
-      totalSites: total, verified, inProgress, returned, rejected, pending,
+      totalSites: total, verified, awaitingDispatch, inProgress, returned, rejected, pending,
       coveragePct: total > 0 ? Math.round((verified / total) * 100) : 0,
       noAdvance,
       totalAdvanceRequested: advancesDetail.reduce((s, a) => s + (Number(a.requested_amount) || 0), 0),
@@ -715,14 +720,15 @@ export default function MmpStateReport({
                 </h3>
                 <div className="space-y-1 text-sm">
                   {[
-                    { label: 'Total Sites',           value: cycleSummary.totalSites,          cls: '' },
-                    { label: 'Verified / Approved',   value: cycleSummary.verified,            cls: 'text-green-700 dark:text-green-400' },
-                    { label: 'In Progress',           value: cycleSummary.inProgress,          cls: 'text-blue-700 dark:text-blue-400' },
-                    { label: 'Pending / Not Started', value: cycleSummary.pending,             cls: 'text-amber-700 dark:text-amber-400' },
-                    { label: 'Returned',              value: cycleSummary.returned,            cls: 'text-orange-700 dark:text-orange-400' },
-                    { label: 'Rejected',              value: cycleSummary.rejected,            cls: 'text-red-700 dark:text-red-400' },
-                    { label: 'Coverage %',            value: `${cycleSummary.coveragePct}%`,  cls: 'text-purple-700 dark:text-purple-400 font-bold' },
-                    { label: 'Active Sites Missing Advance', value: cycleSummary.noAdvance,    cls: 'text-orange-700 dark:text-orange-400' },
+                    { label: 'Total Sites',                  value: cycleSummary.totalSites,          cls: '' },
+                    { label: 'Verified / Approved',          value: cycleSummary.verified,            cls: 'text-green-700 dark:text-green-400' },
+                    { label: 'Active Field Work',            value: cycleSummary.inProgress,          cls: 'text-blue-700 dark:text-blue-400' },
+                    { label: 'Awaiting Dispatch',            value: cycleSummary.awaitingDispatch,    cls: 'text-sky-700 dark:text-sky-400' },
+                    { label: 'Pending / Not Started',        value: cycleSummary.pending,             cls: 'text-amber-700 dark:text-amber-400' },
+                    { label: 'Returned',                     value: cycleSummary.returned,            cls: 'text-orange-700 dark:text-orange-400' },
+                    { label: 'Rejected',                     value: cycleSummary.rejected,            cls: 'text-red-700 dark:text-red-400' },
+                    { label: 'Coverage %',                   value: `${cycleSummary.coveragePct}%`,  cls: 'text-purple-700 dark:text-purple-400 font-bold' },
+                    { label: 'Active Sites Missing Advance', value: cycleSummary.noAdvance,           cls: 'text-orange-700 dark:text-orange-400' },
                   ].map(({ label, value, cls }) => (
                     <div key={label} className="flex justify-between border-b border-border/30 py-1">
                       <span className="text-muted-foreground">{label}</span>
@@ -732,11 +738,12 @@ export default function MmpStateReport({
                 </div>
                 {cycleSummary.totalSites > 0 && (
                   <div className="mt-3 h-3 rounded-full overflow-hidden bg-muted flex">
-                    <div className="bg-green-500" style={{ width: `${(cycleSummary.verified   / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-blue-400"  style={{ width: `${(cycleSummary.inProgress / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-amber-400" style={{ width: `${(cycleSummary.pending    / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-orange-400"style={{ width: `${(cycleSummary.returned   / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-red-500"   style={{ width: `${(cycleSummary.rejected   / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-green-500" style={{ width: `${(cycleSummary.verified         / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-blue-400"  style={{ width: `${(cycleSummary.inProgress       / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-sky-400"   style={{ width: `${(cycleSummary.awaitingDispatch / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-amber-400" style={{ width: `${(cycleSummary.pending          / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-orange-400"style={{ width: `${(cycleSummary.returned         / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-red-500"   style={{ width: `${(cycleSummary.rejected         / cycleSummary.totalSites) * 100}%` }} />
                   </div>
                 )}
               </div>
@@ -849,10 +856,11 @@ export default function MmpStateReport({
                                                 <td className="px-3 py-1.5">{s.dataCollectorName || '—'}</td>
                                                 <td className="px-3 py-1.5">
                                                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                                    s.statusCategory === 'verified'    ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
-                                                    s.statusCategory === 'in_progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-                                                    s.statusCategory === 'returned'    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' :
-                                                    s.statusCategory === 'rejected'    ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' :
+                                                    s.statusCategory === 'verified'          ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
+                                                    s.statusCategory === 'in_progress'       ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
+                                                    s.statusCategory === 'awaiting_dispatch' ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' :
+                                                    s.statusCategory === 'returned'          ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' :
+                                                    s.statusCategory === 'rejected'          ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' :
                                                     'bg-muted text-muted-foreground'
                                                   }`}>
                                                     {s.status.replace(/_/g, ' ')}
