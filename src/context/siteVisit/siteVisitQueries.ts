@@ -11,7 +11,7 @@ export const siteVisitQueryKeys = {
   list: () => [...siteVisitQueryKeys.all] as const,
 };
 
-const STALE_MS = 60 * 1000;
+const STALE_MS = 5 * 60 * 1000; // 5 minutes — avoid re-fetching on every navigation
 
 export function useSiteVisitsQuery(enabled = true) {
   return useQuery({

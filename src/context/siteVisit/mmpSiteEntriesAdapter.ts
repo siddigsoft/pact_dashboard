@@ -243,30 +243,47 @@ const mapStatusToDb = (appStatus: SiteVisit['status']): string => {
  */
 export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   const PAGE_SIZE = 1000;
-  let allData: any[] = [];
-  let from = 0;
-  let hasMore = true;
 
-  while (hasMore) {
-    const { data, error } = await supabase
+  // Fetch first page — covers the common case where all data fits in one page
+  const { data: firstPage, error: firstError } = await supabase
+    .from('mmp_site_entries')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(0, PAGE_SIZE - 1);
+
+  if (firstError) {
+    console.error('Error fetching mmp_site_entries (page 0):', firstError);
+    throw firstError;
+  }
+
+  let allData: any[] = firstPage || [];
+
+  // If the first page was full there is more data — get the total count and
+  // fetch all remaining pages IN PARALLEL instead of sequentially.
+  if (allData.length === PAGE_SIZE) {
+    const { count, error: countError } = await supabase
       .from('mmp_site_entries')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
+      .select('*', { count: 'exact', head: true });
 
-    if (error) {
-      console.error('Error fetching mmp_site_entries:', error);
-      // Return whatever we have so far rather than crashing the whole context
-      if (allData.length === 0) throw error;
-      break;
-    }
+    if (!countError && count && count > PAGE_SIZE) {
+      const remainingPageCount = Math.ceil((count - PAGE_SIZE) / PAGE_SIZE);
+      const pagePromises = Array.from({ length: remainingPageCount }, (_, i) => {
+        const from = PAGE_SIZE + i * PAGE_SIZE;
+        return supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+      });
 
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      from += PAGE_SIZE;
-      hasMore = data.length === PAGE_SIZE;
-    } else {
-      hasMore = false;
+      const results = await Promise.all(pagePromises);
+      for (const { data, error } of results) {
+        if (error) {
+          console.warn('Error fetching mmp_site_entries page (non-fatal):', error);
+          continue;
+        }
+        if (data && data.length > 0) allData = allData.concat(data);
+      }
     }
   }
 
