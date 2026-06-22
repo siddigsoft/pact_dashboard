@@ -1495,7 +1495,12 @@ const CostSubmission = () => {
           }
         }
 
-        fetchOperationalCosts();
+        // Optimistically update local state — no full re-fetch needed
+        setOperationalCosts(prev =>
+          prev.map(oc =>
+            oc.id === submission.id ? { ...oc, ...updates } : oc
+          )
+        );
       }
     } catch (err) {
       console.error('Approval error:', err);
