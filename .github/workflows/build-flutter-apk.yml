@@ -44,6 +44,16 @@ jobs:
         working-directory: /tmp/pact_app
         run: flutter pub get
 
+      - name: Fix app_links Gradle compatibility
+        run: |
+          find ~/.pub-cache -path "*/app_links*/android/build.gradle" -exec \
+            sed -i \
+              -e 's/flutter\.compileSdkVersion/34/g' \
+              -e 's/flutter\.targetSdkVersion/34/g' \
+              -e 's/flutter\.minSdkVersion/21/g' \
+            {} \;
+          echo "app_links patched successfully"
+
       - name: Build APK
         working-directory: /tmp/pact_app
         run: |
