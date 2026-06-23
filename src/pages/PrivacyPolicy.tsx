@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import PactLogo from "@/assets/logo.png";
 
 const EFFECTIVE_DATE = "June 23, 2026";
-const CONTACT_EMAIL = "support@pactorg.com";
 
 export default function PrivacyPolicy() {
   return (
@@ -197,12 +196,42 @@ export default function PrivacyPolicy() {
             </ul>
             <p>
               You can update profile details in the app or web settings. To exercise your rights, contact us
-              at <a href={`mailto:${CONTACT_EMAIL}`} className="text-blue-700 hover:underline">{CONTACT_EMAIL}</a>.
+              at <a href="mailto:siddig@pactorg.com" className="text-blue-700 hover:underline">siddig@pactorg.com</a>.
               We may need to verify your identity before responding.
             </p>
           </Section>
 
-          <Section title="11. Permissions on Mobile Devices">
+          <Section title="11. Account Deletion — Pact Mobile">
+            <p>
+              To request deletion of your Pact Mobile account and associated data:
+            </p>
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                Email{" "}
+                <a href="mailto:siddig@pactorg.com" className="text-blue-700 hover:underline">
+                  siddig@pactorg.com
+                </a>{" "}
+                from the address linked to your account
+              </li>
+              <li>
+                <strong>Subject:</strong> Pact Mobile — Account deletion request
+              </li>
+              <li>
+                Include your full name and registered email address
+              </li>
+            </ol>
+            <p className="mt-3">
+              <strong>What we delete:</strong> account profile, location logs, messages, cost submissions,
+              and other data tied to your account, subject to legal and operational retention requirements
+              (for example, financial records we are required to keep).
+            </p>
+            <p>
+              We will confirm receipt and complete verified deletion requests within a reasonable timeframe,
+              typically within 30 days.
+            </p>
+          </Section>
+
+          <Section title="12. Permissions on Mobile Devices">
             <p>PACT Mobile may request device permissions to provide core functionality:</p>
             <ul>
               <li><strong>Location</strong> — site visit verification and field tracking</li>
@@ -218,7 +247,7 @@ export default function PrivacyPolicy() {
             </p>
           </Section>
 
-          <Section title="12. Cookies and Similar Technologies (Web)">
+          <Section title="13. Cookies and Similar Technologies (Web)">
             <p>
               The PACT Command Center web platform uses cookies and local storage to maintain your
               session, remember preferences, and understand how the site is used. You can control cookies
@@ -227,7 +256,7 @@ export default function PrivacyPolicy() {
             </p>
           </Section>
 
-          <Section title="13. Changes to This Policy">
+          <Section title="14. Changes to This Policy">
             <p>
               We may update this Privacy Policy from time to time. When we make material changes, we will
               post the updated policy on this page and update the effective date. Continued use of the
@@ -235,18 +264,18 @@ export default function PrivacyPolicy() {
             </p>
           </Section>
 
-          <Section title="14. Contact Us">
+          <Section title="15. Contact Us">
             <p>
               If you have questions about this Privacy Policy or our data practices, contact:
             </p>
             <p className="mt-2">
               <strong>PACT — Privacy &amp; Data Protection</strong><br />
-              Email: <a href={`mailto:${CONTACT_EMAIL}`} className="text-blue-700 hover:underline">{CONTACT_EMAIL}</a><br />
+              Email: <a href="mailto:siddig@pactorg.com" className="text-blue-700 hover:underline">siddig@pactorg.com</a><br />
               Web: <a href="https://app.pactorg.com" className="text-blue-700 hover:underline">app.pactorg.com</a>
             </p>
           </Section>
 
-          <Section title="15. Governing Law">
+          <Section title="16. Governing Law">
             <p>
               This Privacy Policy is governed by the laws of the Republic of Sudan, without regard to
               conflict-of-law principles. Disputes arising from this policy shall be subject to the
