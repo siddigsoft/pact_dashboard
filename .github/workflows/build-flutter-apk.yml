@@ -25,3 +25,42 @@ jobs:
         with:
           flutter-version: '3.24.5'
           channel: 'stable'
+
+      - name: Create fresh Flutter project
+        run: |
+          flutter create \
+            --project-name pact_command_center \
+            --org com.pact \
+            --android-language kotlin \
+            /tmp/pact_app
+
+      - name: Copy source code
+        run: |
+          cp -r mobile/lib /tmp/pact_app/
+          cp mobile/pubspec.yaml /tmp/pact_app/
+          mkdir -p /tmp/pact_app/assets/images /tmp/pact_app/assets/icons
+
+      - name: Get dependencies
+        working-directory: /tmp/pact_app
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: /tmp/pact_app
+        run: |
+          flutter build apk --release \
+            --no-tree-shake-icons \
+            --dart-define=SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Confirm APK exists
+        run: |
+          ls -lh /tmp/pact_app/build/app/outputs/flutter-apk/
+          cp /tmp/pact_app/build/app/outputs/flutter-apk/app-release.apk \
+             /tmp/PACT-v${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PACT-CommandCenter-v${{ github.run_number }}
+          path: /tmp/PACT-v${{ github.run_number }}.apk
+          if-no-files-found: error
+          retention-days: 30
