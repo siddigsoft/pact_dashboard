@@ -6,6 +6,12 @@ PACT Command Center is a centralized platform designed to streamline humanitaria
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+**Flutter Mobile Sync Rule (permanent default):**
+- The Flutter app at `mobile/` is for field operations staff only (Data Collector, Coordinator, Supervisor, FOM, Data Team).
+- Whenever ANY change is made to the web app that affects field staff screens, features, layouts, or views — the equivalent change MUST also be made to the Flutter app in the same session, automatically, without being asked.
+- The GitHub Actions workflow (`.github/workflows/build-flutter-apk.yml`) auto-builds a new APK whenever `mobile/` files are pushed to GitHub.
+- Web-only changes (no field staff impact) do not require a Flutter update.
+
 ## System Architecture
 
 ### UI/UX Decisions
