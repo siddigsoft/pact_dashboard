@@ -557,16 +557,101 @@ const CostSubmission = () => {
     }
   }, [viewAdvanceDetails, fetchSignatureForSubmission]);
 
+  // Batch-load ALL signatures in 2 queries instead of 2-per-submission N+1 queries
   useEffect(() => {
-    const signedOps = operationalCosts.filter(oc => 
+    const signedOps = operationalCosts.filter(oc =>
       oc.tier2_notes?.includes('[Signed:') && !sigCacheRef.current[oc.id]
     );
-    signedOps.forEach(oc => fetchSignatureForSubmission(oc));
-  }, [operationalCosts, fetchSignatureForSubmission]);
+    if (signedOps.length === 0) return;
+
+    // Mark all as being fetched so re-renders don't double-fire
+    signedOps.forEach(oc => { sigCacheRef.current[oc.id] = true; });
+
+    const run = async () => {
+      // Extract document_signature IDs from notes
+      const sigIdMap = new Map<string, string>(); // sigId → oc.id
+      const fallbackUserMap = new Map<string, string>(); // userId → oc.id (for handwriting fallback)
+
+      for (const oc of signedOps) {
+        const match = oc.tier2_notes?.match(/ID:\s*(\S+?)(?:\s*\||$)/);
+        if (match?.[1]) sigIdMap.set(match[1], oc.id);
+        else if (oc.tier2_approved_by) fallbackUserMap.set(oc.tier2_approved_by, oc.id);
+      }
+
+      const newImages: Record<string, string | null> = {};
+      signedOps.forEach(oc => { newImages[oc.id] = null; });
+
+      // 1 query: fetch all document_signatures by ID
+      if (sigIdMap.size > 0) {
+        try {
+          const { data: rows } = await supabase
+            .from('document_signatures')
+            .select('id, signature_data, signer_id')
+            .in('id', Array.from(sigIdMap.keys()));
+          for (const row of rows || []) {
+            const ocId = sigIdMap.get(row.id);
+            if (!ocId) continue;
+            if (row.signature_data?.startsWith?.('data:')) {
+              newImages[ocId] = row.signature_data;
+            } else if (row.signer_id) {
+              // Need handwriting fallback — track the user
+              fallbackUserMap.set(row.signer_id, ocId);
+            }
+          }
+        } catch { /* continue */ }
+      }
+
+      // 1 query: fetch handwriting signatures for all users that still need one
+      const needFallback = Array.from(fallbackUserMap.keys()).filter(uid => {
+        const ocId = fallbackUserMap.get(uid)!;
+        return !newImages[ocId]; // only if doc_sig didn't resolve it
+      });
+      if (needFallback.length > 0) {
+        try {
+          const { data: hwRows } = await supabase
+            .from('handwriting_signatures')
+            .select('user_id, signature_image')
+            .in('user_id', needFallback)
+            .eq('is_active', true)
+            .order('is_default', { ascending: false })
+            .order('created_at', { ascending: false });
+          const seen = new Set<string>();
+          for (const row of hwRows || []) {
+            if (seen.has(row.user_id)) continue; // keep first (default) per user
+            seen.add(row.user_id);
+            const ocId = fallbackUserMap.get(row.user_id);
+            if (ocId && row.signature_image?.startsWith?.('data:')) {
+              newImages[ocId] = row.signature_image;
+            }
+          }
+        } catch { /* continue */ }
+      }
+
+      setSignatureImages(prev => ({ ...prev, ...newImages }));
+    };
+
+    run();
+  }, [operationalCosts]);
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
     setOperationalCostsLoading(true);
+
+    // Paginate past Supabase server's 1000-row cap
+    const fetchAllPages = async (baseQuery: any): Promise<{ data: any[] | null; error: any }> => {
+      const PAGE = 1000;
+      const rows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await baseQuery.range(from, from + PAGE - 1);
+        if (error) return { data: null, error };
+        if (data && data.length > 0) rows.push(...data);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      return { data: rows, error: null };
+    };
+
     try {
       const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
       const isSuperAdminDirect = userRole === 'superadmin' || userRole === 'superadministrator';
@@ -587,20 +672,17 @@ const CostSubmission = () => {
           } else {
             console.warn('[CostSubmission] RPC returned empty, trying direct query (role:', currentUser.role, ')');
           }
-          const directResult = await supabase
-            .from('operational_cost_submissions')
-            .select('*')
-            .order('created_at', { ascending: false });
+          const directResult = await fetchAllPages(
+            supabase.from('operational_cost_submissions').select('*').order('created_at', { ascending: false })
+          );
           data = directResult.data as OperationalCostSubmission[];
           error = directResult.error;
           console.log(`[CostSubmission] Direct query fetched ${(data || []).length} records, error:`, error?.message || 'none');
         }
       } else {
-        const result = await supabase
-          .from('operational_cost_submissions')
-          .select('*')
-          .eq('submitted_by', currentUser.id)
-          .order('created_at', { ascending: false });
+        const result = await fetchAllPages(
+          supabase.from('operational_cost_submissions').select('*').eq('submitted_by', currentUser.id).order('created_at', { ascending: false })
+        );
         data = result.data as OperationalCostSubmission[];
         error = result.error;
       }
@@ -1413,7 +1495,12 @@ const CostSubmission = () => {
           }
         }
 
-        fetchOperationalCosts();
+        // Optimistically update local state — no full re-fetch needed
+        setOperationalCosts(prev =>
+          prev.map(oc =>
+            oc.id === submission.id ? { ...oc, ...updates } : oc
+          )
+        );
       }
     } catch (err) {
       console.error('Approval error:', err);
