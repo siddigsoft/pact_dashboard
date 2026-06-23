@@ -39,6 +39,10 @@ jobs:
             git reset --hard origin/master
             git clean -fd
 
+
+            # Clean node_modules completely before reinstalling
+            rm -rf node_modules package-lock.json
+
             # Rebuild
             npm install
             NODE_OPTIONS="--max-old-space-size=4096" npm run build
