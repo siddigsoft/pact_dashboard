@@ -13,7 +13,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to VPS via SSH (hardcoded key)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Deploy dist to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 209.38.78.38
+          username: deploy
+          key: |
+            -----BEGIN OPENSSH PRIVATE KEY-----
+            b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+            QyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQwAAAJjD7cU1w+3F
+            NQAAAAtzc2gtZWQyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQw
+            AAAEC1vOU+lUWcM2NmT4hRzQZTI3rhDcQhthO9CUrk0lkkrewdnKnsOHprn/gcXk0RLbwN
+            f4D/7qPn5xU8pENyQ8ZDAAAAE2dpdGh1Yi1hY3Rpb25zQHBhY3QBAg==
+            -----END OPENSSH PRIVATE KEY-----
+          source: dist/
+          target: /home/deploy/pact_dashboard/
+          rm: true
+
+      - name: Fix permissions on VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 209.38.78.38
@@ -27,28 +57,5 @@ jobs:
             f4D/7qPn5xU8pENyQ8ZDAAAAE2dpdGh1Yi1hY3Rpb25zQHBhY3QBAg==
             -----END OPENSSH PRIVATE KEY-----
           script: |
-            set -e
-            echo "🚀 Deploying PACT Frontend (static)"
-            cd /home/deploy/pact_dashboard
-
-            # Ensure Git can modify files (no sudo needed)
-            chmod -R u+w .
-
-            # Pull latest code
-            git fetch origin
-            git reset --hard origin/master
-            git clean -fd
-
-
-            # Clean node_modules completely before reinstalling
-            rm -rf node_modules package-lock.json
-
-            # Rebuild
-            npm install
-            NODE_OPTIONS="--max-old-space-size=4096" npm run build
-
-            # Set safe permissions for Nginx (world-readable)
-            find dist -type d -exec chmod 755 {} \;
-            find dist -type f -exec chmod 644 {} \;
-
-            echo "✅ Deployment completed successfully"
+            find /home/deploy/pact_dashboard/dist -type d -exec chmod 755 {} \;
+            find /home/deploy/pact_dashboard/dist -type f -exec chmod 644 {} \;
