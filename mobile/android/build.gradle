@@ -26,15 +26,13 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Fix for app_links v6+ and other plugins that reference flutter.compileSdkVersion
-// in library build.gradle files — provide a fallback for CI environments.
+// Fix for app_links v6+ referencing flutter.compileSdkVersion in library projects.
+// plugins.withId fires when the plugin is applied (before evaluation) — safe in all contexts.
 subprojects {
-    afterEvaluate { project ->
-        if (project.plugins.hasPlugin("com.android.library")) {
-            project.android {
-                compileSdkVersion 34
-                buildToolsVersion "34.0.0"
-            }
+    plugins.withId("com.android.library") {
+        android {
+            compileSdkVersion 34
+            buildToolsVersion "34.0.0"
         }
     }
 }
