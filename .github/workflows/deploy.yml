@@ -20,13 +20,20 @@ jobs:
           cache: 'npm'
 
       - name: Install and build
-        # ponytail: npm ci crashes here with "Exit handler never called!" (npm CLI bug),
-        # leaving node_modules half-installed. npm install avoids that code path.
+        # ponytail: pin npm to a version without the "Exit handler never called!" regression
+        # (community-reported fix). If this still fails, the debug-log step below prints
+        # the real internal npm trace so we stop guessing.
         run: |
+          npm install -g npm@10.8.2
+          npm --version
           npm install
           npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Dump npm debug log on failure
+        if: failure()
+        run: cat /home/runner/.npm/_logs/*-debug-0.log
 
       - name: Deploy dist to VPS
         uses: appleboy/scp-action@v0.1.7
