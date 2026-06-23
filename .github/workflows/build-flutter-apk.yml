@@ -3,7 +3,7 @@ name: Build Flutter APK
 on:
   push:
     branches: [master, main]
-    paths:
+    paths: 
       - 'mobile/**'
       - '.github/workflows/build-flutter-apk.yml'
   workflow_dispatch:
@@ -59,7 +59,18 @@ jobs:
       - name: Install dependencies
         working-directory: mobile
         run: flutter pub get
-
+        
+      - name: Patch app_links for CI compatibility
+        run: |
+          find ~/.pub-cache -name "build.gradle" -path "*/app_links*/android/build.gradle" | while read f; do
+            echo "Patching: $f"
+            sed -i 's/flutter\.compileSdkVersion/34/g' "$f"
+            sed -i 's/flutter\.targetSdkVersion/34/g' "$f"
+            sed -i 's/flutter\.minSdkVersion/21/g' "$f"
+            sed -i "s/flutter\.ndkVersion/\"27.0.12077973\"/g" "$f"
+            cat "$f"
+          done
+          
       - name: Analyze code
         working-directory: mobile
         run: flutter analyze --no-fatal-infos
