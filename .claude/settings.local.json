@@ -16,7 +16,15 @@
       "Bash(supabase inspect:*)",
       "Bash(python3:*)",
       "Bash(./node_modules/.bin/tsc --noEmit)",
-      "Bash(npm i:*)"
+      "Bash(npm i:*)",
+      "Bash(node *)",
+      "Bash(npm uninstall *)",
+      "Bash(gh auth *)",
+      "Bash(gh run *)",
+      "PowerShell(Get-Command *)",
+      "Bash(npm config *)",
+      "Read(//c/Users/user/**)",
+      "Bash(env)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -20,20 +20,13 @@ jobs:
           cache: 'npm'
 
       - name: Install and build
-        # ponytail: pin npm to a version without the "Exit handler never called!" regression
-        # (community-reported fix). If this still fails, the debug-log step below prints
-        # the real internal npm trace so we stop guessing.
         run: |
-          npm install -g npm@10.8.2
-          npm --version
-          npm install
+          npm ci
           npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Dump npm debug log on failure
-        if: failure()
-        run: cat /home/runner/.npm/_logs/*-debug-0.log
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Deploy dist to VPS
         uses: appleboy/scp-action@v0.1.7
