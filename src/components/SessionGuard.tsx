@@ -10,7 +10,7 @@ const DEBOUNCE_MS = 2000;
 const RECOVERY_COOLDOWN_MS = 30 * 1000;
 
 // Public routes that have no Supabase session — skip all session checks here
-const PUBLIC_PATHS = ['/pdm-report', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password'];
+const PUBLIC_PATHS = ['/pdm-report', '/privacy-policy', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password'];
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const isPublicPath = PUBLIC_PATHS.some(p => window.location.pathname === p || window.location.pathname.startsWith(p + '/'));

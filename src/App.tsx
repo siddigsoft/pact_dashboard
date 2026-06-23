@@ -97,6 +97,7 @@ const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const MobileDocumentation = lazy(() => import('./pages/MobileDocumentation'));
 const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
@@ -356,7 +357,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report', '/staff-onboarding'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report', '/staff-onboarding', '/privacy-policy'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/') &&
     !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill')) &&
@@ -386,6 +387,7 @@ const AppRoutes = () => {
       <Route path="/email-preview" element={<EmailPreviewPage />} />
       <Route path="/staff-onboarding" element={<Navigate to="/hr?tab=onboarding" replace />} />
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
       <Route path="/s/:id" element={<SurveyFill />} />
