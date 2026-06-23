@@ -20,8 +20,10 @@ jobs:
           cache: 'npm'
 
       - name: Install and build
+        # ponytail: npm ci crashes here with "Exit handler never called!" (npm CLI bug),
+        # leaving node_modules half-installed. npm install avoids that code path.
         run: |
-          npm ci
+          npm install
           npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
