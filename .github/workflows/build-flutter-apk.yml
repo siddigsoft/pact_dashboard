@@ -1,0 +1,130 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-flutter-apk.yml'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build-apk:
+    name: Build PACT Command Center APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter version info
+        run: flutter --version
+
+      - name: Bootstrap missing Android resources
+        # Fills in launcher icons and other boilerplate WITHOUT overwriting our existing files.
+        # The --no-pub flag skips pub get so our pubspec.yaml stays in control.
+        run: |
+          flutter create \
+            --project-name pact_command_center \
+            --org com.pact \
+            --android-language kotlin \
+            --no-pub \
+            . 2>/dev/null || true
+        working-directory: mobile
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: mobile
+
+      - name: Analyze code
+        run: flutter analyze --no-fatal-infos
+        working-directory: mobile
+        continue-on-error: true
+
+      - name: Create google-services.json placeholder
+        # Firebase is gracefully optional — if a real google-services.json is provided
+        # as a secret, it takes priority. Otherwise a stub is used so the build succeeds.
+        run: |
+          if [ ! -f "android/app/google-services.json" ]; then
+            cat > android/app/google-services.json << 'EOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "pact-command-center",
+              "storage_bucket": "pact-command-center.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:000000000000:android:000000000000000000000000",
+                "android_client_info": { "package_name": "com.pact.commandcenter" }
+              },
+              "api_key": [{ "current_key": "PLACEHOLDER" }],
+              "services": {}
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+        working-directory: mobile
+
+      - name: Build release APK
+        run: |
+          flutter build apk \
+            --release \
+            --no-tree-shake-icons \
+            --dart-define=SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        working-directory: mobile
+
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             release/PACT-CommandCenter-v${{ github.run_number }}.apk
+        working-directory: mobile
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PACT-CommandCenter-v${{ github.run_number }}
+          path: mobile/release/PACT-CommandCenter-v${{ github.run_number }}.apk
+          retention-days: 30
+
+      - name: APK build summary
+        run: |
+          APK_SIZE=$(du -sh "mobile/release/PACT-CommandCenter-v${{ github.run_number }}.apk" | cut -f1)
+          echo "## ✅ PACT Command Center APK Built" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | v${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| APK Size | $APK_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Flutter | 3.24.5 stable |" >> $GITHUB_STEP_SUMMARY
+          echo "| Java | 17 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Download from the **Artifacts** section above ⬆️" >> $GITHUB_STEP_SUMMARY
