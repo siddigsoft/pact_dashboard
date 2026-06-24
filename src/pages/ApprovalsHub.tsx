@@ -340,33 +340,62 @@ export default function ApprovalsHub() {
         // 1. Find the current pending step for this fund (lowest step_order pending)
         const { data: stepsData } = await supabase
           .from('pre_fund_approval_steps')
-          .select('id, step_order, is_required, status, assigned_user_id')
+          .select('id, step_order, is_required, status, assigned_user_id, assigned_user_ids, required_approvals')
           .eq('pre_fund_request_id', fundId)
           .order('step_order', { ascending: true });
         const steps: any[] = (stepsData as any) ?? [];
         const pendingStep = steps.find((s: any) => s.status === 'pending');
 
-        // 2. Authorization guard: only the assigned user (or admin/super_admin) may act on the step
-        if (pendingStep?.assigned_user_id) {
-          const isAssignedUser = pendingStep.assigned_user_id === currentUser?.id;
-          const isAdminOverride = isAdmin; // isSuperAdmin || hasAnyRole(['admin','Admin']) — checked at top of component
-          if (!isAssignedUser && !isAdminOverride) {
-            throw new Error('You are not assigned to this approval step. Only the assigned approver or an admin may act on it.');
+        // 2. Authorization guard — supports both legacy single-user and multi-user array
+        if (pendingStep) {
+          const assignedIds: string[] =
+            Array.isArray(pendingStep.assigned_user_ids) && pendingStep.assigned_user_ids.length > 0
+              ? pendingStep.assigned_user_ids
+              : pendingStep.assigned_user_id ? [pendingStep.assigned_user_id] : [];
+          if (assignedIds.length > 0) {
+            const isAssignedUser = assignedIds.includes(currentUser?.id ?? '');
+            if (!isAssignedUser && !isAdmin) {
+              throw new Error('You are not assigned to this approval step. Only an assigned approver or admin may act on it.');
+            }
           }
         }
 
-        // Update the pending step
+        // 3. Record individual vote (quorum model: M-of-N) then update step if threshold met
         if (pendingStep) {
-          const { error: stepErr } = await supabase
-            .from('pre_fund_approval_steps')
-            .update({
-              status: action === 'approve' ? 'approved' : 'rejected',
-              approved_by: currentUser?.id ?? null,
-              approved_at: now,
-              notes: actionNotes || (action === 'approve' ? 'Approved via Approvals Hub' : 'Rejected via Approvals Hub'),
-            })
-            .eq('id', pendingStep.id);
-          if (stepErr) throw stepErr;
+          // Upsert vote (one vote per user per step)
+          await supabase.from('pre_fund_step_approvals' as any).upsert({
+            step_id: pendingStep.id,
+            user_id: currentUser?.id,
+            action: action === 'approve' ? 'approved' : 'rejected',
+            notes: actionNotes || null,
+            created_at: now,
+          }, { onConflict: 'step_id,user_id' });
+
+          // Count current approvals for this step
+          const { data: voteData } = await supabase
+            .from('pre_fund_step_approvals' as any)
+            .select('action')
+            .eq('step_id', pendingStep.id);
+          const votes = (voteData as any) ?? [];
+          const approvalCount = votes.filter((v: any) => v.action === 'approved').length;
+          const anyRejected   = votes.some((v: any) => v.action === 'rejected');
+          const quorumRequired = pendingStep.required_approvals ?? 1;
+          const quorumMet = approvalCount >= quorumRequired;
+
+          // Only mark the step as resolved if quorum is met or a required rejection happened
+          const stepResolved = (action === 'approve' && quorumMet) || (action === 'reject' && anyRejected);
+          if (stepResolved) {
+            const { error: stepErr } = await supabase
+              .from('pre_fund_approval_steps')
+              .update({
+                status: (action === 'approve' && quorumMet) ? 'approved' : 'rejected',
+                approved_by: currentUser?.id ?? null,
+                approved_at: now,
+                notes: actionNotes || (action === 'approve' ? 'Approved via Approvals Hub' : 'Rejected via Approvals Hub'),
+              })
+              .eq('id', pendingStep.id);
+            if (stepErr) throw stepErr;
+          }
         }
 
         // 3. Determine new fund status

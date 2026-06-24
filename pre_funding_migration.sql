@@ -201,24 +201,41 @@ DROP POLICY IF EXISTS "pf_step_votes_read"   ON pre_fund_step_approvals;
 DROP POLICY IF EXISTS "pf_step_votes_insert"  ON pre_fund_step_approvals;
 DROP POLICY IF EXISTS "pf_step_votes_update"  ON pre_fund_step_approvals;
 
--- Anyone who can see the fund can read its votes
+-- Anyone involved with the fund (creator, assignee, admin) can read votes
 CREATE POLICY "pf_step_votes_read" ON pre_fund_step_approvals
   FOR SELECT USING (
+    -- The vote belongs to the current user
+    user_id = auth.uid()
+    OR
+    -- The current user is an admin/finance role
+    LOWER((auth.jwt() -> 'user_metadata' ->> 'role')) IN (
+      'super_admin','superadmin','admin','financialadmin','financial_admin'
+    )
+    OR
+    -- The current user created the fund this step belongs to
     EXISTS (
       SELECT 1 FROM pre_fund_approval_steps s
       JOIN pre_fund_requests r ON r.id = s.pre_fund_request_id
       WHERE s.id = pre_fund_step_approvals.step_id
+        AND r.created_by = auth.uid()
+    )
+    OR
+    -- The current user is assigned to the step (single-user or multi-user)
+    EXISTS (
+      SELECT 1 FROM pre_fund_approval_steps s
+      WHERE s.id = pre_fund_step_approvals.step_id
         AND (
-          LOWER((auth.jwt() -> 'user_metadata' ->> 'role')) IN ('super_admin','superadmin','admin','financialadmin')
-          OR r.requested_by = auth.uid()
+          s.assigned_user_id = auth.uid()
+          OR s.assigned_user_ids @> ARRAY[auth.uid()]
         )
     )
   );
 
--- Users can only insert/update their own vote
+-- Users can only insert their own vote
 CREATE POLICY "pf_step_votes_insert" ON pre_fund_step_approvals
   FOR INSERT WITH CHECK (user_id = auth.uid());
 
+-- Users can only update their own vote
 CREATE POLICY "pf_step_votes_update" ON pre_fund_step_approvals
   FOR UPDATE USING (user_id = auth.uid());
 

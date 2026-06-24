@@ -461,11 +461,12 @@ export function useApprovalsData({
 
       // Step-assignee: surface pre-fund requests where this user has a pending approval step
       // (covers non-finance users assigned to a specific step in the chain)
+      // Checks both legacy single-user column AND multi-user array column.
       if (currentUserId) {
         const { data: assignedSteps } = await supabase
           .from('pre_fund_approval_steps')
           .select('pre_fund_request_id, step_label')
-          .eq('assigned_user_id', currentUserId)
+          .or(`assigned_user_id.eq.${currentUserId},assigned_user_ids.cs.{${currentUserId}}`)
           .eq('status', 'pending')
           .limit(30);
 
