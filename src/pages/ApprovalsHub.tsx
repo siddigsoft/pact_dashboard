@@ -398,31 +398,30 @@ export default function ApprovalsHub() {
           }
         }
 
-        // 3. Determine new fund status
+        // 3. Determine new fund status — only advance when the current step is actually resolved.
+        //    Re-query step states from DB so we never compute against stale in-memory data.
         let newFundStatus: string | null = null;
-        if (action === 'reject') {
-          if (pendingStep?.is_required !== false) {
-            // Required step rejected → fund is rejected
-            newFundStatus = 'rejected';
-          } else {
-            // Optional step rejected → skip it, treat like an approval for flow purposes
-            // Check if any remaining required steps are still pending
-            const remainingRequired = steps.filter(
-              (s: any) => s.id !== pendingStep?.id && s.status === 'pending' && s.is_required
-            );
-            newFundStatus = remainingRequired.length === 0 ? 'awaiting_receipt' : null;
-            // null = stay as pending_approval, more required steps remain
-          }
-        } else {
-          // Approve: check if any required steps remain pending after this approval
-          const remainingRequired = steps.filter(
-            (s: any) => s.id !== pendingStep?.id && s.status === 'pending' && s.is_required
+        if (action === 'reject' && pendingStep?.is_required !== false) {
+          // Required step was rejected → whole fund is rejected regardless of quorum
+          newFundStatus = 'rejected';
+        } else if (stepResolved) {
+          // The current step has just been closed — re-fetch authoritative step states from DB
+          const { data: freshStepsData } = await supabase
+            .from('pre_fund_approval_steps')
+            .select('id, status, is_required')
+            .eq('pre_fund_request_id', fundId);
+          const freshSteps: any[] = (freshStepsData as any) ?? [];
+          const remainingRequired = freshSteps.filter(
+            (s: any) => s.status === 'pending' && s.is_required
           );
           if (remainingRequired.length === 0) {
-            newFundStatus = 'awaiting_receipt'; // all required steps cleared
+            newFundStatus = action === 'reject' ? 'awaiting_receipt' : 'awaiting_receipt';
+            // All required steps cleared; fund now awaits physical receipt
           }
-          // else keep as pending_approval — more steps remain
+          // else: more required steps remain → stay pending_approval (newFundStatus stays null)
         }
+        // If stepResolved = false (quorum not yet met), newFundStatus stays null →
+        // fund status is not mutated; another approver must vote before the step closes.
 
         // 4. Update fund-level columns
         const fundUpdate: any = {
