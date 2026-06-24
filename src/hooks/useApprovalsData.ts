@@ -502,7 +502,9 @@ export function useApprovalsData({
                   status: r.status,
                   submittedAt: r.created_at,
                   urgencyLevel: getUrgencyLevel(r.created_at),
-                  canInlineApprove: false,
+                  // Inline approve/reject enabled — assigned users may act directly from
+                  // Approvals Hub; ApprovalsHub enforces assigned-user guard before writing.
+                  canInlineApprove: true,
                   navigationPath: '/pre-funding',
                   rawData: r,
                 });
