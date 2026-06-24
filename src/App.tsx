@@ -572,6 +572,7 @@ const AppRoutes = () => {
         <Route path="/pre-funding/approvals" element={<Navigate to="/pre-funding?tab=approvals" replace />} />
         <Route path="/pre-funding/reconciliation" element={<Navigate to="/pre-funding?tab=reconciliation" replace />} />
         <Route path="/pre-funding/settings" element={<Navigate to="/pre-funding?tab=settings" replace />} />
+        <Route path="/pre-funding/report" element={<Navigate to="/pre-funding?tab=report" replace />} />
         <Route path="/accounting/coa" element={<Navigate to="/accounting?tab=coa" replace />} />
         <Route path="/accounting/journals" element={<Navigate to="/accounting?tab=journals" replace />} />
         <Route path="/accounting/trial-balance" element={<Navigate to="/accounting?tab=trial-balance" replace />} />

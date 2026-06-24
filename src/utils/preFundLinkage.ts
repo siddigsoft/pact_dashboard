@@ -12,13 +12,19 @@ export interface FundLinkResult {
 }
 
 /**
- * Match a payment to the best active pre-fund and create a pre_fund_transactions
- * record, deduct from available_balance, and back-link the source row.
+ * Match a payment to the best active pre-fund and atomically:
+ *   - create a pre_fund_transactions record
+ *   - deduct from available_balance (and increment paid_amount)
+ *   - back-link the source row
+ *
+ * The scoring/matching phase is read-only TypeScript; the three writes are
+ * delegated to link_payment_atomically_rpc which runs them inside a single
+ * DB transaction — no partial state is possible on failure.
  *
  * Matching priority (highest score wins):
- *  3 — country + project match (scope: country_project or country_project_category)
- *  2 — project-only match (scope: project)
- *  1 — country-only match (scope: country)
+ *  3 — country + project match
+ *  2 — project-only match
+ *  1 — country-only match
  *  0.5 — any active fund in same currency with sufficient balance
  *
  * Called AFTER the cost/DP row is already set to paid — this is additive and
@@ -45,9 +51,9 @@ export async function linkPaymentToPreFund(params: {
 
   const today = paymentDate.split('T')[0];
 
-  // Load all active funds that cover this date and match currency
-  const { data: activeFunds, error: fetchErr } = await supabase
-    .from('pre_fund_requests' as any)
+  // ── Read-only: load and score candidates ────────────────────────────────
+  const { data: activeFunds, error: fetchErr } = await (supabase as any)
+    .from('pre_fund_requests')
     .select('id,name,matching_scope,country_id,project_id,available_balance,currency')
     .eq('status', 'active')
     .eq('currency', currency)
@@ -59,7 +65,6 @@ export async function linkPaymentToPreFund(params: {
     return { linked: false, message: 'No active pre-fund for this currency and period.' };
   }
 
-  // Score each candidate
   const scored = (activeFunds as any[]).map(f => {
     const scope: string = f.matching_scope ?? 'country';
     let score = 0;
@@ -80,7 +85,6 @@ export async function linkPaymentToPreFund(params: {
     return { linked: false, message: 'No active pre-fund matches this payment. Finance must link manually in the Pre-Funding Registry.' };
   }
 
-  // Multiple funds tied at the same top score → Finance must choose
   const topScore = scored[0].score;
   const topCandidates = scored.filter(x => x.score === topScore);
   if (topCandidates.length > 1) {
@@ -94,54 +98,32 @@ export async function linkPaymentToPreFund(params: {
 
   const bestFund = scored[0].fund;
 
-  // Create pre_fund_transactions record
-  const { data: txn, error: txnErr } = await supabase
-    .from('pre_fund_transactions' as any)
-    .insert({
-      pre_fund_request_id: bestFund.id,
-      transaction_type: 'payment',
-      amount,
-      currency,
-      reference: reference ?? null,
-      description: description ?? `Auto-linked from ${sourceTable}`,
-      transaction_date: today,
-      reconciled: false,
-      created_by: createdBy ?? null,
-    })
-    .select('id')
-    .maybeSingle();
+  // ── Atomic write via RPC ─────────────────────────────────────────────────
+  // txn insert + balance deduction + source back-link all in one DB transaction
+  const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
+    'link_payment_atomically_rpc', {
+      p_fund_id:      bestFund.id,
+      p_amount:       amount,
+      p_currency:     currency,
+      p_source_table: sourceTable,
+      p_source_id:    sourceId,
+      p_reference:    reference ?? null,
+      p_description:  description ?? null,
+      p_payment_date: today,
+      p_created_by:   createdBy ?? null,
+    }
+  );
 
-  if (txnErr) return { linked: false, message: `Transaction insert failed: ${txnErr.message}` };
-
-  const txnId = (txn as any)?.id;
-  const newBalance = Math.max(0, (bestFund.available_balance ?? 0) - amount);
-
-  // Deduct from available_balance — must succeed to preserve accounting integrity
-  const { error: balErr } = await supabase
-    .from('pre_fund_requests' as any)
-    .update({ available_balance: newBalance })
-    .eq('id', bestFund.id);
-  if (balErr) {
-    return { linked: false, message: `Balance deduction failed: ${balErr.message}` };
-  }
-
-  // Back-link source row — surface errors; failure leaves txn orphaned so caller knows
-  const { error: linkErr } = await supabase
-    .from(sourceTable as any)
-    .update({ pre_fund_transaction_id: txnId })
-    .eq('id', sourceId);
-  if (linkErr) {
-    return {
-      linked: false,
-      message: `Transaction recorded and balance deducted, but source back-link failed: ${linkErr.message}. Finance should link manually.`,
-    };
+  if (rpcErr) return { linked: false, message: `Linkage RPC failed: ${rpcErr.message}` };
+  if (rpcResult && rpcResult.success === false) {
+    return { linked: false, message: rpcResult.error ?? 'Linkage failed.' };
   }
 
   return {
     linked: true,
     fundId: bestFund.id,
     fundName: bestFund.name,
-    transactionId: txnId,
+    transactionId: rpcResult?.transaction_id,
     message: `Linked to "${bestFund.name}"`,
   };
 }

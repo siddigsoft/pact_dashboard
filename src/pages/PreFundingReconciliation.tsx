@@ -429,84 +429,56 @@ export default function PreFundingReconciliation() {
     try {
       const amount   = parseFloat(txnForm.amount);
       const currency = txnForm.currency || selectedFund.currency;
-      const { data: txn, error: e } = await supabase.from('pre_fund_transactions').insert({
-        pre_fund_request_id: selectedFund.id,
-        transaction_type: txnForm.transaction_type,
-        amount,
-        currency,
-        reference: txnForm.reference || null,
-        description: txnForm.description || null,
-        transaction_date: txnForm.transaction_date,
-        reconciled: false,
-        created_by: currentUser?.id ?? null,
-      }).select('id').maybeSingle();
-      if (e) throw e;
 
-      // ── GL Bridge posting (fail-closed): if GL fails, roll back transaction ─
+      // Determine GL account codes for types that require a journal entry
       const GL_EVENT: Record<string, string> = {
         payment:      'pre_fund_paid',
         commitment:   'pre_fund_committed',
         carry_forward:'pre_fund_carry_forward',
       };
       const glEvent = GL_EVENT[txnForm.transaction_type];
+
+      let glDebitCode: string | null = null;
+      let glCreditCode: string | null = null;
+
       if (glEvent) {
-        // GL posting failure rolls back the transaction (delete + rethrow)
-        const txnId = (txn as any)?.id;
-        try {
-          const { data: fundDetail } = await supabase.from('pre_fund_requests')
-            .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
-            .eq('id', selectedFund.id).maybeSingle();
+        const { data: fundDetail } = await supabase.from('pre_fund_requests')
+          .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
+          .eq('id', selectedFund.id).maybeSingle();
 
-          let drCode = '2400';
-          let crCode = '1200';
-          if (glEvent === 'pre_fund_committed') {
-            drCode = (fundDetail as any)?.gl_liability_account ?? '2400';
-            crCode = '2105';
-          } else if (glEvent === 'pre_fund_carry_forward') {
-            drCode = (fundDetail as any)?.gl_liability_account ?? '2400';
-            crCode = (fundDetail as any)?.gl_cf_account ?? '2401';
-          } else {
-            drCode = (fundDetail as any)?.gl_liability_account ?? '2400';
-            crCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
-          }
-
-          const [{ data: drAcct }, { data: crAcct }] = await Promise.all([
-            supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle(),
-            supabase.from('acct_accounts' as any).select('id').eq('code', crCode).maybeSingle(),
-          ]);
-
-          const { data: je, error: jeErr } = await supabase.from('acct_journal_entries').insert({
-            description_en: `Pre-Fund ${txnForm.transaction_type} — ${selectedFund.name}`,
-            posting_date: txnForm.transaction_date,
-            status: 'draft',
-            source_type: 'pre_fund_transactions',
-            source_id: txnId ?? selectedFund.id,
-            idempotency_key: `pf-${txnForm.transaction_type}-${txnId ?? Date.now()}`,
-            created_by: currentUser?.id ?? null,
-          }).select('id').maybeSingle();
-          if (jeErr) throw jeErr;
-
-          if (je) {
-            const lines: any[] = [];
-            if ((drAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 1, account_id: (drAcct as any).id, debit_credit: 'DR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `${glEvent} — ${selectedFund.name}`, function: 'program' });
-            if ((crAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 2, account_id: (crAcct as any).id, debit_credit: 'CR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `${glEvent} — ${selectedFund.name}`, function: 'program' });
-            if (lines.length > 0) {
-              const { error: lErr } = await supabase.from('acct_journal_lines').insert(lines);
-              if (lErr) throw lErr;
-            }
-            await supabase.from('acct_gl_bridge_log' as any).insert({
-              source_table: 'pre_fund_transactions', source_id: txnId ?? selectedFund.id,
-              event_type: glEvent, status: 'success', journal_entry_id: (je as any).id,
-            });
-          }
-        } catch (glErr: any) {
-          // GL failed — roll back the transaction record to keep DB consistent
-          if (txnId) await supabase.from('pre_fund_transactions').delete().eq('id', txnId);
-          throw new Error(`GL Bridge failed — transaction rolled back: ${(glErr as any).message}`);
+        if (glEvent === 'pre_fund_committed') {
+          glDebitCode  = (fundDetail as any)?.gl_liability_account ?? '2400';
+          glCreditCode = '2105';
+        } else if (glEvent === 'pre_fund_carry_forward') {
+          glDebitCode  = (fundDetail as any)?.gl_liability_account ?? '2400';
+          glCreditCode = (fundDetail as any)?.gl_cf_account ?? '2401';
+        } else {
+          glDebitCode  = (fundDetail as any)?.gl_liability_account ?? '2400';
+          glCreditCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
         }
       }
 
-      toast({ title: 'Transaction added', description: glEvent ? 'GL journal entry created (draft).' : undefined });
+      // All writes (txn insert + optional GL JE + lines + bridge log) run inside
+      // a single Postgres transaction via the RPC — any failure rolls back everything.
+      const { data: result, error: rpcErr } = await (supabase as any).rpc(
+        'add_pre_fund_transaction_rpc', {
+          p_fund_id:          selectedFund.id,
+          p_fund_name:        selectedFund.name,
+          p_transaction_type: txnForm.transaction_type,
+          p_amount:           amount,
+          p_currency:         currency,
+          p_reference:        txnForm.reference || null,
+          p_description:      txnForm.description || null,
+          p_transaction_date: txnForm.transaction_date,
+          p_created_by:       currentUser?.id ?? null,
+          p_gl_debit_code:    glDebitCode,
+          p_gl_credit_code:   glCreditCode,
+        }
+      );
+      if (rpcErr) throw new Error(rpcErr.message);
+      if (result && result.success === false) throw new Error(result.error ?? 'Transaction RPC failed.');
+
+      toast({ title: 'Transaction added', description: result?.gl_posted ? 'GL journal entry created (draft).' : undefined });
       setShowAddTxn(false);
       setTxnForm(p => ({ ...p, amount: '', reference: '', description: '' }));
       await loadTxns(selectedFund.id);
@@ -522,9 +494,10 @@ export default function PreFundingReconciliation() {
   const handleClosePeriod = async () => {
     if (!selectedFund) return;
     const surplus = selectedFund.available_balance;
+
     // Validate split amounts don't exceed surplus
     if (closeForm.surplus_action === 'split') {
-      const carryAmt = parseFloat(closeForm.carry_forward_amount) || 0;
+      const carryAmt  = parseFloat(closeForm.carry_forward_amount) || 0;
       const returnAmt = parseFloat(closeForm.return_amount) || 0;
       if (carryAmt < 0 || returnAmt < 0) {
         toast({ title: 'Amounts cannot be negative', variant: 'destructive' });
@@ -541,132 +514,42 @@ export default function PreFundingReconciliation() {
     }
     setClosing(true);
     try {
-      const carryAmt = closeForm.surplus_action === 'carry_forward' ? surplus : parseFloat(closeForm.carry_forward_amount) || 0;
-      const returnAmt = closeForm.surplus_action === 'return' ? surplus : parseFloat(closeForm.return_amount) || 0;
-      const reserveAmt = closeForm.surplus_action === 'reserve' ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
+      const carryAmt   = closeForm.surplus_action === 'carry_forward' ? surplus : parseFloat(closeForm.carry_forward_amount) || 0;
+      const returnAmt  = closeForm.surplus_action === 'return'        ? surplus : parseFloat(closeForm.return_amount) || 0;
+      const reserveAmt = closeForm.surplus_action === 'reserve'       ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
 
-      const { data: recon, error: e } = await supabase.from('pre_fund_reconciliations').insert({
-        pre_fund_request_id: selectedFund.id,
-        period_start: selectedFund.start_date,
-        period_end: selectedFund.end_date,
-        total_funded: selectedFund.amount,
-        total_paid: selectedFund.paid_amount,
-        total_committed: selectedFund.committed_amount,
-        variance: surplus,
-        surplus_action: closeForm.surplus_action,
-        carry_forward_amount: carryAmt,
-        return_amount: returnAmt,
-        reserve_amount: reserveAmt,
-        status: 'closed',
-        closed_at: new Date().toISOString(),
-        closed_by: currentUser?.id ?? null,
-        notes: closeForm.notes || null,
-      }).select('id').maybeSingle();
-      if (e) throw e;
-      await supabase.from('pre_fund_requests').update({ status: 'closed' }).eq('id', selectedFund.id);
+      // Fetch GL account codes from fund settings
+      const { data: fundDetail } = await supabase.from('pre_fund_requests')
+        .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
+        .eq('id', selectedFund.id).maybeSingle();
 
-      // ── GL Bridge: post pre_fund_closed journal entry ──────────────────────
-      // Template: Dr {gl_liability_account} → Cr {gl_receipt_account} (return portion)
-      //           Dr {gl_liability_account} → Cr {gl_expense_account} (variance/expense portion)
-      try {
-        const { data: fundDetail } = await supabase.from('pre_fund_requests')
-          .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account,currency')
-          .eq('id', selectedFund.id).maybeSingle();
-        const currency = selectedFund.currency;
-
-        // Resolve account IDs from COA
-        const codes = [
-          (fundDetail as any)?.gl_liability_account ?? '2400',
-          (fundDetail as any)?.gl_receipt_account   ?? '1200',
-          (fundDetail as any)?.gl_expense_account   ?? '5600',
-        ];
-        const { data: accts } = await supabase.from('acct_accounts' as any)
-          .select('id,code').in('code', codes);
-        const acctMap: Record<string, string> = {};
-        ((accts as any) ?? []).forEach((a: any) => { acctMap[a.code] = a.id; });
-
-        const { data: je } = await supabase.from('acct_journal_entries').insert({
-          description_en: `Pre-Fund Period Close — ${selectedFund.name}`,
-          description_ar: `إغلاق فترة التمويل المسبق — ${selectedFund.name}`,
-          posting_date: new Date().toISOString().split('T')[0],
-          status: 'draft',
-          source_type: 'pre_fund_reconciliations',
-          source_id: (recon as any)?.id ?? selectedFund.id,
-          idempotency_key: `pf-closed-${selectedFund.id}`,
-          created_by: currentUser?.id ?? null,
-        }).select('id').maybeSingle();
-
-        if (je) {
-          const lines: any[] = [];
-          const liabId = acctMap[codes[0]];
-          const bankId  = acctMap[codes[1]];
-          const expId   = acctMap[codes[2]];
-          const varianceAmt = Math.max(0, surplus - returnAmt - carryAmt);
-
-          // Lines 1-2: return portion (Dr liability → Cr bank)
-          if (liabId && bankId && returnAmt > 0) {
-            lines.push({ entry_id: (je as any).id, line_no: 1, account_id: liabId, debit_credit: 'DR', original_amount: returnAmt, original_currency: currency, functional_amount: returnAmt, functional_currency: currency, description: `Pre-fund close — return to donor`, function: 'program' });
-            lines.push({ entry_id: (je as any).id, line_no: 2, account_id: bankId,  debit_credit: 'CR', original_amount: returnAmt, original_currency: currency, functional_amount: returnAmt, functional_currency: currency, description: `Donor refund — cash out`, function: 'program' });
-          }
-          // Lines 3-4: variance/expense treatment (Dr liability → Cr expense)
-          if (liabId && expId && varianceAmt > 0) {
-            lines.push({ entry_id: (je as any).id, line_no: 3, account_id: liabId, debit_credit: 'DR', original_amount: varianceAmt, original_currency: currency, functional_amount: varianceAmt, functional_currency: currency, description: `Pre-fund close — variance treated as expense`, function: 'program' });
-            lines.push({ entry_id: (je as any).id, line_no: 4, account_id: expId,  debit_credit: 'CR', original_amount: varianceAmt, original_currency: currency, functional_amount: varianceAmt, functional_currency: currency, description: `Programme expense — residual balance`, function: 'program' });
-          }
-          if (lines.length > 0) await supabase.from('acct_journal_lines').insert(lines);
-
-          await supabase.from('acct_gl_bridge_log' as any).insert({
-            source_table: 'pre_fund_reconciliations',
-            source_id: (recon as any)?.id ?? selectedFund.id,
-            event_type: 'pre_fund_closed',
-            status: 'success',
-            journal_entry_id: (je as any).id,
-          });
-
-          // ── Carry-forward GL entry: Dr {gl_receipt_account} → Cr {gl_liability_account} ──
-          // Executed when surplus_action === 'carry_forward' and carry amount > 0.
-          // This creates an opening entry for the carried balance in the next period.
-          if (closeForm.surplus_action === 'carry_forward' && carryAmt > 0) {
-            const { data: cfJe } = await supabase.from('acct_journal_entries').insert({
-              description_en: `Pre-Fund Carry-Forward — ${selectedFund.name} (surplus carried to next period)`,
-              description_ar: `ترحيل رصيد التمويل المسبق — ${selectedFund.name}`,
-              posting_date: new Date().toISOString().split('T')[0],
-              status: 'draft',
-              source_type: 'pre_fund_reconciliations',
-              source_id: (recon as any)?.id ?? selectedFund.id,
-              idempotency_key: `pf-carry-fwd-${selectedFund.id}`,
-              created_by: currentUser?.id ?? null,
-            }).select('id').maybeSingle();
-
-            if (cfJe) {
-              const cfLines: any[] = [];
-              const cfCode = (fundDetail as any)?.gl_cf_account ?? '2401';
-              const { data: cfAcct } = await supabase.from('acct_accounts' as any)
-                .select('id').eq('code', cfCode).maybeSingle();
-              const cfId = (cfAcct as any)?.id;
-              // Dr old-period pre-fund liability (reduce closing period balance)
-              if (liabId) cfLines.push({ entry_id: (cfJe as any).id, line_no: 1, account_id: liabId, debit_credit: 'DR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Carry-forward — close old-period pre-fund liability`, function: 'program' });
-              // Cr new-period pre-fund liability (open balance in next period)
-              if (cfId)   cfLines.push({ entry_id: (cfJe as any).id, line_no: 2, account_id: cfId,   debit_credit: 'CR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Carry-forward — open next-period pre-fund liability`, function: 'program' });
-              if (cfLines.length > 0) await supabase.from('acct_journal_lines').insert(cfLines);
-
-              await supabase.from('acct_gl_bridge_log' as any).insert({
-                source_table: 'pre_fund_reconciliations',
-                source_id: (recon as any)?.id ?? selectedFund.id,
-                event_type: 'pre_fund_carry_forward',
-                status: 'success',
-                journal_entry_id: (cfJe as any).id,
-              });
-            }
-          }
+      // All writes (recon insert + fund close + GL JEs + bridge logs) run inside
+      // a single Postgres transaction via the RPC — any failure rolls back everything.
+      const { data: result, error: rpcErr } = await (supabase as any).rpc(
+        'close_pre_fund_period_rpc', {
+          p_fund_id:           selectedFund.id,
+          p_fund_name:         selectedFund.name,
+          p_period_start:      selectedFund.start_date,
+          p_period_end:        selectedFund.end_date,
+          p_total_funded:      selectedFund.amount,
+          p_total_paid:        selectedFund.paid_amount,
+          p_total_committed:   selectedFund.committed_amount,
+          p_surplus:           surplus,
+          p_surplus_action:    closeForm.surplus_action,
+          p_carry_forward_amt: carryAmt,
+          p_return_amt:        returnAmt,
+          p_reserve_amt:       reserveAmt,
+          p_currency:          selectedFund.currency,
+          p_notes:             closeForm.notes || null,
+          p_closed_by:         currentUser?.id ?? null,
+          p_gl_liability_code: (fundDetail as any)?.gl_liability_account ?? '2400',
+          p_gl_receipt_code:   (fundDetail as any)?.gl_receipt_account   ?? '1200',
+          p_gl_expense_code:   (fundDetail as any)?.gl_expense_account   ?? '5600',
+          p_gl_cf_code:        (fundDetail as any)?.gl_cf_account        ?? '2401',
         }
-      } catch (glErr: any) {
-        // GL failed — roll back recon record and revert fund status to keep DB consistent
-        const reconId = (recon as any)?.id;
-        if (reconId) await supabase.from('pre_fund_reconciliations').delete().eq('id', reconId);
-        await supabase.from('pre_fund_requests').update({ status: 'active' }).eq('id', selectedFund.id);
-        throw new Error(`GL Bridge failed — period close rolled back: ${(glErr as any).message}`);
-      }
+      );
+      if (rpcErr) throw new Error(rpcErr.message);
+      if (result && result.success === false) throw new Error(result.error ?? 'Period close RPC failed.');
 
       toast({ title: 'Period closed', description: 'GL journal entry created (draft) — review in GL module.' });
       setShowClose(false);

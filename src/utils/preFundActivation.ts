@@ -6,11 +6,9 @@
  *   2. Registry bank auto-match (handleBankApiCheck — auto-match loop)
  *   3. Settings manual unmatched-transfer assignment (handleManualMatch)
  *
- * Atomically:
- *   a. Creates a GL journal entry + lines (pre_fund_received event) — fail-closed
- *   b. Logs to acct_gl_bridge_log
- *   c. Updates fund: status='active', available_balance=amount, activated_at, receipt_url (if provided)
- *   d. Creates bank statement line (integration-gated, non-blocking)
+ * Delegates ALL multi-step writes to the activate_pre_fund_rpc Postgres
+ * function which runs them inside a single DB transaction — no partial
+ * state is possible on failure.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -42,80 +40,47 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
     idempotencyKeySuffix = '',
   } = opts;
 
-  const now = new Date().toISOString();
-
-  // ── 1. Look up GL accounts + settings in parallel ──────────────────────────
-  const [{ data: receiptAcct }, { data: liabAcct }, { data: bankReconSettings }, { data: bankAcctRow }] =
-    await Promise.all([
-      supabase.from('acct_accounts' as any).select('id').eq('code', glReceiptCode).maybeSingle(),
-      supabase.from('acct_accounts' as any).select('id').eq('code', glLiabilityCode).maybeSingle(),
-      supabase.from('pre_fund_settings').select('integration_bank_recon').limit(1).maybeSingle(),
-      supabase.from('acct_bank_accounts' as any).select('id').eq('currency', currency).limit(1).maybeSingle(),
-    ]);
-
-  // ── 2. Validate GL accounts BEFORE writing anything to the DB ──────────────
-  // If either code is missing the fund stays in its current state — no partial artifacts.
-  if (!(receiptAcct as any)?.id)
-    throw new Error(`GL account not found for code "${glReceiptCode}" — configure accounts before activating this fund.`);
-  if (!(liabAcct as any)?.id)
-    throw new Error(`GL account not found for code "${glLiabilityCode}" — configure accounts before activating this fund.`);
-
-  // ── 3. Create journal entry (only reached after both accounts resolved) ──────
-  const idempotencyKey = `pf-received-${fundId}${idempotencyKeySuffix ? '-' + idempotencyKeySuffix : ''}`;
-  const { data: je, error: jeErr } = await supabase.from('acct_journal_entries').insert({
-    description_en: `Pre-Fund Received — ${fundName} activated`,
-    description_ar: `استلام التمويل المسبق — ${fundName}`,
-    posting_date: now.split('T')[0],
-    status: 'draft',
-    source_type: 'pre_fund_requests',
-    source_id: fundId,
-    idempotency_key: idempotencyKey,
-    created_by: createdBy,
-  }).select('id').maybeSingle();
-  if (jeErr) throw new Error(`GL Bridge failed — cannot activate fund: ${jeErr.message}`);
-
-  const lines = [
-    { entry_id: (je as any).id, line_no: 1, account_id: (receiptAcct as any).id, debit_credit: 'DR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund receipt — ${fundName}`, function: 'program' },
-    { entry_id: (je as any).id, line_no: 2, account_id: (liabAcct as any).id,   debit_credit: 'CR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund liability deferred — ${fundName}`, function: 'program' },
-  ];
-  const { error: linesErr } = await supabase.from('acct_journal_lines').insert(lines);
-  if (linesErr) throw new Error(`GL lines failed — cannot activate fund: ${linesErr.message}`);
-
-  // ── 3. Bridge log ────────────────────────────────────────────────────────
-  await supabase.from('acct_gl_bridge_log' as any).insert({
-    source_table: 'pre_fund_requests',
-    source_id: fundId,
-    event_type: 'pre_fund_received',
-    status: 'success',
-    journal_entry_id: (je as any).id,
+  // Single RPC call — all writes (JE + lines + bridge log + fund update) run
+  // inside one Postgres transaction; any failure rolls back everything.
+  const { data, error } = await (supabase as any).rpc('activate_pre_fund_rpc', {
+    p_fund_id:            fundId,
+    p_fund_name:          fundName,
+    p_amount:             amount,
+    p_currency:           currency,
+    p_gl_receipt_code:    glReceiptCode,
+    p_gl_liability_code:  glLiabilityCode,
+    p_created_by:         createdBy,
+    p_receipt_url:        receiptUrl,
+    p_idempotency_suffix: idempotencyKeySuffix,
   });
 
-  // ── 4. Activate the fund — only reached after GL succeeded ───────────────
-  const updatePayload: Record<string, unknown> = {
-    status: 'active',
-    available_balance: amount,
-    activated_at: now,
-  };
-  if (receiptUrl) updatePayload.receipt_url = receiptUrl;
+  if (error) throw new Error(`Activation RPC failed: ${error.message}`);
 
-  const { error: updErr } = await supabase.from('pre_fund_requests').update(updatePayload).eq('id', fundId);
-  if (updErr) throw updErr;
+  // RPC returns { success: bool, error?: string } for domain-level failures
+  if (data && data.success === false) {
+    throw new Error(data.error ?? 'Activation failed — unknown error from RPC.');
+  }
 
-  // ── 5. Bank statement line (integration-gated, non-blocking) ─────────────
-  const bankReconOn = (bankReconSettings as any)?.integration_bank_recon !== false;
-  if (bankReconOn && (bankAcctRow as any)?.id) {
-    try {
-      await supabase.from('acct_bank_statement_lines' as any).insert({
+  // Non-blocking: attempt to create a bank statement line via a separate call
+  // (integration-gated). Failure here never affects the already-committed activation.
+  try {
+    const [{ data: bankReconSettings }, { data: bankAcctRow }] = await Promise.all([
+      supabase.from('pre_fund_settings').select('integration_bank_recon').limit(1).maybeSingle(),
+      (supabase as any).from('acct_bank_accounts').select('id').eq('currency', currency).limit(1).maybeSingle(),
+    ]);
+    const bankReconOn = (bankReconSettings as any)?.integration_bank_recon !== false;
+    if (bankReconOn && (bankAcctRow as any)?.id) {
+      await (supabase as any).from('acct_bank_statement_lines').insert({
         bank_account_id: (bankAcctRow as any).id,
-        statement_date: now.split('T')[0],
+        statement_date: new Date().toISOString().split('T')[0],
         description: `Pre-fund received: ${fundName}`,
         reference: `PF-${fundId.slice(0, 8).toUpperCase()}`,
         amount,
         currency,
         pre_fund_request_id: fundId,
       });
-    } catch {
-      // Non-blocking — bank statement line failure must not prevent activation
     }
+  } catch {
+    // Non-blocking — bank statement line failure must not surface to the caller
   }
 }
