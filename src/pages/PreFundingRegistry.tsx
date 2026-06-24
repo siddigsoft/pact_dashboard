@@ -98,7 +98,7 @@ export default function PreFundingRegistry() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'employee', 'fom', 'datateam', 'countrydirector']);
 
   const [funds, setFunds]           = useState<PreFundRequest[]>([]);
   const [periodTypes, setPeriodTypes]= useState<PeriodType[]>([]);

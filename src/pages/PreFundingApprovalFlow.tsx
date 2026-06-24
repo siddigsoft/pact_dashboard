@@ -21,7 +21,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-interface PreFundSummary { id: string; name: string; status: string; currency: string; amount: number }
+interface PreFundSummary { id: string; name: string; status: string; currency: string; amount: number; project_id: string | null; project_name?: string }
+interface Project { id: string; name: string }
 interface ApprovalStep {
   id: string;
   pre_fund_request_id: string;
@@ -74,15 +75,17 @@ export default function PreFundingApprovalFlow() {
   // Finance admins see all funds; any authenticated user can view/action their assigned step
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']) || !!currentUser?.id;
 
-  const [funds, setFunds]       = useState<PreFundSummary[]>([]);
-  const [steps, setSteps]       = useState<ApprovalStep[]>([]);
+  const [funds, setFunds]           = useState<PreFundSummary[]>([]);
+  const [projects, setProjects]     = useState<Project[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string>('__all__');
+  const [steps, setSteps]           = useState<ApprovalStep[]>([]);
   const [selectedFund, setSelected] = useState<PreFundSummary | null>(null);
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading]       = useState(true);
   const [stepsLoading, setStepsLoading] = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
   const [showAddStep, setShowAddStep] = useState(false);
-  const [stepForm, setStepForm] = useState({ step_label: '', assigned_user_id: '__any__', is_required: true });
-  const [saving, setSaving]     = useState(false);
+  const [stepForm, setStepForm]     = useState({ step_label: '', assigned_user_id: '__any__', is_required: true });
+  const [saving, setSaving]         = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<{ step: ApprovalStep; action: 'approve' | 'reject' } | null>(null);
   const [actionNotes, setActionNotes] = useState('');
@@ -90,10 +93,19 @@ export default function PreFundingApprovalFlow() {
   const loadFunds = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: e } = await supabase.from('pre_fund_requests')
-        .select('id,name,status,currency,amount').order('created_at', { ascending: false });
-      if (e && !e.message.includes('does not exist')) throw e;
-      setFunds((data as any) ?? []);
+      const [fundsRes, projectsRes] = await Promise.all([
+        supabase.from('pre_fund_requests')
+          .select('id,name,status,currency,amount,project_id').order('created_at', { ascending: false }),
+        supabase.from('projects').select('id,name').order('name'),
+      ]);
+      if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
+      const projMap = new Map<string, string>((projectsRes.data ?? []).map((p: Project) => [p.id, p.name]));
+      const enriched = ((fundsRes.data as any) ?? []).map((f: PreFundSummary) => ({
+        ...f,
+        project_name: f.project_id ? (projMap.get(f.project_id) ?? 'Unknown Project') : null,
+      }));
+      setFunds(enriched);
+      setProjects(projectsRes.data ?? []);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -245,15 +257,65 @@ export default function PreFundingApprovalFlow() {
 
       {error && <Alert variant="destructive"><AlertDescription>{error} — run pre_funding_migration.sql</AlertDescription></Alert>}
 
+      {/* Project filter */}
+      {projects.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-muted-foreground">Filter by project:</span>
+          <button
+            onClick={() => { setProjectFilter('__all__'); setSelected(null); }}
+            className={cn('px-3 py-1 rounded-md text-xs font-medium border transition-all',
+              projectFilter === '__all__' ? 'bg-sky-600 text-white border-sky-600' : 'bg-background text-muted-foreground border-border hover:border-sky-400 hover:text-sky-700'
+            )}
+          >All Projects</button>
+          <button
+            onClick={() => { setProjectFilter('__none__'); setSelected(null); }}
+            className={cn('px-3 py-1 rounded-md text-xs font-medium border transition-all',
+              projectFilter === '__none__' ? 'bg-sky-600 text-white border-sky-600' : 'bg-background text-muted-foreground border-border hover:border-sky-400 hover:text-sky-700'
+            )}
+          >No Project</button>
+          {projects.map(p => (
+            <button key={p.id}
+              onClick={() => { setProjectFilter(p.id); setSelected(null); }}
+              className={cn('px-3 py-1 rounded-md text-xs font-medium border transition-all',
+                projectFilter === p.id ? 'bg-sky-600 text-white border-sky-600' : 'bg-background text-muted-foreground border-border hover:border-sky-400 hover:text-sky-700'
+              )}
+            >{p.name}</button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Fund selector */}
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Funds</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Funds</h3>
+            <span className="text-[11px] text-muted-foreground">
+              {funds.filter(f =>
+                projectFilter === '__all__' ? true :
+                projectFilter === '__none__' ? !f.project_id :
+                f.project_id === projectFilter
+              ).length} fund{funds.filter(f =>
+                projectFilter === '__all__' ? true :
+                projectFilter === '__none__' ? !f.project_id :
+                f.project_id === projectFilter
+              ).length !== 1 ? 's' : ''}
+            </span>
+          </div>
           {loading ? (
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}</div>
-          ) : funds.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">No funds yet — create one in Fund Registry.</div>
-          ) : funds.map(f => (
+          ) : funds.filter(f =>
+              projectFilter === '__all__' ? true :
+              projectFilter === '__none__' ? !f.project_id :
+              f.project_id === projectFilter
+            ).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm border rounded-xl bg-muted/20">
+              {funds.length === 0 ? 'No funds yet — create one in Fund Registry.' : 'No funds match this project filter.'}
+            </div>
+          ) : funds.filter(f =>
+              projectFilter === '__all__' ? true :
+              projectFilter === '__none__' ? !f.project_id :
+              f.project_id === projectFilter
+            ).map(f => (
             <button
               key={f.id}
               onClick={() => setSelected(f)}
@@ -264,8 +326,11 @@ export default function PreFundingApprovalFlow() {
               data-testid={`button-fund-${f.id}`}
             >
               <div className="font-medium text-sm truncate">{f.name}</div>
+              {f.project_name && (
+                <div className="text-[10px] text-sky-600 truncate mt-0.5">{f.project_name}</div>
+              )}
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={cn('text-[10px]', FUND_STATUS_CFG[f.status] ?? 'bg-muted text-muted-foreground')}>{f.status.replace('_', ' ')}</Badge>
+                <Badge variant="outline" className={cn('text-[10px]', FUND_STATUS_CFG[f.status] ?? 'bg-muted text-muted-foreground')}>{f.status.replace(/_/g, ' ')}</Badge>
                 <span className="text-[11px] text-muted-foreground">{f.currency} {f.amount.toLocaleString()}</span>
               </div>
             </button>
