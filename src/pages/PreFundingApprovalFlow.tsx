@@ -170,14 +170,34 @@ export default function PreFundingApprovalFlow() {
       if (e) throw e;
 
       const allSteps = await supabase.from('pre_fund_approval_steps' as any)
-        .select('status,is_required').eq('pre_fund_request_id', selectedFund.id);
-      const allApproved = (allSteps.data as any)?.every((s: any) => s.status === 'approved' || !s.is_required);
-      if (allApproved && action === 'approve') {
-        await supabase.from('pre_fund_requests' as any).update({ status: 'awaiting_receipt' }).eq('id', selectedFund.id);
+        .select('id,status,is_required').eq('pre_fund_request_id', selectedFund.id);
+      const refreshedSteps = (allSteps.data as any) ?? [];
+      const thisStepInRefresh = refreshedSteps.find((s: any) => s.id === step.id);
+      // Use refreshed view: treat this step as already updated
+      const stepsWithUpdate = refreshedSteps.map((s: any) =>
+        s.id === step.id ? { ...s, status: action === 'approve' ? 'approved' : 'rejected' } : s
+      );
+      const anyRequiredRejected = stepsWithUpdate.some((s: any) => s.status === 'rejected' && s.is_required);
+      const allApproved = stepsWithUpdate.every((s: any) => s.status === 'approved' || !s.is_required);
+
+      if (anyRequiredRejected) {
+        // A required step was rejected → fund moves to rejected
+        await supabase.from('pre_fund_requests' as any).update({
+          status: 'rejected',
+          rejection_reason: actionNotes || 'Step rejected in Approval Flow',
+        }).eq('id', selectedFund.id);
+        toast({ title: 'Step rejected — Fund is now Rejected', description: actionNotes || undefined });
+      } else if (allApproved && action === 'approve') {
+        await supabase.from('pre_fund_requests' as any).update({
+          status: 'awaiting_receipt',
+          approved_by: currentUser?.id ?? null,
+          approved_at: new Date().toISOString(),
+        }).eq('id', selectedFund.id);
         toast({ title: 'All steps approved — fund is now Awaiting Receipt' });
       } else {
-        toast({ title: `Step ${action === 'approve' ? 'approved' : 'rejected'}` });
+        toast({ title: `Step ${action === 'approve' ? 'approved' : 'rejected'}`, description: 'Further approval steps are pending.' });
       }
+      void thisStepInRefresh; // suppress unused warning
       setActionDialog(null);
       setActionNotes('');
       await Promise.all([loadSteps(selectedFund.id), loadFunds()]);

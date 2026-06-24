@@ -344,7 +344,16 @@ export default function ApprovalsHub() {
         const steps: any[] = (stepsData as any) ?? [];
         const pendingStep = steps.find((s: any) => s.status === 'pending');
 
-        // 2. Update the pending step (or fall back to updating fund directly if no steps)
+        // 2. Authorization guard: only the assigned user (or admin/super_admin) may act on the step
+        if (pendingStep?.assigned_user_id) {
+          const isAssignedUser = pendingStep.assigned_user_id === currentUser?.id;
+          const isAdminOverride = isAdmin; // isSuperAdmin || hasAnyRole(['admin','Admin']) — checked at top of component
+          if (!isAssignedUser && !isAdminOverride) {
+            throw new Error('You are not assigned to this approval step. Only the assigned approver or an admin may act on it.');
+          }
+        }
+
+        // Update the pending step
         if (pendingStep) {
           const { error: stepErr } = await supabase
             .from('pre_fund_approval_steps' as any)

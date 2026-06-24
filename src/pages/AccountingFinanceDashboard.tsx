@@ -900,7 +900,7 @@ export default function AccountingFinanceDashboard() {
               title="Total Available Balance"
               titleAr="إجمالي الرصيد المتاح"
               value={preFundKPI.data ? formatNumber(preFundKPI.data.totalAvailable, 0) : '—'}
-              sub="Across all active pre-funds"
+              sub="Raw sum across all currencies — see Pre-Funding for per-currency detail"
               icon={DollarSign}
               accent={preFundKPI.data && preFundKPI.data.lowBalanceCount > 0 ? 'bg-orange-600' : 'bg-emerald-600'}
               href="/pre-funding?tab=overview"

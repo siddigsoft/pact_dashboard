@@ -433,11 +433,12 @@ export default function PreFundingRegistry() {
         const feed: any[] = (feedRows as any) ?? [];
         const match = feed.find((r: any) => Math.abs(r.amount - fund.amount) <= tolerance);
         if (match) {
+          const activatedAt = new Date().toISOString();
           // Auto-activate fund
           const { error: actErr } = await supabase.from('pre_fund_requests' as any).update({
             status: 'active',
             available_balance: fund.amount,
-            activated_at: new Date().toISOString(),
+            activated_at: activatedAt,
           }).eq('id', fund.id);
           if (!actErr) {
             // Mark feed row as matched
@@ -445,8 +446,53 @@ export default function PreFundingRegistry() {
               matched_fund_id: fund.id,
               match_status: 'matched',
               reviewed_by: currentUser?.id ?? null,
-              reviewed_at: new Date().toISOString(),
+              reviewed_at: activatedAt,
             }).eq('id', match.id);
+
+            // ── Post GL journal entry (pre_fund_received) ── same as receipt upload path
+            try {
+              const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
+                .select('gl_receipt_account,gl_liability_account').eq('id', fund.id).maybeSingle();
+              const drCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
+              const crCode = (fundDetail as any)?.gl_liability_account ?? '2400';
+              const [{ data: drAcct }, { data: crAcct }] = await Promise.all([
+                supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle(),
+                supabase.from('acct_accounts' as any).select('id').eq('code', crCode).maybeSingle(),
+              ]);
+              const { data: je } = await supabase.from('acct_journal_entries').insert({
+                description_en: `Pre-fund received (bank auto-match): ${fund.name}`,
+                posting_date: activatedAt.split('T')[0],
+                status: 'draft',
+                source_type: 'pre_fund_requests',
+                source_id: fund.id,
+                idempotency_key: `pf-received-${fund.id}-bankapi`,
+                created_by: currentUser?.id ?? null,
+              }).select('id').maybeSingle();
+              if (je) {
+                const lines: any[] = [];
+                if ((drAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 1, account_id: (drAcct as any).id, debit_credit: 'DR', original_amount: fund.amount, original_currency: fund.currency, functional_amount: fund.amount, functional_currency: fund.currency, description: `Pre-fund receipt: ${fund.name}`, function: 'program' });
+                if ((crAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 2, account_id: (crAcct as any).id, debit_credit: 'CR', original_amount: fund.amount, original_currency: fund.currency, functional_amount: fund.amount, functional_currency: fund.currency, description: `Pre-fund liability: ${fund.name}`, function: 'program' });
+                if (lines.length > 0) await supabase.from('acct_journal_lines').insert(lines);
+                await supabase.from('acct_gl_bridge_log' as any).insert({ source_table: 'pre_fund_requests', source_id: fund.id, event_type: 'pre_fund_received', status: 'success', journal_entry_id: (je as any).id });
+              }
+              // ── Create bank statement reconciliation line ──
+              const { data: bankAcct } = await supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle();
+              if ((bankAcct as any)?.id) {
+                await supabase.from('acct_bank_statement_lines' as any).insert({
+                  account_id: (bankAcct as any).id,
+                  bank_account_id: null,
+                  statement_date: activatedAt.split('T')[0],
+                  description: `Pre-fund received (bank auto-match): ${fund.name}`,
+                  reference: `PF-${fund.id.slice(0, 8).toUpperCase()}`,
+                  amount: fund.amount,
+                  currency: fund.currency,
+                  pre_fund_request_id: fund.id,
+                });
+              }
+            } catch (glErr: any) {
+              console.warn('[PreFund] Bank-match GL posting skipped:', glErr.message);
+            }
+
             activated++;
           }
         }
