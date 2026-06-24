@@ -79,7 +79,9 @@ export async function linkPaymentToPreFund(params: {
       score = 0.5;
     }
     return { fund: f, score };
-  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+  // Require sufficient balance for ALL score levels — scope-matched funds
+  // with zero balance must not silently win over lower-scope funds with balance.
+  }).filter(x => x.score > 0 && (x.fund.available_balance ?? 0) >= amount).sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
     return { linked: false, message: 'No active pre-fund matches this payment. Finance must link manually in the Pre-Funding Registry.' };

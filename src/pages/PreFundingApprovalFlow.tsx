@@ -209,7 +209,6 @@ export default function PreFundingApprovalFlow() {
       setSteps(enriched);
     } catch (e: any) { toast({ title: 'Failed to load steps', description: e.message, variant: 'destructive' }); }
     finally { setStepsLoading(false); }
-    void votesRes;
   }, [users, toast]);
 
   useEffect(() => { loadFunds(); }, [loadFunds]);

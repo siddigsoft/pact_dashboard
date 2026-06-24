@@ -152,19 +152,35 @@ DECLARE
   v_txn_id       UUID;
   v_new_balance  NUMERIC;
   v_cur_balance  NUMERIC;
+  v_gl_liab_code TEXT;
+  v_gl_exp_code  TEXT;
+  v_liab_id      UUID;
+  v_exp_id       UUID;
+  v_je_id        UUID;
+  v_ik           TEXT;
 BEGIN
   -- Authorization: finance/admin role required
   PERFORM _assert_finance_role();
 
-  -- Lock the fund row and read current balance
-  SELECT available_balance INTO v_cur_balance
+  -- Lock the fund row and read balance + GL account codes atomically
+  SELECT available_balance, gl_liability_account, gl_expense_account
+  INTO   v_cur_balance, v_gl_liab_code, v_gl_exp_code
   FROM pre_fund_requests WHERE id = p_fund_id FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Fund not found.');
   END IF;
 
-  v_new_balance := GREATEST(0, v_cur_balance - p_amount);
+  -- Hard failure on insufficient balance — never silently floor to zero
+  IF v_cur_balance < p_amount THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Insufficient pre-fund balance (' || v_cur_balance::TEXT ||
+               ' ' || p_currency || ' available; ' || p_amount::TEXT || ' requested).'
+    );
+  END IF;
+
+  v_new_balance := v_cur_balance - p_amount;
 
   INSERT INTO pre_fund_transactions (
     pre_fund_request_id, transaction_type, amount, currency,
@@ -186,6 +202,46 @@ BEGIN
   ELSIF p_source_table = 'down_payment_requests' THEN
     UPDATE down_payment_requests
     SET pre_fund_transaction_id = v_txn_id WHERE id = p_source_id;
+  END IF;
+
+  -- GL posting: pre_fund_paid event (same transaction — atomic)
+  --   DR: 2400 Pre-Fund Liability (obligation reduced)
+  --   CR: 5600 Programme Expenses (expense recognised)
+  -- Only fires when both GL codes are configured on the fund.
+  -- Idempotency key prevents double-posting on RPC retry.
+  IF v_gl_liab_code IS NOT NULL AND v_gl_exp_code IS NOT NULL THEN
+    SELECT id INTO v_liab_id FROM acct_accounts WHERE code = v_gl_liab_code LIMIT 1;
+    SELECT id INTO v_exp_id  FROM acct_accounts WHERE code = v_gl_exp_code  LIMIT 1;
+
+    IF v_liab_id IS NOT NULL AND v_exp_id IS NOT NULL THEN
+      v_ik := 'pf-paid-' || p_source_table || '-' || p_source_id::TEXT;
+
+      IF NOT EXISTS (SELECT 1 FROM acct_journal_entries WHERE idempotency_key = v_ik) THEN
+        INSERT INTO acct_journal_entries (
+          description_en, description_ar, posting_date, status,
+          source_type, source_id, idempotency_key, created_by
+        ) VALUES (
+          'Pre-Fund Payment — ' || COALESCE(p_description, p_source_table),
+          'مدفوعات التمويل المسبق — ' || COALESCE(p_description, p_source_table),
+          p_payment_date, 'draft',
+          p_source_table, p_source_id, v_ik, p_created_by
+        ) RETURNING id INTO v_je_id;
+
+        INSERT INTO acct_journal_lines (entry_id, line_no, account_id, debit_credit,
+          original_amount, original_currency, functional_amount, functional_currency,
+          description, function)
+        VALUES
+          (v_je_id, 1, v_liab_id, 'DR',
+           p_amount, p_currency, p_amount, p_currency,
+           'Pre-fund payment — liability released', 'program'),
+          (v_je_id, 2, v_exp_id,  'CR',
+           p_amount, p_currency, p_amount, p_currency,
+           'Pre-fund payment — expense recognised', 'program');
+
+        INSERT INTO acct_gl_bridge_log (source_table, source_id, event_type, status, journal_entry_id)
+        VALUES (p_source_table, p_source_id, 'pre_fund_paid', 'success', v_je_id);
+      END IF;
+    END IF;
   END IF;
 
   RETURN jsonb_build_object(
@@ -353,7 +409,10 @@ BEGIN
     status, closed_at, closed_by, notes
   ) VALUES (
     p_fund_id, p_period_start, p_period_end,
-    p_total_funded, p_total_paid, p_total_committed, p_surplus,
+    p_total_funded, p_total_paid, p_total_committed,
+    -- v_variance = unallocated remainder after carry-forward and return;
+    -- must match the JE logic below (NOT the raw p_surplus total)
+    v_variance,
     p_surplus_action, p_carry_forward_amt, p_return_amt, p_reserve_amt,
     'closed', NOW(), p_closed_by, p_notes
   ) RETURNING id INTO v_recon_id;
