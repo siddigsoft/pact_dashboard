@@ -257,6 +257,19 @@ ALTER TABLE pre_fund_transactions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_reconciliations   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_bank_unmatched    ENABLE ROW LEVEL SECURITY;
 
+-- ── DROP before CREATE so the migration is safely re-runnable ──────────────
+DROP POLICY IF EXISTS "pf_period_types_finance"   ON pre_fund_period_types;
+DROP POLICY IF EXISTS "pf_settings_finance"        ON pre_fund_settings;
+DROP POLICY IF EXISTS "pf_requests_finance"        ON pre_fund_requests;
+DROP POLICY IF EXISTS "pf_steps_finance"           ON pre_fund_approval_steps;
+DROP POLICY IF EXISTS "pf_transactions_finance"    ON pre_fund_transactions;
+DROP POLICY IF EXISTS "pf_recons_finance"          ON pre_fund_reconciliations;
+DROP POLICY IF EXISTS "pf_bank_unmatched_access"   ON pre_fund_bank_unmatched;
+-- Also drop the old step-assignee policies that were removed in the last revision
+DROP POLICY IF EXISTS "pf_requests_step_assignee"  ON pre_fund_requests;
+DROP POLICY IF EXISTS "pf_steps_assignee_select"   ON pre_fund_approval_steps;
+DROP POLICY IF EXISTS "pf_steps_assignee_update"   ON pre_fund_approval_steps;
+
 -- Period types: Finance/Admin/Super Admin ONLY (no public read — non-finance has no access)
 CREATE POLICY "pf_period_types_finance" ON pre_fund_period_types FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );

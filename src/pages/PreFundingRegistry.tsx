@@ -158,7 +158,7 @@ export default function PreFundingRegistry() {
       toast({ title: 'Required fields missing', variant: 'destructive' });
       return;
     }
-    const parsedAmount = parseFloat(form.amount);
+    const parsedAmount = parseFloat(form.amount.replace(/,/g, ''));
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       toast({ title: 'Amount must be greater than zero', variant: 'destructive' });
       return;
@@ -176,7 +176,7 @@ export default function PreFundingRegistry() {
       const payload: any = {
         name: form.name.trim(),
         source: form.source || null,
-        amount: parseFloat(form.amount),
+        amount: parseFloat(form.amount.replace(/,/g, '')),
         currency: form.currency,
         period_type_id: (form.period_type_id && !form.period_type_id.startsWith('builtin-')) ? form.period_type_id : null,
         start_date: form.start_date || null,
@@ -702,7 +702,22 @@ export default function PreFundingRegistry() {
             </div>
             <div>
               <Label>Amount *</Label>
-              <Input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} placeholder="0" data-testid="input-fund-amount" />
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={form.amount}
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                  setForm(p => ({ ...p, amount: raw }));
+                }}
+                onBlur={() => {
+                  const num = parseFloat(form.amount.replace(/,/g, ''));
+                  if (!isNaN(num) && num > 0) setForm(p => ({ ...p, amount: num.toLocaleString('en-US') }));
+                }}
+                onFocus={() => setForm(p => ({ ...p, amount: p.amount.replace(/,/g, '') }))}
+                placeholder="0"
+                data-testid="input-fund-amount"
+              />
             </div>
             <div>
               <Label>Currency *</Label>
