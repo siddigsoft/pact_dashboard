@@ -265,29 +265,14 @@ CREATE POLICY "pf_period_types_finance" ON pre_fund_period_types FOR ALL
 CREATE POLICY "pf_settings_finance"   ON pre_fund_settings FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
--- Fund requests: Finance/Admin/Super Admin full access; any user may SELECT if they have an assigned step
+-- Fund requests: Finance/Admin/Super Admin full access ONLY
 CREATE POLICY "pf_requests_finance"   ON pre_fund_requests FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
-CREATE POLICY "pf_requests_step_assignee" ON pre_fund_requests FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM pre_fund_approval_steps
-      WHERE pre_fund_approval_steps.pre_fund_request_id = pre_fund_requests.id
-        AND pre_fund_approval_steps.assigned_user_id = auth.uid()
-    )
-  );
-
--- Approval steps: Finance/Admin/Super Admin full access; assigned user may SELECT & UPDATE their own step
+-- Approval steps: Finance/Admin/Super Admin full access ONLY
+-- (No step-assignee bypass — only finance roles may read or action approval steps)
 CREATE POLICY "pf_steps_finance"      ON pre_fund_approval_steps FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
-
-CREATE POLICY "pf_steps_assignee_select" ON pre_fund_approval_steps FOR SELECT
-  USING ( assigned_user_id = auth.uid() );
-
-CREATE POLICY "pf_steps_assignee_update" ON pre_fund_approval_steps FOR UPDATE
-  USING ( assigned_user_id = auth.uid() )
-  WITH CHECK ( assigned_user_id = auth.uid() );
 
 -- Transactions: Finance/Admin/Super Admin ONLY
 CREATE POLICY "pf_transactions_finance" ON pre_fund_transactions FOR ALL
@@ -453,30 +438,43 @@ BEGIN
     );
 
   -- ── Auto-activate renewal for eligible funds (auto_renewal_mode = 'auto_activate') ──
-  -- Step 1: Create a pending_grace renewal draft if one does not already exist.
-  --         grace_expires_at is set to now() + auto_renewal_grace_hours (from settings).
-  --         Finance can cancel within this window before it goes live.
+  -- When auto_renewal_bypass_approvals = TRUE  → create directly as 'active' (no grace window).
+  -- When auto_renewal_bypass_approvals = FALSE → create as 'pending_grace'; Finance can cancel
+  --   within the configured grace window before it goes live.
   INSERT INTO pre_fund_requests (
     name, source, amount, currency, period_type_id, period_type_name,
     country_id, project_id, grant_id, matching_scope,
     threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+    auto_renewal_bypass_approvals,
     gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-    notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
+    notification_recipients, notes,
+    status, available_balance, committed_amount, paid_amount,
+    activated_at,
     start_date, end_date, grace_expires_at
   )
   SELECT
     name || ' (Auto-Renewal)', source, amount, currency, period_type_id, period_type_name,
     country_id, project_id, grant_id, matching_scope,
     threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+    auto_renewal_bypass_approvals,
     gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
     notification_recipients,
-    'Auto-activated from fund id: ' || id::text,
-    'pending_grace', 0, 0, 0,
+    'Auto-activated from fund id: ' || id::text || '; actor=system',
+    -- Status: bypass=true → active immediately; bypass=false → pending_grace
+    CASE WHEN auto_renewal_bypass_approvals THEN 'active' ELSE 'pending_grace' END,
+    -- available_balance: pre-set only when activating immediately
+    CASE WHEN auto_renewal_bypass_approvals THEN amount ELSE 0 END,
+    0, 0,
+    -- activated_at: set now only for immediate activation
+    CASE WHEN auto_renewal_bypass_approvals THEN now() ELSE NULL END,
     end_date + 1,
     end_date + 1 + COALESCE(
       (SELECT day_count FROM pre_fund_period_types WHERE id = period_type_id), 30
     ),
-    now() + ((SELECT COALESCE(auto_renewal_grace_hours, 24) FROM pre_fund_settings LIMIT 1) || ' hours')::INTERVAL
+    -- grace_expires_at: only meaningful for pending_grace path
+    CASE WHEN auto_renewal_bypass_approvals THEN NULL
+         ELSE now() + ((SELECT COALESCE(auto_renewal_grace_hours, 24) FROM pre_fund_settings LIMIT 1) || ' hours')::INTERVAL
+    END
   FROM pre_fund_requests
   WHERE status IN ('active','low_balance')
     AND auto_renewal_mode = 'auto_activate'
@@ -499,19 +497,28 @@ BEGIN
     AND grace_expires_at IS NOT NULL
     AND grace_expires_at < now();
 
-  -- Notify Finance team of any auto-activations that just fired
+  -- Notify Finance team of any auto-activations that just fired (immediate bypass OR grace-expired)
   INSERT INTO notification_events (event_type, reference_type, title, message, target_roles, metadata)
   SELECT
     'pre_fund_auto_activated',
     'pre_fund_request',
     'Pre-Fund Auto-Activated',
-    'Fund "' || name || '" was automatically activated after the grace window expired.',
+    CASE
+      WHEN auto_renewal_bypass_approvals
+        THEN 'Fund "' || name || '" was automatically activated immediately (bypass approvals enabled). Actor: system.'
+      ELSE 'Fund "' || name || '" was automatically activated after the grace window expired. Actor: system.'
+    END,
     '["super_admin","admin","financialAdmin"]'::JSONB,
-    jsonb_build_object('fund_id', id, 'amount', amount, 'currency', currency)
+    jsonb_build_object(
+      'fund_id', id, 'amount', amount, 'currency', currency,
+      'actor', 'system',
+      'bypass_approvals', auto_renewal_bypass_approvals
+    )
   FROM pre_fund_requests
   WHERE status = 'active'
     AND activated_at >= now() - INTERVAL '1 minute'
-    AND notes LIKE '%Auto-activated from fund id:%';
+    AND notes LIKE '%Auto-activated from fund id:%'
+    AND notes LIKE '%actor=system%';
 
   RETURN QUERY
     SELECT id, name, 'ending_soon_check'::TEXT

@@ -20,8 +20,10 @@ export interface ActivatePreFundOptions {
   fundName: string;
   amount: number;
   currency: string;
-  glReceiptCode?: string;
-  glLiabilityCode?: string;
+  /** Account code for cash/bank DR leg. Must exist in acct_accounts. */
+  glReceiptCode: string;
+  /** Account code for deferred liability CR leg. Must exist in acct_accounts. */
+  glLiabilityCode: string;
   createdBy?: string | null;
   receiptUrl?: string | null;
   idempotencyKeySuffix?: string;
@@ -33,8 +35,8 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
     fundName,
     amount,
     currency,
-    glReceiptCode  = '1200',
-    glLiabilityCode = '2400',
+    glReceiptCode,
+    glLiabilityCode,
     createdBy = null,
     receiptUrl = null,
     idempotencyKeySuffix = '',
@@ -65,15 +67,18 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
   }).select('id').maybeSingle();
   if (jeErr) throw new Error(`GL Bridge failed — cannot activate fund: ${jeErr.message}`);
 
-  const lines: any[] = [];
-  if ((receiptAcct as any)?.id)
-    lines.push({ entry_id: (je as any).id, line_no: 1, account_id: (receiptAcct as any).id, debit_credit: 'DR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund receipt — ${fundName}`, function: 'program' });
-  if ((liabAcct as any)?.id)
-    lines.push({ entry_id: (je as any).id, line_no: 2, account_id: (liabAcct as any).id,   debit_credit: 'CR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund liability deferred — ${fundName}`, function: 'program' });
-  if (lines.length > 0) {
-    const { error: linesErr } = await supabase.from('acct_journal_lines').insert(lines);
-    if (linesErr) throw new Error(`GL lines failed — cannot activate fund: ${linesErr.message}`);
-  }
+  // Fail explicitly if either GL account code cannot be resolved — no silent skip
+  if (!(receiptAcct as any)?.id)
+    throw new Error(`GL account not found for code "${glReceiptCode}" — configure accounts before activating this fund.`);
+  if (!(liabAcct as any)?.id)
+    throw new Error(`GL account not found for code "${glLiabilityCode}" — configure accounts before activating this fund.`);
+
+  const lines = [
+    { entry_id: (je as any).id, line_no: 1, account_id: (receiptAcct as any).id, debit_credit: 'DR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund receipt — ${fundName}`, function: 'program' },
+    { entry_id: (je as any).id, line_no: 2, account_id: (liabAcct as any).id,   debit_credit: 'CR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund liability deferred — ${fundName}`, function: 'program' },
+  ];
+  const { error: linesErr } = await supabase.from('acct_journal_lines').insert(lines);
+  if (linesErr) throw new Error(`GL lines failed — cannot activate fund: ${linesErr.message}`);
 
   // ── 3. Bridge log ────────────────────────────────────────────────────────
   await supabase.from('acct_gl_bridge_log' as any).insert({

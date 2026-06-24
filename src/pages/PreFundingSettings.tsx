@@ -148,7 +148,7 @@ export default function PreFundingSettings() {
 
   const openMatchDialog = async (item: UnmatchedItem) => {
     const { data } = await supabase.from('pre_fund_requests')
-      .select('id,name,currency,amount')
+      .select('id,name,currency,amount,gl_receipt_account,gl_liability_account')
       .eq('status', 'awaiting_receipt')
       .order('created_at', { ascending: false });
     setMatchFundId('');
@@ -167,6 +167,8 @@ export default function PreFundingSettings() {
         fundName: fund.name,
         amount: fund.amount,
         currency: fund.currency,
+        glReceiptCode: (fund as any).gl_receipt_account as string,
+        glLiabilityCode: (fund as any).gl_liability_account as string,
         createdBy: currentUser?.id ?? null,
         idempotencyKeySuffix: 'manual-match',
       });
