@@ -231,29 +231,21 @@ CREATE POLICY "pf_period_types_write" ON pre_fund_period_types FOR ALL
 CREATE POLICY "pf_settings_finance"   ON pre_fund_settings FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
--- Fund requests: Finance/Admin/Super Admin full CRUD; countryDirector read-only
-CREATE POLICY "pf_requests_write"     ON pre_fund_requests FOR ALL
+-- Fund requests: Finance/Admin/Super Admin ONLY — no access for any other role
+CREATE POLICY "pf_requests_finance"   ON pre_fund_requests FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
-CREATE POLICY "pf_requests_read_cd"   ON pre_fund_requests FOR SELECT
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- Approval steps: Finance/Admin full CRUD; countryDirector read-only
-CREATE POLICY "pf_steps_write"        ON pre_fund_approval_steps FOR ALL
+-- Approval steps: Finance/Admin/Super Admin ONLY
+CREATE POLICY "pf_steps_finance"      ON pre_fund_approval_steps FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
-CREATE POLICY "pf_steps_read_cd"      ON pre_fund_approval_steps FOR SELECT
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- Transactions: Finance/Admin full CRUD; countryDirector read-only
-CREATE POLICY "pf_transactions_write" ON pre_fund_transactions FOR ALL
+-- Transactions: Finance/Admin/Super Admin ONLY
+CREATE POLICY "pf_transactions_finance" ON pre_fund_transactions FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
-CREATE POLICY "pf_transactions_read_cd" ON pre_fund_transactions FOR SELECT
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- Reconciliations: Finance/Admin full CRUD; countryDirector read-only
-CREATE POLICY "pf_recons_write"       ON pre_fund_reconciliations FOR ALL
+-- Reconciliations: Finance/Admin/Super Admin ONLY
+CREATE POLICY "pf_recons_finance"     ON pre_fund_reconciliations FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
-CREATE POLICY "pf_recons_read_cd"     ON pre_fund_reconciliations FOR SELECT
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
 -- Bank unmatched queue: Finance/Admin only
 CREATE POLICY "pf_bank_unmatched_access" ON pre_fund_bank_unmatched FOR ALL

@@ -74,7 +74,7 @@ function usedPct(amount: number, available: number): number {
 export default function PreFundingOverview() {
   const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'countryDirector']);
+  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [funds, setFunds]           = useState<PreFundRow[]>([]);
   const [rates, setRates]           = useState<ExchangeRate[]>([]);

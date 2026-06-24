@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, Lock,
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
-  Calendar, Plus, Banknote,
+  Calendar, Plus, Banknote, Shuffle,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -185,7 +185,7 @@ export default function PreFundingReconciliation() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'countryDirector']);
+  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [funds, setFunds]             = useState<PreFundSummary[]>([]);
   const [selectedFund, setSelected]   = useState<PreFundSummary | null>(null);
@@ -200,6 +200,8 @@ export default function PreFundingReconciliation() {
   const [saving, setSaving]           = useState(false);
   const [closing, setClosing]         = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [matchingFeed, setMatchingFeed] = useState(false);
+  const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
 
   const loadFunds = useCallback(async () => {
     setLoading(true);
@@ -273,7 +275,7 @@ export default function PreFundingReconciliation() {
       const returnAmt = closeForm.surplus_action === 'return' ? surplus : parseFloat(closeForm.return_amount) || 0;
       const reserveAmt = closeForm.surplus_action === 'reserve' ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
 
-      const { error: e } = await supabase.from('pre_fund_reconciliations' as any).insert({
+      const { data: recon, error: e } = await supabase.from('pre_fund_reconciliations' as any).insert({
         pre_fund_request_id: selectedFund.id,
         period_start: selectedFund.start_date,
         period_end: selectedFund.end_date,
@@ -289,15 +291,138 @@ export default function PreFundingReconciliation() {
         closed_at: new Date().toISOString(),
         closed_by: currentUser?.id ?? null,
         notes: closeForm.notes || null,
-      });
+      }).select('id').maybeSingle();
       if (e) throw e;
       await supabase.from('pre_fund_requests' as any).update({ status: 'closed' }).eq('id', selectedFund.id);
-      toast({ title: 'Period closed', description: 'GL entries will be posted by the bridge engine.' });
+
+      // ── GL Bridge: post pre_fund_closed journal entry ──────────────────────
+      // Template: Dr {gl_liability_account} → Cr {gl_receipt_account} (return portion)
+      //           Dr {gl_liability_account} → Cr {gl_expense_account} (variance/expense portion)
+      try {
+        const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
+          .select('gl_receipt_account,gl_liability_account,gl_expense_account,currency')
+          .eq('id', selectedFund.id).maybeSingle();
+        const currency = selectedFund.currency;
+
+        // Resolve account IDs from COA
+        const codes = [
+          (fundDetail as any)?.gl_liability_account ?? '2400',
+          (fundDetail as any)?.gl_receipt_account   ?? '1200',
+          (fundDetail as any)?.gl_expense_account   ?? '7000',
+        ];
+        const { data: accts } = await supabase.from('acct_accounts' as any)
+          .select('id,code').in('code', codes);
+        const acctMap: Record<string, string> = {};
+        ((accts as any) ?? []).forEach((a: any) => { acctMap[a.code] = a.id; });
+
+        const { data: je } = await supabase.from('acct_journal_entries').insert({
+          description_en: `Pre-Fund Period Close — ${selectedFund.name}`,
+          description_ar: `إغلاق فترة التمويل المسبق — ${selectedFund.name}`,
+          posting_date: new Date().toISOString().split('T')[0],
+          status: 'draft',
+          source_type: 'pre_fund_reconciliations',
+          source_id: (recon as any)?.id ?? selectedFund.id,
+          idempotency_key: `pf-closed-${selectedFund.id}`,
+          created_by: currentUser?.id ?? null,
+        }).select('id').maybeSingle();
+
+        if (je) {
+          const lines: any[] = [];
+          const liabId = acctMap[codes[0]];
+          const bankId  = acctMap[codes[1]];
+          const expId   = acctMap[codes[2]];
+          const varianceAmt = Math.max(0, surplus - returnAmt - carryAmt);
+
+          // Lines 1-2: return portion (Dr liability → Cr bank)
+          if (liabId && bankId && returnAmt > 0) {
+            lines.push({ entry_id: (je as any).id, line_no: 1, account_id: liabId, debit_credit: 'DR', original_amount: returnAmt, original_currency: currency, functional_amount: returnAmt, functional_currency: currency, description: `Pre-fund close — return to donor`, function: 'program' });
+            lines.push({ entry_id: (je as any).id, line_no: 2, account_id: bankId,  debit_credit: 'CR', original_amount: returnAmt, original_currency: currency, functional_amount: returnAmt, functional_currency: currency, description: `Donor refund — cash out`, function: 'program' });
+          }
+          // Lines 3-4: variance/expense treatment (Dr liability → Cr expense)
+          if (liabId && expId && varianceAmt > 0) {
+            lines.push({ entry_id: (je as any).id, line_no: 3, account_id: liabId, debit_credit: 'DR', original_amount: varianceAmt, original_currency: currency, functional_amount: varianceAmt, functional_currency: currency, description: `Pre-fund close — variance treated as expense`, function: 'program' });
+            lines.push({ entry_id: (je as any).id, line_no: 4, account_id: expId,  debit_credit: 'CR', original_amount: varianceAmt, original_currency: currency, functional_amount: varianceAmt, functional_currency: currency, description: `Programme expense — residual balance`, function: 'program' });
+          }
+          if (lines.length > 0) await supabase.from('acct_journal_lines').insert(lines);
+
+          await supabase.from('acct_gl_bridge_log' as any).insert({
+            source_table: 'pre_fund_reconciliations',
+            source_id: (recon as any)?.id ?? selectedFund.id,
+            event_type: 'pre_fund_closed',
+            status: 'success',
+            journal_entry_id: (je as any).id,
+          });
+        }
+      } catch (glErr: any) {
+        console.warn('[PreFund] Period-close GL bridge skipped:', glErr.message);
+      }
+
+      toast({ title: 'Period closed', description: 'GL journal entry created (draft) — review in GL module.' });
       setShowClose(false);
       await Promise.all([loadFunds(), loadTxns(selectedFund.id)]);
       setSelected(null);
     } catch (e: any) { toast({ title: 'Close failed', description: e.message, variant: 'destructive' }); }
     finally { setClosing(false); }
+  };
+
+  // ── Bank Feed Matching ─────────────────────────────────────────────────────
+  // Queries the pre_fund_bank_unmatched queue, attempts amount±tolerance
+  // matching against open pre_fund_transactions, and marks matched rows.
+  const handleMatchBankFeed = async () => {
+    if (!selectedFund) return;
+    setMatchingFeed(true);
+    setMatchResults(null);
+    let matched = 0;
+    let unmatched = 0;
+    try {
+      const TOLERANCE = 0.01; // 1-cent tolerance for FX rounding
+      // Load unmatched bank feed entries for this fund
+      const { data: feedRows, error: fErr } = await supabase
+        .from('pre_fund_bank_unmatched' as any)
+        .select('*')
+        .eq('pre_fund_request_id', selectedFund.id)
+        .eq('matched', false);
+      if (fErr) throw fErr;
+      const feed: any[] = (feedRows as any) ?? [];
+
+      // Load open (unreconciled payment) transactions for this fund
+      const { data: txnRows } = await supabase
+        .from('pre_fund_transactions' as any)
+        .select('id,amount,currency,reconciled')
+        .eq('pre_fund_request_id', selectedFund.id)
+        .eq('reconciled', false)
+        .eq('transaction_type', 'payment');
+      const openTxns: any[] = (txnRows as any) ?? [];
+
+      for (const row of feed) {
+        const candidate = openTxns.find(
+          t => Math.abs(t.amount - row.amount) <= TOLERANCE && t.currency === row.currency
+        );
+        if (candidate) {
+          // Mark bank feed row as matched
+          await supabase.from('pre_fund_bank_unmatched' as any)
+            .update({ matched: true, matched_txn_id: candidate.id, matched_at: new Date().toISOString() })
+            .eq('id', row.id);
+          // Mark transaction as reconciled
+          await supabase.from('pre_fund_transactions' as any)
+            .update({ reconciled: true, reconciled_at: new Date().toISOString() })
+            .eq('id', candidate.id);
+          // Remove from openTxns to avoid double-match
+          const idx = openTxns.indexOf(candidate);
+          if (idx > -1) openTxns.splice(idx, 1);
+          matched++;
+        } else {
+          unmatched++;
+        }
+      }
+      setMatchResults({ matched, unmatched });
+      toast({ title: `Bank feed matched: ${matched} transactions`, description: unmatched > 0 ? `${unmatched} entries remain unmatched.` : 'All entries matched.' });
+      if (matched > 0) await loadTxns(selectedFund.id);
+    } catch (e: any) {
+      toast({ title: 'Bank feed matching failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setMatchingFeed(false);
+    }
   };
 
   const handleExportPDF = async () => {
@@ -402,13 +527,23 @@ export default function PreFundingReconciliation() {
                       <CardTitle className="text-sm">{selectedFund.name}</CardTitle>
                       <p className="text-[11px] text-muted-foreground">{selectedFund.source}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleDonorPDF} disabled={generatingPdf}>
                         <FileText className="h-3.5 w-3.5 mr-1" />Donor PDF
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPDF} disabled={generatingPdf}>
                         <Download className="h-3.5 w-3.5 mr-1" />{generatingPdf ? 'Generating…' : 'Recon PDF'}
                       </Button>
+                      {['active', 'low_balance'].includes(selectedFund.status) && (
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleMatchBankFeed} disabled={matchingFeed} data-testid="button-match-bank-feed">
+                          <Shuffle className="h-3.5 w-3.5 mr-1" />{matchingFeed ? 'Matching…' : 'Match Bank Feed'}
+                        </Button>
+                      )}
+                      {matchResults && (
+                        <span className="text-[11px] text-muted-foreground self-center">
+                          ✓ {matchResults.matched} matched{matchResults.unmatched > 0 ? `, ${matchResults.unmatched} unmatched` : ''}
+                        </span>
+                      )}
                       {['active', 'low_balance'].includes(selectedFund.status) && (
                         <Button size="sm" className="h-7 text-xs bg-rose-600 hover:bg-rose-700" onClick={() => setShowClose(true)}>
                           <Lock className="h-3.5 w-3.5 mr-1" />Close Period
