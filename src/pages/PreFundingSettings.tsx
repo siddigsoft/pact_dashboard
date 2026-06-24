@@ -119,7 +119,14 @@ export default function PreFundingSettings() {
         supabase.from('pre_fund_settings').select('*').maybeSingle(),
         supabase.from('pre_fund_period_types').select('*').order('display_order'),
       ]);
-      if (sRes.data) setSettings({ ...DEFAULT_SETTINGS, ...sRes.data as any });
+      // Surface SELECT errors (e.g. RLS blocking or table missing)
+      if (sRes.error && !sRes.error.message.includes('does not exist') && !sRes.error.message.includes('relation')) {
+        toast({ title: 'Could not load settings', description: sRes.error.message + ' — run pre_funding_migration.sql first', variant: 'destructive' });
+      }
+      if (sRes.data) setSettings({ ...DEFAULT_SETTINGS, ...(sRes.data as any) });
+      if (ptRes.error && !ptRes.error.message.includes('does not exist')) {
+        toast({ title: 'Could not load period types', description: ptRes.error.message, variant: 'destructive' });
+      }
       setPeriodTypes((ptRes.data as any) ?? []);
     } catch (e: any) {
       if (!e?.message?.includes('does not exist') && !e?.message?.includes('relation')) {
@@ -219,15 +226,16 @@ export default function PreFundingSettings() {
       delete payload.bank_api_key_hint;
       delete payload.bank_api_key_encrypted;
 
-      let savedId = settings.id;
-      if (settings.id) {
-        const { error: e } = await supabase.from('pre_fund_settings').update(payload).eq('id', settings.id);
-        if (e) throw e;
-      } else {
-        const { data, error: e } = await supabase.from('pre_fund_settings').insert(payload).select().maybeSingle();
-        if (e) throw e;
-        if (data) { savedId = (data as any).id; setSettings(p => ({ ...p, id: savedId })); }
-      }
+      // Upsert on singleton_lock — works whether the row exists or not,
+      // and avoids the INSERT-RLS failure when id is unknown after a fresh migration.
+      const { data, error: e } = await supabase
+        .from('pre_fund_settings')
+        .upsert({ singleton_lock: true, ...payload }, { onConflict: 'singleton_lock' })
+        .select()
+        .maybeSingle();
+      if (e) throw e;
+      const savedId = (data as any)?.id ?? settings.id;
+      if (savedId) setSettings(p => ({ ...p, id: savedId }));
 
       // If a new API key was entered, store it encrypted via the security-definer RPC.
       // The raw key is never stored in the settings payload above.
@@ -244,7 +252,11 @@ export default function PreFundingSettings() {
       setShowApiKey(false);
       await load();
     } catch (e: any) {
-      toast({ title: 'Save failed', description: e.message + ' — run pre_funding_migration.sql first', variant: 'destructive' });
+      const msg = (e as any).message ?? String(e);
+      const hint = msg.includes('does not exist') || msg.includes('relation') || msg.includes('security')
+        ? ' — run pre_funding_migration.sql in Supabase first'
+        : '';
+      toast({ title: 'Save failed', description: msg + hint, variant: 'destructive' });
     } finally { setSaving(false); }
   };
 
