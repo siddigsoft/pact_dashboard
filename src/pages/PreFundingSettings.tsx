@@ -36,6 +36,17 @@ interface Settings {
   integration_encumbrance: boolean;
   default_renewal_mode: string;
   default_base_currency: string;
+  // GL account defaults
+  default_gl_receipt_account: string;
+  default_gl_liability_account: string;
+  default_gl_expense_account: string;
+  default_gl_cf_account: string;
+  // Notification & matching defaults
+  default_matching_scope: string;
+  // Reconciliation action toggles
+  reconciliation_action_return: boolean;
+  reconciliation_action_carry_fwd: boolean;
+  reconciliation_action_reserve: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -44,6 +55,14 @@ const DEFAULT_SETTINGS: Settings = {
   bank_api_enabled: false, bank_api_url: null, bank_api_key_hint: null,
   integration_bank_recon: true, integration_cashflow: true, integration_encumbrance: true,
   default_renewal_mode: 'off', default_base_currency: 'USD',
+  default_gl_receipt_account: '1200',
+  default_gl_liability_account: '2400',
+  default_gl_expense_account: '7000',
+  default_gl_cf_account: '2401',
+  default_matching_scope: 'global',
+  reconciliation_action_return: true,
+  reconciliation_action_carry_fwd: true,
+  reconciliation_action_reserve: true,
 };
 
 const BUILTIN_PERIOD_TYPES = [
@@ -338,17 +357,86 @@ export default function PreFundingSettings() {
             )}
           </Card>
 
-          {/* ── Integration Toggles */}
+          {/* ── GL Account Mapping Defaults */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4 text-sky-600" />Integration Toggles</CardTitle>
-              <CardDescription className="text-[11px]">Control which systems automatically receive pre-fund data.</CardDescription>
+              <CardTitle className="text-sm flex items-center gap-2"><Shield className="h-4 w-4 text-sky-600" />Default GL Account Mapping</CardTitle>
+              <CardDescription className="text-[11px]">COA codes pre-populated when creating a new fund. Override per-fund in the Registry. The GL Bridge engine resolves these codes to account IDs at posting time.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Cash / Bank Account (DR on receipt)</Label>
+                  <Input value={settings.default_gl_receipt_account} onChange={e => set('default_gl_receipt_account', e.target.value)} placeholder="1200" data-testid="input-gl-receipt" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Debited when fund is received from donor</p>
+                </div>
+                <div>
+                  <Label>Pre-Fund Liability Account (CR on receipt / DR on payment)</Label>
+                  <Input value={settings.default_gl_liability_account} onChange={e => set('default_gl_liability_account', e.target.value)} placeholder="2400" data-testid="input-gl-liability" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Deferred liability cleared as cash is disbursed</p>
+                </div>
+                <div>
+                  <Label>Programme Expense Account (CR on period close variance)</Label>
+                  <Input value={settings.default_gl_expense_account} onChange={e => set('default_gl_expense_account', e.target.value)} placeholder="7000" data-testid="input-gl-expense" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Recognises residual balance as cost on period close</p>
+                </div>
+                <div>
+                  <Label>Carry-Forward Reserve Account (CR on carry-forward)</Label>
+                  <Input value={settings.default_gl_cf_account} onChange={e => set('default_gl_cf_account', e.target.value)} placeholder="2401" data-testid="input-gl-cf" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Liability rolled to next period when surplus action = carry_forward</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Default Bank Feed Matching Scope</Label>
+                  <Select value={settings.default_matching_scope} onValueChange={v => set('default_matching_scope', v)}>
+                    <SelectTrigger data-testid="select-matching-scope"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global">Global (all unmatched feed entries)</SelectItem>
+                      <SelectItem value="project">Project-scoped</SelectItem>
+                      <SelectItem value="country">Country-scoped</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Reconciliation Action Toggles */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><RotateCcw className="h-4 w-4 text-sky-600" />Reconciliation Actions</CardTitle>
+              <CardDescription className="text-[11px]">Enable or disable surplus disposal options at period close.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                { key: 'integration_bank_recon' as const,    label: 'Bank Reconciliation',   sub: 'Auto-create bank statement lines when a fund is activated' },
-                { key: 'integration_cashflow' as const,      label: 'Cash Flow Forecast',    sub: 'Include active pre-funds as inflows and commitments as outflows' },
-                { key: 'integration_encumbrance' as const,   label: 'Budget Encumbrance',    sub: 'Create encumbrance records for committed fund amounts' },
+                { key: 'reconciliation_action_return' as const,    label: 'Return to Donor',    sub: 'Allow returning surplus cash to the donor at period close' },
+                { key: 'reconciliation_action_carry_fwd' as const, label: 'Carry Forward',       sub: 'Allow carrying forward surplus into the next period' },
+                { key: 'reconciliation_action_reserve' as const,   label: 'Reserve',             sub: 'Allow reserving surplus in a holding account' },
+              ].map(item => (
+                <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div>
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.sub}</p>
+                  </div>
+                  <Switch checked={settings[item.key] as boolean} onCheckedChange={v => set(item.key, v)} data-testid={`switch-${item.key}`} />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* ── Integration Toggles */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4 text-sky-600" />Cross-System Integration Toggles</CardTitle>
+              <CardDescription className="text-[11px]">Control which systems automatically receive pre-fund events.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                { key: 'integration_bank_recon' as const,    label: 'Bank Reconciliation',   sub: 'Auto-create bank statement lines when a fund is activated (acct_bank_statement_lines)' },
+                { key: 'integration_cashflow' as const,      label: 'Cash Flow Forecast',    sub: 'Include active pre-funds as inflows and commitments as outflows in cash flow projections' },
+                { key: 'integration_encumbrance' as const,   label: 'Budget Encumbrance',    sub: 'Create encumbrance records (acct_budget_encumbrances) for committed fund amounts' },
               ].map(item => (
                 <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0">
                   <div>

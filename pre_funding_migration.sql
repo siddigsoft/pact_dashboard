@@ -47,13 +47,34 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   integration_encumbrance      BOOLEAN NOT NULL DEFAULT true,
   default_renewal_mode        TEXT NOT NULL DEFAULT 'off'
                               CHECK (default_renewal_mode IN ('off','auto_draft','auto_activate')),
+  -- Default GL account codes (pre-populate new fund requests; resolved to IDs by the bridge engine)
+  default_gl_receipt_account  TEXT NOT NULL DEFAULT '1200',
+  default_gl_liability_account TEXT NOT NULL DEFAULT '2400',
+  default_gl_expense_account  TEXT NOT NULL DEFAULT '7000',
+  default_gl_cf_account       TEXT NOT NULL DEFAULT '2401',
+  -- Default notification recipients (array of profile UUIDs for alerts)
+  default_notification_recipients JSONB NOT NULL DEFAULT '[]'::JSONB,
+  -- Default matching scope for bank feed matching
+  default_matching_scope      TEXT NOT NULL DEFAULT 'global'
+                              CHECK (default_matching_scope IN ('global','project','country')),
+  -- Reconciliation action toggles
+  reconciliation_action_return    BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_carry_fwd BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_reserve   BOOLEAN NOT NULL DEFAULT true,
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Ensure only one row of settings exists
-INSERT INTO pre_fund_settings DEFAULT VALUES
-ON CONFLICT DO NOTHING;
+-- Ensure only one settings row ever exists (singleton constraint)
+ALTER TABLE pre_fund_settings
+  ADD COLUMN IF NOT EXISTS singleton_lock BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE pre_fund_settings
+  DROP CONSTRAINT IF EXISTS pre_fund_settings_singleton;
+ALTER TABLE pre_fund_settings
+  ADD CONSTRAINT pre_fund_settings_singleton UNIQUE (singleton_lock);
+
+INSERT INTO pre_fund_settings (singleton_lock) VALUES (TRUE)
+ON CONFLICT (singleton_lock) DO NOTHING;
 
 -- ─── 3. Pre-fund requests (main table) ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pre_fund_requests (
@@ -66,7 +87,8 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   committed_amount      NUMERIC(20,4) NOT NULL DEFAULT 0,
   paid_amount           NUMERIC(20,4) NOT NULL DEFAULT 0,
   status                TEXT NOT NULL DEFAULT 'draft'
-                        CHECK (status IN ('draft','pending_approval','awaiting_receipt','active','low_balance','closed','period_locked')),
+                        CHECK (status IN ('draft','pending_approval','awaiting_receipt','active','low_balance','closed','period_locked','pending_grace')),
+  grace_expires_at      TIMESTAMPTZ,               -- set on auto_activate renewals; Finance can cancel before this timestamp
   period_type_id        UUID REFERENCES pre_fund_period_types(id) ON DELETE SET NULL,
   period_type_name      TEXT,                       -- denormalised for display
   start_date            DATE,
@@ -220,11 +242,8 @@ ALTER TABLE pre_fund_transactions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_reconciliations   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_bank_unmatched    ENABLE ROW LEVEL SECURITY;
 
--- Period types: all authenticated users can read (display in fund creation form);
--- only Finance/Admin can write.
-CREATE POLICY "pf_period_types_read"  ON pre_fund_period_types FOR SELECT
-  USING (auth.uid() IS NOT NULL);
-CREATE POLICY "pf_period_types_write" ON pre_fund_period_types FOR ALL
+-- Period types: Finance/Admin/Super Admin ONLY (no public read — non-finance has no access)
+CREATE POLICY "pf_period_types_finance" ON pre_fund_period_types FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
 -- Settings: Finance/Admin/Super Admin only — never countryDirector
@@ -389,6 +408,67 @@ BEGIN
       WHERE r2.notes LIKE '%Auto-renewed from fund id: ' || pre_fund_requests.id::text || '%'
         AND r2.status = 'draft'
     );
+
+  -- ── Auto-activate renewal for eligible funds (auto_renewal_mode = 'auto_activate') ──
+  -- Step 1: Create a pending_grace renewal draft if one does not already exist.
+  --         grace_expires_at is set to now() + auto_renewal_grace_hours (from settings).
+  --         Finance can cancel within this window before it goes live.
+  INSERT INTO pre_fund_requests (
+    name, source, amount, currency, period_type_id, period_type_name,
+    country_id, project_id, grant_id, matching_scope,
+    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+    notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
+    start_date, end_date, grace_expires_at
+  )
+  SELECT
+    name || ' (Auto-Renewal)', source, amount, currency, period_type_id, period_type_name,
+    country_id, project_id, grant_id, matching_scope,
+    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+    notification_recipients,
+    'Auto-activated from fund id: ' || id::text,
+    'pending_grace', 0, 0, 0,
+    end_date + 1,
+    end_date + 1 + COALESCE(
+      (SELECT day_count FROM pre_fund_period_types WHERE id = period_type_id), 30
+    ),
+    now() + ((SELECT COALESCE(auto_renewal_grace_hours, 24) FROM pre_fund_settings LIMIT 1) || ' hours')::INTERVAL
+  FROM pre_fund_requests
+  WHERE status IN ('active','low_balance')
+    AND auto_renewal_mode = 'auto_activate'
+    AND end_date IS NOT NULL
+    AND end_date <= (CURRENT_DATE + COALESCE(auto_renewal_days_before, 7))
+    AND NOT EXISTS (
+      SELECT 1 FROM pre_fund_requests r2
+      WHERE r2.notes LIKE '%Auto-activated from fund id: ' || pre_fund_requests.id::text || '%'
+        AND r2.status IN ('draft','pending_grace','active')
+    );
+
+  -- Step 2: Activate any pending_grace renewals whose grace window has expired
+  --         (grace_expires_at < now() means Finance did not cancel in time).
+  UPDATE pre_fund_requests
+  SET status = 'active',
+      available_balance = amount,
+      activated_at = now(),
+      updated_at = now()
+  WHERE status = 'pending_grace'
+    AND grace_expires_at IS NOT NULL
+    AND grace_expires_at < now();
+
+  -- Notify Finance team of any auto-activations that just fired
+  INSERT INTO notification_events (event_type, reference_type, title, message, target_roles, metadata)
+  SELECT
+    'pre_fund_auto_activated',
+    'pre_fund_request',
+    'Pre-Fund Auto-Activated',
+    'Fund "' || name || '" was automatically activated after the grace window expired.',
+    '["super_admin","admin","financialAdmin"]'::JSONB,
+    jsonb_build_object('fund_id', id, 'amount', amount, 'currency', currency)
+  FROM pre_fund_requests
+  WHERE status = 'active'
+    AND activated_at >= now() - INTERVAL '1 minute'
+    AND notes LIKE '%Auto-activated from fund id:%';
 
   RETURN QUERY
     SELECT id, name, 'ending_soon_check'::TEXT

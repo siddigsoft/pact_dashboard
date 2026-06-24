@@ -375,14 +375,14 @@ export default function PreFundingReconciliation() {
     let matched = 0;
     let unmatched = 0;
     try {
-      const TOLERANCE = 0.01; // 1-cent tolerance for FX rounding
-      // Load unmatched bank feed entries for this fund
+      // Load global unmatched bank feed entries (pre_fund_bank_unmatched has no fund FK
+      // until matched; we filter by currency to narrow candidates)
       const { data: feedRows, error: fErr } = await supabase
         .from('pre_fund_bank_unmatched' as any)
-        .select('*')
-        .eq('pre_fund_request_id', selectedFund.id)
-        .eq('matched', false);
-      if (fErr) throw fErr;
+        .select('id,amount,currency,transaction_date,description,raw_reference')
+        .eq('match_status', 'unmatched')
+        .eq('currency', selectedFund.currency);
+      if (fErr && !fErr.message.includes('does not exist')) throw fErr;
       const feed: any[] = (feedRows as any) ?? [];
 
       // Load open (unreconciled payment) transactions for this fund
@@ -392,16 +392,24 @@ export default function PreFundingReconciliation() {
         .eq('pre_fund_request_id', selectedFund.id)
         .eq('reconciled', false)
         .eq('transaction_type', 'payment');
-      const openTxns: any[] = (txnRows as any) ?? [];
+      const openTxns: any[] = [...((txnRows as any) ?? [])];
 
+      // tolerance: 1-cent absolute minimum or 1% relative (whichever is larger)
       for (const row of feed) {
+        const tolerance = Math.max(0.01, row.amount * 0.01);
         const candidate = openTxns.find(
-          t => Math.abs(t.amount - row.amount) <= TOLERANCE && t.currency === row.currency
+          t => Math.abs(t.amount - row.amount) <= tolerance && t.currency === row.currency
         );
         if (candidate) {
-          // Mark bank feed row as matched
+          // Mark bank feed row as matched — use actual schema columns:
+          // matched_fund_id, match_status, reviewed_by, reviewed_at
           await supabase.from('pre_fund_bank_unmatched' as any)
-            .update({ matched: true, matched_txn_id: candidate.id, matched_at: new Date().toISOString() })
+            .update({
+              matched_fund_id: selectedFund.id,
+              match_status: 'matched',
+              reviewed_by: currentUser?.id ?? null,
+              reviewed_at: new Date().toISOString(),
+            })
             .eq('id', row.id);
           // Mark transaction as reconciled
           await supabase.from('pre_fund_transactions' as any)
@@ -416,7 +424,10 @@ export default function PreFundingReconciliation() {
         }
       }
       setMatchResults({ matched, unmatched });
-      toast({ title: `Bank feed matched: ${matched} transactions`, description: unmatched > 0 ? `${unmatched} entries remain unmatched.` : 'All entries matched.' });
+      toast({
+        title: `Bank feed matched: ${matched} transaction${matched !== 1 ? 's' : ''}`,
+        description: unmatched > 0 ? `${unmatched} feed entr${unmatched !== 1 ? 'ies' : 'y'} remain unmatched.` : 'All feed entries matched.',
+      });
       if (matched > 0) await loadTxns(selectedFund.id);
     } catch (e: any) {
       toast({ title: 'Bank feed matching failed', description: e.message, variant: 'destructive' });
