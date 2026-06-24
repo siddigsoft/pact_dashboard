@@ -478,11 +478,27 @@ export default function DownPaymentApproval() {
     if (!window.confirm(`Mark "${req.requestedByName || 'this advance'}" (${(req.approvedAmount ?? req.requestedAmount).toLocaleString()} SDG) as Fully Paid?\n\nThis will unblock the cycle close gate.`)) return;
     setMarkingPaidId(req.id);
     try {
+      const now = new Date().toISOString();
       const { error } = await supabase
         .from('down_payment_requests')
-        .update({ status: 'fully_paid', updated_at: new Date().toISOString() })
+        .update({ status: 'fully_paid', updated_at: now })
         .eq('id', req.id);
       if (error) throw error;
+      // Auto-link to active pre-fund (non-blocking)
+      import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
+        linkPaymentToPreFund({
+          amount: req.approvedAmount ?? req.requestedAmount,
+          currency: 'SDG',
+          countryId: (req as any).country_id ?? null,
+          projectId: (req as any).project_id ?? null,
+          sourceTable: 'down_payment_requests',
+          sourceId: req.id,
+          reference: (req as any).reference_number ?? null,
+          description: (req as any).purpose ?? (req as any).description ?? null,
+          paymentDate: now,
+          createdBy: null,
+        }).catch(() => { /* linkage is best-effort */ });
+      });
       // Force a page refresh of the down payment context
       window.location.reload();
     } catch (err) {

@@ -1898,6 +1898,25 @@ const CostSubmission = () => {
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
+        // Auto-link to active pre-fund (non-blocking — payment is already marked paid)
+        import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
+          linkPaymentToPreFund({
+            amount: oc.amount_cents / 100,
+            currency: oc.currency,
+            countryId: (oc as any).country_id ?? null,
+            projectId: (oc as any).project_id ?? null,
+            sourceTable: 'operational_cost_submissions',
+            sourceId: oc.id,
+            reference: oc.reference_number ?? null,
+            description: (oc as any).title ?? (oc as any).description ?? null,
+            paymentDate: now,
+            createdBy: currentUser.id,
+          }).then(result => {
+            if (result.linked) {
+              toast({ title: `Linked to Pre-Fund`, description: result.message });
+            }
+          }).catch(() => { /* linkage is best-effort */ });
+        });
         toast({
           title: "Payment Sent / تم إرسال الدفعة",
           description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
@@ -1995,7 +2014,24 @@ const CostSubmission = () => {
           payment_proof_uploaded_at: now,
           ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
         }).eq('id', sub.id);
-        if (error) { failCount++; } else { successCount++; }
+        if (error) { failCount++; } else {
+          successCount++;
+          // Auto-link each paid submission to an active pre-fund (non-blocking)
+          import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
+            linkPaymentToPreFund({
+              amount: sub.amount_cents / 100,
+              currency: sub.currency,
+              countryId: (sub as any).country_id ?? null,
+              projectId: (sub as any).project_id ?? null,
+              sourceTable: 'operational_cost_submissions',
+              sourceId: sub.id,
+              reference: sub.reference_number ?? null,
+              description: (sub as any).title ?? null,
+              paymentDate: now,
+              createdBy: currentUser.id,
+            }).catch(() => { /* linkage is best-effort */ });
+          });
+        }
       }
 
       // Consolidated notifications — one per submitter covering all their paid submissions

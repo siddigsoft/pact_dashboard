@@ -61,116 +61,302 @@ const SURPLUS_OPTIONS = [
   { value: 'reserve',       label: 'Leave in Reserve' },
 ];
 
+// ── PDF colour constants ──────────────────────────────────────────────────────
+const NAVY: [number, number, number]      = [15, 32, 65];
+const NAVY_LIGHT: [number, number, number] = [30, 58, 138];
+const WHITE: [number, number, number]      = [255, 255, 255];
+const GREY_BG: [number, number, number]    = [248, 250, 252];
+
+interface ApprovalStepRow {
+  step_no: number;
+  label: string;
+  assigned_name: string;
+  status: string;
+  decided_at: string | null;
+}
+interface GlEntryRow {
+  event_type: string;
+  posting_date: string;
+  description_en: string;
+  entry_no: string | null;
+  status: string;
+}
+
+function addPdfHeader(doc: jsPDF, title: string, subtitle: string) {
+  // Navy header bar
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE);
+  doc.text('PACT Command Center', 15, 11);
+  doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+  doc.text(title, 15, 18);
+  doc.setFontSize(8);
+  doc.text(subtitle, 15, 24);
+  doc.setTextColor(0, 0, 0);
+}
+
+function addPdfFooter(doc: jsPDF, pageCount: number) {
+  const now = format(new Date(), 'MMM d, yyyy HH:mm');
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFillColor(...NAVY);
+    doc.rect(0, 287, 210, 10, 'F');
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(...WHITE);
+    doc.text(`PACT Command Center — Confidential`, 15, 293);
+    doc.text(`Generated: ${now}`, 105, 293, { align: 'center' });
+    doc.text(`Page ${i} of ${pageCount}`, 195, 293, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+}
+
+function sectionHeader(doc: jsPDF, text: string, y: number): number {
+  doc.setFillColor(...GREY_BG);
+  doc.rect(13, y - 4, 184, 7, 'F');
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(...NAVY_LIGHT);
+  doc.text(text, 15, y);
+  doc.setTextColor(0, 0, 0);
+  return y + 6;
+}
+
 async function generateReconciliationPDF(
   fund: PreFundSummary,
   transactions: PreFundTransaction[],
   recon: Partial<Reconciliation>,
+  approvalSteps: ApprovalStepRow[],
+  glEntries: GlEntryRow[],
 ): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const period = fund.start_date && fund.end_date
+    ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
+    : '—';
 
-  doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-  doc.text('Pre-Fund Reconciliation Report', 15, 20);
-  doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-  doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`, 15, 28);
+  addPdfHeader(doc, 'Pre-Fund Reconciliation Report', `${fund.name}  ·  ${period}`);
 
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-  doc.text('Fund Details', 15, 40);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-  const details = [
-    ['Fund Name', fund.name], ['Source / Donor', fund.source ?? '—'],
-    ['Currency', fund.currency], ['Total Amount', formatNumber(fund.amount, 0)],
-    ['Period', fund.start_date && fund.end_date ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}` : '—'],
-    ['Status', fund.status.replace('_', ' ')],
+  let y = 36;
+
+  // ── Fund details ──────────────────────────────────────────────────────────
+  y = sectionHeader(doc, 'Fund Details', y);
+  const details: [string, string][] = [
+    ['Fund Name', fund.name],
+    ['Source / Donor', fund.source ?? '—'],
+    ['Currency', fund.currency],
+    ['Total Amount', `${fund.currency} ${formatNumber(fund.amount, 0)}`],
+    ['Period', period],
+    ['Status', fund.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
+    ['Close Action', recon.surplus_action ? recon.surplus_action.replace(/_/g, ' ') : '—'],
   ];
-  let y = 46;
-  details.forEach(([k, v]) => { doc.text(`${k}:`, 15, y); doc.text(v, 70, y); y += 7; });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  details.forEach(([k, v]) => { doc.setFont('helvetica', 'bold'); doc.text(`${k}:`, 15, y); doc.setFont('helvetica', 'normal'); doc.text(v, 65, y); y += 5.5; });
+  y += 4;
 
-  y += 6;
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-  doc.text('Summary', 15, y); y += 8;
-
-  const summaryRows = [
-    ['Total Funded', fund.currency, formatNumber(fund.amount, 0)],
-    ['Total Paid Out', fund.currency, formatNumber(fund.paid_amount, 0)],
-    ['Total Committed', fund.currency, formatNumber(fund.committed_amount, 0)],
-    ['Available Balance', fund.currency, formatNumber(fund.available_balance, 0)],
-    ['Variance', fund.currency, formatNumber((recon.variance ?? 0), 0)],
-  ];
+  // ── Financial summary ─────────────────────────────────────────────────────
+  y = sectionHeader(doc, 'Financial Summary', y);
   autoTable(doc, {
-    startY: y, head: [['Item', 'Currency', 'Amount']], body: summaryRows,
-    styles: { fontSize: 9 }, headStyles: { fillColor: [3, 105, 161] },
+    startY: y,
+    head: [['Item', 'Currency', 'Amount']],
+    body: [
+      ['Total Funded',       fund.currency, formatNumber(fund.amount, 0)],
+      ['Total Paid Out',     fund.currency, formatNumber(fund.paid_amount, 0)],
+      ['Total Committed',    fund.currency, formatNumber(fund.committed_amount, 0)],
+      ['Available Balance',  fund.currency, formatNumber(fund.available_balance, 0)],
+      ['Period Variance',    fund.currency, formatNumber(recon.variance ?? 0, 0)],
+      ...(recon.carry_forward_amount ? [['Carry Forward', fund.currency, formatNumber(recon.carry_forward_amount, 0)]] : []),
+      ...(recon.return_amount ? [['Returned to Source', fund.currency, formatNumber(recon.return_amount, 0)]] : []),
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: GREY_BG },
+    columnStyles: { 2: { halign: 'right' } },
   });
-  y = (doc as any).lastAutoTable.finalY + 10;
+  y = (doc as any).lastAutoTable.finalY + 8;
 
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-  doc.text('Transactions', 15, y); y += 8;
-  const txnRows = transactions.map(t => [
-    format(parseISO(t.transaction_date), 'MMM d, yyyy'),
-    TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
-    t.reference ?? '—',
-    t.description ?? '—',
-    formatNumber(t.amount, 0),
-    t.reconciled ? 'Yes' : 'No',
-  ]);
+  // ── Transactions ──────────────────────────────────────────────────────────
+  y = sectionHeader(doc, 'Transactions', y);
   autoTable(doc, {
-    startY: y, head: [['Date', 'Type', 'Reference', 'Description', 'Amount', 'Reconciled']],
-    body: txnRows, styles: { fontSize: 8 }, headStyles: { fillColor: [3, 105, 161] },
+    startY: y,
+    head: [['Date', 'Type', 'Reference', 'Description', `Amount (${fund.currency})`, 'Reconciled']],
+    body: transactions.map(t => [
+      format(parseISO(t.transaction_date), 'MMM d, yyyy'),
+      TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
+      t.reference ?? '—',
+      t.description ?? '—',
+      formatNumber(t.amount, 0),
+      t.reconciled ? '✓' : '—',
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: GREY_BG },
+    columnStyles: { 4: { halign: 'right' }, 5: { halign: 'center' } },
   });
+  y = (doc as any).lastAutoTable.finalY + 8;
+
+  // ── GL Journal Trail ──────────────────────────────────────────────────────
+  if (glEntries.length > 0) {
+    if (y > 240) { doc.addPage(); y = 36; }
+    y = sectionHeader(doc, 'GL Journal Entries Posted', y);
+    autoTable(doc, {
+      startY: y,
+      head: [['Date', 'Event', 'Description', 'Entry No.', 'Status']],
+      body: glEntries.map(e => [
+        e.posting_date,
+        e.event_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        e.description_en,
+        e.entry_no ?? '—',
+        e.status.replace(/\b\w/g, c => c.toUpperCase()),
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GREY_BG },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // ── Approval Chain ────────────────────────────────────────────────────────
+  if (approvalSteps.length > 0) {
+    if (y > 240) { doc.addPage(); y = 36; }
+    y = sectionHeader(doc, 'Approval Chain', y);
+    autoTable(doc, {
+      startY: y,
+      head: [['Step', 'Role / Label', 'Approver', 'Decision', 'Date']],
+      body: approvalSteps.map(s => [
+        String(s.step_no),
+        s.label,
+        s.assigned_name,
+        s.status.replace(/\b\w/g, c => c.toUpperCase()),
+        s.decided_at ? format(parseISO(s.decided_at), 'MMM d, yyyy HH:mm') : '—',
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GREY_BG },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 3) {
+          const val = String(data.cell.raw ?? '');
+          if (val.toLowerCase() === 'approved') data.cell.styles.textColor = [5, 150, 105];
+          else if (val.toLowerCase() === 'rejected') data.cell.styles.textColor = [220, 38, 38];
+        }
+      },
+    });
+  }
+
+  // Footer on all pages
+  addPdfFooter(doc, (doc as any).internal.getNumberOfPages());
 
   const filename = `PreFund-Reconciliation-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
-  const blob = doc.output('blob');
-  return { blob, filename };
+  return { blob: doc.output('blob'), filename };
 }
 
 async function generateDonorStatementPDF(
   fund: PreFundSummary,
   transactions: PreFundTransaction[],
+  approvalSteps: ApprovalStepRow[],
 ): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-  doc.text('Donor Pre-Fund Statement', 15, 20);
-  doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-  doc.text(`Prepared: ${format(new Date(), 'MMM d, yyyy')}`, 15, 28);
+  const period = fund.start_date && fund.end_date
+    ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
+    : '—';
 
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-  doc.text('Fund Information', 15, 40);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-  let y = 48;
-  [['Fund', fund.name], ['Donor / Source', fund.source ?? '—'], ['Currency', fund.currency],
-    ['Period', fund.start_date && fund.end_date ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}` : '—']
-  ].forEach(([k, v]) => { doc.text(`${k}:`, 15, y); doc.text(v, 60, y); y += 7; });
+  addPdfHeader(doc, 'Donor Pre-Fund Statement', `${fund.name}  ·  ${period}`);
 
-  y += 6;
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-  doc.text('Fund Utilisation', 15, y); y += 8;
+  let y = 36;
+
+  // ── Fund information ──────────────────────────────────────────────────────
+  y = sectionHeader(doc, 'Fund Information', y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  const info: [string, string][] = [
+    ['Fund', fund.name],
+    ['Donor / Source', fund.source ?? '—'],
+    ['Currency', fund.currency],
+    ['Reporting Period', period],
+    ['Fund Status', fund.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
+  ];
+  info.forEach(([k, v]) => { doc.setFont('helvetica', 'bold'); doc.text(`${k}:`, 15, y); doc.setFont('helvetica', 'normal'); doc.text(v, 65, y); y += 5.5; });
+  y += 4;
+
+  // ── Utilisation summary ───────────────────────────────────────────────────
+  y = sectionHeader(doc, 'Fund Utilisation', y);
   autoTable(doc, {
     startY: y,
     head: [['Description', 'Amount']],
     body: [
-      ['Amount Received', `${fund.currency} ${formatNumber(fund.amount, 0)}`],
-      ['Total Disbursed', `${fund.currency} ${formatNumber(fund.paid_amount, 0)}`],
-      ['Remaining Balance', `${fund.currency} ${formatNumber(fund.available_balance, 0)}`],
+      ['Total Amount Received',  `${fund.currency} ${formatNumber(fund.amount, 0)}`],
+      ['Total Disbursed',        `${fund.currency} ${formatNumber(fund.paid_amount, 0)}`],
+      ['Total Committed',        `${fund.currency} ${formatNumber(fund.committed_amount, 0)}`],
+      ['Remaining Balance',      `${fund.currency} ${formatNumber(fund.available_balance, 0)}`],
     ],
-    styles: { fontSize: 10 }, headStyles: { fillColor: [3, 105, 161] },
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: GREY_BG },
+    columnStyles: { 1: { halign: 'right' } },
   });
   y = (doc as any).lastAutoTable.finalY + 10;
 
+  // ── Disbursement breakdown ────────────────────────────────────────────────
   const payments = transactions.filter(t => t.transaction_type === 'payment');
   if (payments.length > 0) {
-    doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-    doc.text('Disbursement Detail', 15, y); y += 8;
+    y = sectionHeader(doc, 'Disbursement Detail', y);
     autoTable(doc, {
-      startY: y, head: [['Date', 'Reference', 'Description', 'Amount']],
+      startY: y,
+      head: [['Date', 'Reference', 'Description', `Amount (${fund.currency})`]],
       body: payments.map(t => [
-        format(parseISO(t.transaction_date), 'MMM d, yyyy'), t.reference ?? '—', t.description ?? '—',
-        `${t.currency} ${formatNumber(t.amount, 0)}`,
+        format(parseISO(t.transaction_date), 'MMM d, yyyy'),
+        t.reference ?? '—',
+        t.description ?? '—',
+        formatNumber(t.amount, 0),
       ]),
-      styles: { fontSize: 9 }, headStyles: { fillColor: [3, 105, 161] },
+      styles: { fontSize: 9, cellPadding: 2.5 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GREY_BG },
+      columnStyles: { 3: { halign: 'right' } },
     });
+    y = (doc as any).lastAutoTable.finalY + 10;
   }
+
+  // ── Approval signatories ──────────────────────────────────────────────────
+  if (approvalSteps.length > 0) {
+    if (y > 230) { doc.addPage(); y = 36; }
+    y = sectionHeader(doc, 'Approval Signatories', y);
+    autoTable(doc, {
+      startY: y,
+      head: [['Step', 'Role', 'Signatory', 'Decision', 'Date']],
+      body: approvalSteps.filter(s => s.status === 'approved').map(s => [
+        String(s.step_no),
+        s.label,
+        s.assigned_name,
+        'Approved',
+        s.decided_at ? format(parseISO(s.decided_at), 'MMM d, yyyy') : '—',
+      ]),
+      styles: { fontSize: 9, cellPadding: 2.5 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GREY_BG },
+      columnStyles: { 3: { textColor: [5, 150, 105] as [number,number,number] } },
+    });
+    y = (doc as any).lastAutoTable.finalY + 14;
+
+    // Signature blocks for approved steps
+    if (y > 240) { doc.addPage(); y = 36; }
+    y = sectionHeader(doc, 'Signatures', y);
+    y += 4;
+    const sigCols = Math.min(3, approvalSteps.filter(s => s.status === 'approved').length);
+    const approved = approvalSteps.filter(s => s.status === 'approved');
+    const colW = 58;
+    approved.forEach((s, i) => {
+      const x = 15 + (i % sigCols) * (colW + 5);
+      if (i > 0 && i % sigCols === 0) y += 28;
+      doc.setDrawColor(180, 180, 180);
+      doc.line(x, y + 14, x + colW, y + 14);
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.text(s.assigned_name, x, y + 18);
+      doc.setFont('helvetica', 'normal');
+      doc.text(s.label, x, y + 22);
+      doc.text(s.decided_at ? format(parseISO(s.decided_at), 'MMM d, yyyy') : '—', x, y + 26);
+    });
+    y += 34;
+  }
+
+  addPdfFooter(doc, (doc as any).internal.getNumberOfPages());
+
   const filename = `Donor-Statement-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
-  const blob = doc.output('blob');
-  return { blob, filename };
+  return { blob: doc.output('blob'), filename };
 }
 
 async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string): Promise<string | null> {
@@ -547,25 +733,78 @@ export default function PreFundingReconciliation() {
     }
   };
 
+  // ── Fetch approval steps with resolved user names ─────────────────────────
+  const fetchApprovalSteps = async (fundId: string): Promise<ApprovalStepRow[]> => {
+    const { data: steps } = await supabase
+      .from('pre_fund_approval_steps' as any)
+      .select('step_no,label,assigned_to,status,decided_at')
+      .eq('pre_fund_request_id', fundId)
+      .order('step_no');
+    if (!steps || !(steps as any[]).length) return [];
+    const userIds = [...new Set((steps as any[]).map((s: any) => s.assigned_to).filter(Boolean))];
+    const { data: profiles } = userIds.length
+      ? await supabase.from('user_profiles').select('id,full_name,email').in('id', userIds)
+      : { data: [] };
+    const nameMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name || p.email || 'Unknown']));
+    return (steps as any[]).map((s: any) => ({
+      step_no: s.step_no,
+      label: s.label ?? `Step ${s.step_no}`,
+      assigned_name: nameMap.get(s.assigned_to) ?? '—',
+      status: s.status,
+      decided_at: s.decided_at,
+    }));
+  };
+
+  // ── Fetch GL journal entries for this fund ────────────────────────────────
+  const fetchGlEntries = async (fundId: string): Promise<GlEntryRow[]> => {
+    const { data: logs } = await supabase
+      .from('acct_gl_bridge_log' as any)
+      .select('event_type,journal_entry_id,created_at')
+      .eq('source_table', 'pre_fund_requests')
+      .eq('source_id', fundId)
+      .eq('status', 'success')
+      .order('created_at');
+    if (!logs || !(logs as any[]).length) return [];
+    const jeIds = (logs as any[]).map((l: any) => l.journal_entry_id).filter(Boolean);
+    const { data: entries } = jeIds.length
+      ? await supabase.from('acct_journal_entries').select('id,description_en,posting_date,entry_no,status').in('id', jeIds)
+      : { data: [] };
+    const jeMap = new Map((entries ?? []).map((e: any) => [e.id, e]));
+    return (logs as any[]).map((l: any) => {
+      const je = jeMap.get(l.journal_entry_id);
+      return {
+        event_type: l.event_type,
+        posting_date: je?.posting_date ?? l.created_at?.split('T')[0] ?? '—',
+        description_en: je?.description_en ?? '—',
+        entry_no: je?.entry_no ?? null,
+        status: je?.status ?? '—',
+      };
+    });
+  };
+
   const handleExportPDF = async () => {
     if (!selectedFund) return;
     setGeneratingPdf(true);
     try {
-      const { blob, filename } = await generateReconciliationPDF(selectedFund, transactions, reconciliations[0] ?? {});
-      // Download locally
+      const [approvalSteps, glEntries] = await Promise.all([
+        fetchApprovalSteps(selectedFund.id),
+        fetchGlEntries(selectedFund.id),
+      ]);
+      const { blob, filename } = await generateReconciliationPDF(
+        selectedFund, transactions, reconciliations[0] ?? {}, approvalSteps, glEntries,
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-      // Upload to Supabase Storage and persist pdf_url on reconciliation record
       const reconId = reconciliations[0]?.id;
       try {
         const publicUrl = await uploadPdfToStorage(blob, filename, selectedFund.id);
         if (publicUrl && reconId) {
           await supabase.from('pre_fund_reconciliations').update({ pdf_url: publicUrl }).eq('id', reconId);
-          toast({ title: 'PDF saved', description: 'Reconciliation PDF saved to document storage.' });
+          toast({ title: 'PDF saved', description: 'Reconciliation report with GL trail & approval chain saved.' });
           await Promise.all([loadFunds(), loadTxns(selectedFund.id)]);
         } else {
-          toast({ title: 'PDF downloaded', description: 'Could not persist to storage — check financial-documents bucket exists.' });
+          toast({ title: 'PDF downloaded', description: 'Could not persist to storage — check financial-documents bucket.' });
         }
       } catch (storageErr: any) {
         toast({ title: 'PDF downloaded', description: `Storage upload failed: ${storageErr.message}` });
@@ -578,18 +817,16 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setGeneratingPdf(true);
     try {
-      const { blob, filename } = await generateDonorStatementPDF(selectedFund, transactions);
-      // Download locally
+      const approvalSteps = await fetchApprovalSteps(selectedFund.id);
+      const { blob, filename } = await generateDonorStatementPDF(selectedFund, transactions, approvalSteps);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-      // Upload to Supabase Storage (donor statement shares the same storage path)
       try {
         const publicUrl = await uploadPdfToStorage(blob, filename, selectedFund.id);
-        if (publicUrl) toast({ title: 'Donor statement saved', description: 'Donor PDF saved to document storage.' });
-      } catch { /* storage error — still a successful download */ }
-    }
-    catch (e: any) { toast({ title: 'PDF failed', description: e.message, variant: 'destructive' }); }
+        if (publicUrl) toast({ title: 'Donor statement saved', description: 'Donor PDF with signatories saved to storage.' });
+      } catch { /* storage error — download still succeeded */ }
+    } catch (e: any) { toast({ title: 'PDF failed', description: e.message, variant: 'destructive' }); }
     finally { setGeneratingPdf(false); }
   };
 
