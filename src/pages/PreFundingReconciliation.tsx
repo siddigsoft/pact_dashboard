@@ -553,7 +553,7 @@ export default function PreFundingReconciliation() {
       //           Dr {gl_liability_account} → Cr {gl_expense_account} (variance/expense portion)
       try {
         const { data: fundDetail } = await supabase.from('pre_fund_requests')
-          .select('gl_receipt_account,gl_liability_account,gl_expense_account,currency')
+          .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account,currency')
           .eq('id', selectedFund.id).maybeSingle();
         const currency = selectedFund.currency;
 
@@ -623,10 +623,14 @@ export default function PreFundingReconciliation() {
 
             if (cfJe) {
               const cfLines: any[] = [];
-              // Dr bank/cash account (fund balance moves forward)
-              if (bankId) cfLines.push({ entry_id: (cfJe as any).id, line_no: 1, account_id: bankId, debit_credit: 'DR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Carry-forward opening — next period`, function: 'program' });
-              // Cr liability (defers revenue recognition to next period)
-              if (liabId) cfLines.push({ entry_id: (cfJe as any).id, line_no: 2, account_id: liabId, debit_credit: 'CR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Pre-fund carry-forward liability deferred`, function: 'program' });
+              const cfCode = (fundDetail as any)?.gl_cf_account ?? '2401';
+              const { data: cfAcct } = await supabase.from('acct_accounts' as any)
+                .select('id').eq('code', cfCode).maybeSingle();
+              const cfId = (cfAcct as any)?.id;
+              // Dr old-period pre-fund liability (reduce closing period balance)
+              if (liabId) cfLines.push({ entry_id: (cfJe as any).id, line_no: 1, account_id: liabId, debit_credit: 'DR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Carry-forward — close old-period pre-fund liability`, function: 'program' });
+              // Cr new-period pre-fund liability (open balance in next period)
+              if (cfId)   cfLines.push({ entry_id: (cfJe as any).id, line_no: 2, account_id: cfId,   debit_credit: 'CR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Carry-forward — open next-period pre-fund liability`, function: 'program' });
               if (cfLines.length > 0) await supabase.from('acct_journal_lines').insert(cfLines);
 
               await supabase.from('acct_gl_bridge_log' as any).insert({
@@ -737,21 +741,21 @@ export default function PreFundingReconciliation() {
   const fetchApprovalSteps = async (fundId: string): Promise<ApprovalStepRow[]> => {
     const { data: steps } = await supabase
       .from('pre_fund_approval_steps' as any)
-      .select('step_no,label,assigned_to,status,decided_at')
+      .select('step_order,step_label,assigned_user_id,status,approved_at')
       .eq('pre_fund_request_id', fundId)
-      .order('step_no');
+      .order('step_order');
     if (!steps || !(steps as any[]).length) return [];
-    const userIds = [...new Set((steps as any[]).map((s: any) => s.assigned_to).filter(Boolean))];
-    const { data: profiles } = userIds.length
-      ? await supabase.from('user_profiles').select('id,full_name,email').in('id', userIds)
+    const userIds = [...new Set((steps as any[]).map((s: any) => s.assigned_user_id).filter(Boolean))];
+    const { data: profileRows } = userIds.length
+      ? await supabase.from('profiles').select('id,full_name,email').in('id', userIds)
       : { data: [] };
-    const nameMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name || p.email || 'Unknown']));
+    const nameMap = new Map((profileRows ?? []).map((p: any) => [p.id, p.full_name || p.email || 'Unknown']));
     return (steps as any[]).map((s: any) => ({
-      step_no: s.step_no,
-      label: s.label ?? `Step ${s.step_no}`,
-      assigned_name: nameMap.get(s.assigned_to) ?? '—',
+      step_no: s.step_order,
+      label: s.step_label ?? `Step ${s.step_order}`,
+      assigned_name: nameMap.get(s.assigned_user_id) ?? '—',
       status: s.status,
-      decided_at: s.decided_at,
+      decided_at: s.approved_at,
     }));
   };
 

@@ -1913,7 +1913,13 @@ const CostSubmission = () => {
             createdBy: currentUser.id,
           }).then(result => {
             if (result.linked) {
-              toast({ title: `Linked to Pre-Fund`, description: result.message });
+              toast({ title: 'Linked to Pre-Fund', description: result.message });
+            } else if (result.needsManualSelection) {
+              toast({
+                title: 'Manual Fund Link Required',
+                description: `${result.message} Candidates: ${(result.candidates ?? []).map(c => c.name).join(', ')}.`,
+                variant: 'destructive',
+              });
             }
           }).catch(() => { /* linkage is best-effort */ });
         });

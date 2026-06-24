@@ -5,6 +5,9 @@ export interface FundLinkResult {
   fundId?: string;
   fundName?: string;
   transactionId?: string;
+  /** True when 2+ funds tied for top score — Finance must link manually */
+  needsManualSelection?: boolean;
+  candidates?: Array<{ id: string; name: string }>;
   message: string;
 }
 
@@ -74,7 +77,19 @@ export async function linkPaymentToPreFund(params: {
   }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
-    return { linked: false, message: 'No matching pre-fund for this payment scope.' };
+    return { linked: false, message: 'No active pre-fund matches this payment. Finance must link manually in the Pre-Funding Registry.' };
+  }
+
+  // Multiple funds tied at the same top score → Finance must choose
+  const topScore = scored[0].score;
+  const topCandidates = scored.filter(x => x.score === topScore);
+  if (topCandidates.length > 1) {
+    return {
+      linked: false,
+      needsManualSelection: true,
+      candidates: topCandidates.map(x => ({ id: x.fund.id, name: x.fund.name })),
+      message: `${topCandidates.length} pre-funds match equally — please link manually in the Pre-Funding Registry.`,
+    };
   }
 
   const bestFund = scored[0].fund;
