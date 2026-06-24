@@ -64,8 +64,15 @@ ORDER  BY tablename;
 -- ============================================================================
 
 -- Step 1: Add unique constraint so it can never happen again
-ALTER TABLE pre_fund_period_types
-  ADD CONSTRAINT IF NOT EXISTS pf_period_types_name_unique UNIQUE (name);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'pf_period_types_name_unique'
+      AND conrelid = 'pre_fund_period_types'::regclass
+  ) THEN
+    ALTER TABLE pre_fund_period_types ADD CONSTRAINT pf_period_types_name_unique UNIQUE (name);
+  END IF;
+END $$;
 
 -- Step 2: Delete duplicates — keeps the row with the lowest display_order per name
 DELETE FROM pre_fund_period_types

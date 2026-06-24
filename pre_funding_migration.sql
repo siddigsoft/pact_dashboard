@@ -19,8 +19,15 @@ CREATE TABLE IF NOT EXISTS pre_fund_period_types (
 );
 
 -- Unique constraint on name — prevents duplicate period types on re-run
-ALTER TABLE pre_fund_period_types
-  ADD CONSTRAINT IF NOT EXISTS pf_period_types_name_unique UNIQUE (name);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'pf_period_types_name_unique'
+      AND conrelid = 'pre_fund_period_types'::regclass
+  ) THEN
+    ALTER TABLE pre_fund_period_types ADD CONSTRAINT pf_period_types_name_unique UNIQUE (name);
+  END IF;
+END $$;
 
 -- Remove any duplicate rows from previous runs (keep lowest display_order per name)
 DELETE FROM pre_fund_period_types
