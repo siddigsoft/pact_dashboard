@@ -53,7 +53,14 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
       supabase.from('acct_bank_accounts' as any).select('id').eq('currency', currency).limit(1).maybeSingle(),
     ]);
 
-  // ── 2. Create journal entry (fail-closed — must succeed before fund mutates) ──
+  // ── 2. Validate GL accounts BEFORE writing anything to the DB ──────────────
+  // If either code is missing the fund stays in its current state — no partial artifacts.
+  if (!(receiptAcct as any)?.id)
+    throw new Error(`GL account not found for code "${glReceiptCode}" — configure accounts before activating this fund.`);
+  if (!(liabAcct as any)?.id)
+    throw new Error(`GL account not found for code "${glLiabilityCode}" — configure accounts before activating this fund.`);
+
+  // ── 3. Create journal entry (only reached after both accounts resolved) ──────
   const idempotencyKey = `pf-received-${fundId}${idempotencyKeySuffix ? '-' + idempotencyKeySuffix : ''}`;
   const { data: je, error: jeErr } = await supabase.from('acct_journal_entries').insert({
     description_en: `Pre-Fund Received — ${fundName} activated`,
@@ -66,12 +73,6 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
     created_by: createdBy,
   }).select('id').maybeSingle();
   if (jeErr) throw new Error(`GL Bridge failed — cannot activate fund: ${jeErr.message}`);
-
-  // Fail explicitly if either GL account code cannot be resolved — no silent skip
-  if (!(receiptAcct as any)?.id)
-    throw new Error(`GL account not found for code "${glReceiptCode}" — configure accounts before activating this fund.`);
-  if (!(liabAcct as any)?.id)
-    throw new Error(`GL account not found for code "${glLiabilityCode}" — configure accounts before activating this fund.`);
 
   const lines = [
     { entry_id: (je as any).id, line_no: 1, account_id: (receiptAcct as any).id, debit_credit: 'DR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `Pre-fund receipt — ${fundName}`, function: 'program' },

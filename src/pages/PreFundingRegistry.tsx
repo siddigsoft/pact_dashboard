@@ -212,7 +212,7 @@ export default function PreFundingRegistry() {
         toast({ title: 'Fund updated' });
       } else {
         payload.status = 'draft';
-        payload.available_balance = payload.amount;
+        payload.available_balance = 0;   // stays 0 until receipt/activation — fund is not spendable in draft
         payload.committed_amount = 0;
         payload.paid_amount = 0;
         payload.created_by = currentUser?.id ?? null;

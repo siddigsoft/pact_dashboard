@@ -95,7 +95,7 @@ function kpiCard(title: string, value: string, sub: string, icon: React.ElementT
 
 export default function PreFundingReport() {
   const { hasAnyRole } = useAuthorization();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'employee', 'fom', 'datateam', 'countrydirector']);
+  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [funds, setFunds]         = useState<FundRow[]>([]);
   const [txns, setTxns]           = useState<TxnRow[]>([]);

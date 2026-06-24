@@ -356,46 +356,121 @@ ALTER TABLE pre_fund_reconciliations   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_bank_unmatched    ENABLE ROW LEVEL SECURITY;
 
 -- ── DROP before CREATE so the migration is safely re-runnable ──────────────
-DROP POLICY IF EXISTS "pf_period_types_finance"   ON pre_fund_period_types;
-DROP POLICY IF EXISTS "pf_settings_finance"        ON pre_fund_settings;
-DROP POLICY IF EXISTS "pf_requests_finance"        ON pre_fund_requests;
-DROP POLICY IF EXISTS "pf_steps_finance"           ON pre_fund_approval_steps;
-DROP POLICY IF EXISTS "pf_transactions_finance"    ON pre_fund_transactions;
-DROP POLICY IF EXISTS "pf_recons_finance"          ON pre_fund_reconciliations;
-DROP POLICY IF EXISTS "pf_bank_unmatched_access"   ON pre_fund_bank_unmatched;
--- Also drop the old step-assignee policies that were removed in the last revision
-DROP POLICY IF EXISTS "pf_requests_step_assignee"  ON pre_fund_requests;
-DROP POLICY IF EXISTS "pf_steps_assignee_select"   ON pre_fund_approval_steps;
-DROP POLICY IF EXISTS "pf_steps_assignee_update"   ON pre_fund_approval_steps;
+DROP POLICY IF EXISTS "pf_period_types_finance"      ON pre_fund_period_types;
+DROP POLICY IF EXISTS "pf_settings_finance"           ON pre_fund_settings;
+DROP POLICY IF EXISTS "pf_requests_finance"           ON pre_fund_requests;
+DROP POLICY IF EXISTS "pf_requests_step_assignee"     ON pre_fund_requests;
+DROP POLICY IF EXISTS "pf_steps_finance"              ON pre_fund_approval_steps;
+DROP POLICY IF EXISTS "pf_steps_assignee_select"      ON pre_fund_approval_steps;
+DROP POLICY IF EXISTS "pf_steps_assignee_update"      ON pre_fund_approval_steps;
+DROP POLICY IF EXISTS "pf_transactions_finance"       ON pre_fund_transactions;
+DROP POLICY IF EXISTS "pf_transactions_assignee_read" ON pre_fund_transactions;
+DROP POLICY IF EXISTS "pf_recons_finance"             ON pre_fund_reconciliations;
+DROP POLICY IF EXISTS "pf_bank_unmatched_access"      ON pre_fund_bank_unmatched;
 
--- Period types: Finance/Admin/Super Admin ONLY (no public read — non-finance has no access)
+-- ── Helper: is the current user a finance/admin role? ──────────────────────
+-- Used inline so we don't need a separate function.
+-- Roles: super_admin, superadmin, admin, financialadmin
+
+-- Period types: Finance/Admin/Super Admin ONLY
 CREATE POLICY "pf_period_types_finance" ON pre_fund_period_types FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
 
--- Settings: Finance/Admin/Super Admin only — never countryDirector
-CREATE POLICY "pf_settings_finance"   ON pre_fund_settings FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+-- Settings: Finance/Admin/Super Admin ONLY — configuration is finance-sensitive
+CREATE POLICY "pf_settings_finance" ON pre_fund_settings FOR ALL
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
 
--- Fund requests: Finance/Admin/Super Admin full access ONLY
-CREATE POLICY "pf_requests_finance"   ON pre_fund_requests FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+-- Fund requests ─────────────────────────────────────────────────────────────
+-- Finance/Admin: full CRUD
+CREATE POLICY "pf_requests_finance" ON pre_fund_requests FOR ALL
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
 
--- Approval steps: Finance/Admin/Super Admin full access ONLY
--- (No step-assignee bypass — only finance roles may read or action approval steps)
-CREATE POLICY "pf_steps_finance"      ON pre_fund_approval_steps FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+-- Step assignees: SELECT only — needed so ApprovalsHub can show fund context
+-- Matches both legacy single-user (assigned_user_id) and multi-user (assigned_user_ids[])
+CREATE POLICY "pf_requests_step_assignee" ON pre_fund_requests FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM pre_fund_approval_steps s
+      WHERE s.pre_fund_request_id = pre_fund_requests.id
+        AND (
+          s.assigned_user_id = auth.uid()
+          OR s.assigned_user_ids @> ARRAY[auth.uid()]
+        )
+    )
+  );
 
--- Transactions: Finance/Admin/Super Admin ONLY
+-- Approval steps ─────────────────────────────────────────────────────────────
+-- Finance/Admin: full CRUD (manage chains, reorder, delete)
+CREATE POLICY "pf_steps_finance" ON pre_fund_approval_steps FOR ALL
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
+
+-- Step assignees: SELECT — see their own step(s)
+CREATE POLICY "pf_steps_assignee_select" ON pre_fund_approval_steps FOR SELECT
+  USING (
+    assigned_user_id = auth.uid()
+    OR assigned_user_ids @> ARRAY[auth.uid()]
+  );
+
+-- Step assignees: UPDATE — approve / reject / add notes on their own step(s)
+CREATE POLICY "pf_steps_assignee_update" ON pre_fund_approval_steps FOR UPDATE
+  USING (
+    assigned_user_id = auth.uid()
+    OR assigned_user_ids @> ARRAY[auth.uid()]
+  );
+
+-- Transactions ────────────────────────────────────────────────────────────────
+-- Finance/Admin: full CRUD
 CREATE POLICY "pf_transactions_finance" ON pre_fund_transactions FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
+
+-- Step assignees: SELECT only (e.g. to verify deductions on their approval step)
+CREATE POLICY "pf_transactions_assignee_read" ON pre_fund_transactions FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM pre_fund_approval_steps s
+      WHERE s.pre_fund_request_id = pre_fund_transactions.pre_fund_request_id
+        AND (
+          s.assigned_user_id = auth.uid()
+          OR s.assigned_user_ids @> ARRAY[auth.uid()]
+        )
+    )
+  );
 
 -- Reconciliations: Finance/Admin/Super Admin ONLY
-CREATE POLICY "pf_recons_finance"     ON pre_fund_reconciliations FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+CREATE POLICY "pf_recons_finance" ON pre_fund_reconciliations FOR ALL
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
 
--- Bank unmatched queue: Finance/Admin only
+-- Bank unmatched queue: Finance/Admin ONLY
 CREATE POLICY "pf_bank_unmatched_access" ON pre_fund_bank_unmatched FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
+  USING ( EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ));
 
 -- ─── 10. Auto-update updated_at trigger ──────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_pre_fund_updated_at()
