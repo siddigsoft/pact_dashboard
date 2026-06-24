@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote } from 'lucide-react';
+import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 
 const OverviewPanel        = lazy(() => import('./PreFundingOverview'));
@@ -8,8 +8,9 @@ const RegistryPanel        = lazy(() => import('./PreFundingRegistry'));
 const ApprovalFlowPanel    = lazy(() => import('./PreFundingApprovalFlow'));
 const ReconciliationPanel  = lazy(() => import('./PreFundingReconciliation'));
 const SettingsPanel        = lazy(() => import('./PreFundingSettings'));
+const ReportPanel          = lazy(() => import('./PreFundingReport'));
 
-type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'settings';
+type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'settings' | 'report';
 
 type SectionDef = { id: string; label: string; icon: React.ElementType; color: string; description: string; tabs: { id: string; label: string; icon: React.ElementType; description: string }[] };
 
@@ -50,6 +51,12 @@ const SECTIONS: SectionDef[] = [
         label: 'Settings',
         icon: Settings2,
         description: 'Configure system-wide defaults, period types, GL account mappings, currency settings, auto-renewal rules, bank API feed, and integration toggles.',
+      },
+      {
+        id: 'report',
+        label: 'Report',
+        icon: FileBarChart2,
+        description: 'Comprehensive pre-funding report with KPI cards, utilization charts, fund-by-fund breakdown, transaction history, approval chain status, and PDF/Excel export.',
       },
     ],
   },
@@ -107,6 +114,7 @@ export default function PreFundingHub() {
         {tab === 'approvals'       && <Suspense fallback={<PanelLoader />}><ApprovalFlowPanel /></Suspense>}
         {tab === 'reconciliation'  && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
         {tab === 'settings'        && <Suspense fallback={<PanelLoader />}><SettingsPanel /></Suspense>}
+        {tab === 'report'          && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}
       </div>
     </HubLayout>
   );
