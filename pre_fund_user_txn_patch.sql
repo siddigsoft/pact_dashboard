@@ -53,15 +53,17 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_txn_id       UUID;
-  v_new_balance  NUMERIC;
-  v_cur_balance  NUMERIC;
-  v_gl_liab_code TEXT;
-  v_gl_exp_code  TEXT;
-  v_liab_id      UUID;
-  v_exp_id       UUID;
-  v_je_id        UUID;
-  v_ik           TEXT;
+  v_txn_id         UUID;
+  v_new_balance    NUMERIC;
+  v_cur_balance    NUMERIC;
+  v_gl_liab_code   TEXT;
+  v_gl_exp_code    TEXT;
+  v_liab_id        UUID;
+  v_exp_id         UUID;
+  v_je_id          UUID;
+  v_ik             TEXT;
+  v_alloc_rows     INT;
+  v_alloc_remaining NUMERIC;
 BEGIN
   -- Authorization: finance/admin role required (unchanged)
   PERFORM _assert_finance_role();
@@ -116,6 +118,47 @@ BEGIN
   ELSIF p_source_table = 'down_payment_requests' THEN
     UPDATE down_payment_requests
     SET pre_fund_transaction_id = v_txn_id WHERE id = p_source_id;
+  END IF;
+
+  -- ── Atomic allocation deduction ─────────────────────────────────────────
+  -- Only applies when p_user_id is supplied AND the fund has allocation rows.
+  -- Hard-fail if the user has no allocation row — prevents silent drift.
+  IF p_user_id IS NOT NULL THEN
+    -- Check whether this fund has ANY allocations at all
+    IF EXISTS (SELECT 1 FROM pre_fund_allocations WHERE pre_fund_request_id = p_fund_id LIMIT 1) THEN
+      -- Verify this specific user has sufficient remaining balance
+      SELECT allocated_amount - spent_amount
+      INTO   v_alloc_remaining
+      FROM   pre_fund_allocations
+      WHERE  pre_fund_request_id = p_fund_id AND user_id = p_user_id
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+          'success', false,
+          'error', 'User has no allocation for this fund. Please allocate budget before linking payments.'
+        );
+      END IF;
+
+      IF v_alloc_remaining < p_amount THEN
+        RETURN jsonb_build_object(
+          'success', false,
+          'error', 'Insufficient personal allocation balance (' || v_alloc_remaining::TEXT ||
+                   ' remaining; ' || p_amount::TEXT || ' requested).'
+        );
+      END IF;
+
+      -- Deduct — same transaction, cannot drift
+      UPDATE pre_fund_allocations
+      SET spent_amount = spent_amount + p_amount,
+          updated_at   = now()
+      WHERE pre_fund_request_id = p_fund_id AND user_id = p_user_id;
+
+      GET DIAGNOSTICS v_alloc_rows = ROW_COUNT;
+      IF v_alloc_rows = 0 THEN
+        RAISE EXCEPTION 'Allocation row vanished between lock and update — rolling back.';
+      END IF;
+    END IF;
   END IF;
 
   -- GL posting: pre_fund_paid event (same transaction — atomic)

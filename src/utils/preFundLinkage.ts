@@ -166,19 +166,8 @@ export async function linkPaymentToPreFund(params: {
   if (rpcResult && rpcResult.success === false) {
     return { linked: false, message: rpcResult.error ?? 'Linkage failed.' };
   }
-
-  // ── Deduct from submitter's personal allocation balance (best-effort) ────
-  if (best.userAllocation && submitterId) {
-    const deductErr = await (supabase as any).rpc('deduct_pf_allocation', {
-      p_fund_id:  bestFund.id,
-      p_user_id:  submitterId,   // always the submitter, not the finance admin
-      p_amount:   amount,
-    }).then((r: any) => r.error);
-    if (deductErr) {
-      // Non-blocking but logged — allocation balance may drift until next reconciliation
-      console.warn('[preFundLinkage] deduct_pf_allocation failed:', deductErr.message);
-    }
-  }
+  // Allocation deduction is now inside link_payment_atomically_rpc — same DB transaction.
+  // No separate deduct_pf_allocation call needed.
 
   return {
     linked: true,
