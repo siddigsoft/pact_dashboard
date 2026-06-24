@@ -2,10 +2,10 @@
 -- PRE-FUNDING ATOMIC RPCs
 --
 -- Design principles:
---   1. SECURITY DEFINER — the calling user's RLS applies on every table touched,
---      so no privilege-escalation is possible: if a user cannot update
---      pre_fund_requests directly they cannot do it through these functions either.
---   2. Explicit caller-role guard inside every function — returns/raises if the
+--   1. SECURITY DEFINER — these functions run as the DB owner, bypassing the
+--      caller's RLS.  Authorization is enforced EXPLICITLY via _assert_finance_role()
+--      inside each function; do NOT rely on RLS policies for access control here.
+--   2. Explicit caller-role guard inside every function — raises if the
 --      authenticated user is not finance/admin/super-admin.
 --   3. SET search_path = public — prevents search-path injection.
 --   4. All writes run in a single PL/pgSQL block so Postgres rolls back
@@ -33,10 +33,13 @@ BEGIN
   WHERE id = auth.uid()
   LIMIT 1;
 
+  -- Accept all known role spellings used across RLS policies and UI
   IF v_role IS NULL OR v_role NOT IN (
-    'super_admin', 'superadmin', 'admin', 'financialadmin'
+    'super_admin', 'superadmin', 'admin',
+    'financialadmin', 'financial_admin', 'financialadmin',
+    'financialAdmin'
   ) THEN
-    RAISE EXCEPTION 'Access denied: finance or admin role required.';
+    RAISE EXCEPTION 'Access denied: finance or admin role required (role="%").', v_role;
   END IF;
 END;
 $$;
