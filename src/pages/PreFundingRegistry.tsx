@@ -26,6 +26,16 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface PeriodType { id: string; name: string; day_count: number | null; is_builtin: boolean }
+
+const BUILTIN_PERIOD_TYPES: PeriodType[] = [
+  { id: 'builtin-weekly',    name: 'Weekly',           day_count: 7,    is_builtin: true },
+  { id: 'builtin-biweekly',  name: 'Bi-weekly',        day_count: 14,   is_builtin: true },
+  { id: 'builtin-monthly',   name: 'Monthly',          day_count: 30,   is_builtin: true },
+  { id: 'builtin-quarterly', name: 'Quarterly',        day_count: 90,   is_builtin: true },
+  { id: 'builtin-annual',    name: 'Annual',           day_count: 365,  is_builtin: true },
+  { id: 'builtin-project',   name: 'Project Duration', day_count: null, is_builtin: true },
+  { id: 'builtin-custom',    name: 'Custom',           day_count: null, is_builtin: true },
+];
 interface PreFundRequest {
   id: string;
   name: string;
@@ -114,7 +124,9 @@ export default function PreFundingRegistry() {
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);
-      setPeriodTypes((ptRes.data as any) ?? []);
+      // Use DB rows if available; fall back to built-ins if table is empty or not yet seeded
+      const dbTypes = (ptRes.data as any[]) ?? [];
+      setPeriodTypes(dbTypes.length > 0 ? dbTypes : BUILTIN_PERIOD_TYPES);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -151,7 +163,7 @@ export default function PreFundingRegistry() {
         source: form.source || null,
         amount: parseFloat(form.amount),
         currency: form.currency,
-        period_type_id: form.period_type_id || null,
+        period_type_id: (form.period_type_id && !form.period_type_id.startsWith('builtin-')) ? form.period_type_id : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         country_id: form.country_id || null,
