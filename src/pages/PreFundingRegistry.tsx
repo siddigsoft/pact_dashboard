@@ -90,6 +90,7 @@ const EMPTY_FORM = {
   start_date: '', end_date: '', country_id: '', project_id: '', grant_id: '',
   matching_scope: 'country_project', threshold_pct: '', threshold_amount: '',
   warning_days: '14', auto_renewal_mode: 'off', auto_renewal_days_before: '7',
+  auto_renewal_bypass_approvals: false,
   notes: '',
 };
 
@@ -146,6 +147,7 @@ export default function PreFundingRegistry() {
       matching_scope: f.matching_scope, threshold_pct: '', threshold_amount: '',
       warning_days: String(f.warning_days ?? 14),
       auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: String(f.auto_renewal_days_before ?? 7),
+      auto_renewal_bypass_approvals: (f as any).auto_renewal_bypass_approvals ?? false,
       notes: f.notes ?? '',
     });
     setShowForm(true);
@@ -188,6 +190,7 @@ export default function PreFundingRegistry() {
         warning_days: form.warning_days ? parseInt(form.warning_days) : 14,
         auto_renewal_mode: form.auto_renewal_mode,
         auto_renewal_days_before: form.auto_renewal_days_before ? parseInt(form.auto_renewal_days_before) : null,
+        auto_renewal_bypass_approvals: form.auto_renewal_bypass_approvals ?? false,
         notes: form.notes || null,
       };
       if (editing) {
@@ -342,10 +345,16 @@ export default function PreFundingRegistry() {
   const handleDonorPDF = async (f: PreFundRequest) => {
     setGeneratingDonorPdf(f.id);
     try {
-      // Load transactions for this fund
-      const { data: txnData } = await supabase.from('pre_fund_transactions')
-        .select('*').eq('pre_fund_request_id', f.id).order('transaction_date', { ascending: false });
+      // Load transactions + approval steps in parallel
+      const [{ data: txnData }, { data: stepsData }] = await Promise.all([
+        supabase.from('pre_fund_transactions')
+          .select('*').eq('pre_fund_request_id', f.id).order('transaction_date', { ascending: false }),
+        supabase.from('pre_fund_approval_steps')
+          .select('step_order,step_label,assigned_user_id,status,approved_at,notes')
+          .eq('pre_fund_request_id', f.id).order('step_order'),
+      ]);
       const transactions: any[] = (txnData as any) ?? [];
+      const approvalSteps: any[] = (stepsData as any) ?? [];
 
       const doc = new jsPDF({ unit: 'mm', format: 'a4' });
       doc.setFontSize(18); doc.setFont('helvetica', 'bold');
@@ -392,6 +401,33 @@ export default function PreFundingRegistry() {
           styles: { fontSize: 9 }, headStyles: { fillColor: [3, 105, 161] },
         });
       }
+
+      // ── Approval Chain ────────────────────────────────────────────────────
+      if (approvalSteps.length > 0) {
+        y += 4;
+        doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+        doc.text('Approval Chain', 15, y); y += 8;
+        autoTable(doc, {
+          startY: y,
+          head: [['#', 'Step', 'Status', 'Date Actioned', 'Notes']],
+          body: approvalSteps.map((s: any) => [
+            String(s.step_order),
+            s.step_label,
+            (s.status ?? '—').toUpperCase(),
+            s.approved_at ? format(parseISO(s.approved_at), 'dd MMM yyyy') : '—',
+            s.notes ?? '—',
+          ]),
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [15, 32, 65] as [number, number, number] },
+          alternateRowStyles: { fillColor: [245, 247, 250] as [number, number, number] },
+        });
+        y = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // ── Certification line ────────────────────────────────────────────────
+      if (y > 260) { doc.addPage(); y = 20; }
+      doc.setFontSize(9); doc.setFont('helvetica', 'italic');
+      doc.text('This statement is generated from PACT Command Center financial records and is accurate as of the date shown above.', 15, y);
 
       const filename = `Donor-Statement-${f.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
       const blob = doc.output('blob');
@@ -724,6 +760,25 @@ export default function PreFundingRegistry() {
               <div>
                 <Label>Renew N days before end</Label>
                 <Input type="number" value={form.auto_renewal_days_before} onChange={e => setForm(p => ({ ...p, auto_renewal_days_before: e.target.value }))} placeholder="7" data-testid="input-renewal-days" />
+              </div>
+            )}
+            {form.auto_renewal_mode === 'auto_activate' && (
+              <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
+                <Switch
+                  id="switch-bypass-approvals"
+                  checked={form.auto_renewal_bypass_approvals}
+                  onCheckedChange={v => setForm(p => ({ ...p, auto_renewal_bypass_approvals: v }))}
+                  data-testid="switch-bypass-approvals"
+                />
+                <div>
+                  <Label htmlFor="switch-bypass-approvals" className="text-amber-800 dark:text-amber-300 font-medium cursor-pointer">
+                    Bypass approval chain on auto-renewal
+                  </Label>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                    When on, the renewed fund goes directly to <em>Active</em> without re-running the approval flow.
+                    Leave off to require approvers to re-approve each renewal cycle.
+                  </p>
+                </div>
               </div>
             )}
             <div className="sm:col-span-2">

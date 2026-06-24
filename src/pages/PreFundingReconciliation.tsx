@@ -777,12 +777,23 @@ export default function PreFundingReconciliation() {
   };
 
   // ── Fetch GL journal entries for this fund ────────────────────────────────
+  // Covers all three source tables: pre_fund_requests (receipt/activation),
+  // pre_fund_transactions (payments/commitments), pre_fund_reconciliations (period close)
   const fetchGlEntries = async (fundId: string): Promise<GlEntryRow[]> => {
+    // Step 1: collect all child IDs that GL logs might reference
+    const [txnRes, reconRes] = await Promise.all([
+      supabase.from('pre_fund_transactions').select('id').eq('pre_fund_request_id', fundId),
+      supabase.from('pre_fund_reconciliations').select('id').eq('pre_fund_request_id', fundId),
+    ]);
+    const txnIds  = ((txnRes.data  as any) ?? []).map((r: any) => r.id as string);
+    const reconIds = ((reconRes.data as any) ?? []).map((r: any) => r.id as string);
+    const allSourceIds = [fundId, ...txnIds, ...reconIds];
+
+    // Step 2: query bridge log for all relevant source IDs in one call
     const { data: logs } = await supabase
       .from('acct_gl_bridge_log' as any)
-      .select('event_type,journal_entry_id,created_at')
-      .eq('source_table', 'pre_fund_requests')
-      .eq('source_id', fundId)
+      .select('event_type,journal_entry_id,created_at,source_table')
+      .in('source_id', allSourceIds)
       .eq('status', 'success')
       .order('created_at');
     if (!logs || !(logs as any[]).length) return [];

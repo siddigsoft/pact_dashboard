@@ -19,8 +19,21 @@ import {
   Lock, Globe, Activity, RotateCcw, Zap, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { format, parseISO } from 'date-fns';
+import { formatNumber } from '@/lib/accountingFormat';
 
 interface PeriodType { id: string; name: string; day_count: number | null; is_builtin: boolean; display_order: number }
+interface UnmatchedItem {
+  id: string;
+  raw_reference: string | null;
+  amount: number;
+  currency: string;
+  transaction_date: string;
+  description: string | null;
+  matched_fund_id: string | null;
+  match_status: 'unmatched' | 'matched' | 'dismissed';
+  created_at: string;
+}
 interface Settings {
   id?: string;
   base_currency: string;
@@ -90,6 +103,11 @@ export default function PreFundingSettings() {
   const [ptSaving, setPtSaving]        = useState(false);
   const [bankApiKey, setBankApiKey]    = useState('');
   const [showApiKey, setShowApiKey]    = useState(false);
+  const [unmatchedItems, setUnmatchedItems] = useState<UnmatchedItem[]>([]);
+  const [loadingUnmatched, setLoadingUnmatched] = useState(false);
+  const [matchDialog, setMatchDialog]  = useState<{ item: UnmatchedItem; funds: { id: string; name: string; currency: string; amount: number }[] } | null>(null);
+  const [matchFundId, setMatchFundId]  = useState('');
+  const [matchingId, setMatchingId]    = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +127,67 @@ export default function PreFundingSettings() {
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadUnmatched = useCallback(async () => {
+    setLoadingUnmatched(true);
+    try {
+      const { data, error: e } = await supabase
+        .from('pre_fund_bank_unmatched' as any)
+        .select('*')
+        .eq('match_status', 'unmatched')
+        .order('created_at', { ascending: false });
+      if (e && !e.message.includes('does not exist')) throw e;
+      setUnmatchedItems((data as any) ?? []);
+    } catch (e: any) {
+      toast({ title: 'Failed to load unmatched transfers', description: e.message, variant: 'destructive' });
+    } finally { setLoadingUnmatched(false); }
+  }, [toast]);
+
+  const openMatchDialog = async (item: UnmatchedItem) => {
+    const { data } = await supabase.from('pre_fund_requests')
+      .select('id,name,currency,amount')
+      .eq('status', 'awaiting_receipt')
+      .order('created_at', { ascending: false });
+    setMatchFundId('');
+    setMatchDialog({ item, funds: (data as any) ?? [] });
+  };
+
+  const handleManualMatch = async () => {
+    if (!matchDialog || !matchFundId) return;
+    setMatchingId(matchDialog.item.id);
+    try {
+      const now = new Date().toISOString();
+      const { error: e } = await supabase
+        .from('pre_fund_bank_unmatched' as any)
+        .update({ match_status: 'matched', matched_fund_id: matchFundId, reviewed_at: now } as any)
+        .eq('id', matchDialog.item.id);
+      if (e) throw e;
+      // Auto-activate the matched fund
+      await supabase.from('pre_fund_requests').update({ status: 'active', activated_at: now }).eq('id', matchFundId);
+      toast({ title: 'Transfer matched', description: 'Fund has been marked Active.' });
+      setMatchDialog(null);
+      await loadUnmatched();
+    } catch (e: any) {
+      toast({ title: 'Match failed', description: e.message, variant: 'destructive' });
+    } finally { setMatchingId(null); }
+  };
+
+  const handleDismiss = async (itemId: string) => {
+    setMatchingId(itemId);
+    try {
+      const { error: e } = await supabase
+        .from('pre_fund_bank_unmatched' as any)
+        .update({ match_status: 'dismissed', reviewed_at: new Date().toISOString() } as any)
+        .eq('id', itemId);
+      if (e) throw e;
+      toast({ title: 'Transfer dismissed' });
+      await loadUnmatched();
+    } catch (e: any) {
+      toast({ title: 'Dismiss failed', description: e.message, variant: 'destructive' });
+    } finally { setMatchingId(null); }
+  };
+
+  useEffect(() => { if (settings.bank_api_enabled) loadUnmatched(); }, [settings.bank_api_enabled, loadUnmatched]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -357,6 +436,62 @@ export default function PreFundingSettings() {
                   <Input type="number" value={settings.bank_match_tolerance_pct} onChange={e => set('bank_match_tolerance_pct', parseFloat(e.target.value))} placeholder="2" data-testid="input-match-tolerance" />
                   <p className="text-[10px] text-muted-foreground mt-1">Incoming transfers within ±{settings.bank_match_tolerance_pct}% of the fund amount will be auto-matched</p>
                 </div>
+
+                {/* ── Unmatched Transfers Queue ─────────────────────────────── */}
+                <Separator />
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm font-semibold">Unmatched Transfers Queue</p>
+                      <p className="text-[11px] text-muted-foreground">Bank feed entries that could not be auto-matched — review and link manually or dismiss.</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={loadUnmatched} disabled={loadingUnmatched} data-testid="button-refresh-unmatched">
+                      <RefreshCw className={cn('h-3.5 w-3.5 mr-1', loadingUnmatched && 'animate-spin')} />Refresh
+                    </Button>
+                  </div>
+                  {loadingUnmatched ? (
+                    <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                  ) : unmatchedItems.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg bg-muted/20">
+                      <Activity className="h-6 w-6 mx-auto mb-1 opacity-30" />
+                      No unmatched transfers — all clear.
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/40">
+                            <TableHead className="text-[11px]">Date</TableHead>
+                            <TableHead className="text-[11px]">Reference</TableHead>
+                            <TableHead className="text-[11px]">Amount</TableHead>
+                            <TableHead className="text-[11px]">Description</TableHead>
+                            <TableHead className="text-[11px] text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {unmatchedItems.map(item => (
+                            <TableRow key={item.id} data-testid={`row-unmatched-${item.id}`}>
+                              <TableCell className="text-[11px] font-mono">{format(parseISO(item.transaction_date), 'MMM d, yyyy')}</TableCell>
+                              <TableCell className="text-[11px] max-w-[120px] truncate">{item.raw_reference ?? '—'}</TableCell>
+                              <TableCell className="text-[11px] font-mono font-semibold">{item.currency} {formatNumber(item.amount, 0)}</TableCell>
+                              <TableCell className="text-[11px] max-w-[160px] truncate text-muted-foreground">{item.description ?? '—'}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => openMatchDialog(item)} disabled={!!matchingId} data-testid={`button-match-${item.id}`}>
+                                    Link Fund
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-destructive" onClick={() => handleDismiss(item.id)} disabled={matchingId === item.id} data-testid={`button-dismiss-${item.id}`}>
+                                    Dismiss
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             )}
           </Card>
@@ -482,6 +617,57 @@ export default function PreFundingSettings() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPTDialog(false)}>Cancel</Button>
             <Button onClick={handleSavePT} disabled={ptSaving} data-testid="button-save-pt">{ptSaving ? 'Saving…' : editingPT ? 'Update' : 'Add'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Manual Match Dialog ──────────────────────────────────────────────── */}
+      <Dialog open={!!matchDialog} onOpenChange={o => !o && setMatchDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link Transfer to Fund</DialogTitle>
+          </DialogHeader>
+          {matchDialog && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border bg-muted/20 p-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground text-[11px]">Transfer</span>
+                  <span className="font-mono font-semibold">{matchDialog.item.currency} {formatNumber(matchDialog.item.amount, 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground text-[11px]">Date</span>
+                  <span className="text-[11px]">{format(parseISO(matchDialog.item.transaction_date), 'MMM d, yyyy')}</span>
+                </div>
+                {matchDialog.item.raw_reference && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-[11px]">Ref</span>
+                    <span className="text-[11px] font-mono">{matchDialog.item.raw_reference}</span>
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label>Awaiting-Receipt Fund *</Label>
+                <Select value={matchFundId} onValueChange={setMatchFundId}>
+                  <SelectTrigger data-testid="select-match-fund"><SelectValue placeholder="Select fund…" /></SelectTrigger>
+                  <SelectContent>
+                    {matchDialog.funds.length === 0 ? (
+                      <SelectItem value="__none" disabled>No funds awaiting receipt</SelectItem>
+                    ) : matchDialog.funds.map(f => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.name} — {f.currency} {formatNumber(f.amount, 0)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground mt-1">Matching will mark this transfer as linked and activate the fund.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMatchDialog(null)}>Cancel</Button>
+            <Button onClick={handleManualMatch} disabled={!matchFundId || !!matchingId} data-testid="button-confirm-match">
+              {matchingId ? 'Matching…' : 'Confirm Match'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

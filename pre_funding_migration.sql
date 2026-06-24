@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   auto_renewal_mode     TEXT NOT NULL DEFAULT 'off'
                         CHECK (auto_renewal_mode IN ('off','auto_draft','auto_activate')),
   auto_renewal_days_before INTEGER,
+  auto_renewal_bypass_approvals BOOLEAN NOT NULL DEFAULT false,
   low_balance_alert     BOOLEAN NOT NULL DEFAULT false,
   ending_soon_alert     BOOLEAN NOT NULL DEFAULT false,
   receipt_url           TEXT,
