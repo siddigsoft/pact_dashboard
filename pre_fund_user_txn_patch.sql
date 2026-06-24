@@ -171,11 +171,9 @@ $$;
 REVOKE ALL ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID,UUID,TEXT) FROM PUBLIC;
 GRANT  EXECUTE ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID,UUID,TEXT) TO authenticated;
 
--- Also revoke old 9-param signature (created by pre_funding_atomic_rpcs.sql)
--- and re-grant; PostgreSQL treats different signatures as separate overloads,
--- so the old callers still work via the original signature in pre_funding_atomic_rpcs.sql.
--- To avoid any ambiguity we DROP the old overload and let this one handle all calls.
--- Uncomment these lines ONLY if you want a single canonical overload:
--- DROP FUNCTION IF EXISTS link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID);
+-- Drop the legacy 9-arg overload to remove ambiguity in PostgREST routing.
+-- The 11-arg version handles all callers because p_user_id and p_receipt_url
+-- have DEFAULT NULL — existing callers that omit them continue to work.
+DROP FUNCTION IF EXISTS link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID);
 
 NOTIFY pgrst, 'reload schema';

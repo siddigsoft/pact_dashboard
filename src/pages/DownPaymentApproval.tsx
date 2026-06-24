@@ -498,7 +498,8 @@ export default function DownPaymentApproval() {
           paymentDate: now,
           createdBy: null,
           userId: (req as any).requestedBy ?? null,
-        }).catch(() => { /* linkage is best-effort */ });
+        }).then(r => { if (!r.linked) console.warn('[Pre-Fund] DP link skipped:', r.message); })
+          .catch((err: Error) => console.warn('[Pre-Fund] DP link error:', err?.message));
       });
       // Force a page refresh of the down payment context
       window.location.reload();

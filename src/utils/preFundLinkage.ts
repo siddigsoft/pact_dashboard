@@ -13,13 +13,14 @@ export interface FundLinkResult {
 
 /**
  * Match a payment to the best active pre-fund and atomically:
- *   - create a pre_fund_transactions record
+ *   - create a pre_fund_transactions record (user_id = submitter, created_by = finance actor)
  *   - deduct from available_balance (and increment paid_amount)
  *   - back-link the source row
- *   - deduct from the user's pre_fund_allocations.spent_amount (if allocated)
+ *   - deduct from the submitter's pre_fund_allocations.spent_amount (if allocated)
  *
- * If the fund has ANY allocations, only the submitting user's allocated funds
- * are considered — unallocated users are blocked from auto-linking.
+ * Allocation guard: if a fund has ANY allocations, the SUBMITTER (userId) must be
+ * one of them with sufficient remaining balance. Falls back to createdBy only when
+ * userId is not provided.
  *
  * Matching priority (highest score wins):
  *  3 — country + project match
@@ -37,9 +38,9 @@ export async function linkPaymentToPreFund(params: {
   reference?: string | null;
   description?: string | null;
   paymentDate: string;
-  /** Finance admin who triggered the link (for audit) */
+  /** Finance admin who approved/triggered the payment (for GL audit trail) */
   createdBy?: string | null;
-  /** The field staff member who made the payment (shown in transactions + reconciliation) */
+  /** The field staff member who submitted/made the payment — used for allocation checks */
   userId?: string | null;
   /** URL of the payment receipt / attachment to store on the transaction */
   receiptUrl?: string | null;
@@ -49,6 +50,10 @@ export async function linkPaymentToPreFund(params: {
     sourceTable, sourceId, reference, description,
     paymentDate, createdBy, userId, receiptUrl,
   } = params;
+
+  // The submitter is userId when provided; otherwise fall back to createdBy.
+  // This is the identity used for allocation eligibility + deduction.
+  const submitterId: string | null = userId ?? createdBy ?? null;
 
   const today = paymentDate.split('T')[0];
 
@@ -67,7 +72,7 @@ export async function linkPaymentToPreFund(params: {
   }
 
   // ── Check user allocations for each candidate fund ───────────────────────
-  // If a fund has allocations defined, the submitter must be one of them
+  // If a fund has allocations defined, the submitter (submitterId) must be one of them
   // AND have sufficient remaining balance.
   const fundIds = (activeFunds as any[]).map(f => f.id);
   const { data: allAllocations } = await (supabase as any)
@@ -95,19 +100,21 @@ export async function linkPaymentToPreFund(params: {
       score = 0.5;
     }
 
-    // Allocation guard: if fund has any allocations, submitter must be allocated
-    // with sufficient remaining balance
+    // Allocation guard: check submitterId against the fund's allocation list
     const fundAllocs = allocsByFund[f.id] ?? [];
     let userAllocation: any = null;
     if (fundAllocs.length > 0) {
-      const myAlloc = fundAllocs.find(a => a.user_id === createdBy);
+      // submitterId = field staff who made the payment (not the finance admin)
+      const myAlloc = submitterId
+        ? fundAllocs.find(a => a.user_id === submitterId)
+        : null;
       if (!myAlloc) {
-        // Fund has allocations but submitter is not one of them — skip this fund
+        // Fund is allocation-gated and this submitter has no allocation
         return { fund: f, score: -1, userAllocation: null };
       }
       const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
       if (remaining < amount) {
-        // Allocated but insufficient personal balance
+        // Allocated but insufficient personal balance remaining
         return { fund: f, score: -1, userAllocation: null };
       }
       userAllocation = myAlloc;
@@ -150,7 +157,7 @@ export async function linkPaymentToPreFund(params: {
       p_description:  description ?? null,
       p_payment_date: today,
       p_created_by:   createdBy ?? null,
-      p_user_id:      userId ?? createdBy ?? null,
+      p_user_id:      submitterId,        // field staff submitter for attribution
       p_receipt_url:  receiptUrl ?? null,
     }
   );
@@ -160,13 +167,17 @@ export async function linkPaymentToPreFund(params: {
     return { linked: false, message: rpcResult.error ?? 'Linkage failed.' };
   }
 
-  // ── Deduct from user's personal allocation balance (best-effort) ─────────
-  if (best.userAllocation && createdBy) {
-    await (supabase as any).rpc('deduct_pf_allocation', {
+  // ── Deduct from submitter's personal allocation balance (best-effort) ────
+  if (best.userAllocation && submitterId) {
+    const deductErr = await (supabase as any).rpc('deduct_pf_allocation', {
       p_fund_id:  bestFund.id,
-      p_user_id:  createdBy,
+      p_user_id:  submitterId,   // always the submitter, not the finance admin
       p_amount:   amount,
-    }).catch(() => { /* non-blocking */ });
+    }).then((r: any) => r.error);
+    if (deductErr) {
+      // Non-blocking but logged — allocation balance may drift until next reconciliation
+      console.warn('[preFundLinkage] deduct_pf_allocation failed:', deductErr.message);
+    }
   }
 
   return {

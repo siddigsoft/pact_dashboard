@@ -1921,8 +1921,12 @@ const CostSubmission = () => {
                 description: `${result.message} Candidates: ${(result.candidates ?? []).map(c => c.name).join(', ')}.`,
                 variant: 'destructive',
               });
+            } else {
+              console.warn('[Pre-Fund] Auto-link skipped:', result.message);
             }
-          }).catch(() => { /* linkage is best-effort */ });
+          }).catch((err: Error) => {
+            console.warn('[Pre-Fund] Auto-link error:', err?.message);
+          });
         });
         toast({
           title: "Payment Sent / تم إرسال الدفعة",
@@ -2037,7 +2041,8 @@ const CostSubmission = () => {
               paymentDate: now,
               createdBy: currentUser.id,
               userId: sub.submitted_by ?? null,
-            }).catch(() => { /* linkage is best-effort */ });
+            }).then(r => { if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message); })
+              .catch((err: Error) => console.warn('[Pre-Fund] Bulk link error:', err?.message));
           });
         }
       }
