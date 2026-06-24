@@ -114,7 +114,9 @@ export default function ApprovalsHub() {
   const isSupervisor = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
   const isFinance = isAdmin || isFinancialAdmin || isFOM;
 
-  const canAccess = isAdmin || isFinancialAdmin || isFOM || isSupervisor;
+  // Any authenticated user may access Approvals Hub; non-privileged users will only see items
+  // assigned to them (step-assignee model in useApprovalsData gates what is visible per role).
+  const canAccess = isAdmin || isFinancialAdmin || isFOM || isSupervisor || !!currentUser?.id;
 
   const { items, loading, error, refresh } = useApprovalsData({
     currentUserId: currentUser?.id,

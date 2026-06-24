@@ -416,6 +416,39 @@ export default function PreFundingReconciliation() {
             status: 'success',
             journal_entry_id: (je as any).id,
           });
+
+          // ── Carry-forward GL entry: Dr {gl_receipt_account} → Cr {gl_liability_account} ──
+          // Executed when surplus_action === 'carry_forward' and carry amount > 0.
+          // This creates an opening entry for the carried balance in the next period.
+          if (closeForm.surplus_action === 'carry_forward' && carryAmt > 0) {
+            const { data: cfJe } = await supabase.from('acct_journal_entries').insert({
+              description_en: `Pre-Fund Carry-Forward — ${selectedFund.name} (surplus carried to next period)`,
+              description_ar: `ترحيل رصيد التمويل المسبق — ${selectedFund.name}`,
+              posting_date: new Date().toISOString().split('T')[0],
+              status: 'draft',
+              source_type: 'pre_fund_reconciliations',
+              source_id: (recon as any)?.id ?? selectedFund.id,
+              idempotency_key: `pf-carry-fwd-${selectedFund.id}`,
+              created_by: currentUser?.id ?? null,
+            }).select('id').maybeSingle();
+
+            if (cfJe) {
+              const cfLines: any[] = [];
+              // Dr bank/cash account (fund balance moves forward)
+              if (bankId) cfLines.push({ entry_id: (cfJe as any).id, line_no: 1, account_id: bankId, debit_credit: 'DR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Carry-forward opening — next period`, function: 'program' });
+              // Cr liability (defers revenue recognition to next period)
+              if (liabId) cfLines.push({ entry_id: (cfJe as any).id, line_no: 2, account_id: liabId, debit_credit: 'CR', original_amount: carryAmt, original_currency: currency, functional_amount: carryAmt, functional_currency: currency, description: `Pre-fund carry-forward liability deferred`, function: 'program' });
+              if (cfLines.length > 0) await supabase.from('acct_journal_lines').insert(cfLines);
+
+              await supabase.from('acct_gl_bridge_log' as any).insert({
+                source_table: 'pre_fund_reconciliations',
+                source_id: (recon as any)?.id ?? selectedFund.id,
+                event_type: 'pre_fund_carry_forward',
+                status: 'success',
+                journal_entry_id: (cfJe as any).id,
+              });
+            }
+          }
         }
       } catch (glErr: any) {
         console.warn('[PreFund] Period-close GL bridge skipped:', glErr.message);
@@ -458,9 +491,16 @@ export default function PreFundingReconciliation() {
         .eq('transaction_type', 'payment');
       const openTxns: any[] = [...((txnRows as any) ?? [])];
 
-      // tolerance: 1-cent absolute minimum or 1% relative (whichever is larger)
+      // Fetch configurable tolerance from settings (same as Registry bank-API path)
+      const { data: bankFeedSettings } = await supabase
+        .from('pre_fund_settings' as any)
+        .select('bank_match_tolerance_pct')
+        .limit(1)
+        .maybeSingle();
+      const feedTolerancePct = ((bankFeedSettings as any)?.bank_match_tolerance_pct ?? 2) / 100;
+
       for (const row of feed) {
-        const tolerance = Math.max(0.01, row.amount * 0.01);
+        const tolerance = Math.max(0.01, row.amount * feedTolerancePct);
         const candidate = openTxns.find(
           t => Math.abs(t.amount - row.amount) <= tolerance && t.currency === row.currency
         );
