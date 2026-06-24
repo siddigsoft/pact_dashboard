@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export type ApprovalItemType = 'withdrawal' | 'cost' | 'down_payment' | 'user' | 'mmp';
+export type ApprovalItemType = 'withdrawal' | 'cost' | 'down_payment' | 'user' | 'mmp' | 'pre_fund';
 
 // ── DB row types (only the columns we select) ────────────────────────────────
 

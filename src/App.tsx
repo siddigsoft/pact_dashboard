@@ -169,6 +169,7 @@ const PositionsPage = lazy(() => import('./pages/Positions'));
 const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertifications'));
 const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
 const AccountingHub = lazy(() => import('./pages/AccountingHub'));
+const PreFundingHub = lazy(() => import('./pages/PreFundingHub'));
 const FinanceHub = lazy(() => import('./pages/FinanceHub'));
 const FieldOpsHub = lazy(() => import('./pages/FieldOpsHub'));
 const AnalyticsHub = lazy(() => import('./pages/AnalyticsHub'));
@@ -565,6 +566,12 @@ const AppRoutes = () => {
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
+        <Route path="/pre-funding" element={<PageWrapper><PreFundingHub /></PageWrapper>} />
+        <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
+        <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />
+        <Route path="/pre-funding/approvals" element={<Navigate to="/pre-funding?tab=approvals" replace />} />
+        <Route path="/pre-funding/reconciliation" element={<Navigate to="/pre-funding?tab=reconciliation" replace />} />
+        <Route path="/pre-funding/settings" element={<Navigate to="/pre-funding?tab=settings" replace />} />
         <Route path="/accounting/coa" element={<Navigate to="/accounting?tab=coa" replace />} />
         <Route path="/accounting/journals" element={<Navigate to="/accounting?tab=journals" replace />} />
         <Route path="/accounting/trial-balance" element={<Navigate to="/accounting?tab=trial-balance" replace />} />

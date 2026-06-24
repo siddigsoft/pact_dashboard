@@ -1018,6 +1018,88 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
 
 // ─── Helper utilities ────────────────────────────────────────────────────────
 
+// ─── Phase 6: Pre-Funding GL Bridge Templates ─────────────────────────────────
+
+const PRE_FUNDING_TEMPLATES: PostingTemplate[] = [
+  {
+    id: 'pf-receipt',
+    sourceTable: 'pre_fund_requests',
+    eventType: 'fund_activated',
+    triggerStatus: 'active',
+    triggerCondition: "status changes to 'active' (receipt uploaded)",
+    labelEn: 'Pre-Fund Receipt — Activate Fund',
+    labelAr: 'استلام التمويل المسبق — تفعيل الصندوق',
+    featureFlag: 'pre_funding',
+    lines: [
+      { accountCode: '1200', accountName: 'Cash at Bank', debitCredit: 'DR', amountSource: 'pre_fund_requests.amount', currency: 'fund.currency', glFunction: 'program', description: 'Dr Cash for pre-fund receipt' },
+      { accountCode: '2400', accountName: 'Pre-Fund Liability', debitCredit: 'CR', amountSource: 'pre_fund_requests.amount', currency: 'fund.currency', glFunction: 'program', description: 'Cr deferred pre-fund liability on activation' },
+    ],
+    notes: 'Fires when a pre-fund moves to active status (receipt confirmed). Defers the income until expenditure is incurred.',
+  },
+  {
+    id: 'pf-payment',
+    sourceTable: 'pre_fund_transactions',
+    eventType: 'payment',
+    triggerStatus: 'payment',
+    triggerCondition: "transaction_type = 'payment' INSERT",
+    labelEn: 'Pre-Fund Payment — Reduce Liability',
+    labelAr: 'دفعة من التمويل المسبق — تخفيض الالتزام',
+    featureFlag: 'pre_funding',
+    lines: [
+      { accountCode: '2400', accountName: 'Pre-Fund Liability', debitCredit: 'DR', amountSource: 'pre_fund_transactions.amount', currency: 'fund.currency', glFunction: 'program', description: 'Dr pre-fund liability as payment is made' },
+      { accountCode: '5000', accountName: 'Programme Expenses', debitCredit: 'CR', amountSource: 'pre_fund_transactions.amount', currency: 'fund.currency', glFunction: 'program', description: 'Cr programme expense account on payment' },
+    ],
+    notes: 'Fires on every payment transaction against an active pre-fund. Recognises the expense and reduces the deferred liability.',
+  },
+  {
+    id: 'pf-carry-forward',
+    sourceTable: 'pre_fund_reconciliations',
+    eventType: 'period_close_carry_forward',
+    triggerStatus: 'closed',
+    triggerCondition: "status = 'closed' AND surplus_action IN ('carry_forward','split')",
+    labelEn: 'Pre-Fund Period Close — Carry Forward Surplus',
+    labelAr: 'إغلاق فترة التمويل المسبق — ترحيل الفائض',
+    featureFlag: 'pre_funding',
+    lines: [
+      { accountCode: '2400', accountName: 'Pre-Fund Liability (Current)', debitCredit: 'DR', amountSource: 'pre_fund_reconciliations.carry_forward_amount', currency: 'fund.currency', glFunction: 'program', description: 'Dr current period liability to close it out' },
+      { accountCode: '2401', accountName: 'Pre-Fund Liability (Next Period)', debitCredit: 'CR', amountSource: 'pre_fund_reconciliations.carry_forward_amount', currency: 'fund.currency', glFunction: 'program', description: 'Cr next-period deferred liability for carry-forward' },
+    ],
+    notes: 'Fires at period close when surplus is carried forward. Transfers remaining liability to a next-period holding account.',
+  },
+  {
+    id: 'pf-return',
+    sourceTable: 'pre_fund_reconciliations',
+    eventType: 'period_close_return',
+    triggerStatus: 'closed',
+    triggerCondition: "status = 'closed' AND surplus_action IN ('return','split')",
+    labelEn: 'Pre-Fund Period Close — Return Surplus to Donor',
+    labelAr: 'إغلاق فترة التمويل المسبق — إعادة الفائض للمانح',
+    featureFlag: 'pre_funding',
+    lines: [
+      { accountCode: '2400', accountName: 'Pre-Fund Liability', debitCredit: 'DR', amountSource: 'pre_fund_reconciliations.return_amount', currency: 'fund.currency', glFunction: 'program', description: 'Dr deferred liability for amount being returned' },
+      { accountCode: '1200', accountName: 'Cash at Bank', debitCredit: 'CR', amountSource: 'pre_fund_reconciliations.return_amount', currency: 'fund.currency', glFunction: 'program', description: 'Cr bank for donor refund payment' },
+    ],
+    notes: 'Fires at period close when a portion of the surplus is returned to the donor/source.',
+  },
+  {
+    id: 'pf-forex-revaluation',
+    sourceTable: 'pre_fund_requests',
+    eventType: 'fx_revaluation',
+    triggerStatus: 'active',
+    triggerCondition: "manual FX revaluation run on active foreign-currency funds",
+    labelEn: 'Pre-Fund FX Revaluation',
+    labelAr: 'إعادة تقييم العملة للتمويل المسبق',
+    featureFlag: 'pre_funding',
+    lines: [
+      { accountCode: '2400', accountName: 'Pre-Fund Liability', debitCredit: 'DR', amountSource: 'FX gain amount (if rate moved favorably)', currency: 'base currency', glFunction: 'mng', description: 'Dr pre-fund liability for FX gain' },
+      { accountCode: '8200', accountName: 'FX Gain / Loss', debitCredit: 'CR', amountSource: 'Calculated FX gain/loss', currency: 'base currency', glFunction: 'mng', description: 'Cr/Dr FX gain or loss account' },
+    ],
+    notes: 'Fires during the monthly FX revaluation run for pre-funds held in non-base currencies. Adjusts the liability to current-rate equivalent.',
+  },
+];
+
+POSTING_TEMPLATES.push(...PRE_FUNDING_TEMPLATES);
+
 export function getTemplateById(id: string): PostingTemplate | undefined {
   return POSTING_TEMPLATES.find(t => t.id === id);
 }

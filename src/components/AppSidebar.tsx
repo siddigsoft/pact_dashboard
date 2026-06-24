@@ -456,6 +456,13 @@
     }
     if (finHubItems.length) groups.push({ id: 'finance-management', label: "Finance Hub", order: 5.3, items: finHubItems, parentGroup: 'finance' } as any);
 
+    // ── Pre-Funding module ────────────────────────────────────────────
+    const preFundItems: MenuGroup['items'] = [];
+    if (!isHidden('/pre-funding') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+      preFundItems.push({ id: 'pre-funding', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') });
+    }
+    if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
+
     // ── Accounting module ────────────────────────────────────────────
     const acctItems: MenuGroup['items'] = [];
     if (isSuperAdmin) {

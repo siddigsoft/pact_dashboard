@@ -12,7 +12,7 @@ import {
   CheckCircle2, XCircle, FileText, ShoppingCart, Zap, ChevronRight,
   Landmark, Wallet, Scale, CalendarDays, Layers, Settings2, ListOrdered,
   CreditCard, PiggyBank, Receipt, ArrowUpDown, ShieldAlert, Lock,
-  Award, RotateCcw, Building2, ClipboardList, ArrowLeftRight, Heart, Shield,
+  Award, RotateCcw, Building2, ClipboardList, ArrowLeftRight, Heart, Shield, Banknote,
 } from 'lucide-react';
 import {
   format, parseISO, subMonths, startOfMonth, endOfMonth,
@@ -210,6 +210,7 @@ export default function AccountingFinanceDashboard() {
   const [modules, setModules] = useState<KPIState<ModuleStatus>>(INIT());
   const [phase4, setPhase4] = useState<KPIState<Phase4KPI>>(INIT());
   const [phase5, setPhase5] = useState<KPIState<Phase5KPI>>(INIT());
+  const [preFundKPI, setPreFundKPI] = useState<KPIState<{ activeCount: number; totalAvailable: number; lowBalanceCount: number; pendingApproval: number }>>( INIT() );
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [countdown, setCountdown] = useState(60);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -498,13 +499,35 @@ export default function AccountingFinanceDashboard() {
     setModules({ data: { coa, journals, journalLines, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon }, loading: false, error: null });
   }, []);
 
+  const loadPreFundKPI = useCallback(async () => {
+    setPreFundKPI(p => ({ ...p, loading: true, error: null }));
+    try {
+      const { data, error } = await supabase.from('pre_fund_requests' as any)
+        .select('status, available_balance, currency');
+      if (error?.code === '42P01') { setPreFundKPI({ data: null, loading: false, error: 'table_missing' }); return; }
+      if (error) throw error;
+      const rows = (data ?? []) as any[];
+      const active = rows.filter((r: any) => ['active', 'low_balance'].includes(r.status));
+      setPreFundKPI({
+        data: {
+          activeCount: active.length,
+          totalAvailable: active.reduce((s: number, r: any) => s + Number(r.available_balance ?? 0), 0),
+          lowBalanceCount: rows.filter((r: any) => r.status === 'low_balance').length,
+          pendingApproval: rows.filter((r: any) => r.status === 'pending_approval').length,
+        },
+        loading: false, error: null,
+      });
+    } catch (e: any) { setPreFundKPI({ data: null, loading: false, error: e.message }); }
+  }, []);
+
   const loadAll = useCallback(() => {
     setLastRefresh(new Date());
     setCountdown(60);
     void loadBudget(); void loadAP(); void loadAssets(); void loadJournals();
     void loadMonthlyRevExp(); void loadPOs(); void loadCash(); void loadRevenue();
     void loadCOA(); void loadModules(); void loadPhase4(); void loadPhase5();
-  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules, loadPhase4, loadPhase5]);
+    void loadPreFundKPI();
+  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules, loadPhase4, loadPhase5, loadPreFundKPI]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
 
@@ -856,6 +879,62 @@ export default function AccountingFinanceDashboard() {
           error={phase5.error}
         />
       </div>
+
+      {/* ── KPI row 6: Pre-Funding ── */}
+      {preFundKPI.error !== 'table_missing' && (
+        <>
+          <SectionHeading label="Pre-Funding" labelAr="التمويل المسبق" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <KpiCard
+              title="Active Pre-Funds"
+              titleAr="الصناديق المسبقة النشطة"
+              value={preFundKPI.data ? String(preFundKPI.data.activeCount) : '—'}
+              sub={preFundKPI.data ? `${preFundKPI.data.activeCount} fund${preFundKPI.data.activeCount !== 1 ? 's' : ''} active` : undefined}
+              icon={Banknote}
+              accent="bg-sky-600"
+              href="/pre-funding?tab=overview"
+              loading={preFundKPI.loading}
+              error={preFundKPI.data === null && !preFundKPI.loading && preFundKPI.error !== null && preFundKPI.error !== 'table_missing' ? preFundKPI.error : null}
+            />
+            <KpiCard
+              title="Total Available Balance"
+              titleAr="إجمالي الرصيد المتاح"
+              value={preFundKPI.data ? formatNumber(preFundKPI.data.totalAvailable, 0) : '—'}
+              sub="Across all active pre-funds"
+              icon={DollarSign}
+              accent={preFundKPI.data && preFundKPI.data.lowBalanceCount > 0 ? 'bg-orange-600' : 'bg-emerald-600'}
+              href="/pre-funding?tab=overview"
+              loading={preFundKPI.loading}
+              error={preFundKPI.data === null && !preFundKPI.loading && preFundKPI.error !== null && preFundKPI.error !== 'table_missing' ? preFundKPI.error : null}
+              alert={preFundKPI.data ? preFundKPI.data.lowBalanceCount > 0 : false}
+            />
+            <KpiCard
+              title="Low Balance Alerts"
+              titleAr="تنبيهات انخفاض الرصيد"
+              value={preFundKPI.data ? String(preFundKPI.data.lowBalanceCount) : '—'}
+              sub={preFundKPI.data ? (preFundKPI.data.lowBalanceCount === 0 ? 'All funds within threshold' : `${preFundKPI.data.lowBalanceCount} fund${preFundKPI.data.lowBalanceCount !== 1 ? 's' : ''} below threshold`) : undefined}
+              icon={AlertTriangle}
+              accent={preFundKPI.data && preFundKPI.data.lowBalanceCount > 0 ? 'bg-rose-600' : 'bg-emerald-600'}
+              href="/pre-funding?tab=overview"
+              loading={preFundKPI.loading}
+              error={preFundKPI.data === null && !preFundKPI.loading && preFundKPI.error !== null && preFundKPI.error !== 'table_missing' ? preFundKPI.error : null}
+              alert={preFundKPI.data ? preFundKPI.data.lowBalanceCount > 0 : false}
+            />
+            <KpiCard
+              title="Pending Approval"
+              titleAr="في انتظار الموافقة"
+              value={preFundKPI.data ? String(preFundKPI.data.pendingApproval) : '—'}
+              sub={preFundKPI.data ? (preFundKPI.data.pendingApproval === 0 ? 'No funds awaiting approval' : `${preFundKPI.data.pendingApproval} pending approval`) : undefined}
+              icon={Clock}
+              accent={preFundKPI.data && preFundKPI.data.pendingApproval > 0 ? 'bg-amber-600' : 'bg-slate-500'}
+              href="/pre-funding?tab=approvals"
+              loading={preFundKPI.loading}
+              error={preFundKPI.data === null && !preFundKPI.loading && preFundKPI.error !== null && preFundKPI.error !== 'table_missing' ? preFundKPI.error : null}
+              alert={preFundKPI.data ? preFundKPI.data.pendingApproval > 0 : false}
+            />
+          </div>
+        </>
+      )}
 
       {/* ── charts ── */}
       <SectionHeading label="Financial Charts" labelAr="الرسوم البيانية المالية" />
