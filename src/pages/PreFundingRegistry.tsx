@@ -24,6 +24,7 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { activatePreFund } from '@/utils/preFundActivation';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -191,6 +192,18 @@ export default function PreFundingRegistry() {
         created_by: currentUser?.id ?? null,
       }, { onConflict: 'pre_fund_request_id,user_id' });
       if (error) throw error;
+      try {
+        await supabase.from('notification_events' as any).insert({
+          event_type: 'pre_fund_allocated',
+          reference_id: allocDialog.fund.id,
+          reference_type: 'pre_fund_request',
+          title: 'Pre-Fund Allocation Assigned',
+          message: `You have been allocated ${formatNumber(amt, 0)} ${allocDialog.fund.currency} from fund "${allocDialog.fund.name}".`,
+          target_user_ids: [allocForm.userId],
+          created_by: currentUser?.id ?? null,
+          metadata: { fund_id: allocDialog.fund.id, fund_name: allocDialog.fund.name, amount: amt, currency: allocDialog.fund.currency },
+        });
+      } catch { /* non-blocking */ }
       toast({ title: 'User allocated', description: `${formatNumber(amt, 0)} ${allocDialog.fund.currency} assigned.` });
       setAllocForm({ userId: '', amount: '', notes: '' });
       // Reload allocations
@@ -203,9 +216,24 @@ export default function PreFundingRegistry() {
   };
 
   const handleRemoveAllocation = async (allocId: string) => {
+    const removedAlloc = allocations.find(a => a.id === allocId);
     const { error } = await (supabase as any).from('pre_fund_allocations').delete().eq('id', allocId);
     if (error) { toast({ title: 'Remove failed', description: error.message, variant: 'destructive' }); return; }
     setAllocations(prev => prev.filter(a => a.id !== allocId));
+    if (removedAlloc && allocDialog.fund) {
+      try {
+        await supabase.from('notification_events' as any).insert({
+          event_type: 'pre_fund_allocation_removed',
+          reference_id: allocDialog.fund.id,
+          reference_type: 'pre_fund_request',
+          title: 'Pre-Fund Allocation Removed',
+          message: `Your allocation of ${formatNumber(Number(removedAlloc.allocated_amount), 0)} ${allocDialog.fund.currency} from fund "${allocDialog.fund.name}" has been removed.`,
+          target_user_ids: [removedAlloc.user_id],
+          created_by: currentUser?.id ?? null,
+          metadata: { fund_id: allocDialog.fund.id, fund_name: allocDialog.fund.name, amount: removedAlloc.allocated_amount, currency: allocDialog.fund.currency },
+        });
+      } catch { /* non-blocking */ }
+    }
     toast({ title: 'Allocation removed' });
   };
 
@@ -281,8 +309,21 @@ export default function PreFundingRegistry() {
         payload.committed_amount = 0;
         payload.paid_amount = 0;
         payload.created_by = currentUser?.id ?? null;
-        const { error: e } = await supabase.from('pre_fund_requests').insert(payload);
+        const { data: newFund, error: e } = await supabase
+          .from('pre_fund_requests').insert(payload).select('id').single();
         if (e) throw e;
+        try {
+          await supabase.from('notification_events' as any).insert({
+            event_type: 'pre_fund_created',
+            reference_id: newFund?.id ?? null,
+            reference_type: 'pre_fund_request',
+            title: 'New Pre-Fund Created',
+            message: `Fund "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}) has been created as a draft and is ready for approval submission.`,
+            target_roles: ['super_admin', 'admin', 'financialadmin', 'financial_admin'],
+            created_by: currentUser?.id ?? null,
+            metadata: { fund_name: payload.name, amount: payload.amount, currency: payload.currency },
+          });
+        } catch { /* notifications are non-blocking */ }
         toast({ title: 'Pre-fund created', description: 'Configure the approval chain in Approval Flow Manager.' });
       }
       setShowForm(false);
@@ -366,6 +407,18 @@ export default function PreFundingRegistry() {
       });
 
       const fileWord = receiptFiles.length === 1 ? 'Receipt' : `${receiptFiles.length} receipts`;
+      try {
+        await supabase.from('notification_events' as any).insert({
+          event_type: 'pre_fund_activated',
+          reference_id: receiptDialog.fundId,
+          reference_type: 'pre_fund_request',
+          title: 'Pre-Fund Activated',
+          message: `Fund "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) is now Active. GL journal entry and bank statement line have been posted.`,
+          target_roles: ['super_admin', 'admin', 'financialadmin', 'financial_admin'],
+          created_by: currentUser?.id ?? null,
+          metadata: { fund_id: receiptDialog.fundId, fund_name: fund?.name, amount: fund?.amount, currency: fund?.currency },
+        });
+      } catch { /* non-blocking */ }
       toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
       setReceiptDialog({ open: false, fundId: '', fundName: '' });
       setReceiptFiles([]);
@@ -574,6 +627,29 @@ export default function PreFundingRegistry() {
 
   return (
     <div className="space-y-5 p-4 md:p-6">
+
+      {/* ── Page info banner ─────────────────────────────────────────────────── */}
+      <PageInfoBanner
+        title="Pre-Funding Fund Registry"
+        description="This page is for managing pre-fund requests — money received from donors or headquarters BEFORE it is spent. You can create a fund, set its amount and currency, configure an approval chain, upload the receipt to activate it, and allocate portions to specific staff members. Funds must be approved and activated before they can be used to cover operational expenses. Only Finance Admins and Super Admins can create, activate, or allocate funds. Admins can view and submit for approval. Regular staff cannot access this page."
+        descriptionAr="هذه الصفحة لإدارة طلبات التمويل المسبق — الأموال الواردة من المانحين أو المقر الرئيسي قبل إنفاقها. يمكنك إنشاء صندوق، تحديد المبلغ والعملة، إعداد سلسلة الموافقات، رفع الإيصال لتفعيله، وتخصيص أجزاء منه لموظفين محددين. يجب الموافقة على الأموال وتفعيلها قبل استخدامها لتغطية النفقات التشغيلية. يختص مدير المالية والمشرف العام بإنشاء الأموال وتفعيلها وتخصيصها. يمكن للمديرين العرض والتقديم للموافقة. لا يمكن للموظفين العاديين الوصول إلى هذه الصفحة."
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Creates fund', description: 'Finance creates a new pre-fund request with name, amount, currency, dates, and links it to a project or grant.' },
+          { step: 2, role: 'Finance Admin', action: 'Submits for approval', description: 'The draft fund is submitted to the approval queue. Finance approvers are notified via the Approvals Hub.' },
+          { step: 3, role: 'Admin', action: 'Approves the fund', description: 'An admin or super admin reviews and approves the fund in the Approval Flow Manager tab.' },
+          { step: 4, role: 'Finance Admin', action: 'Uploads receipt & activates', description: 'Once approved, Finance uploads the bank receipt. The system posts a GL journal entry and creates a bank statement line, making the fund active and spendable.' },
+          { step: 5, role: 'Finance Admin', action: 'Allocates to staff', description: 'Finance assigns portions of the active fund to specific staff members so they can draw from it for expenses.' },
+          { step: 6, role: 'System', action: 'Tracks spending & alerts', description: 'The system deducts from each allocation as expenses are linked. Alerts fire when a fund nears the threshold or expiry date.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'مدير المالية', action: 'إنشاء الصندوق', description: 'ينشئ قسم المالية طلب تمويل مسبق جديد بالاسم والمبلغ والعملة والتواريخ، ويربطه بمشروع أو منحة.' },
+          { step: 2, role: 'مدير المالية', action: 'التقديم للموافقة', description: 'يُرسل الصندوق المسودة إلى قائمة الموافقات. يتلقى المعتمدون إشعارًا عبر مركز الموافقات.' },
+          { step: 3, role: 'المدير', action: 'الموافقة على الصندوق', description: 'يراجع المدير أو المشرف العام الصندوق ويوافق عليه في تبويب إدارة سلسلة الموافقات.' },
+          { step: 4, role: 'مدير المالية', action: 'رفع الإيصال والتفعيل', description: 'بعد الموافقة، يرفع قسم المالية إيصال البنك. يُسجّل النظام قيد دفتري وينشئ سطر كشف حساب بنكي، مما يُفعّل الصندوق ويجعله قابلاً للصرف.' },
+          { step: 5, role: 'مدير المالية', action: 'التخصيص للموظفين', description: 'يُخصّص قسم المالية أجزاءً من الصندوق النشط لموظفين محددين حتى يتمكنوا من السحب منه للنفقات.' },
+          { step: 6, role: 'النظام', action: 'تتبع الإنفاق والتنبيهات', description: 'يخصم النظام من كل مخصص عند ربط النفقات. تُرسل تنبيهات عندما يقترب الصندوق من حد التنبيه أو تاريخ الانتهاء.' },
+        ]}
+      />
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b">
