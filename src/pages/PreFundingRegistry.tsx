@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Plus, Pencil, Trash2, Upload, FileText, RefreshCw, Search,
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
-  FolderOpen, Download, Send,
+  FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -25,7 +25,8 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-interface PeriodType { id: string; name: string; day_count: number | null; is_builtin: boolean }
+interface PeriodType  { id: string; name: string; day_count: number | null; is_builtin: boolean }
+interface Project     { id: string; name: string; status?: string | null; description?: string | null }
 
 const BUILTIN_PERIOD_TYPES: PeriodType[] = [
   { id: 'builtin-weekly',    name: 'Weekly',           day_count: 7,    is_builtin: true },
@@ -102,11 +103,14 @@ export default function PreFundingRegistry() {
 
   const [funds, setFunds]           = useState<PreFundRequest[]>([]);
   const [periodTypes, setPeriodTypes]= useState<PeriodType[]>([]);
+  const [projects, setProjects]     = useState<Project[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatus]   = useState('all');
   const [showForm, setShowForm]     = useState(false);
+  const [dialogStep, setDialogStep] = useState<1 | 2>(1);   // 1 = pick project, 2 = fill details
+  const [projectSearch, setProjectSearch] = useState('');
   const [editing, setEditing]       = useState<PreFundRequest | null>(null);
   const [form, setForm]             = useState({ ...EMPTY_FORM });
   const [saving, setSaving]         = useState(false);
@@ -119,12 +123,14 @@ export default function PreFundingRegistry() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fundsRes, ptRes] = await Promise.all([
+      const [fundsRes, ptRes, projRes] = await Promise.all([
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
+        supabase.from('projects').select('id,name,status,description').order('name'),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);
+      setProjects((projRes.data as any) ?? []);
       // Use DB rows if available; fall back to built-ins if table is empty or not yet seeded
       const dbTypes = (ptRes.data as any[]) ?? [];
       setPeriodTypes(dbTypes.length > 0 ? dbTypes : BUILTIN_PERIOD_TYPES);
@@ -137,7 +143,13 @@ export default function PreFundingRegistry() {
 
   useEffect(() => { load(); }, [load]);
 
-  const openNew = () => { setEditing(null); setForm({ ...EMPTY_FORM }); setShowForm(true); };
+  const openNew = () => {
+    setEditing(null);
+    setForm({ ...EMPTY_FORM });
+    setDialogStep(1);
+    setProjectSearch('');
+    setShowForm(true);
+  };
   const openEdit = (f: PreFundRequest) => {
     setEditing(f);
     setForm({
@@ -759,128 +771,299 @@ export default function PreFundingRegistry() {
         </div>
       )}
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      {/* Create/Edit Dialog — two-step wizard for new funds, single step for edits */}
+      <Dialog open={showForm} onOpenChange={o => { if (!o) setShowForm(false); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Edit Pre-Fund' : 'New Pre-Fund Request'}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-            <div className="sm:col-span-2">
-              <Label>Fund Name *</Label>
-              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. WFP Q3 Field Operations" data-testid="input-fund-name" />
-            </div>
-            <div className="sm:col-span-2">
-              <Label>Source / Donor</Label>
-              <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
-            </div>
-            <div>
-              <Label>Amount *</Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                value={form.amount}
-                onChange={e => {
-                  const raw = e.target.value.replace(/[^0-9.]/g, '');
-                  setForm(p => ({ ...p, amount: raw }));
-                }}
-                onBlur={() => {
-                  const num = parseFloat(form.amount.replace(/,/g, ''));
-                  if (!isNaN(num) && num > 0) setForm(p => ({ ...p, amount: num.toLocaleString('en-US') }));
-                }}
-                onFocus={() => setForm(p => ({ ...p, amount: p.amount.replace(/,/g, '') }))}
-                placeholder="0"
-                data-testid="input-fund-amount"
-              />
-            </div>
-            <div>
-              <Label>Currency *</Label>
-              <Select value={form.currency} onValueChange={v => setForm(p => ({ ...p, currency: v }))}>
-                <SelectTrigger data-testid="select-fund-currency"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Period Type</Label>
-              <Select value={form.period_type_id} onValueChange={v => setForm(p => ({ ...p, period_type_id: v }))}>
-                <SelectTrigger data-testid="select-period-type"><SelectValue placeholder="Select period type…" /></SelectTrigger>
-                <SelectContent>
-                  {periodTypes.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Matching Scope</Label>
-              <Select value={form.matching_scope} onValueChange={v => setForm(p => ({ ...p, matching_scope: v }))}>
-                <SelectTrigger data-testid="select-matching-scope"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {MATCHING_SCOPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Start Date</Label>
-              <Input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} data-testid="input-start-date" />
-            </div>
-            <div>
-              <Label>End Date</Label>
-              <Input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} data-testid="input-end-date" />
-            </div>
-            <div>
-              <Label>Low-Balance Threshold %</Label>
-              <Input type="number" value={form.threshold_pct} onChange={e => setForm(p => ({ ...p, threshold_pct: e.target.value }))} placeholder="e.g. 20" data-testid="input-threshold-pct" />
-            </div>
-            <div>
-              <Label>Ending-Soon Warning (days)</Label>
-              <Input type="number" value={form.warning_days} onChange={e => setForm(p => ({ ...p, warning_days: e.target.value }))} placeholder="14" data-testid="input-warning-days" />
-            </div>
-            <div>
-              <Label>Auto-Renewal Mode</Label>
-              <Select value={form.auto_renewal_mode} onValueChange={v => setForm(p => ({ ...p, auto_renewal_mode: v }))}>
-                <SelectTrigger data-testid="select-renewal-mode"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {RENEWAL_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {form.auto_renewal_mode !== 'off' && (
-              <div>
-                <Label>Renew N days before end</Label>
-                <Input type="number" value={form.auto_renewal_days_before} onChange={e => setForm(p => ({ ...p, auto_renewal_days_before: e.target.value }))} placeholder="7" data-testid="input-renewal-days" />
-              </div>
-            )}
-            {form.auto_renewal_mode === 'auto_activate' && (
-              <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
-                <Switch
-                  id="switch-bypass-approvals"
-                  checked={form.auto_renewal_bypass_approvals}
-                  onCheckedChange={v => setForm(p => ({ ...p, auto_renewal_bypass_approvals: v }))}
-                  data-testid="switch-bypass-approvals"
-                />
-                <div>
-                  <Label htmlFor="switch-bypass-approvals" className="text-amber-800 dark:text-amber-300 font-medium cursor-pointer">
-                    Bypass approval chain on auto-renewal
-                  </Label>
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                    When on, the renewed fund goes directly to <em>Active</em> without re-running the approval flow.
-                    Leave off to require approvers to re-approve each renewal cycle.
+
+          {/* ── STEP 1: Project selection (new fund only) ──────────────────── */}
+          {!editing && dialogStep === 1 && (() => {
+            const filteredProjects = projects.filter(p =>
+              !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase())
+            );
+            const selectedProject = projects.find(p => p.id === form.project_id);
+            return (
+              <>
+                <DialogHeader className="pb-1">
+                  <DialogTitle className="flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-sky-600" />
+                    New Pre-Fund Request
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Step 1 of 2 — Select the project this fund belongs to, then continue to fill in the details.
                   </p>
+                </DialogHeader>
+
+                {/* Step indicator */}
+                <div className="flex items-center gap-2 py-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-6 w-6 rounded-full bg-sky-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                    <span className="text-sm font-medium text-sky-700 dark:text-sky-400">Select Project</span>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-1.5 opacity-40">
+                    <span className="h-6 w-6 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center font-bold">2</span>
+                    <span className="text-sm text-muted-foreground">Fund Details</span>
+                  </div>
+                </div>
+
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={projectSearch}
+                    onChange={e => setProjectSearch(e.target.value)}
+                    placeholder="Search projects…"
+                    className="pl-9"
+                    data-testid="input-project-search"
+                  />
+                </div>
+
+                {/* Project cards */}
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {/* No-project option */}
+                  <button
+                    onClick={() => setForm(p => ({ ...p, project_id: '' }))}
+                    className={cn(
+                      'w-full text-left px-4 py-3 rounded-lg border transition-all',
+                      form.project_id === ''
+                        ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-500'
+                        : 'border-border bg-card hover:bg-muted/40'
+                    )}
+                    data-testid="button-project-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                        <FolderOpen className="h-4 w-4 text-slate-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-sm">No Project / General Fund</div>
+                        <div className="text-[11px] text-muted-foreground">This fund is not tied to a specific project</div>
+                      </div>
+                      {form.project_id === '' && <CheckCircle2 className="h-4 w-4 text-sky-600 ml-auto shrink-0" />}
+                    </div>
+                  </button>
+
+                  {filteredProjects.length === 0 && projectSearch ? (
+                    <p className="text-center text-sm text-muted-foreground py-6">No projects match "{projectSearch}"</p>
+                  ) : filteredProjects.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setForm(prev => ({ ...prev, project_id: p.id }))}
+                      className={cn(
+                        'w-full text-left px-4 py-3 rounded-lg border transition-all',
+                        form.project_id === p.id
+                          ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-500'
+                          : 'border-border bg-card hover:bg-muted/40'
+                      )}
+                      data-testid={`button-project-${p.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-md bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
+                          <Briefcase className="h-4 w-4 text-sky-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{p.name}</div>
+                          {p.description && <div className="text-[11px] text-muted-foreground truncate">{p.description}</div>}
+                        </div>
+                        {p.status && (
+                          <span className="text-[10px] shrink-0 bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{p.status}</span>
+                        )}
+                        {form.project_id === p.id && <CheckCircle2 className="h-4 w-4 text-sky-600 shrink-0" />}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">
+                  {selectedProject ? `Selected: ${selectedProject.name}` : 'No project selected (general fund)'}
+                </p>
+
+                <DialogFooter className="mt-2">
+                  <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+                  <Button
+                    className="bg-sky-600 hover:bg-sky-700 text-white"
+                    onClick={() => { setDialogStep(2); setProjectSearch(''); }}
+                    data-testid="button-step1-continue"
+                  >
+                    Continue — Fund Details
+                    <ArrowRight className="h-4 w-4 ml-1.5" />
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+
+          {/* ── STEP 2: Fund details (new fund) OR full form (edit) ─────────── */}
+          {(editing || dialogStep === 2) && (
+            <>
+              <DialogHeader className="pb-1">
+                <DialogTitle>
+                  {editing ? 'Edit Pre-Fund' : 'New Pre-Fund Request'}
+                </DialogTitle>
+                {!editing && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Step 2 of 2 — Fill in the fund details.
+                  </p>
+                )}
+              </DialogHeader>
+
+              {/* Step indicator (new only) */}
+              {!editing && (
+                <div className="flex items-center gap-2 py-1">
+                  <div className="flex items-center gap-1.5 opacity-50">
+                    <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">✓</span>
+                    <span className="text-sm text-muted-foreground">Project Selected</span>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-6 w-6 rounded-full bg-sky-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+                    <span className="text-sm font-medium text-sky-700 dark:text-sky-400">Fund Details</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Selected project chip */}
+              {!editing && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border">
+                  <Briefcase className="h-4 w-4 text-sky-600 shrink-0" />
+                  <span className="text-sm flex-1">
+                    {form.project_id
+                      ? <><span className="font-medium">{projects.find(p => p.id === form.project_id)?.name}</span><span className="text-muted-foreground ml-1 text-xs">— project fund</span></>
+                      : <span className="text-muted-foreground italic">No Project / General Fund</span>
+                    }
+                  </span>
+                  <button
+                    className="text-xs text-sky-600 hover:underline"
+                    onClick={() => setDialogStep(1)}
+                    data-testid="button-change-project"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+                <div className="sm:col-span-2">
+                  <Label>Fund Name *</Label>
+                  <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. WFP Q3 Field Operations" data-testid="input-fund-name" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Source / Donor</Label>
+                  <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
+                </div>
+                <div>
+                  <Label>Amount *</Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.amount}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, '');
+                      setForm(p => ({ ...p, amount: raw }));
+                    }}
+                    onBlur={() => {
+                      const num = parseFloat(form.amount.replace(/,/g, ''));
+                      if (!isNaN(num) && num > 0) setForm(p => ({ ...p, amount: num.toLocaleString('en-US') }));
+                    }}
+                    onFocus={() => setForm(p => ({ ...p, amount: p.amount.replace(/,/g, '') }))}
+                    placeholder="0"
+                    data-testid="input-fund-amount"
+                  />
+                </div>
+                <div>
+                  <Label>Currency *</Label>
+                  <Select value={form.currency} onValueChange={v => setForm(p => ({ ...p, currency: v }))}>
+                    <SelectTrigger data-testid="select-fund-currency"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Period Type</Label>
+                  <Select value={form.period_type_id} onValueChange={v => setForm(p => ({ ...p, period_type_id: v }))}>
+                    <SelectTrigger data-testid="select-period-type"><SelectValue placeholder="Select period type…" /></SelectTrigger>
+                    <SelectContent>
+                      {periodTypes.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Matching Scope</Label>
+                  <Select value={form.matching_scope} onValueChange={v => setForm(p => ({ ...p, matching_scope: v }))}>
+                    <SelectTrigger data-testid="select-matching-scope"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MATCHING_SCOPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Start Date</Label>
+                  <Input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} data-testid="input-start-date" />
+                </div>
+                <div>
+                  <Label>End Date</Label>
+                  <Input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} data-testid="input-end-date" />
+                </div>
+                <div>
+                  <Label>Low-Balance Threshold %</Label>
+                  <Input type="number" value={form.threshold_pct} onChange={e => setForm(p => ({ ...p, threshold_pct: e.target.value }))} placeholder="e.g. 20" data-testid="input-threshold-pct" />
+                </div>
+                <div>
+                  <Label>Ending-Soon Warning (days)</Label>
+                  <Input type="number" value={form.warning_days} onChange={e => setForm(p => ({ ...p, warning_days: e.target.value }))} placeholder="14" data-testid="input-warning-days" />
+                </div>
+                <div>
+                  <Label>Auto-Renewal Mode</Label>
+                  <Select value={form.auto_renewal_mode} onValueChange={v => setForm(p => ({ ...p, auto_renewal_mode: v }))}>
+                    <SelectTrigger data-testid="select-renewal-mode"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {RENEWAL_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.auto_renewal_mode !== 'off' && (
+                  <div>
+                    <Label>Renew N days before end</Label>
+                    <Input type="number" value={form.auto_renewal_days_before} onChange={e => setForm(p => ({ ...p, auto_renewal_days_before: e.target.value }))} placeholder="7" data-testid="input-renewal-days" />
+                  </div>
+                )}
+                {form.auto_renewal_mode === 'auto_activate' && (
+                  <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
+                    <Switch
+                      id="switch-bypass-approvals"
+                      checked={form.auto_renewal_bypass_approvals}
+                      onCheckedChange={v => setForm(p => ({ ...p, auto_renewal_bypass_approvals: v }))}
+                      data-testid="switch-bypass-approvals"
+                    />
+                    <div>
+                      <Label htmlFor="switch-bypass-approvals" className="text-amber-800 dark:text-amber-300 font-medium cursor-pointer">
+                        Bypass approval chain on auto-renewal
+                      </Label>
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                        When on, the renewed fund goes directly to <em>Active</em> without re-running the approval flow.
+                        Leave off to require approvers to re-approve each renewal cycle.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="sm:col-span-2">
+                  <Label>Notes</Label>
+                  <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
                 </div>
               </div>
-            )}
-            <div className="sm:col-span-2">
-              <Label>Notes</Label>
-              <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving} data-testid="button-save-fund">
-              {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Fund'}
-            </Button>
-          </DialogFooter>
+
+              <DialogFooter>
+                {!editing
+                  ? <Button variant="outline" onClick={() => setDialogStep(1)}>← Back</Button>
+                  : <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+                }
+                <Button onClick={handleSave} disabled={saving} data-testid="button-save-fund">
+                  {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Fund'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
