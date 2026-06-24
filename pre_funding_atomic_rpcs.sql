@@ -69,9 +69,21 @@ DECLARE
   v_liab_acct_id     UUID;
   v_je_id            UUID;
   v_idempotency_key  TEXT;
+  v_period_id        UUID;
 BEGIN
   -- Authorization: finance/admin role required
   PERFORM _assert_finance_role();
+
+  -- Resolve current open fiscal period
+  SELECT id INTO v_period_id
+  FROM acct_fiscal_periods
+  WHERE start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE AND status = 'open'
+  ORDER BY start_date DESC LIMIT 1;
+
+  IF v_period_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error',
+      'No open fiscal period found for today — open a fiscal period before activating.');
+  END IF;
 
   -- Resolve GL account IDs before writing anything
   SELECT id INTO v_receipt_acct_id FROM acct_accounts WHERE code = p_gl_receipt_code LIMIT 1;
@@ -91,12 +103,12 @@ BEGIN
 
   -- All writes in one atomic block
   INSERT INTO acct_journal_entries (
-    description_en, description_ar, posting_date, status,
+    description_en, description_ar, posting_date, period_id, status,
     source_type, source_id, idempotency_key, created_by
   ) VALUES (
     'Pre-Fund Received — ' || p_fund_name || ' activated',
     'استلام التمويل المسبق — ' || p_fund_name,
-    CURRENT_DATE, 'draft',
+    CURRENT_DATE, v_period_id, 'draft',
     'pre_fund_requests', p_fund_id, v_idempotency_key, p_created_by
   ) RETURNING id INTO v_je_id;
 
