@@ -561,7 +561,7 @@ export default function PreFundingReconciliation() {
         const codes = [
           (fundDetail as any)?.gl_liability_account ?? '2400',
           (fundDetail as any)?.gl_receipt_account   ?? '1200',
-          (fundDetail as any)?.gl_expense_account   ?? '7000',
+          (fundDetail as any)?.gl_expense_account   ?? '5600',
         ];
         const { data: accts } = await supabase.from('acct_accounts' as any)
           .select('id,code').in('code', codes);
