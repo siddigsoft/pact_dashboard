@@ -21,6 +21,8 @@ import {
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
+import { activatePreFund } from '@/utils/preFundActivation';
+import { useAppContext } from '@/context/AppContext';
 
 interface PeriodType { id: string; name: string; day_count: number | null; is_builtin: boolean; display_order: number }
 interface UnmatchedItem {
@@ -91,6 +93,7 @@ const BUILTIN_PERIOD_TYPES = [
 export default function PreFundingSettings() {
   const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
+  const { currentUser } = useAppContext();
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [settings, setSettings]       = useState<Settings>({ ...DEFAULT_SETTINGS });
@@ -154,17 +157,33 @@ export default function PreFundingSettings() {
 
   const handleManualMatch = async () => {
     if (!matchDialog || !matchFundId) return;
+    const fund = matchDialog.funds.find(f => f.id === matchFundId);
+    if (!fund) return;
     setMatchingId(matchDialog.item.id);
     try {
-      const now = new Date().toISOString();
+      // ── Full activation: GL journal + balance + bank statement (same as receipt upload) ──
+      await activatePreFund({
+        fundId: fund.id,
+        fundName: fund.name,
+        amount: fund.amount,
+        currency: fund.currency,
+        createdBy: currentUser?.id ?? null,
+        idempotencyKeySuffix: 'manual-match',
+      });
+
+      // Mark the unmatched transfer as matched
       const { error: e } = await supabase
         .from('pre_fund_bank_unmatched' as any)
-        .update({ match_status: 'matched', matched_fund_id: matchFundId, reviewed_at: now } as any)
+        .update({
+          match_status: 'matched',
+          matched_fund_id: fund.id,
+          reviewed_by: currentUser?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+        } as any)
         .eq('id', matchDialog.item.id);
       if (e) throw e;
-      // Auto-activate the matched fund
-      await supabase.from('pre_fund_requests').update({ status: 'active', activated_at: now }).eq('id', matchFundId);
-      toast({ title: 'Transfer matched', description: 'Fund has been marked Active.' });
+
+      toast({ title: 'Transfer matched — fund is now Active', description: 'GL journal entry created (draft).' });
       setMatchDialog(null);
       await loadUnmatched();
     } catch (e: any) {
