@@ -403,7 +403,9 @@ export default function ApprovalsHub() {
         // 4. Determine new fund status — only advance when the current step is actually resolved.
         //    Re-query step states from DB so we never compute against stale in-memory data.
         let newFundStatus: string | null = null;
-        if (action === 'reject' && pendingStep?.is_required !== false) {
+        const isOptionalStep = pendingStep?.is_required === false;
+
+        if (action === 'reject' && !isOptionalStep) {
           // Required step was rejected → whole fund is rejected regardless of quorum
           newFundStatus = 'rejected';
         } else if (stepResolved) {
@@ -417,19 +419,23 @@ export default function ApprovalsHub() {
             (s: any) => s.status === 'pending' && s.is_required
           );
           if (remainingRequired.length === 0) {
-            newFundStatus = action === 'reject' ? 'awaiting_receipt' : 'awaiting_receipt';
-            // All required steps cleared; fund now awaits physical receipt
+            // All required steps cleared — advance regardless of optional-step outcomes
+            newFundStatus = 'awaiting_receipt';
           }
           // else: more required steps remain → stay pending_approval (newFundStatus stays null)
         }
         // If stepResolved = false (quorum not yet met), newFundStatus stays null →
         // fund status is not mutated; another approver must vote before the step closes.
 
-        // 4. Update fund-level columns
+        // 5. Update fund-level columns
+        // Only set rejection metadata when the fund itself is being rejected (required step).
+        // Optional-step rejections do not mark the fund as rejected.
         const fundUpdate: any = {
           approved_by: action === 'approve' ? currentUser?.id : null,
           approved_at: action === 'approve' ? now : null,
-          rejection_reason: action === 'reject' ? (actionNotes || 'Rejected via Approvals Hub') : null,
+          rejection_reason: (action === 'reject' && !isOptionalStep)
+            ? (actionNotes || 'Rejected via Approvals Hub')
+            : null,
         };
         if (newFundStatus) fundUpdate.status = newFundStatus;
 
@@ -439,13 +445,22 @@ export default function ApprovalsHub() {
           .eq('id', fundId);
         if (fundErr) throw fundErr;
 
+        // Toast messaging: distinguish optional-step rejection from whole-fund rejection
+        const isFundRejected = newFundStatus === 'rejected';
+        const isOptionalReject = action === 'reject' && isOptionalStep;
         toast({
-          title: action === 'approve' ? 'Pre-Fund Approved' : 'Pre-Fund Rejected',
+          title: action === 'approve'
+            ? 'Step Approved'
+            : isFundRejected ? 'Pre-Fund Rejected' : 'Step Skipped',
           description: action === 'approve'
             ? newFundStatus === 'awaiting_receipt'
-              ? 'All steps cleared — fund is awaiting receipt confirmation.'
+              ? 'All required steps cleared — fund is awaiting receipt confirmation.'
               : 'Step approved. Further approval steps are pending.'
-            : 'Pre-fund request has been rejected.',
+            : isFundRejected
+              ? 'Required step rejected — pre-fund request has been rejected.'
+              : isOptionalReject
+                ? 'Optional step skipped — remaining required steps still apply.'
+                : 'Step rejected.',
         });
       }
 

@@ -284,7 +284,7 @@ export default function PreFundingRegistry() {
       const fund = funds.find(f => f.id === receiptDialog.fundId);
 
       // 2. Activate via shared utility — fail-closed GL + fund status update
-      await activatePreFund({
+      const { bankLineWarning } = await activatePreFund({
         fundId: receiptDialog.fundId,
         fundName: fund?.name ?? 'Fund',
         amount: fund?.amount ?? 0,
@@ -295,7 +295,7 @@ export default function PreFundingRegistry() {
         receiptUrl: urlData.publicUrl,
       });
 
-      toast({ title: 'Receipt uploaded — fund is now Active', description: 'GL journal entry created (draft).' });
+      toast({ title: 'Receipt uploaded — fund is now Active', description: bankLineWarning ?? 'GL journal entry created (draft).' });
       setReceiptDialog({ open: false, fundId: '', fundName: '' });
       setReceiptFile(null);
       await load();
@@ -451,7 +451,7 @@ export default function PreFundingRegistry() {
           // If GL fails, this fund is skipped (stays awaiting_receipt); loop continues.
           const { data: fundDetail } = await supabase.from('pre_fund_requests')
             .select('gl_receipt_account,gl_liability_account').eq('id', fund.id).maybeSingle();
-          await activatePreFund({
+          const { bankLineWarning: blw } = await activatePreFund({
             fundId: fund.id,
             fundName: fund.name,
             amount: fund.amount,
@@ -461,6 +461,7 @@ export default function PreFundingRegistry() {
             createdBy: currentUser?.id ?? null,
             idempotencyKeySuffix: 'bankapi',
           });
+          if (blw) console.warn('[PreFundingRegistry] Bank line warning:', blw);
 
           // Mark feed row as matched (after successful activation)
           await supabase.from('pre_fund_bank_unmatched').update({

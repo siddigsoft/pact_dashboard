@@ -169,7 +169,7 @@ export default function PreFundingSettings() {
     setMatchingId(matchDialog.item.id);
     try {
       // ── Full activation: GL journal + balance + bank statement (same as receipt upload) ──
-      await activatePreFund({
+      const { bankLineWarning } = await activatePreFund({
         fundId: fund.id,
         fundName: fund.name,
         amount: fund.amount,
@@ -192,7 +192,7 @@ export default function PreFundingSettings() {
         .eq('id', matchDialog.item.id);
       if (e) throw e;
 
-      toast({ title: 'Transfer matched — fund is now Active', description: 'GL journal entry created (draft).' });
+      toast({ title: 'Transfer matched — fund is now Active', description: bankLineWarning ?? 'GL journal entry created (draft).' });
       setMatchDialog(null);
       await loadUnmatched();
     } catch (e: any) {

@@ -401,9 +401,9 @@ BEGIN
   INSERT INTO acct_gl_bridge_log (source_table, source_id, event_type, status, journal_entry_id)
   VALUES ('pre_fund_reconciliations', v_recon_id, 'pre_fund_closed', 'success', v_je_id);
 
-  -- 4. Optional carry-forward GL entry
-  IF p_surplus_action = 'carry_forward' AND p_carry_forward_amt > 0
-     AND v_liab_id IS NOT NULL AND v_cf_id IS NOT NULL THEN
+  -- 4. Carry-forward GL entry — fires whenever carry amount > 0, regardless of
+  --    surplus_action (covers both 'carry_forward' and 'split' with carry portion)
+  IF p_carry_forward_amt > 0 AND v_liab_id IS NOT NULL AND v_cf_id IS NOT NULL THEN
 
     INSERT INTO acct_journal_entries (
       description_en, description_ar, posting_date, status,

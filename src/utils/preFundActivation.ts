@@ -9,6 +9,11 @@
  * Delegates ALL multi-step writes to the activate_pre_fund_rpc Postgres
  * function which runs them inside a single DB transaction — no partial
  * state is possible on failure.
+ *
+ * Returns a result object:
+ *   { bankLineWarning?: string } — present when the bank statement line could
+ *   not be created after activation. Activation itself succeeded; callers
+ *   should surface this warning so finance can reconcile the missing bank line.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -27,7 +32,14 @@ export interface ActivatePreFundOptions {
   idempotencyKeySuffix?: string;
 }
 
-export async function activatePreFund(opts: ActivatePreFundOptions): Promise<void> {
+export interface ActivatePreFundResult {
+  /** Present when the bank statement line could not be created after activation. */
+  bankLineWarning?: string;
+}
+
+export async function activatePreFund(
+  opts: ActivatePreFundOptions
+): Promise<ActivatePreFundResult> {
   const {
     fundId,
     fundName,
@@ -61,8 +73,10 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
     throw new Error(data.error ?? 'Activation failed — unknown error from RPC.');
   }
 
-  // Non-blocking: attempt to create a bank statement line via a separate call
-  // (integration-gated). Failure here never affects the already-committed activation.
+  // Non-blocking: attempt to create a bank statement line.
+  // If it fails, activation has already committed — return a warning so the
+  // caller can surface it to finance for manual reconciliation.
+  let bankLineWarning: string | undefined;
   try {
     const [{ data: bankReconSettings }, { data: bankAcctRow }] = await Promise.all([
       supabase.from('pre_fund_settings').select('integration_bank_recon').limit(1).maybeSingle(),
@@ -70,7 +84,7 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
     ]);
     const bankReconOn = (bankReconSettings as any)?.integration_bank_recon !== false;
     if (bankReconOn && (bankAcctRow as any)?.id) {
-      await (supabase as any).from('acct_bank_statement_lines').insert({
+      const { error: bankErr } = await (supabase as any).from('acct_bank_statement_lines').insert({
         bank_account_id: (bankAcctRow as any).id,
         statement_date: new Date().toISOString().split('T')[0],
         description: `Pre-fund received: ${fundName}`,
@@ -79,8 +93,13 @@ export async function activatePreFund(opts: ActivatePreFundOptions): Promise<voi
         currency,
         pre_fund_request_id: fundId,
       });
+      if (bankErr) {
+        bankLineWarning = `Fund activated successfully, but the bank statement line could not be created (${bankErr.message}). Please add it manually in Bank Reconciliation.`;
+      }
     }
-  } catch {
-    // Non-blocking — bank statement line failure must not surface to the caller
+  } catch (bankErr: any) {
+    bankLineWarning = `Fund activated successfully, but the bank statement line could not be created (${bankErr?.message ?? 'unknown error'}). Please add it manually in Bank Reconciliation.`;
   }
+
+  return bankLineWarning ? { bankLineWarning } : {};
 }
