@@ -256,8 +256,7 @@ export default function PreFundingReconciliation() {
       }).select('id').maybeSingle();
       if (e) throw e;
 
-      // ── GL Bridge posting for payment/commitment/carry_forward ────────────
-      // Maps each transaction type to its GL bridge event template
+      // ── GL Bridge posting (fail-closed): if GL fails, roll back transaction ─
       const GL_EVENT: Record<string, string> = {
         payment:      'pre_fund_paid',
         commitment:   'pre_fund_committed',
@@ -265,21 +264,22 @@ export default function PreFundingReconciliation() {
       };
       const glEvent = GL_EVENT[txnForm.transaction_type];
       if (glEvent) {
+        // GL posting failure rolls back the transaction (delete + rethrow)
+        const txnId = (txn as any)?.id;
         try {
           const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
             .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
             .eq('id', selectedFund.id).maybeSingle();
 
-          // Determine debit/credit accounts per event type
-          let drCode = '2400'; // liability (default: reduce liability)
-          let crCode = '1200'; // bank/cash (default: cash out)
+          let drCode = '2400';
+          let crCode = '1200';
           if (glEvent === 'pre_fund_committed') {
             drCode = (fundDetail as any)?.gl_liability_account ?? '2400';
-            crCode = '2105'; // encumbrance reserve
+            crCode = '2105';
           } else if (glEvent === 'pre_fund_carry_forward') {
             drCode = (fundDetail as any)?.gl_liability_account ?? '2400';
             crCode = (fundDetail as any)?.gl_cf_account ?? '2401';
-          } else { // pre_fund_paid
+          } else {
             drCode = (fundDetail as any)?.gl_liability_account ?? '2400';
             crCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
           }
@@ -289,31 +289,34 @@ export default function PreFundingReconciliation() {
             supabase.from('acct_accounts' as any).select('id').eq('code', crCode).maybeSingle(),
           ]);
 
-          const { data: je } = await supabase.from('acct_journal_entries').insert({
+          const { data: je, error: jeErr } = await supabase.from('acct_journal_entries').insert({
             description_en: `Pre-Fund ${txnForm.transaction_type} — ${selectedFund.name}`,
             posting_date: txnForm.transaction_date,
             status: 'draft',
             source_type: 'pre_fund_transactions',
-            source_id: (txn as any)?.id ?? selectedFund.id,
-            idempotency_key: `pf-${txnForm.transaction_type}-${(txn as any)?.id ?? Date.now()}`,
+            source_id: txnId ?? selectedFund.id,
+            idempotency_key: `pf-${txnForm.transaction_type}-${txnId ?? Date.now()}`,
             created_by: currentUser?.id ?? null,
           }).select('id').maybeSingle();
+          if (jeErr) throw jeErr;
 
           if (je) {
             const lines: any[] = [];
             if ((drAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 1, account_id: (drAcct as any).id, debit_credit: 'DR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `${glEvent} — ${selectedFund.name}`, function: 'program' });
             if ((crAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 2, account_id: (crAcct as any).id, debit_credit: 'CR', original_amount: amount, original_currency: currency, functional_amount: amount, functional_currency: currency, description: `${glEvent} — ${selectedFund.name}`, function: 'program' });
-            if (lines.length > 0) await supabase.from('acct_journal_lines').insert(lines);
+            if (lines.length > 0) {
+              const { error: lErr } = await supabase.from('acct_journal_lines').insert(lines);
+              if (lErr) throw lErr;
+            }
             await supabase.from('acct_gl_bridge_log' as any).insert({
-              source_table: 'pre_fund_transactions',
-              source_id: (txn as any)?.id ?? selectedFund.id,
-              event_type: glEvent,
-              status: 'success',
-              journal_entry_id: (je as any).id,
+              source_table: 'pre_fund_transactions', source_id: txnId ?? selectedFund.id,
+              event_type: glEvent, status: 'success', journal_entry_id: (je as any).id,
             });
           }
         } catch (glErr: any) {
-          console.warn('[PreFund] Transaction GL bridge skipped:', glErr.message);
+          // GL failed — roll back the transaction record to keep DB consistent
+          if (txnId) await supabase.from('pre_fund_transactions' as any).delete().eq('id', txnId);
+          throw new Error(`GL Bridge failed — transaction rolled back: ${(glErr as any).message}`);
         }
       }
 
@@ -451,7 +454,11 @@ export default function PreFundingReconciliation() {
           }
         }
       } catch (glErr: any) {
-        console.warn('[PreFund] Period-close GL bridge skipped:', glErr.message);
+        // GL failed — roll back recon record and revert fund status to keep DB consistent
+        const reconId = (recon as any)?.id;
+        if (reconId) await supabase.from('pre_fund_reconciliations' as any).delete().eq('id', reconId);
+        await supabase.from('pre_fund_requests' as any).update({ status: 'active' }).eq('id', selectedFund.id);
+        throw new Error(`GL Bridge failed — period close rolled back: ${(glErr as any).message}`);
       }
 
       toast({ title: 'Period closed', description: 'GL journal entry created (draft) — review in GL module.' });
