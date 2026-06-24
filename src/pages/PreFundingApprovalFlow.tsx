@@ -52,6 +52,20 @@ const FUND_STATUS_CFG: Record<string, string> = {
   closed:           'bg-slate-100 text-slate-500',
 };
 
+// Roles allowed to be assigned as approvers in a pre-fund approval step
+const APPROVER_ROLE_KEYS = new Set([
+  'superadmin', 'super_admin', 'admin',
+  'employee',
+  'datateam', 'data_team',
+  'fieldoperationmanagerfom', 'fom', 'field operation manager (fom)', 'field operation manager',
+  'countrydirector', 'country_director', 'cd',
+]);
+
+function isApproverRole(role: string | null | undefined): boolean {
+  if (!role) return false;
+  return APPROVER_ROLE_KEYS.has(role.toLowerCase().replace(/[\s\-]/g, ''));
+}
+
 export default function PreFundingApprovalFlow() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
@@ -364,9 +378,18 @@ export default function PreFundingApprovalFlow() {
                 <SelectTrigger data-testid="select-step-user"><SelectValue placeholder="Any approver with access…" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__any__">Any approver with access</SelectItem>
-                  {users.filter(u => u.profileStatus === 'approved' || u.isApproved).map(u => (
-                    <SelectItem key={u.id} value={u.id || `__user_${u.email}`}>{u.fullName ?? u.name ?? u.email}</SelectItem>
-                  ))}
+                  {users
+                    .filter(u =>
+                      (u.profileStatus === 'approved' || u.isApproved) &&
+                      isApproverRole(u.role)
+                    )
+                    .map(u => (
+                      <SelectItem key={u.id} value={u.id || `__user_${u.email}`}>
+                        {u.fullName ?? u.name ?? u.email}
+                        <span className="ml-1.5 text-[10px] text-muted-foreground opacity-70">· {u.role}</span>
+                      </SelectItem>
+                    ))
+                  }
                 </SelectContent>
               </Select>
             </div>
