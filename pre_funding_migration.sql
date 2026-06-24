@@ -18,7 +18,19 @@ CREATE TABLE IF NOT EXISTS pre_fund_period_types (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Seed built-in period types
+-- Unique constraint on name — prevents duplicate period types on re-run
+ALTER TABLE pre_fund_period_types
+  ADD CONSTRAINT IF NOT EXISTS pf_period_types_name_unique UNIQUE (name);
+
+-- Remove any duplicate rows from previous runs (keep lowest display_order per name)
+DELETE FROM pre_fund_period_types
+WHERE id NOT IN (
+  SELECT DISTINCT ON (name) id
+  FROM pre_fund_period_types
+  ORDER BY name, display_order, created_at
+);
+
+-- Seed built-in period types (idempotent — UNIQUE(name) prevents re-insertion)
 INSERT INTO pre_fund_period_types (name, day_count, is_builtin, display_order) VALUES
   ('Weekly',           7,    true, 1),
   ('Bi-weekly',        14,   true, 2),
@@ -27,7 +39,7 @@ INSERT INTO pre_fund_period_types (name, day_count, is_builtin, display_order) V
   ('Annual',           365,  true, 5),
   ('Project Duration', NULL, true, 6),
   ('Custom',           NULL, true, 7)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
 -- ─── 2. System-wide pre-funding settings ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pre_fund_settings (

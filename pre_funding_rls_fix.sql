@@ -57,3 +57,23 @@ FROM   pg_policies
 WHERE  policyname LIKE 'pf_%'
   AND  tablename LIKE 'pre_fund_%'
 ORDER  BY tablename;
+
+
+-- ============================================================================
+-- Period Type Deduplication (run this if you see duplicate entries in dropdown)
+-- ============================================================================
+
+-- Step 1: Add unique constraint so it can never happen again
+ALTER TABLE pre_fund_period_types
+  ADD CONSTRAINT IF NOT EXISTS pf_period_types_name_unique UNIQUE (name);
+
+-- Step 2: Delete duplicates — keeps the row with the lowest display_order per name
+DELETE FROM pre_fund_period_types
+WHERE id NOT IN (
+  SELECT DISTINCT ON (name) id
+  FROM pre_fund_period_types
+  ORDER BY name, display_order, created_at
+);
+
+-- Verify — should return exactly 7 rows
+SELECT name, day_count, display_order FROM pre_fund_period_types ORDER BY display_order;
