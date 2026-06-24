@@ -40,19 +40,21 @@ If `acct_accounts` already has codes 2400/2401, the ON CONFLICT clause prevents 
 
 ## Step 3 — RLS Policy Check
 
-The migration creates RLS policies referencing your `profiles` table with a `role` column. If your profiles table uses a different column name, adjust the policy before running:
+The migration creates RLS policies referencing your `profiles` table with a `role` column. The enforced roles are `super_admin`, `admin`, and `financialAdmin`. If your profiles table uses a different column name, adjust the policy before running:
 
 ```sql
 -- Default (as written):
-EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin','countryDirector'))
+EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin'))
 
 -- If your role column is named differently (e.g. 'user_role'), change to:
-EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND user_role IN ('super_admin','admin','financialAdmin','countryDirector'))
+EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(user_role) IN ('super_admin','superadmin','admin','financialadmin'))
 ```
+
+Note: `countryDirector` is **not** a Pre-Funding finance role and does not grant write access to pre-fund records. It can view read-only reports if your org adds it via a custom RLS policy.
 
 ## Step 4 — Verify the UI
 
-1. Log in as a user with `admin`, `financialAdmin`, or `countryDirector` role
+1. Log in as a user with `admin` or `financialAdmin` role
 2. Confirm **Pre-Funding** appears in the sidebar under Finance (between Finance Hub and Accounting)
 3. Navigate to `/pre-funding` — you should see the 5-tab hub
 
@@ -112,8 +114,9 @@ EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND user_role IN ('super_ad
 | super_admin | Full access |
 | admin | Full access |
 | financialAdmin | Full access |
-| countryDirector | Full access |
 | All others | Hidden |
+
+> `countryDirector` is not in the enforced finance role list. If your org requires directors to view pre-fund data, add a read-only RLS policy manually after running the migration.
 
 ## Finance Dashboard Integration
 
