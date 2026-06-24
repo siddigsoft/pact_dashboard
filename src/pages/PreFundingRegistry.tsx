@@ -575,109 +575,183 @@ export default function PreFundingRegistry() {
 
   return (
     <div className="space-y-5 p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2"><FolderOpen className="h-5 w-5 text-sky-600" />Fund Registry</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Create and manage all pre-fund requests</p>
+
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
+            <FolderOpen className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Fund Registry</h1>
+            <p className="text-sm text-muted-foreground">Create and manage all pre-fund requests</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-registry"><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
-          {canAccess && <Button size="sm" onClick={openNew} data-testid="button-new-fund-registry"><Plus className="h-4 w-4 mr-1.5" />New Fund</Button>}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-registry">
+            <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
+          </Button>
+          {canAccess && (
+            <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={openNew} data-testid="button-new-fund-registry">
+              <Plus className="h-4 w-4 mr-1.5" />New Fund
+            </Button>
+          )}
         </div>
       </div>
 
       {error && <Alert variant="destructive"><AlertDescription>{error} — run pre_funding_migration.sql</AlertDescription></Alert>}
 
-      {/* Filters */}
+      {/* ── Filters ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative">
           <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search funds…" className="pl-8 h-8 w-48 text-sm" data-testid="input-search-funds" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search funds…" className="pl-8 h-8 w-52 text-sm" data-testid="input-search-funds" />
         </div>
-        {['all', 'active', 'draft', 'pending_approval', 'awaiting_receipt', 'closed'].map(s => (
-          <button key={s} onClick={() => setStatus(s)}
-            className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all',
-              statusFilter === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-            )}>{s === 'all' ? 'All' : STATUS_CFG[s]?.label ?? s}</button>
-        ))}
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { key: 'all',              label: 'All' },
+            { key: 'active',           label: 'Active' },
+            { key: 'draft',            label: 'Draft' },
+            { key: 'pending_approval', label: 'Awaiting Approval' },
+            { key: 'awaiting_receipt', label: 'Awaiting Receipt' },
+            { key: 'closed',           label: 'Closed' },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setStatus(key)}
+              className={cn(
+                'px-3 py-1 rounded-md text-xs font-medium border transition-all',
+                statusFilter === key
+                  ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                  : 'bg-background text-muted-foreground border-border hover:border-sky-400 hover:text-sky-700'
+              )}
+            >{label}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ───────────────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
+        <div className="text-center py-16 text-muted-foreground border rounded-xl bg-muted/20">
           <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p>No pre-funds found</p>
-          <Button className="mt-4" onClick={openNew}>+ Create First Pre-Fund</Button>
+          <p className="text-sm font-medium mb-1">No pre-funds found</p>
+          <p className="text-xs text-muted-foreground mb-4">Get started by creating your first pre-fund request.</p>
+          <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={openNew}>
+            <Plus className="h-4 w-4 mr-1.5" />Create First Pre-Fund
+          </Button>
         </div>
       ) : (
-        <div className="rounded-lg border overflow-x-auto">
+        <div className="rounded-xl border shadow-sm overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Name / Source</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right">Available</TableHead>
-                <TableHead className="text-right">Committed</TableHead>
-                <TableHead>Scope</TableHead>
-                <TableHead>Renewal</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-center">Actions</TableHead>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="font-semibold text-foreground pl-4 w-56">Fund Name</TableHead>
+                <TableHead className="font-semibold text-foreground">Period</TableHead>
+                <TableHead className="font-semibold text-foreground text-right">Amount</TableHead>
+                <TableHead className="font-semibold text-foreground text-right">Available</TableHead>
+                <TableHead className="font-semibold text-foreground text-right">Committed</TableHead>
+                <TableHead className="font-semibold text-foreground">Scope</TableHead>
+                <TableHead className="font-semibold text-foreground">Renewal</TableHead>
+                <TableHead className="font-semibold text-foreground">Status</TableHead>
+                <TableHead className="font-semibold text-foreground text-center pr-4">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map(f => (
-                <TableRow key={f.id} data-testid={`row-fund-${f.id}`}>
-                  <TableCell>
-                    <div className="font-medium text-sm">{f.name}</div>
-                    {f.source && <div className="text-[11px] text-muted-foreground">{f.source}</div>}
+                <TableRow key={f.id} className="hover:bg-muted/30 border-b last:border-0" data-testid={`row-fund-${f.id}`}>
+
+                  {/* Name + Source */}
+                  <TableCell className="pl-4 py-3">
+                    <div className="font-semibold text-sm leading-tight">{f.name}</div>
+                    {f.source && (
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]" title={f.source}>
+                        {f.source}
+                      </div>
+                    )}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {f.start_date && f.end_date
-                      ? <>{format(parseISO(f.start_date), 'MMM d')} – {format(parseISO(f.end_date), 'MMM d, yyyy')}</>
-                      : f.period_type_name ?? '—'}
+
+                  {/* Period */}
+                  <TableCell className="py-3">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {f.start_date && f.end_date
+                        ? <>{format(parseISO(f.start_date), 'MMM d')} – {format(parseISO(f.end_date), 'MMM d, yyyy')}</>
+                        : f.period_type_name ?? '—'}
+                    </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    <span className="text-muted-foreground text-[10px] mr-1">{f.currency}</span>
-                    {formatNumber(f.amount, 0)}
+
+                  {/* Amount */}
+                  <TableCell className="py-3 text-right">
+                    <div className="font-mono text-sm font-semibold">{formatNumber(f.amount, 0)}</div>
+                    <div className="text-[10px] text-muted-foreground">{f.currency}</div>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm text-emerald-600">{formatNumber(f.available_balance, 0)}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-violet-600">{formatNumber(f.committed_amount, 0)}</TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground">{MATCHING_SCOPE_OPTIONS.find(o => o.value === f.matching_scope)?.label?.split(' ')[0] ?? f.matching_scope}</TableCell>
-                  <TableCell className="text-[11px]">
-                    {f.auto_renewal_mode === 'auto_activate' && <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200">Auto-Activate</Badge>}
-                    {f.auto_renewal_mode === 'auto_draft'    && <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200">Auto-Draft</Badge>}
-                    {f.auto_renewal_mode === 'off'           && <span className="text-muted-foreground">Manual</span>}
+
+                  {/* Available */}
+                  <TableCell className="py-3 text-right">
+                    <div className="font-mono text-sm font-semibold text-emerald-600">{formatNumber(f.available_balance, 0)}</div>
+                    <div className="text-[10px] text-muted-foreground">{f.currency}</div>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn('text-[10px]', STATUS_CFG[f.status]?.cls)}>{STATUS_CFG[f.status]?.label ?? f.status}</Badge>
+
+                  {/* Committed */}
+                  <TableCell className="py-3 text-right">
+                    <div className="font-mono text-sm text-violet-600">{formatNumber(f.committed_amount, 0)}</div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center gap-1">
+
+                  {/* Scope */}
+                  <TableCell className="py-3">
+                    <span className="text-xs text-muted-foreground">
+                      {MATCHING_SCOPE_OPTIONS.find(o => o.value === f.matching_scope)?.label?.split(' ')[0] ?? f.matching_scope}
+                    </span>
+                  </TableCell>
+
+                  {/* Renewal */}
+                  <TableCell className="py-3">
+                    {f.auto_renewal_mode === 'auto_activate' && (
+                      <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">Auto-Activate</Badge>
+                    )}
+                    {f.auto_renewal_mode === 'auto_draft' && (
+                      <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 whitespace-nowrap">Auto-Draft</Badge>
+                    )}
+                    {f.auto_renewal_mode === 'off' && (
+                      <span className="text-xs text-muted-foreground">Manual</span>
+                    )}
+                  </TableCell>
+
+                  {/* Status */}
+                  <TableCell className="py-3">
+                    <Badge variant="outline" className={cn('text-xs font-medium whitespace-nowrap', STATUS_CFG[f.status]?.cls)}>
+                      {STATUS_CFG[f.status]?.label ?? f.status}
+                    </Badge>
+                  </TableCell>
+
+                  {/* Actions */}
+                  <TableCell className="py-3 pr-4">
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
                       {f.status === 'draft' && (
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleSubmitForApproval(f)} data-testid={`button-submit-${f.id}`}>
-                          <Send className="h-3.5 w-3.5 mr-1" />Submit
+                        <Button size="sm" className="h-8 px-3 text-xs bg-sky-600 hover:bg-sky-700 text-white gap-1.5" onClick={() => handleSubmitForApproval(f)} data-testid={`button-submit-${f.id}`}>
+                          <Send className="h-3.5 w-3.5" />Submit
                         </Button>
                       )}
                       {f.status === 'awaiting_receipt' && (
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-sky-600" onClick={() => setReceiptDialog({ open: true, fundId: f.id, fundName: f.name })} data-testid={`button-receipt-${f.id}`}>
-                          <Upload className="h-3.5 w-3.5 mr-1" />Receipt
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-sky-600 border-sky-300 hover:bg-sky-50 gap-1.5" onClick={() => setReceiptDialog({ open: true, fundId: f.id, fundName: f.name })} data-testid={`button-receipt-${f.id}`}>
+                          <Upload className="h-3.5 w-3.5" />Receipt
                         </Button>
                       )}
                       {['active', 'low_balance', 'closed'].includes(f.status) && (
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-sky-600" title="Donor Statement PDF" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`button-donor-pdf-${f.id}`}>
-                          <FileText className="h-3.5 w-3.5" />
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-sky-600 border-sky-300 hover:bg-sky-50 gap-1.5" title="Donor Statement PDF" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`button-donor-pdf-${f.id}`}>
+                          <FileText className="h-3.5 w-3.5" />PDF
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
                       {['draft', 'closed'].includes(f.status) && (
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete fund" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       )}
                     </div>
                   </TableCell>
+
                 </TableRow>
               ))}
             </TableBody>
