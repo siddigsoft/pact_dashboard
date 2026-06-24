@@ -47,7 +47,10 @@ interface StepRow {
   id: string; pre_fund_request_id: string; fund_name?: string;
   step_label: string; status: string; step_order: number; is_required: boolean;
   approved_at: string | null; notes: string | null;
+  assigned_user_id: string | null; assigned_user_ids: string[] | null;
+  assignee_names?: string;
 }
+interface ProfileRow { id: string; full_name: string | null; email: string | null }
 interface Project { id: string; name: string }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -101,6 +104,7 @@ export default function PreFundingReport() {
   const [txns, setTxns]           = useState<TxnRow[]>([]);
   const [steps, setSteps]         = useState<StepRow[]>([]);
   const [projects, setProjects]   = useState<Project[]>([]);
+  const [profiles, setProfiles]   = useState<Map<string, string>>(new Map());
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
@@ -116,16 +120,25 @@ export default function PreFundingReport() {
     setLoading(true);
     setError(null);
     try {
-      const [fundsRes, txnsRes, stepsRes, projRes] = await Promise.all([
+      const [fundsRes, txnsRes, stepsRes, projRes, profRes] = await Promise.all([
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_transactions').select('*').order('transaction_date', { ascending: false }),
-        supabase.from('pre_fund_approval_steps').select('*').order('step_order'),
+        supabase.from('pre_fund_approval_steps')
+          .select('id,pre_fund_request_id,step_label,status,step_order,is_required,approved_at,notes,assigned_user_id,assigned_user_ids')
+          .order('step_order'),
         supabase.from('projects').select('id,name').order('name'),
+        supabase.from('profiles').select('id,full_name,email'),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
 
       const projMap = new Map<string, string>((projRes.data ?? []).map((p: Project) => [p.id, p.name]));
       const fundMap = new Map<string, string>();
+
+      // Build profile id → display name map
+      const profMap = new Map<string, string>();
+      ((profRes.data as any) ?? []).forEach((p: ProfileRow) => {
+        profMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8));
+      });
 
       const enrichedFunds: FundRow[] = ((fundsRes.data as any) ?? []).map((f: FundRow) => {
         const enriched = { ...f, project_name: f.project_id ? (projMap.get(f.project_id) ?? 'Unknown') : '—' };
@@ -136,14 +149,20 @@ export default function PreFundingReport() {
       const enrichedTxns: TxnRow[] = ((txnsRes.data as any) ?? []).map((t: TxnRow) => ({
         ...t, fund_name: fundMap.get(t.pre_fund_request_id) ?? '—',
       }));
-      const enrichedSteps: StepRow[] = ((stepsRes.data as any) ?? []).map((s: StepRow) => ({
-        ...s, fund_name: fundMap.get(s.pre_fund_request_id) ?? '—',
-      }));
+
+      const enrichedSteps: StepRow[] = ((stepsRes.data as any) ?? []).map((s: StepRow) => {
+        const ids: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length
+          ? s.assigned_user_ids
+          : s.assigned_user_id ? [s.assigned_user_id] : [];
+        const assignee_names = ids.map(id => profMap.get(id) ?? id.slice(0, 8)).join(', ') || '—';
+        return { ...s, fund_name: fundMap.get(s.pre_fund_request_id) ?? '—', assignee_names };
+      });
 
       setFunds(enrichedFunds);
       setTxns(enrichedTxns);
       setSteps(enrichedSteps);
       setProjects((projRes.data as any) ?? []);
+      setProfiles(profMap);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -345,60 +364,154 @@ export default function PreFundingReport() {
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
+    const now = format(new Date(), 'MMM d, yyyy HH:mm');
+    const filename = `PreFunding-Report-${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
 
-    // Summary sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Pre-Funding Report', `Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`],
+    // ── Helper: set column widths ──────────────────────────────────────────────
+    const setCols = (ws: XLSX.WorkSheet, widths: number[]) => {
+      ws['!cols'] = widths.map(w => ({ wch: w }));
+    };
+
+    // ── Sheet 1: Cover / Summary ───────────────────────────────────────────────
+    const currency = filteredFunds[0]?.currency ?? 'USD';
+    const summaryData: any[][] = [
+      ['PACT — PRE-FUNDING REPORT', '', '', ''],
+      [`Generated: ${now}`, '', '', ''],
+      ['', '', '', ''],
+      ['REPORT FILTERS', '', '', ''],
+      ['Status Filter', statusFilter === 'all' ? 'All Statuses' : STATUS_CFG[statusFilter]?.label ?? statusFilter, '', ''],
+      ['Currency Filter', currencyFilter, '', ''],
+      ['Date From', dateFrom || '—', '', ''],
+      ['Date To', dateTo || '—', '', ''],
+      ['', '', '', ''],
+      ['SUMMARY STATISTICS', '', '', ''],
+      ['Metric', 'Value', '', ''],
+      ['Total Funds in View', filteredFunds.length, '', ''],
+      ['Active Funds', kpis.activeFunds.length, '', ''],
+      ['Total Funded', `${currency} ${formatNumber(kpis.totalFunded, 2)}`, '', ''],
+      ['Total Disbursed', `${currency} ${formatNumber(kpis.totalPaid, 2)}`, '', ''],
+      ['Total Committed', `${currency} ${formatNumber(kpis.totalCommit, 2)}`, '', ''],
+      ['Available Balance', `${currency} ${formatNumber(kpis.totalBalance, 2)}`, '', ''],
+      ['Overall Utilization', `${kpis.utilPct}%`, '', ''],
+      ['Total Transactions', filteredTxns.length, '', ''],
+      ['Total Approval Steps', filteredSteps.length, '', ''],
+      ['', '', '', ''],
+      ['STATUS BREAKDOWN', '', '', ''],
+      ['Status', 'Count', 'Amount', 'Currency'],
+      ...Object.entries(
+        filteredFunds.reduce((acc, f) => {
+          if (!acc[f.status]) acc[f.status] = { count: 0, amount: 0 };
+          acc[f.status].count++;
+          acc[f.status].amount += f.amount;
+          return acc;
+        }, {} as Record<string, { count: number; amount: number }>)
+      ).map(([status, v]) => [STATUS_CFG[status]?.label ?? status, v.count, v.amount, currency]),
+    ];
+    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+    setCols(summaryWs, [28, 22, 16, 8]);
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'Cover');
+
+    // ── Sheet 2: Fund Detail ───────────────────────────────────────────────────
+    const fundHeaders = [
+      'Fund Name', 'Project', 'Source / Donor', 'Status', 'Currency',
+      'Amount', 'Disbursed', 'Committed', 'Balance', 'Utilization %',
+      'Start Date', 'End Date', 'Created',
+    ];
+    const fundRows = filteredFunds.map(f => [
+      f.name,
+      f.project_name ?? '—',
+      f.source ?? '—',
+      STATUS_CFG[f.status]?.label ?? f.status,
+      f.currency,
+      f.amount,
+      f.paid_amount ?? 0,
+      f.committed_amount ?? 0,
+      f.available_balance ?? 0,
+      f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
+      f.start_date ?? '',
+      f.end_date ?? '',
+      f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
+    ]);
+    const totalsRow = [
+      `TOTALS (${filteredFunds.length} funds)`, '', '', '', currency,
+      filteredFunds.reduce((s, f) => s + f.amount, 0),
+      filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0),
+      filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0),
+      filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0),
+      kpis.utilPct,
+      '', '', '',
+    ];
+    const fundWs = XLSX.utils.aoa_to_sheet([fundHeaders, ...fundRows, [], totalsRow]);
+    setCols(fundWs, [30, 22, 22, 18, 8, 14, 14, 14, 14, 12, 12, 12, 12]);
+    XLSX.utils.book_append_sheet(wb, fundWs, 'Fund Detail');
+
+    // ── Sheet 3: Transactions ──────────────────────────────────────────────────
+    const txnHeaders = ['Date', 'Fund Name', 'Type', 'Reference', 'Description', 'Amount', 'Currency'];
+    const txnRows = filteredTxns.map(t => [
+      t.transaction_date ?? '',
+      t.fund_name ?? '—',
+      t.transaction_type,
+      t.reference ?? '',
+      t.description ?? '',
+      t.amount,
+      t.currency,
+    ]);
+    const txnTotals = ['TOTAL', '', '', '', '',
+      filteredTxns.reduce((s, t) => s + t.amount, 0), ''];
+    const txnWs = XLSX.utils.aoa_to_sheet([txnHeaders, ...txnRows, [], txnTotals]);
+    setCols(txnWs, [12, 30, 14, 18, 30, 14, 8]);
+    XLSX.utils.book_append_sheet(wb, txnWs, 'Transactions');
+
+    // ── Sheet 4: Approval Chain ────────────────────────────────────────────────
+    // Group by fund — each fund gets a header row then its steps
+    const chainRows: any[][] = [
+      ['APPROVAL CHAIN REPORT', '', '', '', '', '', ''],
+      [`Generated: ${now}`, '', '', '', '', '', ''],
       [],
-      ['Metric', 'Value'],
-      ['Total Funds', filteredFunds.length],
-      ['Active Funds', kpis.activeFunds.length],
-      ['Total Funded (USD)', kpis.totalFunded],
-      ['Total Disbursed (USD)', kpis.totalPaid],
-      ['Total Balance (USD)', kpis.totalBalance],
-      ['Utilization %', kpis.utilPct],
-    ]), 'Summary');
+      ['Fund Name', 'Step #', 'Step Label', 'Required', 'Assignee(s)', 'Status', 'Date Actioned', 'Notes'],
+    ];
+    // Group steps by fund
+    const byFundChain: Record<string, StepRow[]> = {};
+    filteredSteps.forEach(s => {
+      if (!byFundChain[s.pre_fund_request_id]) byFundChain[s.pre_fund_request_id] = [];
+      byFundChain[s.pre_fund_request_id].push(s);
+    });
+    Object.values(byFundChain).forEach(fundSteps => {
+      const fundName = fundSteps[0].fund_name ?? '—';
+      fundSteps.forEach((s, i) => {
+        chainRows.push([
+          i === 0 ? fundName : '',
+          s.step_order,
+          s.step_label,
+          s.is_required ? 'Required' : 'Optional',
+          s.assignee_names ?? '—',
+          s.status === 'approved' ? '✓ Approved' : s.status === 'rejected' ? '✗ Rejected' : '⏳ Pending',
+          s.approved_at ? format(parseISO(s.approved_at), 'yyyy-MM-dd HH:mm') : '—',
+          s.notes ?? '',
+        ]);
+      });
+      chainRows.push([]); // blank row between funds
+    });
+    const chainWs = XLSX.utils.aoa_to_sheet(chainRows);
+    setCols(chainWs, [30, 6, 22, 10, 28, 12, 18, 30]);
+    XLSX.utils.book_append_sheet(wb, chainWs, 'Approval Chain');
 
-    // Funds sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredFunds.map(f => ({
-      'Fund Name': f.name,
-      'Project': f.project_name ?? '—',
-      'Source / Donor': f.source ?? '—',
-      'Status': STATUS_CFG[f.status]?.label ?? f.status,
-      'Currency': f.currency,
-      'Amount': f.amount,
-      'Paid': f.paid_amount ?? 0,
-      'Committed': f.committed_amount ?? 0,
-      'Balance': f.available_balance ?? 0,
-      'Utilization %': f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
-      'Start Date': f.start_date ?? '',
-      'End Date': f.end_date ?? '',
-      'Created': f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
-    }))), 'Funds');
+    // ── Sheet 5: Monthly Trend ─────────────────────────────────────────────────
+    const trendHeaders = ['Month', 'Disbursed', 'Receipts', 'Net'];
+    const trendRows = monthlyData.map(m => {
+      const disbursed = filteredTxns
+        .filter(t => t.transaction_type === 'payment' && t.transaction_date?.startsWith(m.label.replace(' ', '-').toLowerCase()))
+        .reduce((s, t) => s + t.amount, 0);
+      const receipts = filteredTxns
+        .filter(t => t.transaction_type === 'receipt' && t.transaction_date?.startsWith(m.label.replace(' ', '-').toLowerCase()))
+        .reduce((s, t) => s + t.amount, 0);
+      return [m.label, m.disbursed, receipts, receipts - m.disbursed];
+    });
+    const trendWs = XLSX.utils.aoa_to_sheet([trendHeaders, ...trendRows]);
+    setCols(trendWs, [12, 16, 16, 16]);
+    XLSX.utils.book_append_sheet(wb, trendWs, 'Monthly Trend');
 
-    // Transactions sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredTxns.map(t => ({
-      'Date': t.transaction_date ?? '',
-      'Fund': t.fund_name ?? '—',
-      'Type': t.transaction_type,
-      'Reference': t.reference ?? '',
-      'Description': t.description ?? '',
-      'Amount': t.amount,
-      'Currency': t.currency,
-    }))), 'Transactions');
-
-    // Approvals sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredSteps.map(s => ({
-      'Fund': s.fund_name ?? '—',
-      'Step #': s.step_order,
-      'Step Label': s.step_label,
-      'Required': s.is_required ? 'Yes' : 'No',
-      'Status': s.status,
-      'Actioned At': s.approved_at ? format(parseISO(s.approved_at), 'yyyy-MM-dd HH:mm') : '',
-      'Notes': s.notes ?? '',
-    }))), 'Approval Chain');
-
-    XLSX.writeFile(wb, `PreFunding-Report-${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    XLSX.writeFile(wb, filename);
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────
@@ -747,93 +860,145 @@ export default function PreFundingReport() {
           </Card>
         </TabsContent>
 
-        {/* ── Approvals tab ── */}
-        <TabsContent value="approvals" className="mt-3">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Step list */}
-            <Card className="border">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-sm font-semibold">All Approval Steps</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? (
-                  <div className="p-4 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                ) : filteredSteps.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground text-sm">No approval steps found.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="font-semibold pl-4">#</TableHead>
-                          <TableHead className="font-semibold">Fund</TableHead>
-                          <TableHead className="font-semibold">Step</TableHead>
-                          <TableHead className="font-semibold">Status</TableHead>
-                          <TableHead className="font-semibold">Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredSteps.slice(0, 150).map(s => (
-                          <TableRow key={s.id} className="hover:bg-muted/30">
-                            <TableCell className="pl-4 text-xs text-muted-foreground w-8">{s.step_order}</TableCell>
-                            <TableCell className="text-xs max-w-[140px]"><span className="truncate block">{s.fund_name}</span></TableCell>
-                            <TableCell className="text-sm max-w-[160px]">
-                              <span className="truncate block">{s.step_label}</span>
-                              {!s.is_required && <span className="text-[10px] text-muted-foreground">optional</span>}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={cn('text-[10px]',
-                                s.status === 'approved' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                s.status === 'rejected' ? 'bg-rose-100 text-rose-700 border-rose-200' :
-                                'bg-amber-100 text-amber-700 border-amber-200')}>
-                                {s.status === 'approved' ? '✓ Approved' : s.status === 'rejected' ? '✗ Rejected' : <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Pending</>}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                              {s.approved_at ? format(parseISO(s.approved_at), 'MMM d, yy') : '—'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        {/* ── Approvals tab — visual chain flow ── */}
+        <TabsContent value="approvals" className="mt-3 space-y-4">
+          {loading ? (
+            <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
+          ) : approvalSummary.length === 0 ? (
+            <div className="p-10 text-center text-muted-foreground text-sm">
+              <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-30" />No approval chains configured for the current filters.
+            </div>
+          ) : (() => {
+            // Group steps by fund
+            const byFund: Record<string, StepRow[]> = {};
+            filteredSteps.forEach(s => {
+              if (!byFund[s.pre_fund_request_id]) byFund[s.pre_fund_request_id] = [];
+              byFund[s.pre_fund_request_id].push(s);
+            });
+            const fundIds = Object.keys(byFund);
+            return fundIds.map(fid => {
+              const fundSteps = byFund[fid].sort((a, b) => a.step_order - b.step_order);
+              const fund = filteredFunds.find(f => f.id === fid);
+              const fundStatus = fund ? STATUS_CFG[fund.status] : null;
+              const allDone  = fundSteps.every(s => s.status !== 'pending');
+              const anyRej   = fundSteps.some(s => s.status === 'rejected');
+              const approvedCount = fundSteps.filter(s => s.status === 'approved').length;
+              const pct = fundSteps.length > 0 ? Math.round((approvedCount / fundSteps.length) * 100) : 0;
 
-            {/* Per-fund approval summary */}
-            <Card className="border">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-sm font-semibold">Approval Progress per Fund</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3 max-h-96 overflow-y-auto">
-                {loading ? (
-                  <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                ) : approvalSummary.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">No approval chains configured.</p>
-                ) : approvalSummary.map((row, i) => {
-                  const pct = row.total > 0 ? Math.round((row.approved / row.total) * 100) : 0;
-                  return (
-                    <div key={i} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium truncate max-w-[200px]">{row.name}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {row.approved > 0 && <span className="text-[10px] text-emerald-600">✓{row.approved}</span>}
-                          {row.pending  > 0 && <span className="text-[10px] text-amber-600"><Clock className="inline h-2.5 w-2.5" />{row.pending}</span>}
-                          {row.rejected > 0 && <span className="text-[10px] text-rose-600">✗{row.rejected}</span>}
-                          <span className="text-[10px] text-muted-foreground">/{row.total}</span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className={cn('h-full rounded-full transition-all', row.rejected > 0 ? 'bg-rose-500' : pct === 100 ? 'bg-emerald-500' : 'bg-sky-500')}
+              return (
+                <Card key={fid} className="border overflow-hidden">
+                  {/* Fund header */}
+                  <div className={cn(
+                    'flex items-center justify-between px-4 py-2.5 border-b',
+                    anyRej ? 'bg-rose-50 dark:bg-rose-950/30' :
+                    allDone ? 'bg-emerald-50 dark:bg-emerald-950/30' :
+                    'bg-sky-50 dark:bg-sky-950/20'
+                  )}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <GitBranch className={cn('h-4 w-4 shrink-0', anyRej ? 'text-rose-500' : allDone ? 'text-emerald-500' : 'text-sky-500')} />
+                      <span className="font-semibold text-sm truncate">{fundSteps[0].fund_name}</span>
+                      {fundStatus && (
+                        <Badge variant="outline" className={cn('text-[10px] shrink-0', fundStatus.cls)}>
+                          {fundStatus.label}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-muted-foreground">{approvedCount}/{fundSteps.length} steps</span>
+                      <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className={cn('h-full rounded-full', anyRej ? 'bg-rose-500' : pct === 100 ? 'bg-emerald-500' : 'bg-sky-500')}
                           style={{ width: `${pct}%` }} />
                       </div>
                     </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </div>
+                  </div>
+
+                  {/* Step flow — horizontal scroll on mobile */}
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-0 overflow-x-auto pb-1">
+                      {fundSteps.map((step, idx) => {
+                        const isApproved = step.status === 'approved';
+                        const isRejected = step.status === 'rejected';
+                        const isPending  = step.status === 'pending';
+                        const isActive   = isPending && (idx === 0 || fundSteps[idx - 1].status === 'approved');
+
+                        const stepColor = isApproved ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30'
+                          : isRejected ? 'border-rose-400 bg-rose-50 dark:bg-rose-950/30'
+                          : isActive   ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-300/50'
+                          : 'border-border bg-muted/30';
+                        const numColor = isApproved ? 'bg-emerald-500 text-white'
+                          : isRejected ? 'bg-rose-500 text-white'
+                          : isActive   ? 'bg-amber-500 text-white'
+                          : 'bg-muted text-muted-foreground';
+
+                        return (
+                          <div key={step.id} className="flex items-center shrink-0">
+                            {/* Step card */}
+                            <div className={cn('border rounded-xl p-3 w-44 flex flex-col gap-1.5 relative', stepColor)}>
+                              {/* Number + label row */}
+                              <div className="flex items-center gap-2">
+                                <span className={cn('h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0', numColor)}>
+                                  {step.step_order}
+                                </span>
+                                <span className="text-xs font-semibold leading-tight truncate">{step.step_label}</span>
+                              </div>
+                              {/* Optional badge */}
+                              {!step.is_required && (
+                                <span className="text-[9px] text-muted-foreground bg-muted rounded px-1 py-0.5 w-fit">optional</span>
+                              )}
+                              {/* Assignee */}
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground truncate">{step.assignee_names}</span>
+                              </div>
+                              {/* Status badge */}
+                              <Badge variant="outline" className={cn('text-[10px] w-fit px-1.5 py-0',
+                                isApproved ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                : isRejected ? 'bg-rose-100 text-rose-700 border-rose-300'
+                                : isActive   ? 'bg-amber-100 text-amber-700 border-amber-300'
+                                : 'bg-muted text-muted-foreground')}>
+                                {isApproved ? '✓ Approved'
+                                  : isRejected ? '✗ Rejected'
+                                  : isActive ? <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Active</>
+                                  : <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Waiting</>}
+                              </Badge>
+                              {/* Date */}
+                              {step.approved_at && (
+                                <span className="text-[9px] text-muted-foreground">
+                                  {format(parseISO(step.approved_at), 'MMM d, yyyy')}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Arrow connector */}
+                            {idx < fundSteps.length - 1 && (
+                              <div className="flex items-center shrink-0 mx-1">
+                                <div className="h-px w-5 bg-border" />
+                                <div className="w-0 h-0 border-t-4 border-b-4 border-l-6 border-t-transparent border-b-transparent border-l-border" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Final outcome bubble */}
+                      {fundSteps.length > 0 && (
+                        <div className="flex items-center shrink-0 mx-1">
+                          <div className="h-px w-5 bg-border" />
+                          <div className={cn(
+                            'rounded-full px-2.5 py-1 text-[10px] font-semibold border',
+                            anyRej ? 'bg-rose-100 text-rose-700 border-rose-300'
+                            : allDone ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                            : 'bg-muted text-muted-foreground border-border'
+                          )}>
+                            {anyRej ? 'Rejected' : allDone ? '✓ All Clear' : 'In Progress'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            });
+          })()}
         </TabsContent>
       </Tabs>
     </div>
