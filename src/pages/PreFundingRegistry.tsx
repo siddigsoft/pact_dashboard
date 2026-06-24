@@ -418,65 +418,70 @@ export default function PreFundingRegistry() {
         const match = feed.find((r: any) => Math.abs(r.amount - fund.amount) <= tolerance);
         if (match) {
           const activatedAt = new Date().toISOString();
-          // Auto-activate fund
+
+          // ── Step 1: GL Bridge FIRST (fail-closed) ──────────────────────────
+          // GL must succeed before fund is ever set active. If it throws,
+          // this fund is skipped — stays in awaiting_receipt with no state change.
+          const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
+            .select('gl_receipt_account,gl_liability_account').eq('id', fund.id).maybeSingle();
+          const drCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
+          const crCode = (fundDetail as any)?.gl_liability_account ?? '2400';
+          const [{ data: drAcct }, { data: crAcct }, { data: bmBankAcct }] = await Promise.all([
+            supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle(),
+            supabase.from('acct_accounts' as any).select('id').eq('code', crCode).maybeSingle(),
+            supabase.from('acct_bank_accounts' as any).select('id').eq('currency', fund.currency).limit(1).maybeSingle(),
+          ]);
+          const { data: je, error: bmJeErr } = await supabase.from('acct_journal_entries').insert({
+            description_en: `Pre-fund received (bank auto-match): ${fund.name}`,
+            posting_date: activatedAt.split('T')[0],
+            status: 'draft',
+            source_type: 'pre_fund_requests',
+            source_id: fund.id,
+            idempotency_key: `pf-received-${fund.id}-bankapi`,
+            created_by: currentUser?.id ?? null,
+          }).select('id').maybeSingle();
+          if (bmJeErr) throw new Error(`GL Bridge failed for ${fund.name}: ${bmJeErr.message}`);
+          if (je) {
+            const lines: any[] = [];
+            if ((drAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 1, account_id: (drAcct as any).id, debit_credit: 'DR', original_amount: fund.amount, original_currency: fund.currency, functional_amount: fund.amount, functional_currency: fund.currency, description: `Pre-fund receipt: ${fund.name}`, function: 'program' });
+            if ((crAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 2, account_id: (crAcct as any).id, debit_credit: 'CR', original_amount: fund.amount, original_currency: fund.currency, functional_amount: fund.amount, functional_currency: fund.currency, description: `Pre-fund liability: ${fund.name}`, function: 'program' });
+            if (lines.length > 0) {
+              const { error: lErr } = await supabase.from('acct_journal_lines').insert(lines);
+              if (lErr) throw new Error(`GL lines failed for ${fund.name}: ${lErr.message}`);
+            }
+            await supabase.from('acct_gl_bridge_log' as any).insert({ source_table: 'pre_fund_requests', source_id: fund.id, event_type: 'pre_fund_received', status: 'success', journal_entry_id: (je as any).id });
+          }
+
+          // ── Step 2: Activate fund — only reached after GL succeeds ──────────
           const { error: actErr } = await supabase.from('pre_fund_requests' as any).update({
             status: 'active',
             available_balance: fund.amount,
             activated_at: activatedAt,
           }).eq('id', fund.id);
-          if (!actErr) {
-            // Mark feed row as matched
-            await supabase.from('pre_fund_bank_unmatched' as any).update({
-              matched_fund_id: fund.id,
-              match_status: 'matched',
-              reviewed_by: currentUser?.id ?? null,
-              reviewed_at: activatedAt,
-            }).eq('id', match.id);
+          if (actErr) throw actErr;
 
-            // ── Post GL BEFORE activating fund (fail-closed) ─────────────────────
-            // GL must succeed for activation to count. If it throws, this fund
-            // is skipped in the count and stays in awaiting_receipt.
-            const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
-              .select('gl_receipt_account,gl_liability_account').eq('id', fund.id).maybeSingle();
-            const drCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
-            const crCode = (fundDetail as any)?.gl_liability_account ?? '2400';
-            const [{ data: drAcct }, { data: crAcct }, { data: bmBankAcct }] = await Promise.all([
-              supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle(),
-              supabase.from('acct_accounts' as any).select('id').eq('code', crCode).maybeSingle(),
-              supabase.from('acct_bank_accounts' as any).select('id').eq('currency', fund.currency).limit(1).maybeSingle(),
-            ]);
-            const { data: je, error: bmJeErr } = await supabase.from('acct_journal_entries').insert({
-              description_en: `Pre-fund received (bank auto-match): ${fund.name}`,
-              posting_date: activatedAt.split('T')[0],
-              status: 'draft',
-              source_type: 'pre_fund_requests',
-              source_id: fund.id,
-              idempotency_key: `pf-received-${fund.id}-bankapi`,
-              created_by: currentUser?.id ?? null,
-            }).select('id').maybeSingle();
-            if (bmJeErr) throw new Error(`GL Bridge failed for ${fund.name}: ${bmJeErr.message}`);
-            if (je) {
-              const lines: any[] = [];
-              if ((drAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 1, account_id: (drAcct as any).id, debit_credit: 'DR', original_amount: fund.amount, original_currency: fund.currency, functional_amount: fund.amount, functional_currency: fund.currency, description: `Pre-fund receipt: ${fund.name}`, function: 'program' });
-              if ((crAcct as any)?.id) lines.push({ entry_id: (je as any).id, line_no: 2, account_id: (crAcct as any).id, debit_credit: 'CR', original_amount: fund.amount, original_currency: fund.currency, functional_amount: fund.amount, functional_currency: fund.currency, description: `Pre-fund liability: ${fund.name}`, function: 'program' });
-              if (lines.length > 0) await supabase.from('acct_journal_lines').insert(lines);
-              await supabase.from('acct_gl_bridge_log' as any).insert({ source_table: 'pre_fund_requests', source_id: fund.id, event_type: 'pre_fund_received', status: 'success', journal_entry_id: (je as any).id });
-            }
-            // ── Bank statement line (normalized: always use bank_account_id) ──
-            if (bankReconEnabled && (bmBankAcct as any)?.id) {
-              await supabase.from('acct_bank_statement_lines' as any).insert({
-                bank_account_id: (bmBankAcct as any).id,
-                statement_date: activatedAt.split('T')[0],
-                description: `Pre-fund received (bank auto-match): ${fund.name}`,
-                reference: `PF-${fund.id.slice(0, 8).toUpperCase()}`,
-                amount: fund.amount,
-                currency: fund.currency,
-                pre_fund_request_id: fund.id,
-              });
-            }
+          // Mark feed row as matched
+          await supabase.from('pre_fund_bank_unmatched' as any).update({
+            matched_fund_id: fund.id,
+            match_status: 'matched',
+            reviewed_by: currentUser?.id ?? null,
+            reviewed_at: activatedAt,
+          }).eq('id', match.id);
 
-            activated++;
+          // Bank statement line (normalized: always use bank_account_id)
+          if (bankReconEnabled && (bmBankAcct as any)?.id) {
+            await supabase.from('acct_bank_statement_lines' as any).insert({
+              bank_account_id: (bmBankAcct as any).id,
+              statement_date: activatedAt.split('T')[0],
+              description: `Pre-fund received (bank auto-match): ${fund.name}`,
+              reference: `PF-${fund.id.slice(0, 8).toUpperCase()}`,
+              amount: fund.amount,
+              currency: fund.currency,
+              pre_fund_request_id: fund.id,
+            });
           }
+
+          activated++;
         }
       }
       if (activated > 0) {
