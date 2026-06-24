@@ -22,6 +22,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface PeriodType { id: string; name: string; day_count: number | null; is_builtin: boolean }
 interface PreFundRequest {
@@ -34,6 +36,7 @@ interface PreFundRequest {
   committed_amount: number;
   paid_amount: number;
   status: string;
+  warning_days: number | null;
   period_type_id: string | null;
   period_type_name: string | null;
   start_date: string | null;
@@ -129,7 +132,7 @@ export default function PreFundingRegistry() {
       period_type_id: f.period_type_id ?? '', start_date: f.start_date ?? '', end_date: f.end_date ?? '',
       country_id: f.country_id ?? '', project_id: f.project_id ?? '', grant_id: f.grant_id ?? '',
       matching_scope: f.matching_scope, threshold_pct: '', threshold_amount: '',
-      warning_days: String(f.auto_renewal_days_before ?? 14),
+      warning_days: String(f.warning_days ?? 14),
       auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: String(f.auto_renewal_days_before ?? 7),
       notes: f.notes ?? '',
     });
@@ -325,6 +328,134 @@ export default function PreFundingRegistry() {
     }
   };
 
+  // ── Donor Statement PDF (per-fund, from Registry) ────────────────────────
+  const [generatingDonorPdf, setGeneratingDonorPdf] = useState<string | null>(null);
+
+  const handleDonorPDF = async (f: PreFundRequest) => {
+    setGeneratingDonorPdf(f.id);
+    try {
+      // Load transactions for this fund
+      const { data: txnData } = await supabase.from('pre_fund_transactions' as any)
+        .select('*').eq('pre_fund_request_id', f.id).order('transaction_date', { ascending: false });
+      const transactions: any[] = (txnData as any) ?? [];
+
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+      doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+      doc.text('Donor Pre-Fund Statement', 15, 20);
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+      doc.text(`Prepared: ${format(new Date(), 'MMM d, yyyy')}`, 15, 28);
+
+      doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+      doc.text('Fund Information', 15, 40);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      let y = 48;
+      [['Fund', f.name], ['Donor / Source', f.source ?? '—'], ['Currency', f.currency],
+        ['Period', f.start_date && f.end_date
+          ? `${format(parseISO(f.start_date), 'MMM d, yyyy')} – ${format(parseISO(f.end_date), 'MMM d, yyyy')}`
+          : '—'],
+      ].forEach(([k, v]) => { doc.text(`${k}:`, 15, y); doc.text(v, 60, y); y += 7; });
+
+      y += 6;
+      doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+      doc.text('Fund Utilisation', 15, y); y += 8;
+      autoTable(doc, {
+        startY: y,
+        head: [['Description', 'Amount']],
+        body: [
+          ['Amount Funded',   `${f.currency} ${formatNumber(f.amount, 0)}`],
+          ['Total Disbursed', `${f.currency} ${formatNumber(f.paid_amount, 0)}`],
+          ['Balance Available', `${f.currency} ${formatNumber(f.available_balance, 0)}`],
+        ],
+        styles: { fontSize: 10 }, headStyles: { fillColor: [3, 105, 161] },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+
+      const payments = transactions.filter((t: any) => t.transaction_type === 'payment');
+      if (payments.length > 0) {
+        doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+        doc.text('Disbursement Detail', 15, y); y += 8;
+        autoTable(doc, {
+          startY: y, head: [['Date', 'Reference', 'Description', 'Amount']],
+          body: payments.map((t: any) => [
+            format(parseISO(t.transaction_date), 'MMM d, yyyy'),
+            t.reference ?? '—', t.description ?? '—',
+            `${t.currency} ${formatNumber(t.amount, 0)}`,
+          ]),
+          styles: { fontSize: 9 }, headStyles: { fillColor: [3, 105, 161] },
+        });
+      }
+
+      const filename = `Donor-Statement-${f.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+
+      // Persist to Supabase Storage
+      try {
+        const path = `pre-fund-pdfs/${f.id}/${filename}`;
+        await supabase.storage.from('financial-documents').upload(path, blob, { contentType: 'application/pdf', upsert: true });
+      } catch { /* storage is best-effort */ }
+
+      toast({ title: 'Donor statement downloaded' });
+    } catch (e: any) {
+      toast({ title: 'PDF failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setGeneratingDonorPdf(null);
+    }
+  };
+
+  // ── Bank API Auto-Activation (awaiting_receipt → active) ─────────────────
+  // Queries unmatched bank feed for entries matching an awaiting_receipt fund
+  // by amount ± tolerance. If matched, auto-activates the fund.
+  const [bankCheckBusy, setBankCheckBusy] = useState(false);
+
+  const handleBankApiCheck = async () => {
+    setBankCheckBusy(true);
+    let activated = 0;
+    try {
+      const awaitingFunds = funds.filter(f => f.status === 'awaiting_receipt');
+      for (const fund of awaitingFunds) {
+        const tolerance = Math.max(0.01, fund.amount * 0.01);
+        const { data: feedRows } = await supabase
+          .from('pre_fund_bank_unmatched' as any)
+          .select('id,amount,currency')
+          .eq('match_status', 'unmatched')
+          .eq('currency', fund.currency);
+        const feed: any[] = (feedRows as any) ?? [];
+        const match = feed.find((r: any) => Math.abs(r.amount - fund.amount) <= tolerance);
+        if (match) {
+          // Auto-activate fund
+          const { error: actErr } = await supabase.from('pre_fund_requests' as any).update({
+            status: 'active',
+            available_balance: fund.amount,
+            activated_at: new Date().toISOString(),
+          }).eq('id', fund.id);
+          if (!actErr) {
+            // Mark feed row as matched
+            await supabase.from('pre_fund_bank_unmatched' as any).update({
+              matched_fund_id: fund.id,
+              match_status: 'matched',
+              reviewed_by: currentUser?.id ?? null,
+              reviewed_at: new Date().toISOString(),
+            }).eq('id', match.id);
+            activated++;
+          }
+        }
+      }
+      if (activated > 0) {
+        toast({ title: `Bank API: ${activated} fund${activated !== 1 ? 's' : ''} auto-activated`, description: 'Matched incoming transfers by amount±tolerance.' });
+        await load();
+      } else {
+        toast({ title: 'Bank API check complete', description: 'No matching transfers found for awaiting-receipt funds.' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Bank API check failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setBankCheckBusy(false);
+    }
+  };
+
   const filtered = funds.filter(f => {
     if (statusFilter !== 'all' && f.status !== statusFilter) return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase()) && !(f.source ?? '').toLowerCase().includes(search.toLowerCase())) return false;
@@ -432,6 +563,11 @@ export default function PreFundingRegistry() {
                       {f.status === 'awaiting_receipt' && (
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-sky-600" onClick={() => setReceiptDialog({ open: true, fundId: f.id, fundName: f.name })} data-testid={`button-receipt-${f.id}`}>
                           <Upload className="h-3.5 w-3.5 mr-1" />Receipt
+                        </Button>
+                      )}
+                      {['active', 'low_balance', 'closed'].includes(f.status) && (
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-sky-600" title="Donor Statement PDF" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`button-donor-pdf-${f.id}`}>
+                          <FileText className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}><Pencil className="h-3.5 w-3.5" /></Button>

@@ -358,8 +358,16 @@ CREATE OR REPLACE FUNCTION run_pre_fund_renewal_check()
 RETURNS TABLE(fund_id UUID, fund_name TEXT, action TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
+  -- Role guard: only service_role (pg_cron / scheduler) can execute this function.
+  -- Direct calls from authenticated users are blocked at the GRANT level AND here.
+  IF current_setting('role', true) NOT IN ('service_role', '') THEN
+    -- Allow if invoked by pg_cron/postgres superuser (empty role string means superuser context)
+    -- Reject all others silently to prevent information disclosure
+    RETURN;
+  END IF;
   -- Mark funds ending within warning_days as ending_soon
   UPDATE pre_fund_requests
   SET ending_soon_alert = true, updated_at = now()
@@ -477,7 +485,10 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION run_pre_fund_renewal_check() TO authenticated;
+-- Restrict to service_role/pg_cron scheduler ONLY — never callable by regular authenticated users
+REVOKE ALL ON FUNCTION run_pre_fund_renewal_check() FROM PUBLIC;
+REVOKE ALL ON FUNCTION run_pre_fund_renewal_check() FROM authenticated;
+GRANT EXECUTE ON FUNCTION run_pre_fund_renewal_check() TO service_role;
 
 -- ============================================================================
 -- Migration complete. Open /pre-funding in the app to get started.
