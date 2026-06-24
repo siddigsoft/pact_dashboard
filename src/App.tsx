@@ -285,6 +285,14 @@ const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { hasAnyRole } = useAuthorization();
+  if (!hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
 // Notification display component
 const AppNotifications = () => {
   const { notifications, remove } = useNotifications();
@@ -566,7 +574,7 @@ const AppRoutes = () => {
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
-        <Route path="/pre-funding" element={<PageWrapper><PreFundingHub /></PageWrapper>} />
+        <Route path="/pre-funding" element={<FinanceAdminRoute><PageWrapper><PreFundingHub /></PageWrapper></FinanceAdminRoute>} />
         <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
         <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />
         <Route path="/pre-funding/approvals" element={<Navigate to="/pre-funding?tab=approvals" replace />} />

@@ -1911,6 +1911,7 @@ const CostSubmission = () => {
             description: (oc as any).title ?? (oc as any).description ?? null,
             paymentDate: now,
             createdBy: currentUser.id,
+            userId: oc.submitted_by ?? null,
           }).then(result => {
             if (result.linked) {
               toast({ title: 'Linked to Pre-Fund', description: result.message });
@@ -2035,6 +2036,7 @@ const CostSubmission = () => {
               description: (sub as any).title ?? null,
               paymentDate: now,
               createdBy: currentUser.id,
+              userId: sub.submitted_by ?? null,
             }).catch(() => { /* linkage is best-effort */ });
           });
         }

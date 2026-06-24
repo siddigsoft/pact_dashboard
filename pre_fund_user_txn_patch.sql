@@ -67,7 +67,8 @@ BEGIN
   PERFORM _assert_finance_role();
 
   -- Lock the fund row and read balance + GL account codes atomically
-  SELECT available_balance, gl_liability_account, gl_expense_account
+  -- pre_fund_paid: DR gl_liability_account (obligation released) → CR gl_receipt_account (cash/bank outflow)
+  SELECT available_balance, gl_liability_account, gl_receipt_account
   INTO   v_cur_balance, v_gl_liab_code, v_gl_exp_code
   FROM   pre_fund_requests WHERE id = p_fund_id FOR UPDATE;
 

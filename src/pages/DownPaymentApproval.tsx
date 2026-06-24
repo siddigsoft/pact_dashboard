@@ -497,6 +497,7 @@ export default function DownPaymentApproval() {
           description: (req as any).purpose ?? (req as any).description ?? null,
           paymentDate: now,
           createdBy: null,
+          userId: (req as any).requestedBy ?? null,
         }).catch(() => { /* linkage is best-effort */ });
       });
       // Force a page refresh of the down payment context
