@@ -19,6 +19,7 @@ import {
   FileBarChart2, Download, RefreshCw, AlertTriangle,
   DollarSign, TrendingDown, CheckCircle2, Clock,
   FileSpreadsheet, Wallet, Activity, GitBranch,
+  Users, Receipt, ExternalLink, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -42,6 +43,16 @@ interface TxnRow {
   transaction_type: string; amount: number; currency: string;
   reference: string | null; description: string | null;
   transaction_date: string; created_at: string;
+  user_id: string | null; created_by: string | null;
+  receipt_url: string | null; source_table: string | null; source_id: string | null;
+  reconciled: boolean;
+  /** enriched */
+  user_name?: string;
+}
+interface AllocRow {
+  id: string; pre_fund_request_id: string; user_id: string;
+  allocated_amount: number; spent_amount: number; currency: string; notes: string | null;
+  fund_name?: string; user_name?: string;
 }
 interface StepRow {
   id: string; pre_fund_request_id: string; fund_name?: string;
@@ -100,34 +111,44 @@ export default function PreFundingReport() {
   const { hasAnyRole } = useAuthorization();
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
-  const [funds, setFunds]         = useState<FundRow[]>([]);
-  const [txns, setTxns]           = useState<TxnRow[]>([]);
-  const [steps, setSteps]         = useState<StepRow[]>([]);
-  const [projects, setProjects]   = useState<Project[]>([]);
-  const [profiles, setProfiles]   = useState<Map<string, string>>(new Map());
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
+  const [funds, setFunds]           = useState<FundRow[]>([]);
+  const [txns, setTxns]             = useState<TxnRow[]>([]);
+  const [steps, setSteps]           = useState<StepRow[]>([]);
+  const [allocations, setAllocations] = useState<AllocRow[]>([]);
+  const [projects, setProjects]     = useState<Project[]>([]);
+  const [profiles, setProfiles]     = useState<Map<string, string>>(new Map());
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
 
   // Filters
-  const [statusFilter, setStatusFilter]   = useState('all');
+  const [statusFilter, setStatusFilter]     = useState('all');
   const [currencyFilter, setCurrencyFilter] = useState('All');
-  const [projectFilter, setProjectFilter] = useState('all');
-  const [dateFrom, setDateFrom]           = useState('');
-  const [dateTo, setDateTo]               = useState('');
-  const [txnSearch, setTxnSearch]         = useState('');
+  const [projectFilter, setProjectFilter]   = useState('all');
+  const [dateFrom, setDateFrom]             = useState('');
+  const [dateTo, setDateTo]                 = useState('');
+  const [txnSearch, setTxnSearch]           = useState('');
+  const [txnUserFilter, setTxnUserFilter]   = useState('all');
+
+  // Reconciliation expand state
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [fundsRes, txnsRes, stepsRes, projRes, profRes] = await Promise.all([
+      const [fundsRes, txnsRes, stepsRes, projRes, profRes, allocRes] = await Promise.all([
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('pre_fund_transactions').select('*').order('transaction_date', { ascending: false }),
+        (supabase as any).from('pre_fund_transactions')
+          .select('id,pre_fund_request_id,transaction_type,amount,currency,reference,description,transaction_date,created_at,user_id,created_by,receipt_url,source_table,source_id,reconciled')
+          .order('transaction_date', { ascending: false }),
         supabase.from('pre_fund_approval_steps')
           .select('id,pre_fund_request_id,step_label,status,step_order,is_required,approved_at,notes,assigned_user_id,assigned_user_ids')
           .order('step_order'),
         supabase.from('projects').select('id,name').order('name'),
         supabase.from('profiles').select('id,full_name,email'),
+        (supabase as any).from('pre_fund_allocations')
+          .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes')
+          .order('created_at', { ascending: false }),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
 
@@ -146,9 +167,14 @@ export default function PreFundingReport() {
         return enriched;
       });
 
-      const enrichedTxns: TxnRow[] = ((txnsRes.data as any) ?? []).map((t: TxnRow) => ({
-        ...t, fund_name: fundMap.get(t.pre_fund_request_id) ?? '—',
-      }));
+      const enrichedTxns: TxnRow[] = ((txnsRes.data as any) ?? []).map((t: TxnRow) => {
+        const userId = t.user_id ?? t.created_by ?? null;
+        return {
+          ...t,
+          fund_name: fundMap.get(t.pre_fund_request_id) ?? '—',
+          user_name: userId ? (profMap.get(userId) ?? userId.slice(0, 8)) : '—',
+        };
+      });
 
       const enrichedSteps: StepRow[] = ((stepsRes.data as any) ?? []).map((s: StepRow) => {
         const ids: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length
@@ -158,9 +184,16 @@ export default function PreFundingReport() {
         return { ...s, fund_name: fundMap.get(s.pre_fund_request_id) ?? '—', assignee_names };
       });
 
+      const enrichedAllocs: AllocRow[] = ((allocRes.data as any) ?? []).map((a: AllocRow) => ({
+        ...a,
+        fund_name: fundMap.get(a.pre_fund_request_id) ?? '—',
+        user_name: profMap.get(a.user_id) ?? a.user_id.slice(0, 8),
+      }));
+
       setFunds(enrichedFunds);
       setTxns(enrichedTxns);
       setSteps(enrichedSteps);
+      setAllocations(enrichedAllocs);
       setProjects((projRes.data as any) ?? []);
       setProfiles(profMap);
     } catch (e: any) { setError(e.message); }
@@ -187,15 +220,74 @@ export default function PreFundingReport() {
     const fundIds = new Set(filteredFunds.map(f => f.id));
     return txns.filter(t => {
       if (!fundIds.has(t.pre_fund_request_id)) return false;
+      if (txnUserFilter !== 'all') {
+        const uid = t.user_id ?? t.created_by;
+        if (uid !== txnUserFilter) return false;
+      }
       if (txnSearch) {
         const q = txnSearch.toLowerCase();
         if (!t.fund_name?.toLowerCase().includes(q) &&
             !(t.reference ?? '').toLowerCase().includes(q) &&
-            !(t.description ?? '').toLowerCase().includes(q)) return false;
+            !(t.description ?? '').toLowerCase().includes(q) &&
+            !(t.user_name ?? '').toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [txns, filteredFunds, txnSearch]);
+  }, [txns, filteredFunds, txnSearch, txnUserFilter]);
+
+  // ─── Reconciliation: per-user rollup ────────────────────────────────────────
+  const reconciliationByUser = useMemo(() => {
+    const fundIds = new Set(filteredFunds.map(f => f.id));
+    // Build a user→txns map from filtered funds
+    const userMap = new Map<string, {
+      userId: string; userName: string;
+      txns: TxnRow[];
+      allocated: number; spent: number; currency: string;
+    }>();
+
+    // Seed from allocations first (to show allocated users even with no txns yet)
+    allocations.filter(a => fundIds.has(a.pre_fund_request_id)).forEach(a => {
+      if (!userMap.has(a.user_id)) {
+        userMap.set(a.user_id, {
+          userId: a.user_id,
+          userName: a.user_name ?? a.user_id.slice(0, 8),
+          txns: [],
+          allocated: 0, spent: 0,
+          currency: a.currency,
+        });
+      }
+      const u = userMap.get(a.user_id)!;
+      u.allocated += Number(a.allocated_amount);
+      u.spent += Number(a.spent_amount);
+    });
+
+    // Add transactions (even for non-allocated users — unallocated payments)
+    txns.filter(t => fundIds.has(t.pre_fund_request_id) && t.transaction_type === 'payment').forEach(t => {
+      const uid = t.user_id ?? t.created_by ?? '__unknown__';
+      if (!userMap.has(uid)) {
+        userMap.set(uid, {
+          userId: uid,
+          userName: t.user_name ?? uid.slice(0, 8),
+          txns: [],
+          allocated: 0, spent: 0,
+          currency: t.currency,
+        });
+      }
+      userMap.get(uid)!.txns.push(t);
+    });
+
+    return Array.from(userMap.values()).sort((a, b) => a.userName.localeCompare(b.userName));
+  }, [allocations, txns, filteredFunds]);
+
+  // Unique users who appear in filtered transactions (for user filter dropdown)
+  const txnUsers = useMemo(() => {
+    const seen = new Map<string, string>();
+    filteredTxns.forEach(t => {
+      const uid = t.user_id ?? t.created_by;
+      if (uid && !seen.has(uid)) seen.set(uid, t.user_name ?? uid.slice(0, 8));
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [filteredTxns]);
 
   const filteredSteps = useMemo(() => {
     const fundIds = new Set(filteredFunds.map(f => f.id));
@@ -711,14 +803,17 @@ export default function PreFundingReport() {
 
       {/* Detail tabs */}
       <Tabs defaultValue="funds">
-        <TabsList className="grid grid-cols-3 w-full max-w-md">
-          <TabsTrigger value="funds" className="text-xs gap-1.5">
+        <TabsList className="grid grid-cols-4 w-full">
+          <TabsTrigger value="funds" className="text-xs gap-1">
             <Wallet className="h-3.5 w-3.5" />Funds ({filteredFunds.length})
           </TabsTrigger>
-          <TabsTrigger value="transactions" className="text-xs gap-1.5">
+          <TabsTrigger value="transactions" className="text-xs gap-1">
             <Activity className="h-3.5 w-3.5" />Transactions ({filteredTxns.length})
           </TabsTrigger>
-          <TabsTrigger value="approvals" className="text-xs gap-1.5">
+          <TabsTrigger value="reconciliation" className="text-xs gap-1">
+            <Users className="h-3.5 w-3.5" />By User ({reconciliationByUser.length})
+          </TabsTrigger>
+          <TabsTrigger value="approvals" className="text-xs gap-1">
             <GitBranch className="h-3.5 w-3.5" />Approvals ({filteredSteps.length})
           </TabsTrigger>
         </TabsList>
@@ -799,51 +894,140 @@ export default function PreFundingReport() {
         </TabsContent>
 
         {/* ── Transactions tab ── */}
-        <TabsContent value="transactions" className="mt-3">
-          <div className="mb-3">
-            <Input value={txnSearch} onChange={e => setTxnSearch(e.target.value)}
-              placeholder="Search transactions by fund name, reference, or description…"
-              className="max-w-sm h-8 text-sm" />
+        <TabsContent value="transactions" className="mt-3 space-y-3">
+          {/* Search + user filter bar */}
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={txnSearch}
+              onChange={e => setTxnSearch(e.target.value)}
+              placeholder="Search fund, reference, description, or user…"
+              className="max-w-xs h-8 text-sm"
+            />
+            <Select value={txnUserFilter} onValueChange={setTxnUserFilter}>
+              <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-txn-user">
+                <SelectValue placeholder="All Users" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                {txnUsers.map(u => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(txnSearch || txnUserFilter !== 'all') && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs"
+                onClick={() => { setTxnSearch(''); setTxnUserFilter('all'); }}>
+                Clear filters
+              </Button>
+            )}
           </div>
+
           <Card className="border">
             <CardContent className="p-0">
               {loading ? (
                 <div className="p-4 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
               ) : filteredTxns.length === 0 ? (
-                <div className="p-10 text-center text-muted-foreground text-sm">No transactions found.</div>
+                <div className="p-10 text-center text-muted-foreground text-sm">No transactions match the current filters.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/30">
-                        <TableHead className="font-semibold pl-4">Date</TableHead>
+                        <TableHead className="font-semibold pl-4 whitespace-nowrap">Date / Time</TableHead>
+                        <TableHead className="font-semibold">Submitted By</TableHead>
                         <TableHead className="font-semibold">Fund</TableHead>
                         <TableHead className="font-semibold">Type</TableHead>
+                        <TableHead className="font-semibold">Source</TableHead>
                         <TableHead className="font-semibold">Reference</TableHead>
                         <TableHead className="font-semibold">Description</TableHead>
-                        <TableHead className="font-semibold text-right">Amount</TableHead>
+                        <TableHead className="font-semibold text-center">Reconciled</TableHead>
+                        <TableHead className="font-semibold text-center">Receipt</TableHead>
+                        <TableHead className="font-semibold text-right pr-4">Amount</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredTxns.slice(0, 200).map(t => (
-                        <TableRow key={t.id} className="hover:bg-muted/30">
-                          <TableCell className="pl-4 text-xs whitespace-nowrap">
-                            {t.transaction_date ? format(parseISO(t.transaction_date), 'MMM d, yyyy') : '—'}
+                        <TableRow key={t.id} className="hover:bg-muted/30 align-middle">
+                          {/* Date + exact timestamp */}
+                          <TableCell className="pl-4 py-2.5">
+                            <div className="text-xs font-medium whitespace-nowrap">
+                              {t.transaction_date ? format(parseISO(t.transaction_date), 'MMM d, yyyy') : '—'}
+                            </div>
+                            {t.created_at && (
+                              <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                {format(parseISO(t.created_at), 'HH:mm:ss')}
+                              </div>
+                            )}
                           </TableCell>
-                          <TableCell className="text-sm max-w-[180px]">
+
+                          {/* Submitted by */}
+                          <TableCell className="py-2.5">
+                            <span className="text-xs font-medium">{t.user_name ?? '—'}</span>
+                          </TableCell>
+
+                          {/* Fund */}
+                          <TableCell className="text-xs max-w-[160px] py-2.5">
                             <span className="truncate block">{t.fund_name}</span>
                           </TableCell>
-                          <TableCell>
-                            <span className="text-xs px-1.5 py-0.5 rounded-md font-medium"
+
+                          {/* Type badge */}
+                          <TableCell className="py-2.5">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-medium whitespace-nowrap"
                               style={{ background: (TXN_COLORS[t.transaction_type] ?? '#94a3b8') + '22', color: TXN_COLORS[t.transaction_type] ?? '#64748b' }}>
                               {t.transaction_type}
                             </span>
                           </TableCell>
-                          <TableCell className="text-xs font-mono text-muted-foreground">{t.reference ?? '—'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[200px]">
+
+                          {/* Source module */}
+                          <TableCell className="py-2.5">
+                            {t.source_table ? (
+                              <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
+                                {t.source_table === 'operational_cost_submissions' ? 'Cost Sub.' :
+                                 t.source_table === 'down_payment_requests' ? 'Down Pmt.' :
+                                 t.source_table}
+                              </span>
+                            ) : <span className="text-muted-foreground text-xs">—</span>}
+                          </TableCell>
+
+                          {/* Reference */}
+                          <TableCell className="text-xs font-mono text-muted-foreground py-2.5 whitespace-nowrap">
+                            {t.reference ?? '—'}
+                          </TableCell>
+
+                          {/* Description */}
+                          <TableCell className="text-xs text-muted-foreground max-w-[180px] py-2.5">
                             <span className="truncate block">{t.description ?? '—'}</span>
                           </TableCell>
-                          <TableCell className={cn('text-right text-sm font-medium tabular-nums',
+
+                          {/* Reconciled */}
+                          <TableCell className="text-center py-2.5">
+                            {t.reconciled ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                            ) : (
+                              <Clock className="h-3.5 w-3.5 text-amber-400 mx-auto" />
+                            )}
+                          </TableCell>
+
+                          {/* Receipt */}
+                          <TableCell className="text-center py-2.5">
+                            {t.receipt_url ? (
+                              <a
+                                href={t.receipt_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-800 text-xs font-medium"
+                                title="View receipt"
+                              >
+                                <Receipt className="h-3.5 w-3.5" />
+                                <ExternalLink className="h-2.5 w-2.5" />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+
+                          {/* Amount */}
+                          <TableCell className={cn('text-right text-sm font-semibold tabular-nums pr-4 py-2.5',
                             t.transaction_type === 'payment' ? 'text-rose-600' : 'text-emerald-600')}>
                             {t.currency} {formatNumber(t.amount, 2)}
                           </TableCell>
@@ -852,12 +1036,239 @@ export default function PreFundingReport() {
                     </TableBody>
                   </Table>
                   {filteredTxns.length > 200 && (
-                    <p className="text-center text-xs text-muted-foreground py-3">Showing first 200 of {filteredTxns.length} transactions. Export to Excel for full data.</p>
+                    <p className="text-center text-xs text-muted-foreground py-3">
+                      Showing first 200 of {filteredTxns.length} transactions. Export to Excel for the full list.
+                    </p>
                   )}
                 </div>
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── By-User / Reconciliation tab ── */}
+        <TabsContent value="reconciliation" className="mt-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Per-user allocation vs actual spending with full transaction history.
+            </p>
+            {reconciliationByUser.length > 0 && (
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5"
+                onClick={() => setExpandedUsers(
+                  expandedUsers.size === reconciliationByUser.length
+                    ? new Set()
+                    : new Set(reconciliationByUser.map(u => u.userId))
+                )}>
+                {expandedUsers.size === reconciliationByUser.length ? 'Collapse All' : 'Expand All'}
+              </Button>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
+          ) : reconciliationByUser.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground text-sm border rounded-xl bg-muted/20">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              No user allocations or transactions found for the current fund filters.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reconciliationByUser.map(u => {
+                const isExpanded = expandedUsers.has(u.userId);
+                const txnTotal = u.txns.reduce((s, t) => s + t.amount, 0);
+                const currency = u.currency || u.txns[0]?.currency || 'USD';
+                const hasAlloc = u.allocated > 0;
+                const remaining = hasAlloc ? u.allocated - u.spent : null;
+                const pct = hasAlloc && u.allocated > 0 ? Math.min((u.spent / u.allocated) * 100, 100) : null;
+                const reconciledCount = u.txns.filter(t => t.reconciled).length;
+                const unreconciled = u.txns.length - reconciledCount;
+
+                return (
+                  <Card key={u.userId} className={cn('border overflow-hidden', isExpanded && 'ring-1 ring-violet-300 dark:ring-violet-700')}>
+                    {/* User header row */}
+                    <button
+                      className="w-full text-left"
+                      onClick={() => setExpandedUsers(prev => {
+                        const next = new Set(prev);
+                        if (next.has(u.userId)) next.delete(u.userId); else next.add(u.userId);
+                        return next;
+                      })}
+                    >
+                      <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 hover:bg-muted/40 transition-colors">
+                        {/* Chevron */}
+                        {isExpanded
+                          ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                          : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+
+                        {/* Avatar */}
+                        <div className="h-8 w-8 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-bold text-violet-700 dark:text-violet-300">
+                            {u.userName.slice(0, 2).toUpperCase()}
+                          </span>
+                        </div>
+
+                        {/* Name */}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-sm truncate">{u.userName}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {u.txns.length} transaction{u.txns.length !== 1 ? 's' : ''}
+                            {unreconciled > 0 && (
+                              <span className="ml-2 text-amber-600 font-medium">{unreconciled} unreconciled</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Allocation pill */}
+                        {hasAlloc ? (
+                          <div className="shrink-0 text-right hidden sm:block">
+                            <div className="text-[10px] text-muted-foreground mb-0.5">Allocated</div>
+                            <div className="text-xs font-mono font-semibold">{currency} {formatNumber(u.allocated, 0)}</div>
+                          </div>
+                        ) : (
+                          <div className="shrink-0 hidden sm:block">
+                            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">No allocation</span>
+                          </div>
+                        )}
+
+                        {/* Spent */}
+                        <div className="shrink-0 text-right hidden sm:block">
+                          <div className="text-[10px] text-muted-foreground mb-0.5">Spent</div>
+                          <div className="text-xs font-mono font-semibold text-rose-600">
+                            {currency} {formatNumber(hasAlloc ? u.spent : txnTotal, 0)}
+                          </div>
+                        </div>
+
+                        {/* Remaining */}
+                        {hasAlloc && remaining !== null && (
+                          <div className="shrink-0 text-right hidden sm:block">
+                            <div className="text-[10px] text-muted-foreground mb-0.5">Remaining</div>
+                            <div className={cn('text-xs font-mono font-semibold', remaining < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                              {currency} {formatNumber(remaining, 0)}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Progress bar */}
+                        {pct !== null && (
+                          <div className="shrink-0 hidden md:flex flex-col items-end gap-0.5 w-20">
+                            <span className="text-[10px] text-muted-foreground">{Math.round(pct)}%</span>
+                            <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className={cn('h-full rounded-full', pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500')}
+                                style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Expanded: per-transaction list */}
+                    {isExpanded && (
+                      <div className="border-t">
+                        {u.txns.length === 0 ? (
+                          <div className="px-4 py-4 text-xs text-muted-foreground italic">
+                            No transactions recorded yet for this user under the current fund filters.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-violet-50/40 dark:bg-violet-900/10 hover:bg-violet-50/40">
+                                  <TableHead className="text-[11px] font-semibold pl-4 whitespace-nowrap">Date / Time</TableHead>
+                                  <TableHead className="text-[11px] font-semibold">Fund</TableHead>
+                                  <TableHead className="text-[11px] font-semibold">Type</TableHead>
+                                  <TableHead className="text-[11px] font-semibold">Source</TableHead>
+                                  <TableHead className="text-[11px] font-semibold">Reference</TableHead>
+                                  <TableHead className="text-[11px] font-semibold">Description</TableHead>
+                                  <TableHead className="text-[11px] font-semibold text-center">Reconciled</TableHead>
+                                  <TableHead className="text-[11px] font-semibold text-center">Receipt</TableHead>
+                                  <TableHead className="text-[11px] font-semibold text-right pr-4">Amount</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {u.txns.map(t => (
+                                  <TableRow key={t.id} className="hover:bg-muted/20">
+                                    {/* Date + timestamp */}
+                                    <TableCell className="pl-4 py-2">
+                                      <div className="text-[11px] font-medium whitespace-nowrap">
+                                        {t.transaction_date ? format(parseISO(t.transaction_date), 'MMM d, yyyy') : '—'}
+                                      </div>
+                                      {t.created_at && (
+                                        <div className="text-[10px] text-muted-foreground">
+                                          {format(parseISO(t.created_at), 'HH:mm:ss')}
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                    {/* Fund */}
+                                    <TableCell className="text-xs max-w-[130px] py-2">
+                                      <span className="truncate block">{t.fund_name}</span>
+                                    </TableCell>
+                                    {/* Type */}
+                                    <TableCell className="py-2">
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap"
+                                        style={{ background: (TXN_COLORS[t.transaction_type] ?? '#94a3b8') + '22', color: TXN_COLORS[t.transaction_type] ?? '#64748b' }}>
+                                        {t.transaction_type}
+                                      </span>
+                                    </TableCell>
+                                    {/* Source */}
+                                    <TableCell className="py-2">
+                                      {t.source_table ? (
+                                        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-mono">
+                                          {t.source_table === 'operational_cost_submissions' ? 'Cost Sub.' :
+                                           t.source_table === 'down_payment_requests' ? 'Down Pmt.' :
+                                           t.source_table}
+                                        </span>
+                                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                                    </TableCell>
+                                    {/* Reference */}
+                                    <TableCell className="text-[11px] font-mono text-muted-foreground py-2 whitespace-nowrap">
+                                      {t.reference ?? '—'}
+                                    </TableCell>
+                                    {/* Description */}
+                                    <TableCell className="text-[11px] text-muted-foreground max-w-[160px] py-2">
+                                      <span className="truncate block">{t.description ?? '—'}</span>
+                                    </TableCell>
+                                    {/* Reconciled */}
+                                    <TableCell className="text-center py-2">
+                                      {t.reconciled
+                                        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                                        : <Clock className="h-3.5 w-3.5 text-amber-400 mx-auto" />}
+                                    </TableCell>
+                                    {/* Receipt */}
+                                    <TableCell className="text-center py-2">
+                                      {t.receipt_url ? (
+                                        <a href={t.receipt_url} target="_blank" rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-800 text-xs font-medium">
+                                          <Receipt className="h-3.5 w-3.5" />
+                                          <ExternalLink className="h-2.5 w-2.5" />
+                                        </a>
+                                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                                    </TableCell>
+                                    {/* Amount */}
+                                    <TableCell className={cn('text-right text-xs font-semibold tabular-nums pr-4 py-2',
+                                      t.transaction_type === 'payment' ? 'text-rose-600' : 'text-emerald-600')}>
+                                      {t.currency} {formatNumber(t.amount, 2)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+
+                            {/* User subtotal */}
+                            <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-t text-xs">
+                              <span className="font-semibold text-muted-foreground">{u.txns.length} transactions</span>
+                              <span className="font-mono font-bold text-rose-600">
+                                {currency} {formatNumber(txnTotal, 2)} total
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Approvals tab — visual chain flow ── */}

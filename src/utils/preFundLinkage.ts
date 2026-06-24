@@ -37,12 +37,17 @@ export async function linkPaymentToPreFund(params: {
   reference?: string | null;
   description?: string | null;
   paymentDate: string;
+  /** Finance admin who triggered the link (for audit) */
   createdBy?: string | null;
+  /** The field staff member who made the payment (shown in transactions + reconciliation) */
+  userId?: string | null;
+  /** URL of the payment receipt / attachment to store on the transaction */
+  receiptUrl?: string | null;
 }): Promise<FundLinkResult> {
   const {
     amount, currency, countryId, projectId,
     sourceTable, sourceId, reference, description,
-    paymentDate, createdBy,
+    paymentDate, createdBy, userId, receiptUrl,
   } = params;
 
   const today = paymentDate.split('T')[0];
@@ -145,6 +150,8 @@ export async function linkPaymentToPreFund(params: {
       p_description:  description ?? null,
       p_payment_date: today,
       p_created_by:   createdBy ?? null,
+      p_user_id:      userId ?? createdBy ?? null,
+      p_receipt_url:  receiptUrl ?? null,
     }
   );
 
