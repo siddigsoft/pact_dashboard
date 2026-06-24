@@ -3,13 +3,21 @@
 ## Overview
 The Pre-Funding Management System adds a top-level section at `/pre-funding` for Finance and Admin users. It manages incoming pre-funds, approval chains, transaction reconciliation, GL postings, multi-currency balances, and donor PDF statements.
 
-## Step 1 — Apply the Database Migration
+## Step 1 — Apply All SQL Files in Order
 
-1. Open Supabase Dashboard → SQL Editor → New query
-2. Paste the contents of `pre_funding_migration.sql`
-3. Click **Run**
+Run each file in Supabase Dashboard → SQL Editor → New query, **in this exact order**:
 
-**What the migration creates:**
+| # | File | Purpose |
+|---|---|---|
+| 1 | `pre_funding_migration.sql` | Core tables, RLS, GL bridge accounts |
+| 2 | `pre_funding_atomic_rpcs.sql` | 4 SECURITY DEFINER RPCs (activate, link, add txn, close period) |
+| 3 | `pre_funding_rls_fix.sql` | RLS policy corrections (if needed) |
+| 4 | `pre_fund_allocations.sql` | `pre_fund_allocations` table + `deduct_pf_allocation` RPC |
+| 5 | `pre_fund_user_txn_patch.sql` | Adds `user_id` + `receipt_url` to `pre_fund_transactions`, extends `link_payment_atomically_rpc` |
+
+> Files 3–5 are safe to re-run at any time — all use `IF NOT EXISTS` / `CREATE OR REPLACE` guards.
+
+**What the base migration (file 1) creates:**
 | Table | Purpose |
 |---|---|
 | `pre_fund_period_types` | Period type definitions (Weekly, Monthly, etc.) |
@@ -19,10 +27,26 @@ The Pre-Funding Management System adds a top-level section at `/pre-funding` for
 | `pre_fund_transactions` | Individual transactions (receipt, payment, etc.) |
 | `pre_fund_reconciliations` | Period close records with surplus disposition |
 
-**Verify:**
+**What the allocations file (file 4) creates:**
+| Object | Purpose |
+|---|---|
+| `pre_fund_allocations` | Per-user budget limits within a fund |
+| `deduct_pf_allocation()` RPC | Atomically increments `spent_amount` when a payment links |
+
+**What the patch file (file 5) adds:**
+| Change | Detail |
+|---|---|
+| `pre_fund_transactions.user_id` | Field staff who made the payment (separate from `created_by` which is the finance admin) |
+| `pre_fund_transactions.receipt_url` | URL of the uploaded payment receipt/attachment |
+| Extended `link_payment_atomically_rpc` | New optional params `p_user_id`, `p_receipt_url` — old callers with 9 params still work |
+
+**Verify after all files:**
 ```sql
-SELECT COUNT(*) FROM pre_fund_period_types;
--- Should return 7
+SELECT COUNT(*) FROM pre_fund_period_types;  -- Should return 7
+SELECT column_name FROM information_schema.columns
+  WHERE table_name = 'pre_fund_transactions'
+    AND column_name IN ('user_id', 'receipt_url');  -- Should return 2 rows
+SELECT COUNT(*) FROM pre_fund_allocations;   -- Should return 0 (empty, no error)
 ```
 
 ## Step 2 — Add GL Bridge Accounts (if not already present)
