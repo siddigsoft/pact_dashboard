@@ -421,7 +421,10 @@ export function useApprovalsData({
       }
 
       // ── 8. Pre-fund requests — pending approval ───────────────────────
-      // Visible to: Financial Admin, Admin only
+      // Visible to: Financial Admin, Admin — see all pending_approval funds
+      // Also visible to: any user assigned to a pending approval step (step-assignee model)
+      const preFundIds = new Set<string>();
+
       if (roleIsFinancialAdmin || roleIsAdmin) {
         const { data: preFunds } = await supabase
           .from('pre_fund_requests' as any)
@@ -435,6 +438,7 @@ export function useApprovalsData({
           const creatorIds = [...new Set(rows.map((r: any) => r.created_by).filter(Boolean))];
           const { nameMap } = await getProfilesMap(creatorIds);
           rows.forEach((r: any) => {
+            preFundIds.add(r.id);
             allItems.push({
               id: `pf_${r.id}`,
               type: 'pre_fund',
@@ -452,6 +456,58 @@ export function useApprovalsData({
               rawData: r,
             });
           });
+        }
+      }
+
+      // Step-assignee: surface pre-fund requests where this user has a pending approval step
+      // (covers non-finance users assigned to a specific step in the chain)
+      if (currentUserId) {
+        const { data: assignedSteps } = await supabase
+          .from('pre_fund_approval_steps' as any)
+          .select('pre_fund_request_id, step_label')
+          .eq('assigned_user_id', currentUserId)
+          .eq('status', 'pending')
+          .limit(30);
+
+        if (assignedSteps && (assignedSteps as any[]).length > 0) {
+          const stepRows = assignedSteps as any[];
+          const pendingFundIds = stepRows
+            .map((s: any) => s.pre_fund_request_id)
+            .filter((fid: string) => !preFundIds.has(fid));
+
+          if (pendingFundIds.length > 0) {
+            const { data: stepFunds } = await supabase
+              .from('pre_fund_requests' as any)
+              .select('id, name, source, amount, currency, status, created_at, created_by')
+              .in('id', pendingFundIds)
+              .eq('status', 'pending_approval')
+              .limit(30);
+
+            if (stepFunds && (stepFunds as any[]).length > 0) {
+              const sfRows = stepFunds as any[];
+              const creatorIds = [...new Set(sfRows.map((r: any) => r.created_by).filter(Boolean))];
+              const { nameMap } = await getProfilesMap(creatorIds);
+              sfRows.forEach((r: any) => {
+                const myStep = stepRows.find((s: any) => s.pre_fund_request_id === r.id);
+                allItems.push({
+                  id: `pf_${r.id}`,
+                  type: 'pre_fund',
+                  subtype: myStep?.step_label ? `Step: ${myStep.step_label}` : 'Approval Step',
+                  requesterName: nameMap[r.created_by || ''] || 'Finance Team',
+                  requesterId: r.created_by || '',
+                  amount: parseFloat(r.amount),
+                  currency: r.currency || 'USD',
+                  description: [r.name, r.source ? `Donor: ${r.source}` : null].filter(Boolean).join(' — ') || undefined,
+                  status: r.status,
+                  submittedAt: r.created_at,
+                  urgencyLevel: getUrgencyLevel(r.created_at),
+                  canInlineApprove: false,
+                  navigationPath: '/pre-funding',
+                  rawData: r,
+                });
+              });
+            }
+          }
         }
       }
 

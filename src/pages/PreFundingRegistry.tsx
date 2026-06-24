@@ -296,20 +296,27 @@ export default function PreFundingRegistry() {
             journal_entry_id: (je as any).id,
           });
 
-          // Bank statement line (bank recon integration)
-          // Find a bank account matching the currency
-          const { data: bankAcct } = await supabase.from('acct_bank_accounts' as any)
-            .select('id').eq('currency', currency).limit(1).maybeSingle();
-          if ((bankAcct as any)?.id) {
-            await supabase.from('acct_bank_statement_lines').insert({
-              bank_account_id: (bankAcct as any).id,
-              statement_date: new Date().toISOString().split('T')[0],
-              description: `Pre-fund received: ${fund?.name}`,
-              reference: `PF-${fundId.slice(0, 8).toUpperCase()}`,
-              amount,
-              currency,
-              pre_fund_request_id: fundId,
-            });
+          // Bank statement line — only when integration_bank_recon toggle is enabled
+          const { data: bankReconSettings } = await supabase
+            .from('pre_fund_settings' as any)
+            .select('integration_bank_recon')
+            .limit(1)
+            .maybeSingle();
+          const bankReconOn = (bankReconSettings as any)?.integration_bank_recon !== false;
+          if (bankReconOn) {
+            const { data: bankAcct } = await supabase.from('acct_bank_accounts' as any)
+              .select('id').eq('currency', currency).limit(1).maybeSingle();
+            if ((bankAcct as any)?.id) {
+              await supabase.from('acct_bank_statement_lines').insert({
+                bank_account_id: (bankAcct as any).id,
+                statement_date: new Date().toISOString().split('T')[0],
+                description: `Pre-fund received: ${fund?.name}`,
+                reference: `PF-${fundId.slice(0, 8).toUpperCase()}`,
+                amount,
+                currency,
+                pre_fund_request_id: fundId,
+              });
+            }
           }
         }
       } catch (glErr: any) {
@@ -414,13 +421,14 @@ export default function PreFundingRegistry() {
     setBankCheckBusy(true);
     let activated = 0;
     try {
-      // Read configurable tolerance from pre_fund_settings
+      // Read configurable tolerance + integration toggles from pre_fund_settings
       const { data: settingsRow } = await supabase
         .from('pre_fund_settings' as any)
-        .select('bank_match_tolerance_pct')
+        .select('bank_match_tolerance_pct, integration_bank_recon')
         .limit(1)
         .maybeSingle();
       const tolerancePct = ((settingsRow as any)?.bank_match_tolerance_pct ?? 2) / 100;
+      const bankReconEnabled = (settingsRow as any)?.integration_bank_recon !== false;
 
       const awaitingFunds = funds.filter(f => f.status === 'awaiting_receipt');
       for (const fund of awaitingFunds) {
@@ -475,19 +483,21 @@ export default function PreFundingRegistry() {
                 if (lines.length > 0) await supabase.from('acct_journal_lines').insert(lines);
                 await supabase.from('acct_gl_bridge_log' as any).insert({ source_table: 'pre_fund_requests', source_id: fund.id, event_type: 'pre_fund_received', status: 'success', journal_entry_id: (je as any).id });
               }
-              // ── Create bank statement reconciliation line ──
-              const { data: bankAcct } = await supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle();
-              if ((bankAcct as any)?.id) {
-                await supabase.from('acct_bank_statement_lines' as any).insert({
-                  account_id: (bankAcct as any).id,
-                  bank_account_id: null,
-                  statement_date: activatedAt.split('T')[0],
-                  description: `Pre-fund received (bank auto-match): ${fund.name}`,
-                  reference: `PF-${fund.id.slice(0, 8).toUpperCase()}`,
-                  amount: fund.amount,
-                  currency: fund.currency,
-                  pre_fund_request_id: fund.id,
-                });
+              // ── Create bank statement reconciliation line (only if integration enabled) ──
+              if (bankReconEnabled) {
+                const { data: bankAcct } = await supabase.from('acct_accounts' as any).select('id').eq('code', drCode).maybeSingle();
+                if ((bankAcct as any)?.id) {
+                  await supabase.from('acct_bank_statement_lines' as any).insert({
+                    account_id: (bankAcct as any).id,
+                    bank_account_id: null,
+                    statement_date: activatedAt.split('T')[0],
+                    description: `Pre-fund received (bank auto-match): ${fund.name}`,
+                    reference: `PF-${fund.id.slice(0, 8).toUpperCase()}`,
+                    amount: fund.amount,
+                    currency: fund.currency,
+                    pre_fund_request_id: fund.id,
+                  });
+                }
               }
             } catch (glErr: any) {
               console.warn('[PreFund] Bank-match GL posting skipped:', glErr.message);

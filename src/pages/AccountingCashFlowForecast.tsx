@@ -48,7 +48,7 @@ export default function AccountingCashFlowForecast() {
     try {
       const missing: string[] = [];
 
-      const [bankRes, journalLineRes, encRes, poRes, preFundRes] = await Promise.all([
+      const [bankRes, journalLineRes, encRes, poRes, preFundRes, preFundSettingsRes, fxRes] = await Promise.all([
         supabase.from('acct_bank_accounts').select('current_balance, is_active').limit(500),
         supabase.from('acct_journal_lines')
           .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
@@ -62,6 +62,10 @@ export default function AccountingCashFlowForecast() {
           .select('available_balance, committed_amount, currency')
           .in('status', ['active', 'low_balance'])
           .limit(500),
+        // Integration toggle + FX rates for base-currency conversion
+        supabase.from('pre_fund_settings' as any).select('integration_cashflow').limit(1).maybeSingle(),
+        supabase.from('exchange_rates').select('usd_to_sdg').eq('is_active', true)
+          .order('fetched_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
 
       if (bankRes.error?.code === '42P01') missing.push('acct_bank_accounts');
@@ -71,10 +75,24 @@ export default function AccountingCashFlowForecast() {
       const totalCash = banks.filter(b => b.is_active !== false).reduce((s: number, b: any) => s + Number(b.current_balance ?? 0), 0);
       setCashBalance(totalCash);
 
-      // Pre-fund liquidity (USD-denominated funds contribute directly; others are advisory)
+      // Only include pre-fund liquidity when integration_cashflow toggle is enabled (default: true)
+      const pfSettings = (preFundSettingsRes as any)?.data;
+      const integrationEnabled = pfSettings === null || pfSettings?.integration_cashflow !== false;
+      const usdToSdg = Number((fxRes as any)?.data?.usd_to_sdg ?? 1) || 1;
+
       const preFunds = (preFundRes.data ?? []) as any[];
-      const pfLiquidity = preFunds.reduce((s: number, r: any) => s + Number(r.available_balance ?? 0), 0);
-      const pfCommitted = preFunds.reduce((s: number, r: any) => s + Number(r.committed_amount ?? 0), 0);
+      // Convert all pre-fund balances to USD using FX rates for a unified base-currency total
+      const toUSD = (amount: number, currency: string) => {
+        if (currency === 'USD') return amount;
+        if (currency === 'SDG') return usdToSdg > 0 ? amount / usdToSdg : 0;
+        return amount; // fallback: treat unknown currencies as USD-equivalent
+      };
+      const pfLiquidity = integrationEnabled
+        ? preFunds.reduce((s: number, r: any) => s + toUSD(Number(r.available_balance ?? 0), r.currency ?? 'USD'), 0)
+        : 0;
+      const pfCommitted = integrationEnabled
+        ? preFunds.reduce((s: number, r: any) => s + toUSD(Number(r.committed_amount ?? 0), r.currency ?? 'USD'), 0)
+        : 0;
       setPreFundLiquidity(pfLiquidity);
       setPreFundCommitted(pfCommitted);
 

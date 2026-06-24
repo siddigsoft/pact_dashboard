@@ -57,7 +57,8 @@ export default function PreFundingApprovalFlow() {
   const { currentUser } = useAppContext();
   const { users } = useUser();
   const { toast } = useToast();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  // Finance admins see all funds; any authenticated user can view/action their assigned step
+  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']) || !!currentUser?.id;
 
   const [funds, setFunds]       = useState<PreFundSummary[]>([]);
   const [steps, setSteps]       = useState<ApprovalStep[]>([]);
