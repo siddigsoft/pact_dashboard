@@ -233,6 +233,20 @@ DO $$ BEGIN
   ALTER TABLE acct_bank_statement_lines ADD COLUMN IF NOT EXISTS pre_fund_request_id UUID REFERENCES pre_fund_requests(id) ON DELETE SET NULL;
 EXCEPTION WHEN undefined_table THEN NULL; END $$;
 
+-- ─── 8b. Add approval/rejection tracking columns to pre_fund_requests ─────────
+ALTER TABLE pre_fund_requests
+  ADD COLUMN IF NOT EXISTS approved_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS approved_at      TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+
+-- Expand status CHECK to include 'rejected' (safe idempotent via DROP IF EXISTS + re-add)
+ALTER TABLE pre_fund_requests
+  DROP CONSTRAINT IF EXISTS pre_fund_requests_status_check;
+ALTER TABLE pre_fund_requests
+  ADD CONSTRAINT pre_fund_requests_status_check
+  CHECK (status IN ('draft','pending_approval','awaiting_receipt','active','low_balance',
+                    'closed','period_locked','pending_grace','rejected'));
+
 -- ─── 9. Row Level Security ────────────────────────────────────────────────────
 ALTER TABLE pre_fund_period_types      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_settings          ENABLE ROW LEVEL SECURITY;

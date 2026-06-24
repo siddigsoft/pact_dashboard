@@ -331,24 +331,68 @@ export default function ApprovalsHub() {
           toast({ title: 'Advance Rejected', description: 'Request has been rejected.' });
         }
       } else if (item.type === 'pre_fund') {
-        // Pre-fund approval: pending_approval → awaiting_receipt (approve) or rejected (reject)
+        // Step-aware pre-fund approval via pre_fund_approval_steps
         const fundId = item.rawData?.id;
         const now = new Date().toISOString();
-        const newStatus = action === 'approve' ? 'awaiting_receipt' : 'rejected';
-        const { error } = await supabase
+
+        // 1. Find the current pending step for this fund (lowest step_order pending)
+        const { data: stepsData } = await supabase
+          .from('pre_fund_approval_steps' as any)
+          .select('id, step_order, is_required, status')
+          .eq('pre_fund_request_id', fundId)
+          .order('step_order', { ascending: true });
+        const steps: any[] = (stepsData as any) ?? [];
+        const pendingStep = steps.find((s: any) => s.status === 'pending');
+
+        // 2. Update the pending step (or fall back to updating fund directly if no steps)
+        if (pendingStep) {
+          const { error: stepErr } = await supabase
+            .from('pre_fund_approval_steps' as any)
+            .update({
+              status: action === 'approve' ? 'approved' : 'rejected',
+              approved_by: currentUser?.id ?? null,
+              approved_at: now,
+              notes: actionNotes || (action === 'approve' ? 'Approved via Approvals Hub' : 'Rejected via Approvals Hub'),
+            })
+            .eq('id', pendingStep.id);
+          if (stepErr) throw stepErr;
+        }
+
+        // 3. Determine new fund status
+        let newFundStatus: string | null = null;
+        if (action === 'reject') {
+          newFundStatus = 'rejected'; // now allowed by updated CHECK
+        } else {
+          // Check if any required steps remain pending after this approval
+          const remainingRequired = steps.filter(
+            (s: any) => s.id !== pendingStep?.id && s.status === 'pending' && s.is_required
+          );
+          if (remainingRequired.length === 0) {
+            newFundStatus = 'awaiting_receipt'; // all required steps cleared
+          }
+          // else keep as pending_approval — more steps remain
+        }
+
+        // 4. Update fund-level columns
+        const fundUpdate: any = {
+          approved_by: action === 'approve' ? currentUser?.id : null,
+          approved_at: action === 'approve' ? now : null,
+          rejection_reason: action === 'reject' ? (actionNotes || 'Rejected via Approvals Hub') : null,
+        };
+        if (newFundStatus) fundUpdate.status = newFundStatus;
+
+        const { error: fundErr } = await supabase
           .from('pre_fund_requests' as any)
-          .update({
-            status: newStatus,
-            approved_by: action === 'approve' ? currentUser?.id : null,
-            approved_at: action === 'approve' ? now : null,
-            rejection_reason: action === 'reject' ? (actionNotes || 'Rejected via Approvals Hub') : null,
-          })
+          .update(fundUpdate)
           .eq('id', fundId);
-        if (error) throw error;
+        if (fundErr) throw fundErr;
+
         toast({
           title: action === 'approve' ? 'Pre-Fund Approved' : 'Pre-Fund Rejected',
           description: action === 'approve'
-            ? 'Fund is now awaiting receipt — upload bank confirmation to activate.'
+            ? newFundStatus === 'awaiting_receipt'
+              ? 'All steps cleared — fund is awaiting receipt confirmation.'
+              : 'Step approved. Further approval steps are pending.'
             : 'Pre-fund request has been rejected.',
         });
       }
