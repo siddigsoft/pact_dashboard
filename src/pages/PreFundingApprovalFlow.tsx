@@ -15,30 +15,57 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import {
   GitBranch, Plus, Trash2, ChevronUp, ChevronDown, RefreshCw,
-  AlertTriangle, CheckCircle2, Clock, Users, ArrowRight, Edit2, X, Search,
+  AlertTriangle, CheckCircle2, Clock, Users, ArrowRight, Edit2,
+  X, Search, CheckCircle, XCircle, ShieldCheck,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-interface PreFundSummary { id: string; name: string; status: string; currency: string; amount: number; project_id: string | null; project_name?: string }
+// ─── Interfaces ───────────────────────────────────────────────────────────────
+
+interface PreFundSummary {
+  id: string; name: string; status: string;
+  currency: string; amount: number;
+  project_id: string | null; project_name?: string;
+}
 interface Project { id: string; name: string }
+
+interface StepVote {
+  id: string;
+  step_id: string;
+  user_id: string;
+  user_name?: string;
+  action: 'approved' | 'rejected';
+  notes: string | null;
+  created_at: string;
+}
+
 interface ApprovalStep {
   id: string;
   pre_fund_request_id: string;
   step_order: number;
   step_label: string;
-  assigned_user_id: string | null;     // legacy single-user (kept for backward compat)
-  assigned_user_ids: string[];         // multi-user array
+  assigned_user_id: string | null;        // legacy (kept for compat)
+  assigned_user_ids: string[];            // multi-user array
   assigned_user_names?: string[];
+  required_approvals: number;             // quorum: how many must approve
   is_required: boolean;
   status: string;
   approved_at: string | null;
   approved_by: string | null;
   notes: string | null;
+  votes?: StepVote[];                     // individual votes
 }
 
-type StepForm = { step_label: string; assigned_user_ids: string[]; is_required: boolean };
-const EMPTY_STEP_FORM: StepForm = { step_label: '', assigned_user_ids: [], is_required: true };
+type StepForm = {
+  step_label: string;
+  assigned_user_ids: string[];
+  required_approvals: number;
+  is_required: boolean;
+};
+const EMPTY_STEP_FORM: StepForm = { step_label: '', assigned_user_ids: [], required_approvals: 1, is_required: true };
+
+// ─── Config ───────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
   pending:  { label: 'Pending',  cls: 'bg-amber-100 text-amber-700 border-amber-200',       icon: Clock },
@@ -46,7 +73,6 @@ const STATUS_CFG: Record<string, { label: string; cls: string; icon: React.Eleme
   rejected: { label: 'Rejected', cls: 'bg-rose-100 text-rose-700 border-rose-200',          icon: AlertTriangle },
   skipped:  { label: 'Skipped',  cls: 'bg-slate-100 text-slate-500 border-slate-200',       icon: ArrowRight },
 };
-
 const FUND_STATUS_CFG: Record<string, string> = {
   draft:            'bg-slate-100 text-slate-600',
   pending_approval: 'bg-amber-100 text-amber-700',
@@ -56,7 +82,6 @@ const FUND_STATUS_CFG: Record<string, string> = {
   closed:           'bg-slate-100 text-slate-500',
 };
 
-// Roles allowed to be assigned as approvers in a pre-fund approval step
 const APPROVER_ROLE_KEYS = new Set([
   'superadmin', 'super_admin', 'admin',
   'employee',
@@ -64,11 +89,12 @@ const APPROVER_ROLE_KEYS = new Set([
   'fieldoperationmanagerfom', 'fom', 'field operation manager (fom)', 'field operation manager',
   'countrydirector', 'country_director', 'cd',
 ]);
-
 function isApproverRole(role: string | null | undefined): boolean {
   if (!role) return false;
   return APPROVER_ROLE_KEYS.has(role.toLowerCase().replace(/[\s\-]/g, ''));
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PreFundingApprovalFlow() {
   const { hasAnyRole } = useAuthorization();
@@ -76,6 +102,7 @@ export default function PreFundingApprovalFlow() {
   const { users } = useUser();
   const { toast } = useToast();
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']) || !!currentUser?.id;
+  const isAdmin   = hasAnyRole(['super_admin', 'admin']);
 
   const [funds, setFunds]                 = useState<PreFundSummary[]>([]);
   const [projects, setProjects]           = useState<Project[]>([]);
@@ -97,20 +124,19 @@ export default function PreFundingApprovalFlow() {
   const [actionDialog, setActionDialog]     = useState<{ step: ApprovalStep; action: 'approve' | 'reject' } | null>(null);
   const [actionNotes, setActionNotes]       = useState('');
 
-  // Eligible approvers (filtered by role + approved status)
+  // Eligible approvers
   const eligibleUsers = useMemo(() =>
     users.filter(u => (u.profileStatus === 'approved' || u.isApproved) && isApproverRole(u.role)),
     [users]
   );
-
   const filteredEligibleUsers = useMemo(() =>
-    eligibleUsers.filter(u => {
-      if (!userSearch) return true;
-      const name = (u.fullName ?? u.name ?? u.email ?? '').toLowerCase();
-      return name.includes(userSearch.toLowerCase());
-    }),
+    eligibleUsers.filter(u =>
+      !userSearch || (u.fullName ?? u.name ?? u.email ?? '').toLowerCase().includes(userSearch.toLowerCase())
+    ),
     [eligibleUsers, userSearch]
   );
+
+  // ─── Data loaders ───────────────────────────────────────────────────────────
 
   const loadFunds = useCallback(async () => {
     setLoading(true);
@@ -122,11 +148,10 @@ export default function PreFundingApprovalFlow() {
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       const projMap = new Map<string, string>((projectsRes.data ?? []).map((p: Project) => [p.id, p.name]));
-      const enriched = ((fundsRes.data as any) ?? []).map((f: PreFundSummary) => ({
+      setFunds(((fundsRes.data as any) ?? []).map((f: PreFundSummary) => ({
         ...f,
         project_name: f.project_id ? (projMap.get(f.project_id) ?? 'Unknown Project') : null,
-      }));
-      setFunds(enriched);
+      })));
       setProjects(projectsRes.data ?? []);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
@@ -135,28 +160,63 @@ export default function PreFundingApprovalFlow() {
   const loadSteps = useCallback(async (fundId: string) => {
     setStepsLoading(true);
     try {
-      const { data, error: e } = await supabase.from('pre_fund_approval_steps')
-        .select('*').eq('pre_fund_request_id', fundId).order('step_order');
-      if (e) throw e;
-      const enriched = ((data as any) ?? []).map((s: any): ApprovalStep => {
-        // Normalise: prefer assigned_user_ids array; fall back to legacy assigned_user_id
+      const [stepsRes, votesRes] = await Promise.all([
+        supabase.from('pre_fund_approval_steps')
+          .select('*').eq('pre_fund_request_id', fundId).order('step_order'),
+        supabase.from('pre_fund_step_approvals' as any)
+          .select('*')
+          .in('step_id',
+            // we'll set this properly after first query; use a sub-approach
+            ['__placeholder__']
+          ).limit(0),    // placeholder — overridden below
+      ]);
+
+      if (stepsRes.error) throw stepsRes.error;
+      const rawSteps = (stepsRes.data as any) ?? [];
+      const stepIds: string[] = rawSteps.map((s: any) => s.id);
+
+      // Load votes for all steps in one query
+      let votes: StepVote[] = [];
+      if (stepIds.length > 0) {
+        const { data: vData } = await supabase
+          .from('pre_fund_step_approvals' as any)
+          .select('*')
+          .in('step_id', stepIds);
+        votes = (vData as any) ?? [];
+      }
+
+      const enriched = rawSteps.map((s: any): ApprovalStep => {
         const ids: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length > 0
           ? s.assigned_user_ids
           : (s.assigned_user_id ? [s.assigned_user_id] : []);
-        const names = ids.map(uid =>
+        const names = ids.map((uid: string) =>
           users.find(u => u.id === uid)?.fullName ?? users.find(u => u.id === uid)?.name ?? uid
         );
-        return { ...s, assigned_user_ids: ids, assigned_user_names: names };
+        const stepVotes: StepVote[] = votes
+          .filter((v: any) => v.step_id === s.id)
+          .map((v: any) => ({
+            ...v,
+            user_name: users.find(u => u.id === v.user_id)?.fullName ?? users.find(u => u.id === v.user_id)?.name ?? v.user_id,
+          }));
+        return {
+          ...s,
+          assigned_user_ids: ids,
+          assigned_user_names: names,
+          required_approvals: s.required_approvals ?? 1,
+          votes: stepVotes,
+        };
       });
       setSteps(enriched);
     } catch (e: any) { toast({ title: 'Failed to load steps', description: e.message, variant: 'destructive' }); }
     finally { setStepsLoading(false); }
+    void votesRes;
   }, [users, toast]);
 
   useEffect(() => { loadFunds(); }, [loadFunds]);
   useEffect(() => { if (selectedFund) loadSteps(selectedFund.id); }, [selectedFund, loadSteps]);
 
-  // Open dialog for a new step
+  // ─── Dialog open helpers ────────────────────────────────────────────────────
+
   const openNewStep = () => {
     setEditingStep(null);
     setStepForm(EMPTY_STEP_FORM);
@@ -164,12 +224,12 @@ export default function PreFundingApprovalFlow() {
     setShowStepDialog(true);
   };
 
-  // Open dialog to edit an existing step
   const openEditStep = (step: ApprovalStep) => {
     setEditingStep(step);
     setStepForm({
       step_label: step.step_label,
       assigned_user_ids: step.assigned_user_ids ?? (step.assigned_user_id ? [step.assigned_user_id] : []),
+      required_approvals: step.required_approvals ?? 1,
       is_required: step.is_required,
     });
     setUserSearch('');
@@ -177,29 +237,34 @@ export default function PreFundingApprovalFlow() {
   };
 
   const toggleUser = (uid: string) => {
-    setStepForm(p => ({
-      ...p,
-      assigned_user_ids: p.assigned_user_ids.includes(uid)
+    setStepForm(p => {
+      const next = p.assigned_user_ids.includes(uid)
         ? p.assigned_user_ids.filter(id => id !== uid)
-        : [...p.assigned_user_ids, uid],
-    }));
+        : [...p.assigned_user_ids, uid];
+      // keep required_approvals <= new length (min 1)
+      const maxQ = Math.max(next.length, 1);
+      return { ...p, assigned_user_ids: next, required_approvals: Math.min(p.required_approvals, maxQ) };
+    });
   };
+
+  // ─── Save step (add or edit) ─────────────────────────────────────────────
 
   const handleSaveStep = async () => {
     if (!selectedFund || !stepForm.step_label.trim()) {
       toast({ title: 'Step label required', variant: 'destructive' }); return;
     }
+    const requiredApprovals = Math.max(1, Math.min(stepForm.required_approvals, Math.max(stepForm.assigned_user_ids.length, 1)));
     setSaving(true);
     try {
       const payload = {
         step_label: stepForm.step_label.trim(),
         assigned_user_ids: stepForm.assigned_user_ids,
-        assigned_user_id: stepForm.assigned_user_ids[0] ?? null,   // backward-compat
+        assigned_user_id: stepForm.assigned_user_ids[0] ?? null,
+        required_approvals: requiredApprovals,
         is_required: stepForm.is_required,
       };
       if (editingStep) {
-        const { error: e } = await supabase.from('pre_fund_approval_steps')
-          .update(payload).eq('id', editingStep.id);
+        const { error: e } = await supabase.from('pre_fund_approval_steps').update(payload).eq('id', editingStep.id);
         if (e) throw e;
         toast({ title: 'Step updated' });
       } else {
@@ -220,6 +285,8 @@ export default function PreFundingApprovalFlow() {
     } catch (e: any) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); }
     finally { setSaving(false); }
   };
+
+  // ─── Delete / reorder ───────────────────────────────────────────────────────
 
   const handleDelete = async (stepId: string) => {
     if (!selectedFund) return;
@@ -250,45 +317,86 @@ export default function PreFundingApprovalFlow() {
     } catch (e: any) { toast({ title: 'Reorder failed', description: e.message, variant: 'destructive' }); }
   };
 
+  // ─── Approve / Reject with quorum logic ─────────────────────────────────────
+
   const handleAction = async () => {
     if (!actionDialog || !selectedFund) return;
     const { step, action } = actionDialog;
     setProcessing(step.id);
     try {
       const now = new Date().toISOString();
-      const { error: e } = await supabase.from('pre_fund_approval_steps').update({
-        status: action === 'approve' ? 'approved' : 'rejected',
-        approved_at: now,
-        approved_by: currentUser?.id,
+
+      // Record the individual vote (upsert — one vote per user per step)
+      const { error: vErr } = await supabase.from('pre_fund_step_approvals' as any).upsert({
+        step_id: step.id,
+        user_id: currentUser?.id,
+        action: action === 'approve' ? 'approved' : 'rejected',
         notes: actionNotes || null,
-      }).eq('id', step.id);
-      if (e) throw e;
+        created_at: now,
+      }, { onConflict: 'step_id,user_id' });
+      if (vErr && !vErr.message.includes('does not exist')) throw vErr;
 
-      const { data: allStepsData } = await supabase.from('pre_fund_approval_steps')
-        .select('id,status,is_required').eq('pre_fund_request_id', selectedFund.id);
-      const refreshed = (allStepsData as any) ?? [];
-      const withUpdate = refreshed.map((s: any) =>
-        s.id === step.id ? { ...s, status: action === 'approve' ? 'approved' : 'rejected' } : s
-      );
-      const anyRequiredRejected = withUpdate.some((s: any) => s.status === 'rejected' && s.is_required);
-      const allApproved = withUpdate.every((s: any) => s.status === 'approved' || !s.is_required);
+      // Count how many approvals now exist for this step
+      const { data: voteData } = await supabase
+        .from('pre_fund_step_approvals' as any)
+        .select('action')
+        .eq('step_id', step.id);
+      const votes = (voteData as any) ?? [];
+      const approvalCount   = votes.filter((v: any) => v.action === 'approved').length;
+      const anyRejected     = votes.some((v: any) => v.action === 'rejected');
+      const quorumMet       = approvalCount >= (step.required_approvals ?? 1);
 
-      if (anyRequiredRejected) {
-        await supabase.from('pre_fund_requests').update({
-          status: 'rejected',
-          rejection_reason: actionNotes || 'Step rejected in Approval Flow',
-        }).eq('id', selectedFund.id);
-        toast({ title: 'Step rejected — Fund is now Rejected' });
-      } else if (allApproved && action === 'approve') {
-        await supabase.from('pre_fund_requests').update({
-          status: 'awaiting_receipt',
-          approved_by: currentUser?.id ?? null,
-          approved_at: now,
-        }).eq('id', selectedFund.id);
-        toast({ title: 'All steps approved — fund is now Awaiting Receipt' });
-      } else {
-        toast({ title: `Step ${action === 'approve' ? 'approved' : 'rejected'}` });
+      // Determine new step status
+      let newStepStatus: string | null = null;
+      if (anyRejected && step.is_required) {
+        newStepStatus = 'rejected';
+      } else if (quorumMet) {
+        newStepStatus = 'approved';
       }
+      // else: still pending (more approvals needed)
+
+      if (newStepStatus) {
+        const { error: sErr } = await supabase.from('pre_fund_approval_steps').update({
+          status: newStepStatus,
+          approved_at: now,
+          approved_by: currentUser?.id,
+          notes: actionNotes || null,
+        }).eq('id', step.id);
+        if (sErr) throw sErr;
+      }
+
+      // If step is now resolved, check if fund status should change
+      if (newStepStatus) {
+        const { data: allStepsData } = await supabase.from('pre_fund_approval_steps')
+          .select('id,status,is_required').eq('pre_fund_request_id', selectedFund.id);
+        const allSteps = (allStepsData as any) ?? [];
+        const withUpdate = allSteps.map((s: any) =>
+          s.id === step.id ? { ...s, status: newStepStatus } : s
+        );
+        const anyRequiredRejected = withUpdate.some((s: any) => s.status === 'rejected' && s.is_required);
+        const allDone = withUpdate.every((s: any) => s.status === 'approved' || !s.is_required);
+
+        if (anyRequiredRejected) {
+          await supabase.from('pre_fund_requests').update({
+            status: 'rejected',
+            rejection_reason: actionNotes || 'Step rejected in Approval Flow',
+          }).eq('id', selectedFund.id);
+          toast({ title: 'Step rejected — Fund is now Rejected' });
+        } else if (allDone) {
+          await supabase.from('pre_fund_requests').update({
+            status: 'awaiting_receipt',
+            approved_by: currentUser?.id ?? null,
+            approved_at: now,
+          }).eq('id', selectedFund.id);
+          toast({ title: 'All steps approved — fund is now Awaiting Receipt' });
+        } else {
+          toast({ title: newStepStatus === 'approved' ? 'Step approved ✓' : 'Step rejected' });
+        }
+      } else {
+        const needed = (step.required_approvals ?? 1) - approvalCount;
+        toast({ title: `Vote recorded`, description: `${approvalCount} of ${step.required_approvals ?? 1} approvals — ${needed} more needed.` });
+      }
+
       setActionDialog(null);
       setActionNotes('');
       await Promise.all([loadSteps(selectedFund.id), loadFunds()]);
@@ -296,26 +404,34 @@ export default function PreFundingApprovalFlow() {
     finally { setProcessing(null); }
   };
 
+  // ─── Permission helpers ──────────────────────────────────────────────────────
+
   const canActOnStep = (step: ApprovalStep) => {
     if (step.status !== 'pending') return false;
     const prevRequired = steps.filter(s => s.step_order < step.step_order && s.is_required);
     if (prevRequired.some(s => s.status !== 'approved' && s.status !== 'skipped')) return false;
-    // No assigned users → any authorized user can act
+    const alreadyVoted = step.votes?.some(v => v.user_id === currentUser?.id);
+    if (alreadyVoted) return false;
     if (!step.assigned_user_ids?.length) return canAccess;
-    // Assigned users → must be one of them, or super_admin/admin
-    return step.assigned_user_ids.includes(currentUser?.id ?? '') || hasAnyRole(['super_admin', 'admin']);
+    return step.assigned_user_ids.includes(currentUser?.id ?? '') || isAdmin;
   };
 
-  if (!canAccess) return (
-    <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
-  );
+  // ─── Filtered funds ──────────────────────────────────────────────────────────
 
-  // Filtered funds by project
   const filteredFunds = funds.filter(f =>
     projectFilter === '__all__' ? true :
     projectFilter === '__none__' ? !f.project_id :
     f.project_id === projectFilter
   );
+
+  if (!canAccess) return (
+    <div className="p-8 text-center">
+      <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
+      <p className="text-muted-foreground">Access denied.</p>
+    </div>
+  );
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-5 p-4 md:p-6">
@@ -361,7 +477,7 @@ export default function PreFundingApprovalFlow() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* ── Fund selector ─────────────────────────────────────────────────── */}
+        {/* ── Fund selector ───────────────────────────────────────────────── */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Funds</h3>
@@ -371,7 +487,7 @@ export default function PreFundingApprovalFlow() {
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}</div>
           ) : filteredFunds.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm border rounded-xl bg-muted/20">
-              {funds.length === 0 ? 'No funds yet — create one in Fund Registry.' : 'No funds match this project filter.'}
+              {funds.length === 0 ? 'No funds yet — create one in Fund Registry.' : 'No funds match this filter.'}
             </div>
           ) : filteredFunds.map(f => (
             <button key={f.id} onClick={() => setSelected(f)}
@@ -393,7 +509,7 @@ export default function PreFundingApprovalFlow() {
           ))}
         </div>
 
-        {/* ── Approval chain panel ──────────────────────────────────────────── */}
+        {/* ── Approval chain panel ────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-3">
           {!selectedFund ? (
             <div className="flex items-center justify-center h-48 text-muted-foreground text-sm border rounded-xl bg-muted/20">
@@ -411,7 +527,7 @@ export default function PreFundingApprovalFlow() {
               </div>
 
               {stepsLoading ? (
-                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}</div>
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
               ) : steps.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground border rounded-xl bg-muted/20">
                   <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -423,8 +539,15 @@ export default function PreFundingApprovalFlow() {
                   {[...steps].sort((a, b) => a.step_order - b.step_order).map((step, idx) => {
                     const Icon = STATUS_CFG[step.status]?.icon ?? Clock;
                     const isActing = processing === step.id;
+                    const approvalVotes  = step.votes?.filter(v => v.action === 'approved') ?? [];
+                    const rejectionVotes = step.votes?.filter(v => v.action === 'rejected') ?? [];
+                    const approvalCount  = approvalVotes.length;
+                    const required       = step.required_approvals ?? 1;
+                    const hasMultiUsers  = (step.assigned_user_ids?.length ?? 0) > 1;
+                    const alreadyVoted   = step.votes?.some(v => v.user_id === currentUser?.id);
+
                     return (
-                      <Card key={step.id} className={cn('border', step.status === 'approved' ? 'opacity-75' : '')} data-testid={`card-step-${step.id}`}>
+                      <Card key={step.id} className={cn('border', step.status === 'approved' ? 'opacity-80' : '')} data-testid={`card-step-${step.id}`}>
                         <CardContent className="p-3">
                           <div className="flex items-start gap-3">
 
@@ -444,13 +567,15 @@ export default function PreFundingApprovalFlow() {
                             </div>
 
                             {/* Step content */}
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 space-y-2">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                  <span className="font-medium text-sm">{step.step_label}</span>
-                                  {!step.is_required && <span className="ml-2 text-[10px] text-muted-foreground">(optional)</span>}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm">{step.step_label}</span>
+                                    {!step.is_required && <span className="text-[10px] text-muted-foreground">(optional)</span>}
+                                  </div>
 
-                                  {/* Assignees */}
+                                  {/* Assignees + quorum badge */}
                                   <div className="flex items-start gap-1.5 mt-1 flex-wrap">
                                     <Users className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
                                     {step.assigned_user_names?.length ? (
@@ -462,25 +587,74 @@ export default function PreFundingApprovalFlow() {
                                     ) : (
                                       <span className="text-[11px] text-muted-foreground italic">Any authorized approver</span>
                                     )}
+                                    {/* Quorum label — only show if > 1 user and threshold > 1 */}
+                                    {hasMultiUsers && (
+                                      <span className={cn(
+                                        'text-[11px] px-1.5 py-0.5 rounded-md font-medium',
+                                        required < (step.assigned_user_ids?.length ?? 1)
+                                          ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                          : 'bg-slate-100 text-slate-600'
+                                      )}>
+                                        <ShieldCheck className="inline h-3 w-3 mr-0.5" />
+                                        {required} of {step.assigned_user_ids?.length} must approve
+                                      </span>
+                                    )}
                                   </div>
-
-                                  {step.approved_at && (
-                                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                                      {step.status === 'approved' ? 'Approved' : 'Acted'} {format(parseISO(step.approved_at), 'MMM d, yyyy HH:mm')}
-                                    </div>
-                                  )}
                                 </div>
 
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Badge variant="outline" className={cn('text-[10px]', STATUS_CFG[step.status]?.cls)}>
-                                    <Icon className="h-3 w-3 mr-1" />{STATUS_CFG[step.status]?.label ?? step.status}
-                                  </Badge>
-                                </div>
+                                <Badge variant="outline" className={cn('text-[10px] shrink-0', STATUS_CFG[step.status]?.cls)}>
+                                  <Icon className="h-3 w-3 mr-1" />{STATUS_CFG[step.status]?.label ?? step.status}
+                                </Badge>
                               </div>
+
+                              {/* Approval progress bar (only when multi-user quorum) */}
+                              {step.status === 'pending' && hasMultiUsers && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[11px] text-muted-foreground">
+                                      {approvalCount} / {required} approval{required !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className={cn('h-full rounded-full transition-all', approvalCount >= required ? 'bg-emerald-500' : 'bg-sky-400')}
+                                      style={{ width: `${Math.min((approvalCount / required) * 100, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Individual votes */}
+                              {(step.votes?.length ?? 0) > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {approvalVotes.map(v => (
+                                    <span key={v.id} className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 px-1.5 py-0.5 rounded-md">
+                                      <CheckCircle className="h-3 w-3" />{v.user_name}
+                                    </span>
+                                  ))}
+                                  {rejectionVotes.map(v => (
+                                    <span key={v.id} className="inline-flex items-center gap-1 text-[10px] bg-rose-50 dark:bg-rose-900/20 text-rose-700 px-1.5 py-0.5 rounded-md">
+                                      <XCircle className="h-3 w-3" />{v.user_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Approved at */}
+                              {step.approved_at && step.status !== 'pending' && (
+                                <div className="text-[10px] text-muted-foreground">
+                                  {step.status === 'approved' ? 'Completed' : 'Acted'} {format(parseISO(step.approved_at), 'MMM d, yyyy HH:mm')}
+                                </div>
+                              )}
+
+                              {/* Already voted notice */}
+                              {alreadyVoted && step.status === 'pending' && (
+                                <p className="text-[11px] text-muted-foreground italic">You have already voted on this step.</p>
+                              )}
 
                               {/* Approve / Reject buttons */}
                               {canActOnStep(step) && (
-                                <div className="flex gap-2 mt-2">
+                                <div className="flex gap-2">
                                   <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" disabled={isActing}
                                     onClick={() => setActionDialog({ step, action: 'approve' })} data-testid={`button-approve-step-${step.id}`}>
                                     Approve
@@ -519,7 +693,7 @@ export default function PreFundingApprovalFlow() {
 
       {/* ── Add / Edit Step Dialog ─────────────────────────────────────────── */}
       <Dialog open={showStepDialog} onOpenChange={o => { if (!o) { setShowStepDialog(false); setEditingStep(null); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingStep ? 'Edit Approval Step' : 'Add Approval Step'}</DialogTitle>
           </DialogHeader>
@@ -528,31 +702,26 @@ export default function PreFundingApprovalFlow() {
             {/* Label */}
             <div>
               <Label>Step Label *</Label>
-              <Input
-                value={stepForm.step_label}
-                onChange={e => setStepForm(p => ({ ...p, step_label: e.target.value }))}
-                placeholder="e.g. Finance Manager Review"
-                data-testid="input-step-label"
-              />
+              <Input value={stepForm.step_label} onChange={e => setStepForm(p => ({ ...p, step_label: e.target.value }))}
+                placeholder="e.g. Finance Manager Review" data-testid="input-step-label" />
             </div>
 
             {/* Multi-user picker */}
             <div>
-              <Label className="mb-1 block">Assigned Approvers <span className="text-muted-foreground font-normal text-[11px]">(leave empty = any authorized user)</span></Label>
+              <Label className="mb-1 block">
+                Assigned Approvers
+                <span className="text-muted-foreground font-normal text-[11px] ml-1">(leave empty = any authorized user)</span>
+              </Label>
 
-              {/* Selected user chips */}
+              {/* Selected chips */}
               {stepForm.assigned_user_ids.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2 p-2 rounded-lg bg-muted/30 border">
                   {stepForm.assigned_user_ids.map(uid => {
                     const u = users.find(u => u.id === uid);
                     return (
-                      <span key={uid} className="inline-flex items-center gap-1 text-xs bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded-full border border-sky-200 dark:border-sky-700">
+                      <span key={uid} className="inline-flex items-center gap-1 text-xs bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded-full border border-sky-200">
                         {u?.fullName ?? u?.name ?? uid}
-                        <button
-                          onClick={() => toggleUser(uid)}
-                          className="hover:text-destructive ml-0.5"
-                          data-testid={`button-remove-user-${uid}`}
-                        >
+                        <button onClick={() => toggleUser(uid)} className="hover:text-destructive" data-testid={`button-remove-user-${uid}`}>
                           <X className="h-3 w-3" />
                         </button>
                       </span>
@@ -564,36 +733,23 @@ export default function PreFundingApprovalFlow() {
               {/* Search */}
               <div className="relative mb-1">
                 <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  value={userSearch}
-                  onChange={e => setUserSearch(e.target.value)}
-                  placeholder="Search users…"
-                  className="pl-8 h-8 text-sm"
-                  data-testid="input-user-search"
-                />
+                <Input value={userSearch} onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Search users…" className="pl-8 h-8 text-sm" data-testid="input-user-search" />
               </div>
 
-              {/* Scrollable checkbox list */}
-              <div className="max-h-48 overflow-y-auto border rounded-lg divide-y bg-background">
+              {/* Checkbox list */}
+              <div className="max-h-40 overflow-y-auto border rounded-lg divide-y bg-background">
                 {filteredEligibleUsers.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-4">No users found</p>
                 ) : filteredEligibleUsers.map(u => {
                   const checked = stepForm.assigned_user_ids.includes(u.id);
                   return (
-                    <label
-                      key={u.id}
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors',
-                        checked ? 'bg-sky-50 dark:bg-sky-900/20' : 'hover:bg-muted/40'
-                      )}
+                    <label key={u.id}
+                      className={cn('flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors', checked ? 'bg-sky-50 dark:bg-sky-900/20' : 'hover:bg-muted/40')}
                       data-testid={`checkbox-user-${u.id}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleUser(u.id)}
-                        className="h-4 w-4 rounded border-border accent-sky-600"
-                      />
+                      <input type="checkbox" checked={checked} onChange={() => toggleUser(u.id)}
+                        className="h-4 w-4 rounded border-border accent-sky-600" />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{u.fullName ?? u.name ?? u.email}</div>
                         {u.email && <div className="text-[11px] text-muted-foreground truncate">{u.email}</div>}
@@ -609,52 +765,85 @@ export default function PreFundingApprovalFlow() {
               </p>
             </div>
 
+            {/* Quorum — only shown when 2+ users selected */}
+            {stepForm.assigned_user_ids.length >= 2 && (
+              <div className="rounded-lg border bg-violet-50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800 p-3 space-y-2">
+                <Label className="text-violet-800 dark:text-violet-300 flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4" />
+                  Required Approvals (Quorum)
+                </Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={stepForm.assigned_user_ids.length}
+                    value={stepForm.required_approvals}
+                    onChange={e => {
+                      const v = Math.max(1, Math.min(parseInt(e.target.value) || 1, stepForm.assigned_user_ids.length));
+                      setStepForm(p => ({ ...p, required_approvals: v }));
+                    }}
+                    className="w-20 h-8 text-center text-sm"
+                    data-testid="input-required-approvals"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    of {stepForm.assigned_user_ids.length} assigned users must approve
+                  </span>
+                </div>
+                <p className="text-[11px] text-violet-700 dark:text-violet-400">
+                  {stepForm.required_approvals === stepForm.assigned_user_ids.length
+                    ? 'All assigned users must approve (unanimous).'
+                    : stepForm.required_approvals === 1
+                    ? 'Any one of the assigned users can approve.'
+                    : `${stepForm.required_approvals} of ${stepForm.assigned_user_ids.length} approvals needed — ${stepForm.assigned_user_ids.length - stepForm.required_approvals} abstention${stepForm.assigned_user_ids.length - stepForm.required_approvals !== 1 ? 's' : ''} allowed.`
+                  }
+                </p>
+              </div>
+            )}
+
             {/* Required toggle */}
             <div className="flex items-center gap-3">
-              <Switch
-                checked={stepForm.is_required}
-                onCheckedChange={v => setStepForm(p => ({ ...p, is_required: v }))}
-                id="switch-required"
-              />
+              <Switch checked={stepForm.is_required} onCheckedChange={v => setStepForm(p => ({ ...p, is_required: v }))} id="switch-required" />
               <Label htmlFor="switch-required">Required step (fund won't proceed if rejected)</Label>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowStepDialog(false); setEditingStep(null); }}>Cancel</Button>
-            <Button
-              onClick={handleSaveStep}
-              disabled={saving}
-              className="bg-sky-600 hover:bg-sky-700 text-white"
-              data-testid="button-save-step"
-            >
+            <Button onClick={handleSaveStep} disabled={saving} className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-save-step">
               {saving ? (editingStep ? 'Saving…' : 'Adding…') : (editingStep ? 'Save Changes' : 'Add Step')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Approve / Reject confirm dialog ───────────────────────────────── */}
+      {/* ── Approve / Reject confirm ───────────────────────────────────────── */}
       <Dialog open={!!actionDialog} onOpenChange={o => !o && setActionDialog(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{actionDialog?.action === 'approve' ? 'Approve' : 'Reject'} Step</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">Step: <strong>{actionDialog?.step.step_label}</strong></p>
+            <p className="text-sm text-muted-foreground">
+              Step: <strong>{actionDialog?.step.step_label}</strong>
+            </p>
+            {actionDialog?.step && (actionDialog.step.required_approvals ?? 1) > 1 && (
+              <p className="text-xs text-sky-600 bg-sky-50 dark:bg-sky-900/20 px-3 py-2 rounded-lg">
+                This step requires <strong>{actionDialog.step.required_approvals}</strong> of{' '}
+                <strong>{actionDialog.step.assigned_user_ids?.length}</strong> approvals.
+                Current: <strong>{actionDialog.step.votes?.filter(v => v.action === 'approved').length ?? 0}</strong> approved.
+              </p>
+            )}
             <div>
               <Label>Notes (optional)</Label>
-              <Input value={actionNotes} onChange={e => setActionNotes(e.target.value)} placeholder="Add a note…" data-testid="input-action-notes" />
+              <Input value={actionNotes} onChange={e => setActionNotes(e.target.value)}
+                placeholder="Add a note…" data-testid="input-action-notes" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionDialog(null)}>Cancel</Button>
-            <Button
-              onClick={handleAction}
-              disabled={!!processing}
+            <Button onClick={handleAction} disabled={!!processing}
               variant={actionDialog?.action === 'approve' ? 'default' : 'destructive'}
-              data-testid="button-confirm-action"
-            >
+              data-testid="button-confirm-action">
               {processing ? 'Processing…' : actionDialog?.action === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
             </Button>
           </DialogFooter>

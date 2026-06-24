@@ -171,6 +171,57 @@ UPDATE pre_fund_approval_steps
 WHERE assigned_user_id IS NOT NULL
   AND (assigned_user_ids IS NULL OR assigned_user_ids = '{}');
 
+-- Add quorum column (how many of the assigned users must approve)
+ALTER TABLE pre_fund_approval_steps
+  ADD COLUMN IF NOT EXISTS required_approvals INTEGER NOT NULL DEFAULT 1;
+
+-- Back-fill: single-user steps get required_approvals = 1
+UPDATE pre_fund_approval_steps
+  SET required_approvals = 1
+WHERE required_approvals IS NULL OR required_approvals < 1;
+
+-- ─── 4b. Per-step individual vote log ─────────────────────────────────────────
+-- Tracks each user's vote on a step; enables M-of-N quorum logic.
+CREATE TABLE IF NOT EXISTS pre_fund_step_approvals (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  step_id     UUID NOT NULL REFERENCES pre_fund_approval_steps(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  action      TEXT NOT NULL CHECK (action IN ('approved', 'rejected')),
+  notes       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (step_id, user_id)   -- one vote per user per step (upsert-safe)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pf_step_votes_step ON pre_fund_step_approvals(step_id);
+CREATE INDEX IF NOT EXISTS idx_pf_step_votes_user ON pre_fund_step_approvals(user_id);
+
+ALTER TABLE IF EXISTS pre_fund_step_approvals ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "pf_step_votes_read"   ON pre_fund_step_approvals;
+DROP POLICY IF EXISTS "pf_step_votes_insert"  ON pre_fund_step_approvals;
+DROP POLICY IF EXISTS "pf_step_votes_update"  ON pre_fund_step_approvals;
+
+-- Anyone who can see the fund can read its votes
+CREATE POLICY "pf_step_votes_read" ON pre_fund_step_approvals
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM pre_fund_approval_steps s
+      JOIN pre_fund_requests r ON r.id = s.pre_fund_request_id
+      WHERE s.id = pre_fund_step_approvals.step_id
+        AND (
+          LOWER((auth.jwt() -> 'user_metadata' ->> 'role')) IN ('super_admin','superadmin','admin','financialadmin')
+          OR r.requested_by = auth.uid()
+        )
+    )
+  );
+
+-- Users can only insert/update their own vote
+CREATE POLICY "pf_step_votes_insert" ON pre_fund_step_approvals
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "pf_step_votes_update" ON pre_fund_step_approvals
+  FOR UPDATE USING (user_id = auth.uid());
+
 -- ─── 5. Pre-fund transactions ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pre_fund_transactions (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
