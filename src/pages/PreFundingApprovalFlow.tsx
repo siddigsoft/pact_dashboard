@@ -208,6 +208,9 @@ export default function PreFundingApprovalFlow() {
 
   const canActOnStep = (step: ApprovalStep) => {
     if (step.status !== 'pending') return false;
+    // Sequential enforcement: all required steps before this one must be approved first
+    const prevRequired = steps.filter(s => s.step_order < step.step_order && s.is_required);
+    if (prevRequired.some(s => s.status !== 'approved' && s.status !== 'skipped')) return false;
     if (!step.assigned_user_id) return canAccess;
     return step.assigned_user_id === currentUser?.id || hasAnyRole(['super_admin', 'admin']);
   };

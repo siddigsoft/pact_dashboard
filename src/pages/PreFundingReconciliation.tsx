@@ -411,9 +411,9 @@ export default function PreFundingReconciliation() {
       ]);
       setTxns((txnRes.data as any) ?? []);
       setRecons((reconRes.data as any) ?? []);
-    } catch (e: any) { console.warn(e); }
+    } catch (e: any) { toast({ title: 'Failed to load transactions', description: e.message, variant: 'destructive' }); }
     finally { setTxnLoading(false); }
-  }, []);
+  }, [toast]);
 
   useEffect(() => { loadFunds(); }, [loadFunds]);
   useEffect(() => {
@@ -521,9 +521,26 @@ export default function PreFundingReconciliation() {
 
   const handleClosePeriod = async () => {
     if (!selectedFund) return;
+    const surplus = selectedFund.available_balance;
+    // Validate split amounts don't exceed surplus
+    if (closeForm.surplus_action === 'split') {
+      const carryAmt = parseFloat(closeForm.carry_forward_amount) || 0;
+      const returnAmt = parseFloat(closeForm.return_amount) || 0;
+      if (carryAmt < 0 || returnAmt < 0) {
+        toast({ title: 'Amounts cannot be negative', variant: 'destructive' });
+        return;
+      }
+      if (carryAmt + returnAmt > surplus + 0.005) {
+        toast({
+          title: 'Split amounts exceed available surplus',
+          description: `Carry-forward (${carryAmt}) + Return (${returnAmt}) = ${carryAmt + returnAmt} exceeds surplus of ${surplus}.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
     setClosing(true);
     try {
-      const surplus = selectedFund.available_balance;
       const carryAmt = closeForm.surplus_action === 'carry_forward' ? surplus : parseFloat(closeForm.carry_forward_amount) || 0;
       const returnAmt = closeForm.surplus_action === 'return' ? surplus : parseFloat(closeForm.return_amount) || 0;
       const reserveAmt = closeForm.surplus_action === 'reserve' ? surplus : Math.max(0, surplus - carryAmt - returnAmt);

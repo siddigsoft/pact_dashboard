@@ -156,6 +156,19 @@ export default function PreFundingRegistry() {
       toast({ title: 'Required fields missing', variant: 'destructive' });
       return;
     }
+    const parsedAmount = parseFloat(form.amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast({ title: 'Amount must be greater than zero', variant: 'destructive' });
+      return;
+    }
+    if (form.start_date && form.end_date && form.start_date >= form.end_date) {
+      toast({ title: 'End date must be after start date', variant: 'destructive' });
+      return;
+    }
+    if (form.threshold_pct && (parseFloat(form.threshold_pct) < 0 || parseFloat(form.threshold_pct) > 100)) {
+      toast({ title: 'Alert threshold % must be between 0 and 100', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const payload: any = {

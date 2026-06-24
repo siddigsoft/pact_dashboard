@@ -100,9 +100,13 @@ export default function PreFundingSettings() {
       ]);
       if (sRes.data) setSettings({ ...DEFAULT_SETTINGS, ...sRes.data as any });
       setPeriodTypes((ptRes.data as any) ?? []);
-    } catch (e: any) { /* tables may not exist yet */ }
+    } catch (e: any) {
+      if (!e?.message?.includes('does not exist') && !e?.message?.includes('relation')) {
+        toast({ title: 'Failed to load settings', description: e.message + ' — run pre_funding_migration.sql first', variant: 'destructive' });
+      }
+    }
     finally { setLoading(false); }
-  }, []);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 

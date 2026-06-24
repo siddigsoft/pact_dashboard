@@ -189,6 +189,22 @@ export default function PreFundingOverview() {
         </Alert>
       )}
 
+      {!loading && !error && rates.length === 0 && baseCurrency !== 'USD' && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-700 dark:text-amber-400">
+            No exchange rates found for <strong>{baseCurrency}</strong> — totals are shown at 1:1. Go to{' '}
+            <button
+              className="underline font-medium hover:no-underline"
+              onClick={() => navigate('/accounting?tab=exchange-rates')}
+            >
+              Accounting → Exchange Rates
+            </button>{' '}
+            to add rates, or switch display currency to USD.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Aggregate KPI row */}
       {!loading && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
