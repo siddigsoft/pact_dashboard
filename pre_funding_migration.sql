@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS pre_fund_approval_steps (
   step_order               INTEGER NOT NULL DEFAULT 1,
   step_label               TEXT NOT NULL,
   assigned_user_id         UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  assigned_user_ids        UUID[] NOT NULL DEFAULT '{}',   -- multi-user: all assignees for this step
   is_required              BOOLEAN NOT NULL DEFAULT true,
   status                   TEXT NOT NULL DEFAULT 'pending'
                            CHECK (status IN ('pending','approved','rejected','skipped')),
@@ -159,6 +160,16 @@ CREATE TABLE IF NOT EXISTS pre_fund_approval_steps (
 
 CREATE INDEX IF NOT EXISTS idx_pf_approval_steps_fund ON pre_fund_approval_steps(pre_fund_request_id);
 CREATE INDEX IF NOT EXISTS idx_pf_approval_steps_user ON pre_fund_approval_steps(assigned_user_id);
+
+-- Add multi-user array column to existing installations
+ALTER TABLE pre_fund_approval_steps
+  ADD COLUMN IF NOT EXISTS assigned_user_ids UUID[] NOT NULL DEFAULT '{}';
+
+-- Back-fill: copy legacy single assigned_user_id into the array for existing rows
+UPDATE pre_fund_approval_steps
+  SET assigned_user_ids = ARRAY[assigned_user_id]
+WHERE assigned_user_id IS NOT NULL
+  AND (assigned_user_ids IS NULL OR assigned_user_ids = '{}');
 
 -- ─── 5. Pre-fund transactions ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pre_fund_transactions (
