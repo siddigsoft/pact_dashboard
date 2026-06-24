@@ -118,7 +118,7 @@ export default function PreFundingRegistry() {
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [deleting, setDeleting]     = useState(false);
   const [receiptDialog, setReceiptDialog] = useState<{ open: boolean; fundId: string; fundName: string }>({ open: false, fundId: '', fundName: '' });
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [uploading, setUploading]   = useState(false);
 
   const load = useCallback(async () => {
@@ -272,18 +272,23 @@ export default function PreFundingRegistry() {
   };
 
   const handleReceiptUpload = async () => {
-    if (!receiptFile || !receiptDialog.fundId) return;
+    if (receiptFiles.length === 0 || !receiptDialog.fundId) return;
     setUploading(true);
     try {
-      // 1. Upload file to storage first
-      const path = `pre-fund-receipts/${receiptDialog.fundId}/${Date.now()}-${receiptFile.name}`;
-      const { error: upErr } = await supabase.storage.from('financial-documents').upload(path, receiptFile, { upsert: true });
-      if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from('financial-documents').getPublicUrl(path);
+      const ts = Date.now();
+      // 1. Upload all selected files in parallel; first file is the primary receipt URL
+      const uploadResults = await Promise.all(
+        receiptFiles.map(async (file, idx) => {
+          const path = `pre-fund-receipts/${receiptDialog.fundId}/${ts}-${idx}-${file.name}`;
+          const { error: upErr } = await supabase.storage.from('financial-documents').upload(path, file, { upsert: true });
+          if (upErr) throw new Error(`Failed to upload "${file.name}": ${upErr.message}`);
+          return supabase.storage.from('financial-documents').getPublicUrl(path).data.publicUrl;
+        })
+      );
 
       const fund = funds.find(f => f.id === receiptDialog.fundId);
 
-      // 2. Activate via shared utility — fail-closed GL + fund status update
+      // 2. Activate via shared utility using the first file as primary receipt URL
       const { bankLineWarning } = await activatePreFund({
         fundId: receiptDialog.fundId,
         fundName: fund?.name ?? 'Fund',
@@ -292,12 +297,13 @@ export default function PreFundingRegistry() {
         glReceiptCode:  (fund as any)?.gl_receipt_account  ?? '1200',
         glLiabilityCode:(fund as any)?.gl_liability_account ?? '2400',
         createdBy: currentUser?.id ?? null,
-        receiptUrl: urlData.publicUrl,
+        receiptUrl: uploadResults[0],
       });
 
-      toast({ title: 'Receipt uploaded — fund is now Active', description: bankLineWarning ?? 'GL journal entry created (draft).' });
+      const fileWord = receiptFiles.length === 1 ? 'Receipt' : `${receiptFiles.length} receipts`;
+      toast({ title: `${fileWord} uploaded — fund is now Active`, description: bankLineWarning ?? 'GL journal entry created (draft).' });
       setReceiptDialog({ open: false, fundId: '', fundName: '' });
-      setReceiptFile(null);
+      setReceiptFiles([]);
       await load();
     } catch (e: any) {
       toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
@@ -991,16 +997,44 @@ export default function PreFundingRegistry() {
             <DialogTitle>Upload Bank Receipt</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">Upload the bank receipt for <strong>{receiptDialog.fundName}</strong>. This will activate the fund.</p>
-            <div>
-              <Label>Receipt File</Label>
-              <Input type="file" accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] ?? null)} data-testid="input-receipt-file" />
+            <p className="text-sm text-muted-foreground">
+              Upload bank receipt(s) for <strong>{receiptDialog.fundName}</strong>. This will activate the fund.
+            </p>
+            <div className="space-y-2">
+              <Label>Receipt Files</Label>
+              <Input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                multiple
+                onChange={e => setReceiptFiles(Array.from(e.target.files ?? []))}
+                data-testid="input-receipt-file"
+              />
+              <p className="text-xs text-muted-foreground">Images, PDF, Word, Excel — select multiple files if needed.</p>
             </div>
+            {receiptFiles.length > 0 && (
+              <div className="rounded-md border border-border bg-muted/40 divide-y divide-border">
+                {receiptFiles.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                    <span className="truncate max-w-[280px] text-foreground">{f.name}</span>
+                    <div className="flex items-center gap-2 ml-2 shrink-0">
+                      <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={() => setReceiptFiles(prev => prev.filter((_, j) => j !== i))}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiptDialog({ open: false, fundId: '', fundName: '' })}>Cancel</Button>
-            <Button onClick={handleReceiptUpload} disabled={uploading || !receiptFile} data-testid="button-upload-receipt">
-              {uploading ? 'Uploading…' : 'Upload & Activate'}
+            <Button variant="outline" onClick={() => { setReceiptDialog({ open: false, fundId: '', fundName: '' }); setReceiptFiles([]); }}>Cancel</Button>
+            <Button onClick={handleReceiptUpload} disabled={uploading || receiptFiles.length === 0} data-testid="button-upload-receipt">
+              {uploading ? 'Uploading…' : receiptFiles.length > 1 ? `Upload ${receiptFiles.length} Files & Activate` : 'Upload & Activate'}
             </Button>
           </DialogFooter>
         </DialogContent>
