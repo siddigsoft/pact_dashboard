@@ -420,7 +420,42 @@ export function useApprovalsData({
         }
       }
 
-      // ── 8. MMP files — pending coordinator assignment ─────────────────
+      // ── 8. Pre-fund requests — pending approval ───────────────────────
+      // Visible to: Financial Admin, Admin only
+      if (roleIsFinancialAdmin || roleIsAdmin) {
+        const { data: preFunds } = await supabase
+          .from('pre_fund_requests' as any)
+          .select('id, name, source, amount, currency, status, created_at, created_by, country_id, project_id')
+          .eq('status', 'pending_approval')
+          .order('created_at', { ascending: true })
+          .limit(50);
+
+        if (preFunds && (preFunds as any[]).length > 0) {
+          const rows = preFunds as any[];
+          const creatorIds = [...new Set(rows.map((r: any) => r.created_by).filter(Boolean))];
+          const { nameMap } = await getProfilesMap(creatorIds);
+          rows.forEach((r: any) => {
+            allItems.push({
+              id: `pf_${r.id}`,
+              type: 'pre_fund',
+              subtype: 'Activation',
+              requesterName: nameMap[r.created_by || ''] || 'Finance Team',
+              requesterId: r.created_by || '',
+              amount: parseFloat(r.amount),
+              currency: r.currency || 'USD',
+              description: [r.name, r.source ? `Donor: ${r.source}` : null].filter(Boolean).join(' — ') || undefined,
+              status: r.status,
+              submittedAt: r.created_at,
+              urgencyLevel: getUrgencyLevel(r.created_at),
+              canInlineApprove: false,
+              navigationPath: '/pre-funding',
+              rawData: r,
+            });
+          });
+        }
+      }
+
+      // ── 9. MMP files — pending coordinator assignment ─────────────────
       // Visible to: Admin, FOM only
       if (roleIsAdmin || roleIsFOM) {
         const { data: mmpFiles } = await supabase

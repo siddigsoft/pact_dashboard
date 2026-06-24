@@ -61,9 +61,12 @@ const SURPLUS_OPTIONS = [
   { value: 'reserve',       label: 'Leave in Reserve' },
 ];
 
-async function generateReconciliationPDF(fund: PreFundSummary, transactions: PreFundTransaction[], recon: Partial<Reconciliation>) {
+async function generateReconciliationPDF(
+  fund: PreFundSummary,
+  transactions: PreFundTransaction[],
+  recon: Partial<Reconciliation>,
+): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const pageW = doc.internal.pageSize.getWidth();
 
   doc.setFontSize(18); doc.setFont('helvetica', 'bold');
   doc.text('Pre-Fund Reconciliation Report', 15, 20);
@@ -114,10 +117,15 @@ async function generateReconciliationPDF(fund: PreFundSummary, transactions: Pre
     body: txnRows, styles: { fontSize: 8 }, headStyles: { fillColor: [3, 105, 161] },
   });
 
-  doc.save(`PreFund-Reconciliation-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`);
+  const filename = `PreFund-Reconciliation-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+  const blob = doc.output('blob');
+  return { blob, filename };
 }
 
-async function generateDonorStatementPDF(fund: PreFundSummary, transactions: PreFundTransaction[]) {
+async function generateDonorStatementPDF(
+  fund: PreFundSummary,
+  transactions: PreFundTransaction[],
+): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   doc.setFontSize(18); doc.setFont('helvetica', 'bold');
   doc.text('Donor Pre-Fund Statement', 15, 20);
@@ -160,7 +168,17 @@ async function generateDonorStatementPDF(fund: PreFundSummary, transactions: Pre
       styles: { fontSize: 9 }, headStyles: { fillColor: [3, 105, 161] },
     });
   }
-  doc.save(`Donor-Statement-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`);
+  const filename = `Donor-Statement-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+  const blob = doc.output('blob');
+  return { blob, filename };
+}
+
+async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string): Promise<string | null> {
+  const path = `pre-fund-pdfs/${fundId}/${filename}`;
+  const { error } = await supabase.storage.from('financial-documents').upload(path, blob, { contentType: 'application/pdf', upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from('financial-documents').getPublicUrl(path);
+  return data.publicUrl ?? null;
 }
 
 export default function PreFundingReconciliation() {
@@ -286,7 +304,25 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setGeneratingPdf(true);
     try {
-      await generateReconciliationPDF(selectedFund, transactions, reconciliations[0] ?? {});
+      const { blob, filename } = await generateReconciliationPDF(selectedFund, transactions, reconciliations[0] ?? {});
+      // Download locally
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      // Upload to Supabase Storage and persist pdf_url on reconciliation record
+      const reconId = reconciliations[0]?.id;
+      try {
+        const publicUrl = await uploadPdfToStorage(blob, filename, selectedFund.id);
+        if (publicUrl && reconId) {
+          await supabase.from('pre_fund_reconciliations' as any).update({ pdf_url: publicUrl }).eq('id', reconId);
+          toast({ title: 'PDF saved', description: 'Reconciliation PDF saved to document storage.' });
+          await Promise.all([loadFunds(), loadTxns(selectedFund.id)]);
+        } else {
+          toast({ title: 'PDF downloaded', description: 'Could not persist to storage — check financial-documents bucket exists.' });
+        }
+      } catch (storageErr: any) {
+        toast({ title: 'PDF downloaded', description: `Storage upload failed: ${storageErr.message}` });
+      }
     } catch (e: any) { toast({ title: 'PDF failed', description: e.message, variant: 'destructive' }); }
     finally { setGeneratingPdf(false); }
   };
@@ -294,7 +330,18 @@ export default function PreFundingReconciliation() {
   const handleDonorPDF = async () => {
     if (!selectedFund) return;
     setGeneratingPdf(true);
-    try { await generateDonorStatementPDF(selectedFund, transactions); }
+    try {
+      const { blob, filename } = await generateDonorStatementPDF(selectedFund, transactions);
+      // Download locally
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      // Upload to Supabase Storage (donor statement shares the same storage path)
+      try {
+        const publicUrl = await uploadPdfToStorage(blob, filename, selectedFund.id);
+        if (publicUrl) toast({ title: 'Donor statement saved', description: 'Donor PDF saved to document storage.' });
+      } catch { /* storage error — still a successful download */ }
+    }
     catch (e: any) { toast({ title: 'PDF failed', description: e.message, variant: 'destructive' }); }
     finally { setGeneratingPdf(false); }
   };

@@ -204,7 +204,26 @@ export default function PreFundingRegistry() {
   const handleSubmitForApproval = async (f: PreFundRequest) => {
     const { error: e } = await supabase.from('pre_fund_requests' as any).update({ status: 'pending_approval' }).eq('id', f.id);
     if (e) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); return; }
-    toast({ title: 'Submitted for approval' });
+
+    // Wire into Approvals Hub — create a notification event so the approval
+    // queue in ApprovalsHub.tsx surfaces this fund under the 'pre_fund' type.
+    // The ApprovalItem is constructed on the fly from pre_fund_requests rows
+    // with status='pending_approval' in useApprovalsData.ts; here we just
+    // emit the notification so approvers are alerted.
+    try {
+      await supabase.from('notification_events' as any).insert({
+        event_type: 'pre_fund_approval_requested',
+        reference_id: f.id,
+        reference_type: 'pre_fund_request',
+        title: 'Pre-Fund Approval Required',
+        message: `Fund "${f.name}" (${f.currency} ${f.amount.toLocaleString()}) requires approval before activation.`,
+        target_roles: ['super_admin', 'admin', 'financialAdmin'],
+        created_by: currentUser?.id ?? null,
+        metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: f.currency },
+      });
+    } catch { /* notifications are non-blocking — main approval flow still works */ }
+
+    toast({ title: 'Submitted for approval', description: 'Finance approvers have been notified via the Approvals Hub.' });
     await load();
   };
 

@@ -5,6 +5,9 @@
 -- Apply once. Safe to re-run (uses IF NOT EXISTS / ON CONFLICT DO NOTHING).
 -- ============================================================================
 
+-- ─── 0. Extensions ───────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ─── 1. Period type definitions ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pre_fund_period_types (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -37,7 +40,8 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   bank_match_tolerance_pct    NUMERIC(5,2) NOT NULL DEFAULT 2,
   bank_api_enabled            BOOLEAN NOT NULL DEFAULT false,
   bank_api_url                TEXT,
-  bank_api_key_hint           TEXT,          -- only last 4 chars stored
+  bank_api_key_hint           TEXT,              -- only last 4 chars, never the full key
+  bank_api_key_encrypted      BYTEA,             -- pgcrypto-encrypted full key (server-only)
   integration_bank_recon      BOOLEAN NOT NULL DEFAULT true,
   integration_cashflow         BOOLEAN NOT NULL DEFAULT true,
   integration_encumbrance      BOOLEAN NOT NULL DEFAULT true,
@@ -83,6 +87,13 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   receipt_url           TEXT,
   activated_at          TIMESTAMPTZ,
   notes                 TEXT,
+  -- GL account mapping (COA codes resolved per fund; bridge engine uses these at posting time)
+  gl_receipt_account    TEXT NOT NULL DEFAULT '1200',    -- DR on receipt (cash/bank account)
+  gl_liability_account  TEXT NOT NULL DEFAULT '2400',    -- CR on receipt, DR on payment (deferred liability)
+  gl_expense_account    TEXT NOT NULL DEFAULT '5600',    -- CR on payment (programme expense)
+  gl_cf_account         TEXT NOT NULL DEFAULT '2401',    -- CR on carry-forward (next-period liability)
+  -- Notification recipients (JSONB array of profile UUIDs for renewal/low-balance alerts)
+  notification_recipients JSONB NOT NULL DEFAULT '[]',
   created_by            UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -122,6 +133,9 @@ CREATE TABLE IF NOT EXISTS pre_fund_transactions (
   reconciled_at         TIMESTAMPTZ,
   source_table          TEXT,                       -- e.g. 'cost_submissions', 'down_payments'
   source_id             UUID,
+  -- GL Bridge linkage
+  encumbrance_id        UUID,                       -- FK to acct_budget_encumbrances.id (if exists)
+  gl_entry_id           UUID,                       -- FK to acct_journal_entries.id (if exists)
   created_by            UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -149,51 +163,103 @@ CREATE TABLE IF NOT EXISTS pre_fund_reconciliations (
                            CHECK (status IN ('open','closed')),
   closed_at                TIMESTAMPTZ,
   closed_by                UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  pdf_url                  TEXT,
+  pdf_url                  TEXT,                               -- Supabase Storage URL of the donor PDF
   notes                    TEXT,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_pf_recons_fund ON pre_fund_reconciliations(pre_fund_request_id);
 
--- ─── 7. Row Level Security ────────────────────────────────────────────────────
+-- ─── 7. Bank feed unmatched queue ─────────────────────────────────────────────
+-- Stores incoming bank statement lines that could not be auto-matched to a fund.
+-- Finance reviews and manually links or dismisses these.
+CREATE TABLE IF NOT EXISTS pre_fund_bank_unmatched (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  raw_reference    TEXT,
+  amount           NUMERIC(20,4) NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'USD',
+  transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  description      TEXT,
+  matched_fund_id  UUID REFERENCES pre_fund_requests(id) ON DELETE SET NULL,
+  match_status     TEXT NOT NULL DEFAULT 'unmatched'
+                   CHECK (match_status IN ('unmatched','matched','dismissed')),
+  reviewed_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  reviewed_at      TIMESTAMPTZ,
+  source_payload   JSONB,                           -- raw API response for audit
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
+CREATE INDEX IF NOT EXISTS idx_pf_bank_unmatched_status ON pre_fund_bank_unmatched(match_status);
+
+-- ─── 8. Cross-system FK columns (ALTER existing tables safely) ────────────────
+-- These add pre-fund linkage to existing operational tables.
+-- Each ALTER uses IF NOT EXISTS to be idempotent.
+
+DO $$ BEGIN
+  ALTER TABLE operational_cost_submissions ADD COLUMN IF NOT EXISTS pre_fund_transaction_id UUID REFERENCES pre_fund_transactions(id) ON DELETE SET NULL;
+EXCEPTION WHEN undefined_table THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE down_payment_requests ADD COLUMN IF NOT EXISTS pre_fund_transaction_id UUID REFERENCES pre_fund_transactions(id) ON DELETE SET NULL;
+EXCEPTION WHEN undefined_table THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE acct_budget_encumbrances ADD COLUMN IF NOT EXISTS pre_fund_transaction_id UUID REFERENCES pre_fund_transactions(id) ON DELETE SET NULL;
+EXCEPTION WHEN undefined_table THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE acct_bank_statement_lines ADD COLUMN IF NOT EXISTS pre_fund_request_id UUID REFERENCES pre_fund_requests(id) ON DELETE SET NULL;
+EXCEPTION WHEN undefined_table THEN NULL; END $$;
+
+-- ─── 9. Row Level Security ────────────────────────────────────────────────────
 ALTER TABLE pre_fund_period_types      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_settings          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_requests          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_approval_steps    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_transactions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_reconciliations   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pre_fund_bank_unmatched    ENABLE ROW LEVEL SECURITY;
 
--- Policy helper: check role in profiles table
--- Adjust the table/column names to match your actual profiles schema.
-
--- Period types: everyone can read; only finance/admin can write
-CREATE POLICY "pf_period_types_read"  ON pre_fund_period_types FOR SELECT USING (true);
+-- Period types: all authenticated users can read (display in fund creation form);
+-- only Finance/Admin can write.
+CREATE POLICY "pf_period_types_read"  ON pre_fund_period_types FOR SELECT
+  USING (auth.uid() IS NOT NULL);
 CREATE POLICY "pf_period_types_write" ON pre_fund_period_types FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin','countryDirector')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
--- Settings: finance/admin only
+-- Settings: Finance/Admin/Super Admin only — never countryDirector
 CREATE POLICY "pf_settings_finance"   ON pre_fund_settings FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
--- Fund requests: finance/admin/countryDirector can see and write
-CREATE POLICY "pf_requests_access"    ON pre_fund_requests FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin','countryDirector')) );
+-- Fund requests: Finance/Admin/Super Admin full CRUD; countryDirector read-only
+CREATE POLICY "pf_requests_write"     ON pre_fund_requests FOR ALL
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+CREATE POLICY "pf_requests_read_cd"   ON pre_fund_requests FOR SELECT
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- Approval steps: same access
-CREATE POLICY "pf_steps_access"       ON pre_fund_approval_steps FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin','countryDirector')) );
+-- Approval steps: Finance/Admin full CRUD; countryDirector read-only
+CREATE POLICY "pf_steps_write"        ON pre_fund_approval_steps FOR ALL
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+CREATE POLICY "pf_steps_read_cd"      ON pre_fund_approval_steps FOR SELECT
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- Transactions: same access
-CREATE POLICY "pf_transactions_access" ON pre_fund_transactions FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin','countryDirector')) );
+-- Transactions: Finance/Admin full CRUD; countryDirector read-only
+CREATE POLICY "pf_transactions_write" ON pre_fund_transactions FOR ALL
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+CREATE POLICY "pf_transactions_read_cd" ON pre_fund_transactions FOR SELECT
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- Reconciliations: same access
-CREATE POLICY "pf_recons_access"      ON pre_fund_reconciliations FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin','countryDirector')) );
+-- Reconciliations: Finance/Admin full CRUD; countryDirector read-only
+CREATE POLICY "pf_recons_write"       ON pre_fund_reconciliations FOR ALL
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+CREATE POLICY "pf_recons_read_cd"     ON pre_fund_reconciliations FOR SELECT
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'countryDirector') );
 
--- ─── 8. Auto-update updated_at trigger ───────────────────────────────────────
+-- Bank unmatched queue: Finance/Admin only
+CREATE POLICY "pf_bank_unmatched_access" ON pre_fund_bank_unmatched FOR ALL
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+
+-- ─── 10. Auto-update updated_at trigger ──────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_pre_fund_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -214,7 +280,56 @@ DO $$ BEGIN
     FOR EACH ROW EXECUTE FUNCTION update_pre_fund_updated_at();
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- ─── 9. GL Bridge account code (add to CoA if not exists) ────────────────────
+-- ─── 11. Encrypted bank API key RPC ──────────────────────────────────────────
+-- Called from the UI when saving a new bank API key.
+-- The key is encrypted with pgp_sym_encrypt using a per-deploy secret.
+-- The UI never receives the key back; only the hint is returned by SELECT.
+-- IMPORTANT: Replace 'pact_bank_key_passphrase' below with your actual secret,
+--            or set it via: ALTER DATABASE postgres SET app.bank_key_passphrase = '...';
+
+CREATE OR REPLACE FUNCTION store_pre_fund_bank_key(
+  p_settings_id UUID,
+  p_key         TEXT
+) RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_passphrase TEXT;
+BEGIN
+  -- Caller must be Finance/Admin
+  IF NOT EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')
+  ) THEN
+    RAISE EXCEPTION 'Insufficient privileges to store bank API key';
+  END IF;
+
+  -- Resolve passphrase from DB setting (set once per deploy via ALTER DATABASE)
+  v_passphrase := current_setting('app.bank_key_passphrase', true);
+  IF v_passphrase IS NULL OR v_passphrase = '' THEN
+    -- Fallback: derive from JWT secret (available in Supabase runtime)
+    v_passphrase := current_setting('app.settings.jwt_secret', true);
+  END IF;
+  IF v_passphrase IS NULL OR v_passphrase = '' THEN
+    RAISE EXCEPTION 'app.bank_key_passphrase is not configured. Run: ALTER DATABASE postgres SET app.bank_key_passphrase = ''your-secret'';';
+  END IF;
+
+  UPDATE pre_fund_settings
+  SET bank_api_key_encrypted = pgp_sym_encrypt(p_key, v_passphrase),
+      bank_api_key_hint      = '...' || RIGHT(p_key, 4),
+      updated_at             = now()
+  WHERE id = p_settings_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Settings row not found';
+  END IF;
+END;
+$$;
+
+-- Grant execute to authenticated users (RLS inside the function gates by role)
+GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT) TO authenticated;
+
+-- ─── 12. GL Bridge account code (add to CoA if not exists) ───────────────────
 -- Account 2400 — Pre-Fund Liability (deferred pre-fund liability)
 -- Account 2401 — Pre-Fund Liability (Next Period) for carry-forward
 -- These are soft-created; skip if your CoA already has them.
@@ -224,8 +339,83 @@ VALUES
   ('2401', 'Pre-Fund Liability (Next Period)','liability', 'CR', true, 'Carry-forward pre-fund liability for next period')
 ON CONFLICT (code) DO NOTHING;
 
+-- ─── 13. Auto-renewal scheduler stub (run via pg_cron or Supabase Edge Function) ──
+-- This function is called by a nightly pg_cron job or Supabase Edge Function scheduler.
+-- It finds funds within their warning window and sets ending_soon_alert = true.
+-- Actual notification delivery uses the existing notification_events table.
+CREATE OR REPLACE FUNCTION run_pre_fund_renewal_check()
+RETURNS TABLE(fund_id UUID, fund_name TEXT, action TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Mark funds ending within warning_days as ending_soon
+  UPDATE pre_fund_requests
+  SET ending_soon_alert = true, updated_at = now()
+  WHERE status IN ('active','low_balance')
+    AND end_date IS NOT NULL
+    AND end_date <= (CURRENT_DATE + (warning_days || ' days')::INTERVAL)
+    AND ending_soon_alert = false;
+
+  -- Mark funds with available_balance below threshold as low_balance
+  UPDATE pre_fund_requests
+  SET status = 'low_balance', low_balance_alert = true, updated_at = now()
+  WHERE status = 'active'
+    AND threshold_pct IS NOT NULL
+    AND amount > 0
+    AND (available_balance / amount * 100) <= threshold_pct;
+
+  -- Auto-draft renewal for eligible funds (auto_renewal_mode = 'auto_draft')
+  -- Creates a new draft fund request copying key fields from the expiring fund
+  INSERT INTO pre_fund_requests (
+    name, source, amount, currency, period_type_id, period_type_name,
+    country_id, project_id, grant_id, matching_scope,
+    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+    notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
+    start_date, end_date
+  )
+  SELECT
+    name || ' (Renewal)', source, amount, currency, period_type_id, period_type_name,
+    country_id, project_id, grant_id, matching_scope,
+    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+    notification_recipients,
+    'Auto-renewed from fund id: ' || id::text,
+    'draft', 0, 0, 0,
+    end_date + 1,
+    end_date + 1 + COALESCE(
+      (SELECT day_count FROM pre_fund_period_types WHERE id = period_type_id), 30
+    )
+  FROM pre_fund_requests
+  WHERE status IN ('active','low_balance')
+    AND auto_renewal_mode = 'auto_draft'
+    AND end_date IS NOT NULL
+    AND end_date <= (CURRENT_DATE + COALESCE(auto_renewal_days_before, 7))
+    AND NOT EXISTS (
+      SELECT 1 FROM pre_fund_requests r2
+      WHERE r2.notes LIKE '%Auto-renewed from fund id: ' || pre_fund_requests.id::text || '%'
+        AND r2.status = 'draft'
+    );
+
+  RETURN QUERY
+    SELECT id, name, 'ending_soon_check'::TEXT
+    FROM pre_fund_requests
+    WHERE ending_soon_alert = true AND status IN ('active','low_balance');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION run_pre_fund_renewal_check() TO authenticated;
+
 -- ============================================================================
 -- Migration complete. Open /pre-funding in the app to get started.
 -- Verify by running: SELECT COUNT(*) FROM pre_fund_period_types;
 -- Expected: 7 (the built-in period types)
+--
+-- Post-migration steps:
+-- 1. Set the bank key passphrase:
+--    ALTER DATABASE postgres SET app.bank_key_passphrase = 'your-strong-secret';
+-- 2. Schedule the renewal check (pg_cron example):
+--    SELECT cron.schedule('pre-fund-renewal-check', '0 6 * * *', 'SELECT run_pre_fund_renewal_check()');
+-- 3. Create the financial-documents storage bucket if not already present.
 -- ============================================================================

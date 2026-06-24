@@ -91,20 +91,34 @@ export default function PreFundingSettings() {
     setSaving(true);
     try {
       const payload: any = { ...settings };
-      if (bankApiKey) {
-        payload.bank_api_key_hint = `...${bankApiKey.slice(-4)}`;
-      }
       delete payload.id;
+      // Never persist the raw key — strip it from the payload
+      delete payload.bank_api_key_hint;
+      delete payload.bank_api_key_encrypted;
+
+      let savedId = settings.id;
       if (settings.id) {
         const { error: e } = await supabase.from('pre_fund_settings' as any).update(payload).eq('id', settings.id);
         if (e) throw e;
       } else {
         const { data, error: e } = await supabase.from('pre_fund_settings' as any).insert(payload).select().maybeSingle();
         if (e) throw e;
-        if (data) setSettings({ ...settings, id: (data as any).id });
+        if (data) { savedId = (data as any).id; setSettings(p => ({ ...p, id: savedId })); }
       }
+
+      // If a new API key was entered, store it encrypted via the security-definer RPC.
+      // The raw key is never stored in the settings payload above.
+      if (bankApiKey.trim() && savedId) {
+        const { error: rpcErr } = await supabase.rpc('store_pre_fund_bank_key' as any, {
+          p_settings_id: savedId,
+          p_key: bankApiKey.trim(),
+        });
+        if (rpcErr) throw new Error(`Key encryption failed: ${rpcErr.message} — ensure store_pre_fund_bank_key RPC is deployed`);
+      }
+
       toast({ title: 'Settings saved' });
       setBankApiKey('');
+      setShowApiKey(false);
       await load();
     } catch (e: any) {
       toast({ title: 'Save failed', description: e.message + ' — run pre_funding_migration.sql first', variant: 'destructive' });
