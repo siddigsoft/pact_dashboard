@@ -517,14 +517,15 @@ BEGIN
     RAISE EXCEPTION 'Insufficient privileges to store bank API key';
   END IF;
 
-  -- Resolve passphrase from DB setting (set once per deploy via ALTER DATABASE)
+  -- Resolve passphrase from DB setting (set once per deploy via ALTER DATABASE).
+  -- Hard-fail if not configured — no fallback to JWT secret or any other secret material.
+  -- Key separation is critical: encryption passphrase must be independent of auth secrets.
   v_passphrase := current_setting('app.bank_key_passphrase', true);
   IF v_passphrase IS NULL OR v_passphrase = '' THEN
-    -- Fallback: derive from JWT secret (available in Supabase runtime)
-    v_passphrase := current_setting('app.settings.jwt_secret', true);
-  END IF;
-  IF v_passphrase IS NULL OR v_passphrase = '' THEN
-    RAISE EXCEPTION 'app.bank_key_passphrase is not configured. Run: ALTER DATABASE postgres SET app.bank_key_passphrase = ''your-secret'';';
+    RAISE EXCEPTION
+      'app.bank_key_passphrase is not configured. '
+      'Run: ALTER DATABASE postgres SET app.bank_key_passphrase = ''your-strong-secret''; '
+      'Do NOT reuse any JWT secret or auth token as this passphrase.';
   END IF;
 
   UPDATE pre_fund_settings

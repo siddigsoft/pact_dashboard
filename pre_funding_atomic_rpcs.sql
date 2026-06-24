@@ -205,12 +205,15 @@ BEGIN
   END IF;
 
   -- GL posting: pre_fund_paid event (same transaction — atomic)
-  --   DR: 2400 Pre-Fund Liability (obligation reduced)
-  --   CR: 5600 Programme Expenses (expense recognised)
+  --   DR: 2400 Pre-Fund Liability (obligation reduced — pre-fund balance consumed)
+  --   CR: 1200 Cash / Bank (cash outflow recorded against the pre-fund)
+  -- Correct double-entry: pre-fund cash was received into bank (DR cash / CR liability at
+  -- activation); disbursement releases liability back against cash (DR liability / CR cash).
   -- Only fires when both GL codes are configured on the fund.
   -- Idempotency key prevents double-posting on RPC retry.
   IF v_gl_liab_code IS NOT NULL AND v_gl_exp_code IS NOT NULL THEN
     SELECT id INTO v_liab_id FROM acct_accounts WHERE code = v_gl_liab_code LIMIT 1;
+    -- CR leg: cash/bank account (stored in gl_expense_account column; maps to receipt/cash code)
     SELECT id INTO v_exp_id  FROM acct_accounts WHERE code = v_gl_exp_code  LIMIT 1;
 
     IF v_liab_id IS NOT NULL AND v_exp_id IS NOT NULL THEN
@@ -221,8 +224,8 @@ BEGIN
           description_en, description_ar, posting_date, status,
           source_type, source_id, idempotency_key, created_by
         ) VALUES (
-          'Pre-Fund Payment — ' || COALESCE(p_description, p_source_table),
-          'مدفوعات التمويل المسبق — ' || COALESCE(p_description, p_source_table),
+          'Pre-Fund Disbursement — ' || COALESCE(p_description, p_source_table),
+          'صرف التمويل المسبق — ' || COALESCE(p_description, p_source_table),
           p_payment_date, 'draft',
           p_source_table, p_source_id, v_ik, p_created_by
         ) RETURNING id INTO v_je_id;
@@ -233,10 +236,10 @@ BEGIN
         VALUES
           (v_je_id, 1, v_liab_id, 'DR',
            p_amount, p_currency, p_amount, p_currency,
-           'Pre-fund payment — liability released', 'program'),
+           'Pre-fund disbursement — liability released', 'program'),
           (v_je_id, 2, v_exp_id,  'CR',
            p_amount, p_currency, p_amount, p_currency,
-           'Pre-fund payment — expense recognised', 'program');
+           'Pre-fund disbursement — cash/bank outflow', 'program');
 
         INSERT INTO acct_gl_bridge_log (source_table, source_id, event_type, status, journal_entry_id)
         VALUES (p_source_table, p_source_id, 'pre_fund_paid', 'success', v_je_id);
