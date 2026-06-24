@@ -71,6 +71,8 @@ DECLARE
   v_idempotency_key  TEXT;
   v_period_id        UUID;
   v_acct_fund_id     UUID;
+  v_bank_acct_id     UUID;
+  v_bank_recon_on    BOOLEAN;
 BEGIN
   -- Authorization: finance/admin role required
   PERFORM _assert_finance_role();
@@ -141,6 +143,35 @@ BEGIN
       activated_at      = NOW(),
       receipt_url       = COALESCE(p_receipt_url, receipt_url)
   WHERE id = p_fund_id;
+
+  -- ── Bank statement line (same transaction — atomic with GL and fund update) ──
+  -- Only created when bank reconciliation integration is enabled AND a matching
+  -- bank account exists for this currency.  Skipped silently if either is absent.
+  SELECT COALESCE((integration_bank_recon)::BOOLEAN, true)
+  INTO   v_bank_recon_on
+  FROM   pre_fund_settings LIMIT 1;
+
+  IF COALESCE(v_bank_recon_on, true) THEN
+    SELECT id INTO v_bank_acct_id
+    FROM   acct_bank_accounts
+    WHERE  currency = p_currency
+    LIMIT  1;
+
+    IF v_bank_acct_id IS NOT NULL THEN
+      INSERT INTO acct_bank_statement_lines (
+        bank_account_id, statement_date, description,
+        reference, amount, currency, pre_fund_request_id
+      ) VALUES (
+        v_bank_acct_id,
+        CURRENT_DATE,
+        'Pre-fund received: ' || p_fund_name,
+        'PF-' || UPPER(LEFT(p_fund_id::TEXT, 8)),
+        p_amount,
+        p_currency,
+        p_fund_id
+      );
+    END IF;
+  END IF;
 
   RETURN jsonb_build_object('success', true, 'journal_entry_id', v_je_id);
 END;

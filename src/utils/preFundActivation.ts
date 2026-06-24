@@ -7,13 +7,13 @@
  *   3. Settings manual unmatched-transfer assignment (handleManualMatch)
  *
  * Delegates ALL multi-step writes to the activate_pre_fund_rpc Postgres
- * function which runs them inside a single DB transaction — no partial
- * state is possible on failure.
+ * function which runs them inside a single DB transaction:
+ *   - GL journal entry + lines + bridge log
+ *   - Fund status → active, available_balance set
+ *   - Bank statement line (when bank recon integration is on and a matching
+ *     bank account exists for the currency)
  *
- * Returns a result object:
- *   { bankLineWarning?: string } — present when the bank statement line could
- *   not be created after activation. Activation itself succeeded; callers
- *   should surface this warning so finance can reconcile the missing bank line.
+ * Everything is atomic — no partial state on failure.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -33,8 +33,7 @@ export interface ActivatePreFundOptions {
 }
 
 export interface ActivatePreFundResult {
-  /** Present when the bank statement line could not be created after activation. */
-  bankLineWarning?: string;
+  journalEntryId?: string;
 }
 
 export async function activatePreFund(
@@ -52,8 +51,9 @@ export async function activatePreFund(
     idempotencyKeySuffix = '',
   } = opts;
 
-  // Single RPC call — all writes (JE + lines + bridge log + fund update) run
-  // inside one Postgres transaction; any failure rolls back everything.
+  // Single RPC call — ALL writes (JE + lines + bridge log + fund update +
+  // bank statement line) run inside one Postgres transaction.
+  // Any failure rolls back everything — no partial state possible.
   const { data, error } = await (supabase as any).rpc('activate_pre_fund_rpc', {
     p_fund_id:            fundId,
     p_fund_name:          fundName,
@@ -68,38 +68,9 @@ export async function activatePreFund(
 
   if (error) throw new Error(`Activation RPC failed: ${error.message}`);
 
-  // RPC returns { success: bool, error?: string } for domain-level failures
   if (data && data.success === false) {
     throw new Error(data.error ?? 'Activation failed — unknown error from RPC.');
   }
 
-  // Non-blocking: attempt to create a bank statement line.
-  // If it fails, activation has already committed — return a warning so the
-  // caller can surface it to finance for manual reconciliation.
-  let bankLineWarning: string | undefined;
-  try {
-    const [{ data: bankReconSettings }, { data: bankAcctRow }] = await Promise.all([
-      supabase.from('pre_fund_settings').select('integration_bank_recon').limit(1).maybeSingle(),
-      (supabase as any).from('acct_bank_accounts').select('id').eq('currency', currency).limit(1).maybeSingle(),
-    ]);
-    const bankReconOn = (bankReconSettings as any)?.integration_bank_recon !== false;
-    if (bankReconOn && (bankAcctRow as any)?.id) {
-      const { error: bankErr } = await (supabase as any).from('acct_bank_statement_lines').insert({
-        bank_account_id: (bankAcctRow as any).id,
-        statement_date: new Date().toISOString().split('T')[0],
-        description: `Pre-fund received: ${fundName}`,
-        reference: `PF-${fundId.slice(0, 8).toUpperCase()}`,
-        amount,
-        currency,
-        pre_fund_request_id: fundId,
-      });
-      if (bankErr) {
-        bankLineWarning = `Fund activated successfully, but the bank statement line could not be created (${bankErr.message}). Please add it manually in Bank Reconciliation.`;
-      }
-    }
-  } catch (bankErr: any) {
-    bankLineWarning = `Fund activated successfully, but the bank statement line could not be created (${bankErr?.message ?? 'unknown error'}). Please add it manually in Bank Reconciliation.`;
-  }
-
-  return bankLineWarning ? { bankLineWarning } : {};
+  return { journalEntryId: data?.journal_entry_id };
 }

@@ -573,12 +573,12 @@ DECLARE
   v_je_id           UUID;
   v_ik              TEXT;
 BEGIN
-  -- Role guard: only service_role (pg_cron / Edge Function scheduler) may call this.
-  -- Supabase sets request.jwt.claims.role when invoking via service key.
-  -- Authenticated users will have role='authenticated', so they are rejected here.
+  -- Role guard: only service_role (pg_cron / Edge Function scheduler) or postgres
+  -- superuser may call this function.  Blank JWT role and 'authenticated' are
+  -- explicitly rejected — no regular user or unauthenticated caller may invoke it.
   v_jwt_role := coalesce(current_setting('request.jwt.claims.role', true), '');
-  IF v_jwt_role NOT IN ('service_role', 'postgres', '') THEN
-    RETURN; -- Silently reject — do not leak information
+  IF v_jwt_role NOT IN ('service_role', 'postgres') THEN
+    RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (role="%"). Must be service_role or postgres.', v_jwt_role;
   END IF;
   -- Mark funds ending within warning_days as ending_soon
   UPDATE pre_fund_requests
