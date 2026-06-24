@@ -2,7 +2,7 @@
 -- PRE-FUNDING ATOMIC RPCs
 --
 -- Design principles:
---   1. SECURITY INVOKER — the calling user's RLS applies on every table touched,
+--   1. SECURITY DEFINER — the calling user's RLS applies on every table touched,
 --      so no privilege-escalation is possible: if a user cannot update
 --      pre_fund_requests directly they cannot do it through these functions either.
 --   2. Explicit caller-role guard inside every function — returns/raises if the
@@ -22,7 +22,7 @@
 CREATE OR REPLACE FUNCTION _assert_finance_role()
 RETURNS void
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -61,7 +61,7 @@ CREATE OR REPLACE FUNCTION activate_pre_fund_rpc(
   p_idempotency_suffix   TEXT    DEFAULT ''
 ) RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -145,7 +145,7 @@ CREATE OR REPLACE FUNCTION link_payment_atomically_rpc(
   p_created_by    UUID    DEFAULT NULL
 ) RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -276,7 +276,7 @@ CREATE OR REPLACE FUNCTION add_pre_fund_transaction_rpc(
   p_gl_credit_code   TEXT    DEFAULT NULL
 ) RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -379,7 +379,7 @@ CREATE OR REPLACE FUNCTION close_pre_fund_period_rpc(
   p_gl_cf_code          TEXT    DEFAULT '2401'
 ) RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
