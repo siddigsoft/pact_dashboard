@@ -272,32 +272,32 @@ DROP POLICY IF EXISTS "pf_steps_assignee_update"   ON pre_fund_approval_steps;
 
 -- Period types: Finance/Admin/Super Admin ONLY (no public read — non-finance has no access)
 CREATE POLICY "pf_period_types_finance" ON pre_fund_period_types FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- Settings: Finance/Admin/Super Admin only — never countryDirector
 CREATE POLICY "pf_settings_finance"   ON pre_fund_settings FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- Fund requests: Finance/Admin/Super Admin full access ONLY
 CREATE POLICY "pf_requests_finance"   ON pre_fund_requests FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- Approval steps: Finance/Admin/Super Admin full access ONLY
 -- (No step-assignee bypass — only finance roles may read or action approval steps)
 CREATE POLICY "pf_steps_finance"      ON pre_fund_approval_steps FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- Transactions: Finance/Admin/Super Admin ONLY
 CREATE POLICY "pf_transactions_finance" ON pre_fund_transactions FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- Reconciliations: Finance/Admin/Super Admin ONLY
 CREATE POLICY "pf_recons_finance"     ON pre_fund_reconciliations FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- Bank unmatched queue: Finance/Admin only
 CREATE POLICY "pf_bank_unmatched_access" ON pre_fund_bank_unmatched FOR ALL
-  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+  USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')) );
 
 -- ─── 10. Auto-update updated_at trigger ──────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_pre_fund_updated_at()
@@ -339,7 +339,7 @@ DECLARE
 BEGIN
   -- Caller must be Finance/Admin
   IF NOT EXISTS (
-    SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
   ) THEN
     RAISE EXCEPTION 'Insufficient privileges to store bank API key';
   END IF;
