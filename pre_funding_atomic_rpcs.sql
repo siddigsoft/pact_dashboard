@@ -181,9 +181,13 @@ REVOKE ALL ON FUNCTION activate_pre_fund_rpc(UUID,TEXT,NUMERIC,TEXT,TEXT,TEXT,UU
 GRANT EXECUTE ON FUNCTION activate_pre_fund_rpc(UUID,TEXT,NUMERIC,TEXT,TEXT,TEXT,UUID,TEXT,TEXT) TO authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
--- RPC 2: link_payment_atomically_rpc
--- Wraps: pre_fund_transactions insert + available_balance deduction + source back-link
--- The scoring/matching stays in TypeScript (read-only); only writes are here.
+-- RPC 2: link_payment_atomically_rpc (canonical 11-arg version)
+-- Wraps in ONE transaction:
+--   pre_fund_transactions insert (with user_id + receipt_url)
+--   available_balance deduction + paid_amount increment
+--   source row back-link
+--   allocation deduction (when fund is allocation-gated and p_user_id provided)
+--   GL journal entry + lines + bridge log
 -- ────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION link_payment_atomically_rpc(
   p_fund_id       UUID,
@@ -194,36 +198,45 @@ CREATE OR REPLACE FUNCTION link_payment_atomically_rpc(
   p_reference     TEXT    DEFAULT NULL,
   p_description   TEXT    DEFAULT NULL,
   p_payment_date  DATE    DEFAULT CURRENT_DATE,
-  p_created_by    UUID    DEFAULT NULL
+  p_created_by    UUID    DEFAULT NULL,
+  -- New optional params — callers that omit them continue to work unchanged
+  p_user_id       UUID    DEFAULT NULL,
+  p_receipt_url   TEXT    DEFAULT NULL
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+-- SECURITY DEFINER bypasses caller RLS; authorization is enforced explicitly
+-- via _assert_finance_role() below — not via RLS policies.
 SET search_path = public
 AS $$
 DECLARE
-  v_txn_id       UUID;
-  v_new_balance  NUMERIC;
-  v_cur_balance  NUMERIC;
-  v_gl_liab_code TEXT;
-  v_gl_exp_code  TEXT;
-  v_liab_id      UUID;
-  v_exp_id       UUID;
-  v_je_id        UUID;
-  v_ik           TEXT;
+  v_txn_id          UUID;
+  v_new_balance     NUMERIC;
+  v_cur_balance     NUMERIC;
+  v_gl_liab_code    TEXT;
+  v_gl_rcpt_code    TEXT;   -- gl_receipt_account = cash/bank (CR leg for disbursement)
+  v_liab_id         UUID;
+  v_rcpt_id         UUID;
+  v_je_id           UUID;
+  v_ik              TEXT;
+  v_alloc_rows      INT;
+  v_alloc_remaining NUMERIC;
 BEGIN
-  -- Authorization: finance/admin role required
+  -- Authorization: only finance/admin roles may call this RPC
   PERFORM _assert_finance_role();
 
-  -- Lock the fund row and read balance + GL account codes atomically
-  SELECT available_balance, gl_liability_account, gl_expense_account
-  INTO   v_cur_balance, v_gl_liab_code, v_gl_exp_code
-  FROM pre_fund_requests WHERE id = p_fund_id FOR UPDATE;
+  -- Lock the fund row and read balance + GL account codes in one statement
+  -- pre_fund_paid double-entry:
+  --   DR gl_liability_account  (pre-fund obligation released)
+  --   CR gl_receipt_account    (cash/bank outflow — same account debited at activation)
+  SELECT available_balance, gl_liability_account, gl_receipt_account
+  INTO   v_cur_balance, v_gl_liab_code, v_gl_rcpt_code
+  FROM   pre_fund_requests WHERE id = p_fund_id FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Fund not found.');
   END IF;
 
-  -- Hard failure on insufficient balance — never silently floor to zero
   IF v_cur_balance < p_amount THEN
     RETURN jsonb_build_object(
       'success', false,
@@ -234,20 +247,29 @@ BEGIN
 
   v_new_balance := v_cur_balance - p_amount;
 
+  -- Insert transaction row (user_id = field staff submitter, receipt_url = attachment)
   INSERT INTO pre_fund_transactions (
     pre_fund_request_id, transaction_type, amount, currency,
-    reference, description, transaction_date, reconciled, created_by
+    reference, description, transaction_date, reconciled,
+    source_table, source_id, created_by,
+    user_id, receipt_url
   ) VALUES (
     p_fund_id, 'payment', p_amount, p_currency,
-    p_reference, COALESCE(p_description, 'Auto-linked from ' || p_source_table),
-    p_payment_date, false, p_created_by
+    p_reference,
+    COALESCE(p_description, 'Auto-linked from ' || p_source_table),
+    p_payment_date, false,
+    p_source_table, p_source_id, p_created_by,
+    COALESCE(p_user_id, p_created_by),
+    p_receipt_url
   ) RETURNING id INTO v_txn_id;
 
+  -- Deduct fund balance and increment paid_amount
   UPDATE pre_fund_requests
   SET available_balance = v_new_balance,
       paid_amount       = COALESCE(paid_amount, 0) + p_amount
   WHERE id = p_fund_id;
 
+  -- Back-link source row to this transaction
   IF p_source_table = 'operational_cost_submissions' THEN
     UPDATE operational_cost_submissions
     SET pre_fund_transaction_id = v_txn_id WHERE id = p_source_id;
@@ -256,19 +278,54 @@ BEGIN
     SET pre_fund_transaction_id = v_txn_id WHERE id = p_source_id;
   END IF;
 
-  -- GL posting: pre_fund_paid event (same transaction — atomic)
-  --   DR: 2400 Pre-Fund Liability (obligation reduced — pre-fund balance consumed)
-  --   CR: 1200 Cash / Bank (cash outflow recorded against the pre-fund)
-  -- Correct double-entry: pre-fund cash was received into bank (DR cash / CR liability at
-  -- activation); disbursement releases liability back against cash (DR liability / CR cash).
-  -- Only fires when both GL codes are configured on the fund.
-  -- Idempotency key prevents double-posting on RPC retry.
-  IF v_gl_liab_code IS NOT NULL AND v_gl_exp_code IS NOT NULL THEN
-    SELECT id INTO v_liab_id FROM acct_accounts WHERE code = v_gl_liab_code LIMIT 1;
-    -- CR leg: cash/bank account (stored in gl_expense_account column; maps to receipt/cash code)
-    SELECT id INTO v_exp_id  FROM acct_accounts WHERE code = v_gl_exp_code  LIMIT 1;
+  -- ── Atomic allocation deduction ─────────────────────────────────────────
+  -- Only when p_user_id is supplied AND the fund has allocation rows.
+  -- Hard-fail if the submitter has no allocation — prevents silent drift.
+  IF p_user_id IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM pre_fund_allocations
+               WHERE pre_fund_request_id = p_fund_id LIMIT 1) THEN
+      SELECT allocated_amount - spent_amount
+      INTO   v_alloc_remaining
+      FROM   pre_fund_allocations
+      WHERE  pre_fund_request_id = p_fund_id AND user_id = p_user_id
+      FOR UPDATE;
 
-    IF v_liab_id IS NOT NULL AND v_exp_id IS NOT NULL THEN
+      IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+          'success', false,
+          'error', 'User has no allocation for this fund. Allocate budget before linking payments.'
+        );
+      END IF;
+
+      IF v_alloc_remaining < p_amount THEN
+        RETURN jsonb_build_object(
+          'success', false,
+          'error', 'Insufficient personal allocation (' || v_alloc_remaining::TEXT ||
+                   ' remaining; ' || p_amount::TEXT || ' requested).'
+        );
+      END IF;
+
+      UPDATE pre_fund_allocations
+      SET spent_amount = spent_amount + p_amount, updated_at = now()
+      WHERE pre_fund_request_id = p_fund_id AND user_id = p_user_id;
+
+      GET DIAGNOSTICS v_alloc_rows = ROW_COUNT;
+      IF v_alloc_rows = 0 THEN
+        RAISE EXCEPTION 'Allocation row vanished between lock and update — rolling back.';
+      END IF;
+    END IF;
+  END IF;
+
+  -- ── GL posting (pre_fund_paid) ───────────────────────────────────────────
+  -- DR: gl_liability_account  — releases the pre-fund obligation
+  -- CR: gl_receipt_account    — cash/bank outflow (mirrors the DR at activation)
+  -- Idempotency key prevents double-posting on retry.
+  -- Only fires when both GL codes are configured on the fund.
+  IF v_gl_liab_code IS NOT NULL AND v_gl_rcpt_code IS NOT NULL THEN
+    SELECT id INTO v_liab_id FROM acct_accounts WHERE code = v_gl_liab_code LIMIT 1;
+    SELECT id INTO v_rcpt_id  FROM acct_accounts WHERE code = v_gl_rcpt_code  LIMIT 1;
+
+    IF v_liab_id IS NOT NULL AND v_rcpt_id IS NOT NULL THEN
       v_ik := 'pf-paid-' || p_source_table || '-' || p_source_id::TEXT;
 
       IF NOT EXISTS (SELECT 1 FROM acct_journal_entries WHERE idempotency_key = v_ik) THEN
@@ -277,19 +334,20 @@ BEGIN
           source_type, source_id, idempotency_key, created_by
         ) VALUES (
           'Pre-Fund Disbursement — ' || COALESCE(p_description, p_source_table),
-          'صرف التمويل المسبق — ' || COALESCE(p_description, p_source_table),
+          'صرف التمويل المسبق — '    || COALESCE(p_description, p_source_table),
           p_payment_date, 'draft',
           p_source_table, p_source_id, v_ik, p_created_by
         ) RETURNING id INTO v_je_id;
 
-        INSERT INTO acct_journal_lines (entry_id, line_no, account_id, debit_credit,
+        INSERT INTO acct_journal_lines (
+          entry_id, line_no, account_id, debit_credit,
           original_amount, original_currency, functional_amount, functional_currency,
-          description, function)
-        VALUES
+          description, function
+        ) VALUES
           (v_je_id, 1, v_liab_id, 'DR',
            p_amount, p_currency, p_amount, p_currency,
            'Pre-fund disbursement — liability released', 'program'),
-          (v_je_id, 2, v_exp_id,  'CR',
+          (v_je_id, 2, v_rcpt_id,  'CR',
            p_amount, p_currency, p_amount, p_currency,
            'Pre-fund disbursement — cash/bank outflow', 'program');
 
@@ -307,8 +365,12 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID) TO authenticated;
+-- Drop the legacy 9-arg overload so PostgREST has a single unambiguous signature.
+-- The 11-arg version handles all existing callers via DEFAULT NULL for new params.
+DROP FUNCTION IF EXISTS link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID);
+
+REVOKE ALL ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID,UUID,TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID,UUID,TEXT) TO authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- RPC 3: add_pre_fund_transaction_rpc
