@@ -338,7 +338,7 @@ export default function ApprovalsHub() {
         // 1. Find the current pending step for this fund (lowest step_order pending)
         const { data: stepsData } = await supabase
           .from('pre_fund_approval_steps' as any)
-          .select('id, step_order, is_required, status')
+          .select('id, step_order, is_required, status, assigned_user_id')
           .eq('pre_fund_request_id', fundId)
           .order('step_order', { ascending: true });
         const steps: any[] = (stepsData as any) ?? [];

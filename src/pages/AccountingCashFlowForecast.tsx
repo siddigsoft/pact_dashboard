@@ -37,6 +37,8 @@ export default function AccountingCashFlowForecast() {
   const [monthlyInflow, setMonthlyInflow] = useState(0);
   const [openEncumbrances, setOpenEncumbrances] = useState(0);
   const [openPOs, setOpenPOs] = useState(0);
+  const [preFundLiquidity, setPreFundLiquidity] = useState(0);
+  const [preFundCommitted, setPreFundCommitted] = useState(0);
   const [historical, setHistorical] = useState<HistoricalRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [missingTables, setMissingTables] = useState<string[]>([]);
@@ -46,7 +48,7 @@ export default function AccountingCashFlowForecast() {
     try {
       const missing: string[] = [];
 
-      const [bankRes, journalLineRes, encRes, poRes] = await Promise.all([
+      const [bankRes, journalLineRes, encRes, poRes, preFundRes] = await Promise.all([
         supabase.from('acct_bank_accounts').select('current_balance, is_active').limit(500),
         supabase.from('acct_journal_lines')
           .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
@@ -55,6 +57,11 @@ export default function AccountingCashFlowForecast() {
           .limit(10000),
         supabase.from('acct_budget_encumbrances' as any).select('amount').eq('status', 'open').limit(5000),
         supabase.from('acct_purchase_orders').select('amount, status').eq('status', 'approved').limit(2000),
+        // Pre-fund liquidity: active/low_balance funds contribute available balance as liquid cash
+        supabase.from('pre_fund_requests' as any)
+          .select('available_balance, committed_amount, currency')
+          .in('status', ['active', 'low_balance'])
+          .limit(500),
       ]);
 
       if (bankRes.error?.code === '42P01') missing.push('acct_bank_accounts');
@@ -63,6 +70,13 @@ export default function AccountingCashFlowForecast() {
       const banks = (bankRes.data ?? []) as any[];
       const totalCash = banks.filter(b => b.is_active !== false).reduce((s: number, b: any) => s + Number(b.current_balance ?? 0), 0);
       setCashBalance(totalCash);
+
+      // Pre-fund liquidity (USD-denominated funds contribute directly; others are advisory)
+      const preFunds = (preFundRes.data ?? []) as any[];
+      const pfLiquidity = preFunds.reduce((s: number, r: any) => s + Number(r.available_balance ?? 0), 0);
+      const pfCommitted = preFunds.reduce((s: number, r: any) => s + Number(r.committed_amount ?? 0), 0);
+      setPreFundLiquidity(pfLiquidity);
+      setPreFundCommitted(pfCommitted);
 
       const enc = (encRes.data ?? []) as any[];
       setOpenEncumbrances(enc.reduce((s: number, e: any) => s + Number(e.amount ?? 0), 0));
@@ -107,15 +121,19 @@ export default function AccountingCashFlowForecast() {
 
   const forecast: ForecastRow[] = useMemo(() => {
     const rows: ForecastRow[] = [];
-    let balance = cashBalance;
+    // Pre-fund liquidity is included in opening balance as it represents committed cash on hand
+    let balance = cashBalance + preFundLiquidity;
     const monthlyEncSpread = openEncumbrances / 3;
     const monthlyPOSpread = openPOs / 4;
+    // Pre-fund committed amounts are planned outflows spread over the next 2 months
+    const pfCommittedSpread = preFundCommitted / 2;
     for (let i = 0; i < 12; i++) {
       const d = addMonths(startOfMonth(new Date()), i);
       const inflows = monthlyInflow;
       const extraOut = i < 3 ? monthlyEncSpread : 0;
       const poOut = i < 4 ? monthlyPOSpread : 0;
-      const outflows = monthlyOutflow + extraOut + poOut;
+      const pfOut = i < 2 ? pfCommittedSpread : 0;
+      const outflows = monthlyOutflow + extraOut + poOut + pfOut;
       const net = inflows - outflows;
       rows.push({
         month: format(d, 'yyyy-MM'), label: format(d, 'MMM yy'),

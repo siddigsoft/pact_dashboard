@@ -33,6 +33,7 @@ interface PeriodHealth {
   draftJournals: number;
   unmatchedBankLines: number;
   outstandingAP: number;
+  activePrefundsWithBalance: number;
   loading: boolean;
 }
 
@@ -57,9 +58,10 @@ const TRANSITIONS: Record<string, { next: string; label: string; warn?: string }
 };
 
 const CHECK_LABELS: Record<string, { label: string; icon: React.ElementType; desc: string }> = {
-  draftJournals:      { label: 'Unposted Journals',        icon: BookOpen,   desc: 'Draft or pending-approval journals within this period' },
-  unmatchedBankLines: { label: 'Unmatched Bank Lines',     icon: Landmark,   desc: 'Bank statement lines not yet matched to a journal entry' },
-  outstandingAP:      { label: 'Outstanding AP Invoices',  icon: FileText,   desc: 'AP invoices due by period end that are not yet paid' },
+  draftJournals:             { label: 'Unposted Journals',         icon: BookOpen,      desc: 'Draft or pending-approval journals within this period' },
+  unmatchedBankLines:        { label: 'Unmatched Bank Lines',      icon: Landmark,      desc: 'Bank statement lines not yet matched to a journal entry' },
+  outstandingAP:             { label: 'Outstanding AP Invoices',   icon: FileText,      desc: 'AP invoices due by period end that are not yet paid' },
+  activePrefundsWithBalance: { label: 'Open Pre-Fund Balances',    icon: DollarSign,    desc: 'Active pre-funds with available balance — reconcile or carry-forward before close' },
 };
 
 export default function AccountingPeriodClose() {
@@ -104,9 +106,10 @@ export default function AccountingPeriodClose() {
 
   const loadHealth = useCallback(async (period: Period) => {
     setHealth(prev => new Map(prev).set(period.id, {
-      periodId: period.id, draftJournals: 0, unmatchedBankLines: 0, outstandingAP: 0, loading: true,
+      periodId: period.id, draftJournals: 0, unmatchedBankLines: 0, outstandingAP: 0,
+      activePrefundsWithBalance: 0, loading: true,
     }));
-    const [jRes, apRes, blRes] = await Promise.all([
+    const [jRes, apRes, blRes, pfRes] = await Promise.all([
       supabase.from('acct_journal_entries')
         .select('id', { count: 'exact', head: true })
         .eq('period_id', period.id)
@@ -121,12 +124,20 @@ export default function AccountingPeriodClose() {
         .eq('is_excluded', false)
         .gte('statement_date', period.start_date)
         .lte('statement_date', period.end_date),
+      // Pre-fund gate: active funds with available balance > 0 should be reconciled before close
+      supabase.from('pre_fund_requests' as any)
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['active', 'low_balance'])
+        .gt('available_balance', 0)
+        .lte('start_date', period.end_date)
+        .gte('end_date', period.start_date),
     ]);
     setHealth(prev => new Map(prev).set(period.id, {
       periodId: period.id,
       draftJournals: jRes.count ?? 0,
       unmatchedBankLines: blRes.count ?? 0,
       outstandingAP: apRes.count ?? 0,
+      activePrefundsWithBalance: pfRes.error?.code === '42P01' ? 0 : (pfRes.count ?? 0),
       loading: false,
     }));
   }, []);

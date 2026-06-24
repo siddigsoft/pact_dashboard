@@ -374,13 +374,15 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_jwt_role TEXT;
 BEGIN
-  -- Role guard: only service_role (pg_cron / scheduler) can execute this function.
-  -- Direct calls from authenticated users are blocked at the GRANT level AND here.
-  IF current_setting('role', true) NOT IN ('service_role', '') THEN
-    -- Allow if invoked by pg_cron/postgres superuser (empty role string means superuser context)
-    -- Reject all others silently to prevent information disclosure
-    RETURN;
+  -- Role guard: only service_role (pg_cron / Edge Function scheduler) may call this.
+  -- Supabase sets request.jwt.claims.role when invoking via service key.
+  -- Authenticated users will have role='authenticated', so they are rejected here.
+  v_jwt_role := coalesce(current_setting('request.jwt.claims.role', true), '');
+  IF v_jwt_role NOT IN ('service_role', 'postgres', '') THEN
+    RETURN; -- Silently reject — do not leak information
   END IF;
   -- Mark funds ending within warning_days as ending_soon
   UPDATE pre_fund_requests
