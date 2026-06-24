@@ -95,8 +95,8 @@ export default function PreFundingSettings() {
     setLoading(true);
     try {
       const [sRes, ptRes] = await Promise.all([
-        supabase.from('pre_fund_settings' as any).select('*').maybeSingle(),
-        supabase.from('pre_fund_period_types' as any).select('*').order('display_order'),
+        supabase.from('pre_fund_settings').select('*').maybeSingle(),
+        supabase.from('pre_fund_period_types').select('*').order('display_order'),
       ]);
       if (sRes.data) setSettings({ ...DEFAULT_SETTINGS, ...sRes.data as any });
       setPeriodTypes((ptRes.data as any) ?? []);
@@ -117,10 +117,10 @@ export default function PreFundingSettings() {
 
       let savedId = settings.id;
       if (settings.id) {
-        const { error: e } = await supabase.from('pre_fund_settings' as any).update(payload).eq('id', settings.id);
+        const { error: e } = await supabase.from('pre_fund_settings').update(payload).eq('id', settings.id);
         if (e) throw e;
       } else {
-        const { data, error: e } = await supabase.from('pre_fund_settings' as any).insert(payload).select().maybeSingle();
+        const { data, error: e } = await supabase.from('pre_fund_settings').insert(payload).select().maybeSingle();
         if (e) throw e;
         if (data) { savedId = (data as any).id; setSettings(p => ({ ...p, id: savedId })); }
       }
@@ -156,10 +156,10 @@ export default function PreFundingSettings() {
         display_order: editingPT ? editingPT.display_order : maxOrder + 1,
       };
       if (editingPT) {
-        const { error: e } = await supabase.from('pre_fund_period_types' as any).update(payload).eq('id', editingPT.id);
+        const { error: e } = await supabase.from('pre_fund_period_types').update(payload).eq('id', editingPT.id);
         if (e) throw e;
       } else {
-        const { error: e } = await supabase.from('pre_fund_period_types' as any).insert(payload);
+        const { error: e } = await supabase.from('pre_fund_period_types').insert(payload);
         if (e) throw e;
       }
       toast({ title: editingPT ? 'Period type updated' : 'Period type added' });
@@ -173,7 +173,7 @@ export default function PreFundingSettings() {
 
   const handleDeletePT = async (id: string) => {
     try {
-      const { error: e } = await supabase.from('pre_fund_period_types' as any).delete().eq('id', id);
+      const { error: e } = await supabase.from('pre_fund_period_types').delete().eq('id', id);
       if (e) throw e;
       toast({ title: 'Period type deleted' });
       await load();
@@ -187,7 +187,7 @@ export default function PreFundingSettings() {
         const pt = BUILTIN_PERIOD_TYPES[i];
         const exists = periodTypes.some(p => p.name === pt.name);
         if (!exists) {
-          await supabase.from('pre_fund_period_types' as any).insert({ name: pt.name, day_count: pt.day_count, is_builtin: true, display_order: i + 1 });
+          await supabase.from('pre_fund_period_types').insert({ name: pt.name, day_count: pt.day_count, is_builtin: true, display_order: i + 1 });
         }
       }
       toast({ title: 'Built-in period types seeded' });

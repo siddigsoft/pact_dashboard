@@ -88,11 +88,11 @@ export default function PreFundingOverview() {
   const load = useCallback(async () => {
     try {
       const [fundsRes, ratesRes, settingsRes] = await Promise.all([
-        supabase.from('pre_fund_requests' as any)
+        supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
         supabase.from('acct_exchange_rates' as any).select('currency,rate_to_usd').eq('is_active', true),
-        supabase.from('pre_fund_settings' as any).select('base_currency').maybeSingle(),
+        supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);

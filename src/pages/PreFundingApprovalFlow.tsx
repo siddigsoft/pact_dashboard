@@ -76,7 +76,7 @@ export default function PreFundingApprovalFlow() {
   const loadFunds = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: e } = await supabase.from('pre_fund_requests' as any)
+      const { data, error: e } = await supabase.from('pre_fund_requests')
         .select('id,name,status,currency,amount').order('created_at', { ascending: false });
       if (e && !e.message.includes('does not exist')) throw e;
       setFunds((data as any) ?? []);
@@ -87,7 +87,7 @@ export default function PreFundingApprovalFlow() {
   const loadSteps = useCallback(async (fundId: string) => {
     setStepsLoading(true);
     try {
-      const { data, error: e } = await supabase.from('pre_fund_approval_steps' as any)
+      const { data, error: e } = await supabase.from('pre_fund_approval_steps')
         .select('*').eq('pre_fund_request_id', fundId).order('step_order');
       if (e) throw e;
       const stepsWithNames = ((data as any) ?? []).map((s: ApprovalStep) => ({
@@ -109,7 +109,7 @@ export default function PreFundingApprovalFlow() {
     setSaving(true);
     try {
       const maxOrder = steps.length > 0 ? Math.max(...steps.map(s => s.step_order)) : 0;
-      const { error: e } = await supabase.from('pre_fund_approval_steps' as any).insert({
+      const { error: e } = await supabase.from('pre_fund_approval_steps').insert({
         pre_fund_request_id: selectedFund.id,
         step_order: maxOrder + 1,
         step_label: stepForm.step_label.trim(),
@@ -130,7 +130,7 @@ export default function PreFundingApprovalFlow() {
     if (!selectedFund) return;
     setProcessing(stepId);
     try {
-      const { error: e } = await supabase.from('pre_fund_approval_steps' as any).delete().eq('id', stepId);
+      const { error: e } = await supabase.from('pre_fund_approval_steps').delete().eq('id', stepId);
       if (e) throw e;
       await loadSteps(selectedFund.id);
     } catch (e: any) { toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }); }
@@ -148,8 +148,8 @@ export default function PreFundingApprovalFlow() {
     updated[swapIdx] = { ...updated[swapIdx], step_order: temp };
     try {
       await Promise.all([
-        supabase.from('pre_fund_approval_steps' as any).update({ step_order: updated[idx].step_order }).eq('id', updated[idx].id),
-        supabase.from('pre_fund_approval_steps' as any).update({ step_order: updated[swapIdx].step_order }).eq('id', updated[swapIdx].id),
+        supabase.from('pre_fund_approval_steps').update({ step_order: updated[idx].step_order }).eq('id', updated[idx].id),
+        supabase.from('pre_fund_approval_steps').update({ step_order: updated[swapIdx].step_order }).eq('id', updated[swapIdx].id),
       ]);
       await loadSteps(selectedFund.id);
     } catch (e: any) { toast({ title: 'Reorder failed', description: e.message, variant: 'destructive' }); }
@@ -167,10 +167,10 @@ export default function PreFundingApprovalFlow() {
         approved_by: currentUser?.id,
         notes: actionNotes || null,
       };
-      const { error: e } = await supabase.from('pre_fund_approval_steps' as any).update(updates).eq('id', step.id);
+      const { error: e } = await supabase.from('pre_fund_approval_steps').update(updates).eq('id', step.id);
       if (e) throw e;
 
-      const allSteps = await supabase.from('pre_fund_approval_steps' as any)
+      const allSteps = await supabase.from('pre_fund_approval_steps')
         .select('id,status,is_required').eq('pre_fund_request_id', selectedFund.id);
       const refreshedSteps = (allSteps.data as any) ?? [];
       const thisStepInRefresh = refreshedSteps.find((s: any) => s.id === step.id);
@@ -183,13 +183,13 @@ export default function PreFundingApprovalFlow() {
 
       if (anyRequiredRejected) {
         // A required step was rejected → fund moves to rejected
-        await supabase.from('pre_fund_requests' as any).update({
+        await supabase.from('pre_fund_requests').update({
           status: 'rejected',
           rejection_reason: actionNotes || 'Step rejected in Approval Flow',
         }).eq('id', selectedFund.id);
         toast({ title: 'Step rejected — Fund is now Rejected', description: actionNotes || undefined });
       } else if (allApproved && action === 'approve') {
-        await supabase.from('pre_fund_requests' as any).update({
+        await supabase.from('pre_fund_requests').update({
           status: 'awaiting_receipt',
           approved_by: currentUser?.id ?? null,
           approved_at: new Date().toISOString(),

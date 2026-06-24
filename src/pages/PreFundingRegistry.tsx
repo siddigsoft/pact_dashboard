@@ -109,8 +109,8 @@ export default function PreFundingRegistry() {
     setLoading(true);
     try {
       const [fundsRes, ptRes] = await Promise.all([
-        supabase.from('pre_fund_requests' as any).select('*').order('created_at', { ascending: false }),
-        supabase.from('pre_fund_period_types' as any).select('id,name,day_count,is_builtin').order('display_order'),
+        supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);
@@ -166,7 +166,7 @@ export default function PreFundingRegistry() {
         notes: form.notes || null,
       };
       if (editing) {
-        const { error: e } = await supabase.from('pre_fund_requests' as any).update(payload).eq('id', editing.id);
+        const { error: e } = await supabase.from('pre_fund_requests').update(payload).eq('id', editing.id);
         if (e) throw e;
         toast({ title: 'Fund updated' });
       } else {
@@ -175,7 +175,7 @@ export default function PreFundingRegistry() {
         payload.committed_amount = 0;
         payload.paid_amount = 0;
         payload.created_by = currentUser?.id ?? null;
-        const { error: e } = await supabase.from('pre_fund_requests' as any).insert(payload);
+        const { error: e } = await supabase.from('pre_fund_requests').insert(payload);
         if (e) throw e;
         toast({ title: 'Pre-fund created', description: 'Configure the approval chain in Approval Flow Manager.' });
       }
@@ -192,7 +192,7 @@ export default function PreFundingRegistry() {
     if (!deleteId) return;
     setDeleting(true);
     try {
-      const { error: e } = await supabase.from('pre_fund_requests' as any).delete().eq('id', deleteId);
+      const { error: e } = await supabase.from('pre_fund_requests').delete().eq('id', deleteId);
       if (e) throw e;
       toast({ title: 'Fund deleted' });
       setDeleteId(null);
@@ -205,7 +205,7 @@ export default function PreFundingRegistry() {
   };
 
   const handleSubmitForApproval = async (f: PreFundRequest) => {
-    const { error: e } = await supabase.from('pre_fund_requests' as any).update({ status: 'pending_approval' }).eq('id', f.id);
+    const { error: e } = await supabase.from('pre_fund_requests').update({ status: 'pending_approval' }).eq('id', f.id);
     if (e) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); return; }
 
     // Wire into Approvals Hub — create a notification event so the approval
@@ -251,7 +251,7 @@ export default function PreFundingRegistry() {
       const [{ data: receiptAcct }, { data: liabAcct }, { data: bankReconSettings }, { data: bankAcctRow }] = await Promise.all([
         supabase.from('acct_accounts' as any).select('id').eq('code', glReceiptCode).maybeSingle(),
         supabase.from('acct_accounts' as any).select('id').eq('code', glLiabCode).maybeSingle(),
-        supabase.from('pre_fund_settings' as any).select('integration_bank_recon').limit(1).maybeSingle(),
+        supabase.from('pre_fund_settings').select('integration_bank_recon').limit(1).maybeSingle(),
         supabase.from('acct_bank_accounts' as any).select('id').eq('currency', currency).limit(1).maybeSingle(),
       ]);
 
@@ -280,7 +280,7 @@ export default function PreFundingRegistry() {
       });
 
       // ── Activate fund — only reached if GL posting succeeded ─────────────
-      const { error: updErr } = await supabase.from('pre_fund_requests' as any).update({
+      const { error: updErr } = await supabase.from('pre_fund_requests').update({
         status: 'active',
         available_balance: fund?.amount ?? 0,
         receipt_url: urlData.publicUrl,
@@ -318,7 +318,7 @@ export default function PreFundingRegistry() {
     setGeneratingDonorPdf(f.id);
     try {
       // Load transactions for this fund
-      const { data: txnData } = await supabase.from('pre_fund_transactions' as any)
+      const { data: txnData } = await supabase.from('pre_fund_transactions')
         .select('*').eq('pre_fund_request_id', f.id).order('transaction_date', { ascending: false });
       const transactions: any[] = (txnData as any) ?? [];
 
@@ -399,7 +399,7 @@ export default function PreFundingRegistry() {
     try {
       // Read configurable tolerance + integration toggles from pre_fund_settings
       const { data: settingsRow } = await supabase
-        .from('pre_fund_settings' as any)
+        .from('pre_fund_settings')
         .select('bank_match_tolerance_pct, integration_bank_recon')
         .limit(1)
         .maybeSingle();
@@ -410,7 +410,7 @@ export default function PreFundingRegistry() {
       for (const fund of awaitingFunds) {
         const tolerance = Math.max(0.01, fund.amount * tolerancePct);
         const { data: feedRows } = await supabase
-          .from('pre_fund_bank_unmatched' as any)
+          .from('pre_fund_bank_unmatched')
           .select('id,amount,currency')
           .eq('match_status', 'unmatched')
           .eq('currency', fund.currency);
@@ -422,7 +422,7 @@ export default function PreFundingRegistry() {
           // ── Step 1: GL Bridge FIRST (fail-closed) ──────────────────────────
           // GL must succeed before fund is ever set active. If it throws,
           // this fund is skipped — stays in awaiting_receipt with no state change.
-          const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
+          const { data: fundDetail } = await supabase.from('pre_fund_requests')
             .select('gl_receipt_account,gl_liability_account').eq('id', fund.id).maybeSingle();
           const drCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
           const crCode = (fundDetail as any)?.gl_liability_account ?? '2400';
@@ -453,7 +453,7 @@ export default function PreFundingRegistry() {
           }
 
           // ── Step 2: Activate fund — only reached after GL succeeds ──────────
-          const { error: actErr } = await supabase.from('pre_fund_requests' as any).update({
+          const { error: actErr } = await supabase.from('pre_fund_requests').update({
             status: 'active',
             available_balance: fund.amount,
             activated_at: activatedAt,
@@ -461,7 +461,7 @@ export default function PreFundingRegistry() {
           if (actErr) throw actErr;
 
           // Mark feed row as matched
-          await supabase.from('pre_fund_bank_unmatched' as any).update({
+          await supabase.from('pre_fund_bank_unmatched').update({
             matched_fund_id: fund.id,
             match_status: 'matched',
             reviewed_by: currentUser?.id ?? null,

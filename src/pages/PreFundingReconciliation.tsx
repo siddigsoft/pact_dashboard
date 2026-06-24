@@ -206,7 +206,7 @@ export default function PreFundingReconciliation() {
   const loadFunds = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: e } = await supabase.from('pre_fund_requests' as any)
+      const { data, error: e } = await supabase.from('pre_fund_requests')
         .select('id,name,source,currency,amount,available_balance,committed_amount,paid_amount,status,start_date,end_date')
         .in('status', ['active', 'low_balance', 'closed', 'period_locked'])
         .order('created_at', { ascending: false });
@@ -220,8 +220,8 @@ export default function PreFundingReconciliation() {
     setTxnLoading(true);
     try {
       const [txnRes, reconRes] = await Promise.all([
-        supabase.from('pre_fund_transactions' as any).select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false }),
-        supabase.from('pre_fund_reconciliations' as any).select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false }),
+        supabase.from('pre_fund_transactions').select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false }),
+        supabase.from('pre_fund_reconciliations').select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false }),
       ]);
       setTxns((txnRes.data as any) ?? []);
       setRecons((reconRes.data as any) ?? []);
@@ -243,7 +243,7 @@ export default function PreFundingReconciliation() {
     try {
       const amount   = parseFloat(txnForm.amount);
       const currency = txnForm.currency || selectedFund.currency;
-      const { data: txn, error: e } = await supabase.from('pre_fund_transactions' as any).insert({
+      const { data: txn, error: e } = await supabase.from('pre_fund_transactions').insert({
         pre_fund_request_id: selectedFund.id,
         transaction_type: txnForm.transaction_type,
         amount,
@@ -267,7 +267,7 @@ export default function PreFundingReconciliation() {
         // GL posting failure rolls back the transaction (delete + rethrow)
         const txnId = (txn as any)?.id;
         try {
-          const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
+          const { data: fundDetail } = await supabase.from('pre_fund_requests')
             .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
             .eq('id', selectedFund.id).maybeSingle();
 
@@ -315,7 +315,7 @@ export default function PreFundingReconciliation() {
           }
         } catch (glErr: any) {
           // GL failed — roll back the transaction record to keep DB consistent
-          if (txnId) await supabase.from('pre_fund_transactions' as any).delete().eq('id', txnId);
+          if (txnId) await supabase.from('pre_fund_transactions').delete().eq('id', txnId);
           throw new Error(`GL Bridge failed — transaction rolled back: ${(glErr as any).message}`);
         }
       }
@@ -329,7 +329,7 @@ export default function PreFundingReconciliation() {
   };
 
   const handleReconcileTxn = async (txnId: string, reconciled: boolean) => {
-    await supabase.from('pre_fund_transactions' as any).update({ reconciled, reconciled_at: reconciled ? new Date().toISOString() : null }).eq('id', txnId);
+    await supabase.from('pre_fund_transactions').update({ reconciled, reconciled_at: reconciled ? new Date().toISOString() : null }).eq('id', txnId);
     if (selectedFund) await loadTxns(selectedFund.id);
   };
 
@@ -342,7 +342,7 @@ export default function PreFundingReconciliation() {
       const returnAmt = closeForm.surplus_action === 'return' ? surplus : parseFloat(closeForm.return_amount) || 0;
       const reserveAmt = closeForm.surplus_action === 'reserve' ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
 
-      const { data: recon, error: e } = await supabase.from('pre_fund_reconciliations' as any).insert({
+      const { data: recon, error: e } = await supabase.from('pre_fund_reconciliations').insert({
         pre_fund_request_id: selectedFund.id,
         period_start: selectedFund.start_date,
         period_end: selectedFund.end_date,
@@ -360,13 +360,13 @@ export default function PreFundingReconciliation() {
         notes: closeForm.notes || null,
       }).select('id').maybeSingle();
       if (e) throw e;
-      await supabase.from('pre_fund_requests' as any).update({ status: 'closed' }).eq('id', selectedFund.id);
+      await supabase.from('pre_fund_requests').update({ status: 'closed' }).eq('id', selectedFund.id);
 
       // ── GL Bridge: post pre_fund_closed journal entry ──────────────────────
       // Template: Dr {gl_liability_account} → Cr {gl_receipt_account} (return portion)
       //           Dr {gl_liability_account} → Cr {gl_expense_account} (variance/expense portion)
       try {
-        const { data: fundDetail } = await supabase.from('pre_fund_requests' as any)
+        const { data: fundDetail } = await supabase.from('pre_fund_requests')
           .select('gl_receipt_account,gl_liability_account,gl_expense_account,currency')
           .eq('id', selectedFund.id).maybeSingle();
         const currency = selectedFund.currency;
@@ -456,8 +456,8 @@ export default function PreFundingReconciliation() {
       } catch (glErr: any) {
         // GL failed — roll back recon record and revert fund status to keep DB consistent
         const reconId = (recon as any)?.id;
-        if (reconId) await supabase.from('pre_fund_reconciliations' as any).delete().eq('id', reconId);
-        await supabase.from('pre_fund_requests' as any).update({ status: 'active' }).eq('id', selectedFund.id);
+        if (reconId) await supabase.from('pre_fund_reconciliations').delete().eq('id', reconId);
+        await supabase.from('pre_fund_requests').update({ status: 'active' }).eq('id', selectedFund.id);
         throw new Error(`GL Bridge failed — period close rolled back: ${(glErr as any).message}`);
       }
 
@@ -482,7 +482,7 @@ export default function PreFundingReconciliation() {
       // Load global unmatched bank feed entries (pre_fund_bank_unmatched has no fund FK
       // until matched; we filter by currency to narrow candidates)
       const { data: feedRows, error: fErr } = await supabase
-        .from('pre_fund_bank_unmatched' as any)
+        .from('pre_fund_bank_unmatched')
         .select('id,amount,currency,transaction_date,description,raw_reference')
         .eq('match_status', 'unmatched')
         .eq('currency', selectedFund.currency);
@@ -491,7 +491,7 @@ export default function PreFundingReconciliation() {
 
       // Load open (unreconciled payment) transactions for this fund
       const { data: txnRows } = await supabase
-        .from('pre_fund_transactions' as any)
+        .from('pre_fund_transactions')
         .select('id,amount,currency,reconciled')
         .eq('pre_fund_request_id', selectedFund.id)
         .eq('reconciled', false)
@@ -500,7 +500,7 @@ export default function PreFundingReconciliation() {
 
       // Fetch configurable tolerance from settings (same as Registry bank-API path)
       const { data: bankFeedSettings } = await supabase
-        .from('pre_fund_settings' as any)
+        .from('pre_fund_settings')
         .select('bank_match_tolerance_pct')
         .limit(1)
         .maybeSingle();
@@ -514,7 +514,7 @@ export default function PreFundingReconciliation() {
         if (candidate) {
           // Mark bank feed row as matched — use actual schema columns:
           // matched_fund_id, match_status, reviewed_by, reviewed_at
-          await supabase.from('pre_fund_bank_unmatched' as any)
+          await supabase.from('pre_fund_bank_unmatched')
             .update({
               matched_fund_id: selectedFund.id,
               match_status: 'matched',
@@ -523,7 +523,7 @@ export default function PreFundingReconciliation() {
             })
             .eq('id', row.id);
           // Mark transaction as reconciled
-          await supabase.from('pre_fund_transactions' as any)
+          await supabase.from('pre_fund_transactions')
             .update({ reconciled: true, reconciled_at: new Date().toISOString() })
             .eq('id', candidate.id);
           // Remove from openTxns to avoid double-match
@@ -561,7 +561,7 @@ export default function PreFundingReconciliation() {
       try {
         const publicUrl = await uploadPdfToStorage(blob, filename, selectedFund.id);
         if (publicUrl && reconId) {
-          await supabase.from('pre_fund_reconciliations' as any).update({ pdf_url: publicUrl }).eq('id', reconId);
+          await supabase.from('pre_fund_reconciliations').update({ pdf_url: publicUrl }).eq('id', reconId);
           toast({ title: 'PDF saved', description: 'Reconciliation PDF saved to document storage.' });
           await Promise.all([loadFunds(), loadTxns(selectedFund.id)]);
         } else {

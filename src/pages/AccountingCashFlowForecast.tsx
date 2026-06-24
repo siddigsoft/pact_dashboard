@@ -58,12 +58,12 @@ export default function AccountingCashFlowForecast() {
         supabase.from('acct_budget_encumbrances' as any).select('amount').eq('status', 'open').limit(5000),
         supabase.from('acct_purchase_orders').select('amount, status').eq('status', 'approved').limit(2000),
         // Pre-fund liquidity: active/low_balance funds contribute available balance as liquid cash
-        supabase.from('pre_fund_requests' as any)
+        supabase.from('pre_fund_requests')
           .select('available_balance, committed_amount, currency')
           .in('status', ['active', 'low_balance'])
           .limit(500),
         // Integration toggle + FX rates for base-currency conversion
-        supabase.from('pre_fund_settings' as any).select('integration_cashflow').limit(1).maybeSingle(),
+        supabase.from('pre_fund_settings').select('integration_cashflow').limit(1).maybeSingle(),
         supabase.from('exchange_rates').select('usd_to_sdg').eq('is_active', true)
           .order('fetched_at', { ascending: false }).limit(1).maybeSingle(),
       ]);

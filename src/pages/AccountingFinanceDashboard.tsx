@@ -503,7 +503,7 @@ export default function AccountingFinanceDashboard() {
     setPreFundKPI(p => ({ ...p, loading: true, error: null }));
     try {
       const [{ data, error }, { data: fxData }] = await Promise.all([
-        supabase.from('pre_fund_requests' as any).select('status, available_balance, currency'),
+        supabase.from('pre_fund_requests').select('status, available_balance, currency'),
         supabase.from('exchange_rates').select('usd_to_sdg').eq('is_active', true)
           .order('fetched_at', { ascending: false }).limit(1).maybeSingle(),
       ]);

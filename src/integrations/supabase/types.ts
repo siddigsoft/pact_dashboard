@@ -474,6 +474,493 @@ export type Database = {
           },
         ]
       }
+      pre_fund_approval_steps: {
+        Row: {
+          id: string
+          pre_fund_request_id: string
+          step_order: number
+          step_label: string
+          assigned_user_id: string | null
+          is_required: boolean
+          status: string
+          approved_at: string | null
+          approved_by: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          pre_fund_request_id: string
+          step_order?: number
+          step_label: string
+          assigned_user_id?: string | null
+          is_required?: boolean
+          status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          pre_fund_request_id?: string
+          step_order?: number
+          step_label?: string
+          assigned_user_id?: string | null
+          is_required?: boolean
+          status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_fund_approval_steps_pre_fund_request_id_fkey"
+            columns: ["pre_fund_request_id"]
+            isOneToOne: false
+            referencedRelation: "pre_fund_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pre_fund_bank_unmatched: {
+        Row: {
+          id: string
+          raw_reference: string | null
+          amount: number
+          currency: string
+          transaction_date: string
+          description: string | null
+          matched_fund_id: string | null
+          match_status: string
+          reviewed_by: string | null
+          reviewed_at: string | null
+          source_payload: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          raw_reference?: string | null
+          amount: number
+          currency?: string
+          transaction_date?: string
+          description?: string | null
+          matched_fund_id?: string | null
+          match_status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          source_payload?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          raw_reference?: string | null
+          amount?: number
+          currency?: string
+          transaction_date?: string
+          description?: string | null
+          matched_fund_id?: string | null
+          match_status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          source_payload?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_fund_bank_unmatched_matched_fund_id_fkey"
+            columns: ["matched_fund_id"]
+            isOneToOne: false
+            referencedRelation: "pre_fund_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pre_fund_period_types: {
+        Row: {
+          id: string
+          name: string
+          day_count: number | null
+          is_builtin: boolean
+          display_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          day_count?: number | null
+          is_builtin?: boolean
+          display_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          day_count?: number | null
+          is_builtin?: boolean
+          display_order?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      pre_fund_reconciliations: {
+        Row: {
+          id: string
+          pre_fund_request_id: string
+          period_start: string | null
+          period_end: string | null
+          total_funded: number
+          total_paid: number
+          total_committed: number
+          variance: number
+          surplus_action: string
+          carry_forward_amount: number
+          return_amount: number
+          reserve_amount: number
+          status: string
+          closed_at: string | null
+          closed_by: string | null
+          pdf_url: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          pre_fund_request_id: string
+          period_start?: string | null
+          period_end?: string | null
+          total_funded?: number
+          total_paid?: number
+          total_committed?: number
+          variance?: number
+          surplus_action?: string
+          carry_forward_amount?: number
+          return_amount?: number
+          reserve_amount?: number
+          status?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          pdf_url?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          pre_fund_request_id?: string
+          period_start?: string | null
+          period_end?: string | null
+          total_funded?: number
+          total_paid?: number
+          total_committed?: number
+          variance?: number
+          surplus_action?: string
+          carry_forward_amount?: number
+          return_amount?: number
+          reserve_amount?: number
+          status?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          pdf_url?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_fund_reconciliations_pre_fund_request_id_fkey"
+            columns: ["pre_fund_request_id"]
+            isOneToOne: false
+            referencedRelation: "pre_fund_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pre_fund_requests: {
+        Row: {
+          id: string
+          name: string
+          source: string | null
+          amount: number
+          currency: string
+          available_balance: number
+          committed_amount: number
+          paid_amount: number
+          status: string
+          grace_expires_at: string | null
+          period_type_id: string | null
+          period_type_name: string | null
+          start_date: string | null
+          end_date: string | null
+          country_id: string | null
+          project_id: string | null
+          grant_id: string | null
+          matching_scope: string
+          threshold_pct: number | null
+          threshold_amount: number | null
+          warning_days: number | null
+          auto_renewal_mode: string
+          auto_renewal_days_before: number | null
+          low_balance_alert: boolean
+          ending_soon_alert: boolean
+          receipt_url: string | null
+          activated_at: string | null
+          notes: string | null
+          gl_receipt_account: string
+          gl_liability_account: string
+          gl_expense_account: string
+          gl_cf_account: string
+          notification_recipients: Json
+          approved_by: string | null
+          approved_at: string | null
+          rejection_reason: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          source?: string | null
+          amount: number
+          currency?: string
+          available_balance?: number
+          committed_amount?: number
+          paid_amount?: number
+          status?: string
+          grace_expires_at?: string | null
+          period_type_id?: string | null
+          period_type_name?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          country_id?: string | null
+          project_id?: string | null
+          grant_id?: string | null
+          matching_scope?: string
+          threshold_pct?: number | null
+          threshold_amount?: number | null
+          warning_days?: number | null
+          auto_renewal_mode?: string
+          auto_renewal_days_before?: number | null
+          low_balance_alert?: boolean
+          ending_soon_alert?: boolean
+          receipt_url?: string | null
+          activated_at?: string | null
+          notes?: string | null
+          gl_receipt_account?: string
+          gl_liability_account?: string
+          gl_expense_account?: string
+          gl_cf_account?: string
+          notification_recipients?: Json
+          approved_by?: string | null
+          approved_at?: string | null
+          rejection_reason?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          source?: string | null
+          amount?: number
+          currency?: string
+          available_balance?: number
+          committed_amount?: number
+          paid_amount?: number
+          status?: string
+          grace_expires_at?: string | null
+          period_type_id?: string | null
+          period_type_name?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          country_id?: string | null
+          project_id?: string | null
+          grant_id?: string | null
+          matching_scope?: string
+          threshold_pct?: number | null
+          threshold_amount?: number | null
+          warning_days?: number | null
+          auto_renewal_mode?: string
+          auto_renewal_days_before?: number | null
+          low_balance_alert?: boolean
+          ending_soon_alert?: boolean
+          receipt_url?: string | null
+          activated_at?: string | null
+          notes?: string | null
+          gl_receipt_account?: string
+          gl_liability_account?: string
+          gl_expense_account?: string
+          gl_cf_account?: string
+          notification_recipients?: Json
+          approved_by?: string | null
+          approved_at?: string | null
+          rejection_reason?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_fund_requests_period_type_id_fkey"
+            columns: ["period_type_id"]
+            isOneToOne: false
+            referencedRelation: "pre_fund_period_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pre_fund_settings: {
+        Row: {
+          id: string
+          base_currency: string
+          default_base_currency: string
+          default_threshold_pct: number
+          default_warning_days: number
+          auto_renewal_grace_hours: number
+          bank_match_tolerance_pct: number
+          bank_api_enabled: boolean
+          bank_api_url: string | null
+          bank_api_key_hint: string | null
+          integration_bank_recon: boolean
+          integration_cashflow: boolean
+          integration_encumbrance: boolean
+          default_renewal_mode: string
+          default_gl_receipt_account: string
+          default_gl_liability_account: string
+          default_gl_expense_account: string
+          default_gl_cf_account: string
+          default_notification_recipients: Json
+          default_matching_scope: string
+          reconciliation_action_return: boolean
+          reconciliation_action_carry_fwd: boolean
+          reconciliation_action_reserve: boolean
+          singleton_lock: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          base_currency?: string
+          default_base_currency?: string
+          default_threshold_pct?: number
+          default_warning_days?: number
+          auto_renewal_grace_hours?: number
+          bank_match_tolerance_pct?: number
+          bank_api_enabled?: boolean
+          bank_api_url?: string | null
+          bank_api_key_hint?: string | null
+          integration_bank_recon?: boolean
+          integration_cashflow?: boolean
+          integration_encumbrance?: boolean
+          default_renewal_mode?: string
+          default_gl_receipt_account?: string
+          default_gl_liability_account?: string
+          default_gl_expense_account?: string
+          default_gl_cf_account?: string
+          default_notification_recipients?: Json
+          default_matching_scope?: string
+          reconciliation_action_return?: boolean
+          reconciliation_action_carry_fwd?: boolean
+          reconciliation_action_reserve?: boolean
+          singleton_lock?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          base_currency?: string
+          default_base_currency?: string
+          default_threshold_pct?: number
+          default_warning_days?: number
+          auto_renewal_grace_hours?: number
+          bank_match_tolerance_pct?: number
+          bank_api_enabled?: boolean
+          bank_api_url?: string | null
+          bank_api_key_hint?: string | null
+          integration_bank_recon?: boolean
+          integration_cashflow?: boolean
+          integration_encumbrance?: boolean
+          default_renewal_mode?: string
+          default_gl_receipt_account?: string
+          default_gl_liability_account?: string
+          default_gl_expense_account?: string
+          default_gl_cf_account?: string
+          default_notification_recipients?: Json
+          default_matching_scope?: string
+          reconciliation_action_return?: boolean
+          reconciliation_action_carry_fwd?: boolean
+          reconciliation_action_reserve?: boolean
+          singleton_lock?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pre_fund_transactions: {
+        Row: {
+          id: string
+          pre_fund_request_id: string
+          transaction_type: string
+          amount: number
+          currency: string
+          reference: string | null
+          description: string | null
+          transaction_date: string
+          reconciled: boolean
+          reconciled_at: string | null
+          source_table: string | null
+          source_id: string | null
+          encumbrance_id: string | null
+          gl_entry_id: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          pre_fund_request_id: string
+          transaction_type?: string
+          amount: number
+          currency?: string
+          reference?: string | null
+          description?: string | null
+          transaction_date?: string
+          reconciled?: boolean
+          reconciled_at?: string | null
+          source_table?: string | null
+          source_id?: string | null
+          encumbrance_id?: string | null
+          gl_entry_id?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          pre_fund_request_id?: string
+          transaction_type?: string
+          amount?: number
+          currency?: string
+          reference?: string | null
+          description?: string | null
+          transaction_date?: string
+          reconciled?: boolean
+          reconciled_at?: string | null
+          source_table?: string | null
+          source_id?: string | null
+          encumbrance_id?: string | null
+          gl_entry_id?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_fund_transactions_pre_fund_request_id_fkey"
+            columns: ["pre_fund_request_id"]
+            isOneToOne: false
+            referencedRelation: "pre_fund_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

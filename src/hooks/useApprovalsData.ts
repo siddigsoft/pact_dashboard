@@ -427,7 +427,7 @@ export function useApprovalsData({
 
       if (roleIsFinancialAdmin || roleIsAdmin) {
         const { data: preFunds } = await supabase
-          .from('pre_fund_requests' as any)
+          .from('pre_fund_requests')
           .select('id, name, source, amount, currency, status, created_at, created_by, country_id, project_id')
           .eq('status', 'pending_approval')
           .order('created_at', { ascending: true })
@@ -463,7 +463,7 @@ export function useApprovalsData({
       // (covers non-finance users assigned to a specific step in the chain)
       if (currentUserId) {
         const { data: assignedSteps } = await supabase
-          .from('pre_fund_approval_steps' as any)
+          .from('pre_fund_approval_steps')
           .select('pre_fund_request_id, step_label')
           .eq('assigned_user_id', currentUserId)
           .eq('status', 'pending')
@@ -477,7 +477,7 @@ export function useApprovalsData({
 
           if (pendingFundIds.length > 0) {
             const { data: stepFunds } = await supabase
-              .from('pre_fund_requests' as any)
+              .from('pre_fund_requests')
               .select('id, name, source, amount, currency, status, created_at, created_by')
               .in('id', pendingFundIds)
               .eq('status', 'pending_approval')

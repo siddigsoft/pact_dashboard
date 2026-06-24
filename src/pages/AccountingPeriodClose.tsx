@@ -125,7 +125,7 @@ export default function AccountingPeriodClose() {
         .gte('statement_date', period.start_date)
         .lte('statement_date', period.end_date),
       // Pre-fund gate: active funds with available balance > 0 should be reconciled before close
-      supabase.from('pre_fund_requests' as any)
+      supabase.from('pre_fund_requests')
         .select('id', { count: 'exact', head: true })
         .in('status', ['active', 'low_balance'])
         .gt('available_balance', 0)
