@@ -67,7 +67,7 @@ export default function PreFundingApprovalFlow() {
   const [stepsLoading, setStepsLoading] = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [showAddStep, setShowAddStep] = useState(false);
-  const [stepForm, setStepForm] = useState({ step_label: '', assigned_user_id: '', is_required: true });
+  const [stepForm, setStepForm] = useState({ step_label: '', assigned_user_id: '__any__', is_required: true });
   const [saving, setSaving]     = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<{ step: ApprovalStep; action: 'approve' | 'reject' } | null>(null);
@@ -113,14 +113,14 @@ export default function PreFundingApprovalFlow() {
         pre_fund_request_id: selectedFund.id,
         step_order: maxOrder + 1,
         step_label: stepForm.step_label.trim(),
-        assigned_user_id: stepForm.assigned_user_id || null,
+        assigned_user_id: (stepForm.assigned_user_id && stepForm.assigned_user_id !== '__any__') ? stepForm.assigned_user_id : null,
         is_required: stepForm.is_required,
         status: 'pending',
       });
       if (e) throw e;
       toast({ title: 'Step added' });
       setShowAddStep(false);
-      setStepForm({ step_label: '', assigned_user_id: '', is_required: true });
+      setStepForm({ step_label: '', assigned_user_id: '__any__', is_required: true });
       await loadSteps(selectedFund.id);
     } catch (e: any) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); }
     finally { setSaving(false); }
@@ -363,9 +363,9 @@ export default function PreFundingApprovalFlow() {
               <Select value={stepForm.assigned_user_id} onValueChange={v => setStepForm(p => ({ ...p, assigned_user_id: v }))}>
                 <SelectTrigger data-testid="select-step-user"><SelectValue placeholder="Any approver with access…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any approver with access</SelectItem>
+                  <SelectItem value="__any__">Any approver with access</SelectItem>
                   {users.filter(u => u.profileStatus === 'approved' || u.isApproved).map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.fullName ?? u.name ?? u.email}</SelectItem>
+                    <SelectItem key={u.id} value={u.id || `__user_${u.email}`}>{u.fullName ?? u.name ?? u.email}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
