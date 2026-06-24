@@ -70,6 +70,7 @@ DECLARE
   v_je_id            UUID;
   v_idempotency_key  TEXT;
   v_period_id        UUID;
+  v_acct_fund_id     UUID;
 BEGIN
   -- Authorization: finance/admin role required
   PERFORM _assert_finance_role();
@@ -82,7 +83,15 @@ BEGIN
 
   IF v_period_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error',
-      'No open fiscal period found for today — open a fiscal period before activating.');
+      'No open fiscal period for today — open a period in Accounting → Fiscal Years first.');
+  END IF;
+
+  -- Resolve first active donor fund (required by acct_journal_lines.fund_id NOT NULL)
+  SELECT id INTO v_acct_fund_id FROM acct_funds WHERE is_active = true LIMIT 1;
+
+  IF v_acct_fund_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error',
+      'No active fund found in Fund Registry — create a fund in Accounting → Funds first.');
   END IF;
 
   -- Resolve GL account IDs before writing anything
@@ -91,11 +100,11 @@ BEGIN
 
   IF v_receipt_acct_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error',
-      'GL account not found for code "' || p_gl_receipt_code || '" — configure accounts before activating.');
+      'GL account not found for code "' || p_gl_receipt_code || '".');
   END IF;
   IF v_liab_acct_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error',
-      'GL account not found for code "' || p_gl_liability_code || '" — configure accounts before activating.');
+      'GL account not found for code "' || p_gl_liability_code || '".');
   END IF;
 
   v_idempotency_key := 'pf-received-' || p_fund_id::TEXT ||
@@ -112,14 +121,14 @@ BEGIN
     'pre_fund_requests', p_fund_id, v_idempotency_key, p_created_by
   ) RETURNING id INTO v_je_id;
 
-  INSERT INTO acct_journal_lines (entry_id, line_no, account_id, debit_credit,
+  INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, debit_credit,
     original_amount, original_currency, functional_amount, functional_currency,
     description, function)
   VALUES
-    (v_je_id, 1, v_receipt_acct_id, 'DR',
+    (v_je_id, 1, v_receipt_acct_id, v_acct_fund_id, 'DR',
      p_amount, p_currency, p_amount, p_currency,
      'Pre-fund receipt — ' || p_fund_name, 'program'),
-    (v_je_id, 2, v_liab_acct_id, 'CR',
+    (v_je_id, 2, v_liab_acct_id, v_acct_fund_id, 'CR',
      p_amount, p_currency, p_amount, p_currency,
      'Pre-fund liability deferred — ' || p_fund_name, 'program');
 
