@@ -16,20 +16,16 @@ export interface FundLinkResult {
  *   - create a pre_fund_transactions record
  *   - deduct from available_balance (and increment paid_amount)
  *   - back-link the source row
+ *   - deduct from the user's pre_fund_allocations.spent_amount (if allocated)
  *
- * The scoring/matching phase is read-only TypeScript; the three writes are
- * delegated to link_payment_atomically_rpc which runs them inside a single
- * DB transaction — no partial state is possible on failure.
+ * If the fund has ANY allocations, only the submitting user's allocated funds
+ * are considered — unallocated users are blocked from auto-linking.
  *
  * Matching priority (highest score wins):
  *  3 — country + project match
  *  2 — project-only match
  *  1 — country-only match
  *  0.5 — any active fund in same currency with sufficient balance
- *
- * Called AFTER the cost/DP row is already set to paid — this is additive and
- * non-blocking (errors are returned, not thrown, so the parent payment flow is
- * never rolled back by a linkage failure).
  */
 export async function linkPaymentToPreFund(params: {
   amount: number;
@@ -65,6 +61,21 @@ export async function linkPaymentToPreFund(params: {
     return { linked: false, message: 'No active pre-fund for this currency and period.' };
   }
 
+  // ── Check user allocations for each candidate fund ───────────────────────
+  // If a fund has allocations defined, the submitter must be one of them
+  // AND have sufficient remaining balance.
+  const fundIds = (activeFunds as any[]).map(f => f.id);
+  const { data: allAllocations } = await (supabase as any)
+    .from('pre_fund_allocations')
+    .select('pre_fund_request_id,user_id,allocated_amount,spent_amount')
+    .in('pre_fund_request_id', fundIds);
+
+  const allocsByFund: Record<string, any[]> = {};
+  for (const a of (allAllocations ?? [])) {
+    if (!allocsByFund[a.pre_fund_request_id]) allocsByFund[a.pre_fund_request_id] = [];
+    allocsByFund[a.pre_fund_request_id].push(a);
+  }
+
   const scored = (activeFunds as any[]).map(f => {
     const scope: string = f.matching_scope ?? 'country';
     let score = 0;
@@ -78,13 +89,34 @@ export async function linkPaymentToPreFund(params: {
     } else if ((f.available_balance ?? 0) >= amount) {
       score = 0.5;
     }
-    return { fund: f, score };
-  // Require sufficient balance for ALL score levels — scope-matched funds
-  // with zero balance must not silently win over lower-scope funds with balance.
-  }).filter(x => x.score > 0 && (x.fund.available_balance ?? 0) >= amount).sort((a, b) => b.score - a.score);
+
+    // Allocation guard: if fund has any allocations, submitter must be allocated
+    // with sufficient remaining balance
+    const fundAllocs = allocsByFund[f.id] ?? [];
+    let userAllocation: any = null;
+    if (fundAllocs.length > 0) {
+      const myAlloc = fundAllocs.find(a => a.user_id === createdBy);
+      if (!myAlloc) {
+        // Fund has allocations but submitter is not one of them — skip this fund
+        return { fund: f, score: -1, userAllocation: null };
+      }
+      const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
+      if (remaining < amount) {
+        // Allocated but insufficient personal balance
+        return { fund: f, score: -1, userAllocation: null };
+      }
+      userAllocation = myAlloc;
+    }
+
+    return { fund: f, score, userAllocation };
+  }).filter(x => x.score > 0 && (x.fund.available_balance ?? 0) >= amount)
+    .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
-    return { linked: false, message: 'No active pre-fund matches this payment. Finance must link manually in the Pre-Funding Registry.' };
+    return {
+      linked: false,
+      message: 'No active pre-fund matches this payment (check user allocation or fund balance). Finance must link manually in the Pre-Funding Registry.',
+    };
   }
 
   const topScore = scored[0].score;
@@ -98,10 +130,10 @@ export async function linkPaymentToPreFund(params: {
     };
   }
 
-  const bestFund = scored[0].fund;
+  const best = scored[0];
+  const bestFund = best.fund;
 
   // ── Atomic write via RPC ─────────────────────────────────────────────────
-  // txn insert + balance deduction + source back-link all in one DB transaction
   const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
     'link_payment_atomically_rpc', {
       p_fund_id:      bestFund.id,
@@ -119,6 +151,15 @@ export async function linkPaymentToPreFund(params: {
   if (rpcErr) return { linked: false, message: `Linkage RPC failed: ${rpcErr.message}` };
   if (rpcResult && rpcResult.success === false) {
     return { linked: false, message: rpcResult.error ?? 'Linkage failed.' };
+  }
+
+  // ── Deduct from user's personal allocation balance (best-effort) ─────────
+  if (best.userAllocation && createdBy) {
+    await (supabase as any).rpc('deduct_pf_allocation', {
+      p_fund_id:  bestFund.id,
+      p_user_id:  createdBy,
+      p_amount:   amount,
+    }).catch(() => { /* non-blocking */ });
   }
 
   return {

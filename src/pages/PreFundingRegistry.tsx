@@ -18,6 +18,7 @@ import {
   Plus, Pencil, Trash2, Upload, FileText, RefreshCw, Search,
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
+  Users, UserPlus, Wallet,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -121,6 +122,14 @@ export default function PreFundingRegistry() {
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [uploading, setUploading]   = useState(false);
 
+  // ── Allocations ────────────────────────────────────────────────────────────
+  const [allocDialog, setAllocDialog] = useState<{ open: boolean; fund: PreFundRequest | null }>({ open: false, fund: null });
+  const [allocations, setAllocations] = useState<any[]>([]);
+  const [allocProfiles, setAllocProfiles] = useState<any[]>([]);
+  const [allocLoading, setAllocLoading] = useState(false);
+  const [allocForm, setAllocForm] = useState({ userId: '', amount: '', notes: '' });
+  const [allocSaving, setAllocSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -143,6 +152,60 @@ export default function PreFundingRegistry() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const openAllocDialog = async (fund: PreFundRequest) => {
+    setAllocDialog({ open: true, fund });
+    setAllocForm({ userId: '', amount: '', notes: '' });
+    setAllocLoading(true);
+    try {
+      const [allocRes, profRes] = await Promise.all([
+        (supabase as any).from('pre_fund_allocations')
+          .select('*').eq('pre_fund_request_id', fund.id).order('created_at'),
+        supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
+      ]);
+      setAllocations(allocRes.data ?? []);
+      setAllocProfiles(profRes.data ?? []);
+    } catch { /* ignore */ }
+    finally { setAllocLoading(false); }
+  };
+
+  const handleAddAllocation = async () => {
+    if (!allocDialog.fund || !allocForm.userId || !allocForm.amount) return;
+    setAllocSaving(true);
+    try {
+      const amt = parseFloat(allocForm.amount);
+      const totalAllocated = allocations.reduce((s, a) => s + Number(a.allocated_amount), 0);
+      const fundBalance = allocDialog.fund.available_balance;
+      if (totalAllocated + amt > allocDialog.fund.amount) {
+        toast({ title: 'Over-allocation', description: `Total allocations would exceed fund amount of ${formatNumber(allocDialog.fund.amount, 0)} ${allocDialog.fund.currency}.`, variant: 'destructive' });
+        return;
+      }
+      const { error } = await (supabase as any).from('pre_fund_allocations').upsert({
+        pre_fund_request_id: allocDialog.fund.id,
+        user_id: allocForm.userId,
+        allocated_amount: amt,
+        currency: allocDialog.fund.currency,
+        notes: allocForm.notes || null,
+        created_by: currentUser?.id ?? null,
+      }, { onConflict: 'pre_fund_request_id,user_id' });
+      if (error) throw error;
+      toast({ title: 'User allocated', description: `${formatNumber(amt, 0)} ${allocDialog.fund.currency} assigned.` });
+      setAllocForm({ userId: '', amount: '', notes: '' });
+      // Reload allocations
+      const { data } = await (supabase as any).from('pre_fund_allocations')
+        .select('*').eq('pre_fund_request_id', allocDialog.fund.id).order('created_at');
+      setAllocations(data ?? []);
+    } catch (e: any) {
+      toast({ title: 'Failed to allocate', description: e.message, variant: 'destructive' });
+    } finally { setAllocSaving(false); }
+  };
+
+  const handleRemoveAllocation = async (allocId: string) => {
+    const { error } = await (supabase as any).from('pre_fund_allocations').delete().eq('id', allocId);
+    if (error) { toast({ title: 'Remove failed', description: error.message, variant: 'destructive' }); return; }
+    setAllocations(prev => prev.filter(a => a.id !== allocId));
+    toast({ title: 'Allocation removed' });
+  };
 
   const openNew = () => {
     setEditing(null);
@@ -676,6 +739,11 @@ export default function PreFundingRegistry() {
                           <FileText className="h-3.5 w-3.5" />PDF
                         </Button>
                       )}
+                      {['active', 'low_balance'].includes(f.status) && (
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-violet-600 border-violet-300 hover:bg-violet-50 gap-1.5" title="Manage user allocations" onClick={() => openAllocDialog(f)} data-testid={`button-users-${f.id}`}>
+                          <Users className="h-3.5 w-3.5" />Users
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -1048,6 +1116,170 @@ export default function PreFundingRegistry() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting} data-testid="button-confirm-delete">{deleting ? 'Deleting…' : 'Delete'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Allocations Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={allocDialog.open} onOpenChange={o => !o && setAllocDialog({ open: false, fund: null })}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-violet-600" />
+              User Allocations — {allocDialog.fund?.name}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Assign budget to specific users. Only allocated users can have payments auto-linked to this fund.
+            </p>
+          </DialogHeader>
+
+          {/* Fund summary */}
+          {allocDialog.fund && (
+            <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/40 border">
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-0.5">Fund Total</div>
+                <div className="font-mono font-semibold text-sm">{formatNumber(allocDialog.fund.amount, 0)} {allocDialog.fund.currency}</div>
+              </div>
+              <div className="text-center border-x">
+                <div className="text-xs text-muted-foreground mb-0.5">Total Allocated</div>
+                <div className="font-mono font-semibold text-sm text-violet-600">
+                  {formatNumber(allocations.reduce((s, a) => s + Number(a.allocated_amount), 0), 0)} {allocDialog.fund.currency}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-0.5">Unallocated</div>
+                <div className="font-mono font-semibold text-sm text-emerald-600">
+                  {formatNumber(allocDialog.fund.amount - allocations.reduce((s, a) => s + Number(a.allocated_amount), 0), 0)} {allocDialog.fund.currency}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add new allocation */}
+          <div className="rounded-lg border p-3 space-y-3 bg-violet-50/40 dark:bg-violet-900/10">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-violet-700 dark:text-violet-400">
+              <UserPlus className="h-4 w-4" />Add / Update Allocation
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-1">
+                <Label className="text-xs mb-1 block">User</Label>
+                <Select value={allocForm.userId} onValueChange={v => setAllocForm(f => ({ ...f, userId: v }))}>
+                  <SelectTrigger className="h-9 text-sm" data-testid="select-alloc-user">
+                    <SelectValue placeholder="Select user…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allocProfiles
+                      .filter(p => !allocations.some(a => a.user_id === p.id))
+                      .map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.full_name || p.email}
+                          {p.role && <span className="ml-1.5 text-muted-foreground text-xs">({p.role})</span>}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Amount ({allocDialog.fund?.currency})</Label>
+                <Input
+                  type="number" min="1" step="0.01"
+                  className="h-9 text-sm"
+                  placeholder="0.00"
+                  value={allocForm.amount}
+                  onChange={e => setAllocForm(f => ({ ...f, amount: e.target.value }))}
+                  data-testid="input-alloc-amount"
+                />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Notes (optional)</Label>
+                <Input
+                  className="h-9 text-sm"
+                  placeholder="Purpose…"
+                  value={allocForm.notes}
+                  onChange={e => setAllocForm(f => ({ ...f, notes: e.target.value }))}
+                  data-testid="input-alloc-notes"
+                />
+              </div>
+            </div>
+            <Button
+              size="sm" className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5"
+              disabled={!allocForm.userId || !allocForm.amount || allocSaving}
+              onClick={handleAddAllocation}
+              data-testid="button-add-allocation"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              {allocSaving ? 'Saving…' : 'Add Allocation'}
+            </Button>
+          </div>
+
+          {/* Existing allocations table */}
+          {allocLoading ? (
+            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+          ) : allocations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              No users allocated yet. Add users above to restrict and track fund usage per person.
+            </div>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="text-xs font-semibold pl-3">User</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">Allocated</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">Spent</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">Remaining</TableHead>
+                    <TableHead className="text-xs font-semibold">Notes</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allocations.map(a => {
+                    const profile = allocProfiles.find(p => p.id === a.user_id);
+                    const remaining = Number(a.allocated_amount) - Number(a.spent_amount);
+                    const pct = Number(a.allocated_amount) > 0 ? (Number(a.spent_amount) / Number(a.allocated_amount)) * 100 : 0;
+                    return (
+                      <TableRow key={a.id} className="hover:bg-muted/20">
+                        <TableCell className="pl-3 py-2.5">
+                          <div className="font-medium text-sm">{profile?.full_name || profile?.email || a.user_id.slice(0,8)}</div>
+                          {profile?.role && <div className="text-xs text-muted-foreground">{profile.role}</div>}
+                        </TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <span className="font-mono text-sm font-semibold">{formatNumber(a.allocated_amount, 0)}</span>
+                        </TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <div>
+                            <span className="font-mono text-sm text-amber-600">{formatNumber(a.spent_amount, 0)}</span>
+                            <div className="w-20 h-1 bg-muted rounded-full mt-1 ml-auto">
+                              <div className={cn('h-1 rounded-full', pct > 90 ? 'bg-red-500' : pct > 60 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(pct, 100)}%` }} />
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <span className={cn('font-mono text-sm font-semibold', remaining < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                            {formatNumber(remaining, 0)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2.5 text-xs text-muted-foreground max-w-[140px] truncate">{a.notes || '—'}</TableCell>
+                        <TableCell className="py-2.5 pr-3">
+                          <button
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                            onClick={() => handleRemoveAllocation(a.id)}
+                            title="Remove allocation"
+                          >
+                            <XIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAllocDialog({ open: false, fund: null })}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
