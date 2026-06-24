@@ -25,7 +25,7 @@ import {
   CheckCircle2, XCircle, Clock, AlertTriangle, Flame, Timer,
   RefreshCw, ExternalLink, Users, Wallet, DollarSign, Database,
   ClipboardList, ArrowRight, ChevronRight, Inbox, Filter,
-  CheckCheck, Info
+  CheckCheck, Info, Landmark
 } from 'lucide-react';
 import { format, differenceInHours, differenceInDays } from 'date-fns';
 
@@ -35,22 +35,25 @@ const TYPE_LABELS: Record<ApprovalItemType, string> = {
   down_payment: 'Advance',
   user: 'User',
   mmp: 'MMP',
+  pre_fund: 'Pre-Fund',
 };
 
 const TYPE_COLORS: Record<ApprovalItemType, { badge: string; bg: string; icon: string }> = {
-  withdrawal: { badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200', bg: 'border-l-blue-500', icon: 'text-blue-600' },
-  cost: { badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200', bg: 'border-l-orange-500', icon: 'text-orange-600' },
-  down_payment: { badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200', bg: 'border-l-purple-500', icon: 'text-purple-600' },
-  user: { badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200', bg: 'border-l-emerald-500', icon: 'text-emerald-600' },
-  mmp: { badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200', bg: 'border-l-indigo-500', icon: 'text-indigo-600' },
+  withdrawal:  { badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200', bg: 'border-l-blue-500', icon: 'text-blue-600' },
+  cost:        { badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200', bg: 'border-l-orange-500', icon: 'text-orange-600' },
+  down_payment:{ badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200', bg: 'border-l-purple-500', icon: 'text-purple-600' },
+  user:        { badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200', bg: 'border-l-emerald-500', icon: 'text-emerald-600' },
+  mmp:         { badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200', bg: 'border-l-indigo-500', icon: 'text-indigo-600' },
+  pre_fund:    { badge: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 border-teal-200', bg: 'border-l-teal-500', icon: 'text-teal-600' },
 };
 
 const TYPE_ICONS: Record<ApprovalItemType, React.ElementType> = {
-  withdrawal: Wallet,
-  cost: ClipboardList,
-  down_payment: DollarSign,
-  user: Users,
-  mmp: Database,
+  withdrawal:  Wallet,
+  cost:        ClipboardList,
+  down_payment:DollarSign,
+  user:        Users,
+  mmp:         Database,
+  pre_fund:    Landmark,
 };
 
 const URGENCY_CONFIG = {
@@ -327,6 +330,27 @@ export default function ApprovalsHub() {
         } else {
           toast({ title: 'Advance Rejected', description: 'Request has been rejected.' });
         }
+      } else if (item.type === 'pre_fund') {
+        // Pre-fund approval: pending_approval → awaiting_receipt (approve) or rejected (reject)
+        const fundId = item.rawData?.id;
+        const now = new Date().toISOString();
+        const newStatus = action === 'approve' ? 'awaiting_receipt' : 'rejected';
+        const { error } = await supabase
+          .from('pre_fund_requests' as any)
+          .update({
+            status: newStatus,
+            approved_by: action === 'approve' ? currentUser?.id : null,
+            approved_at: action === 'approve' ? now : null,
+            rejection_reason: action === 'reject' ? (actionNotes || 'Rejected via Approvals Hub') : null,
+          })
+          .eq('id', fundId);
+        if (error) throw error;
+        toast({
+          title: action === 'approve' ? 'Pre-Fund Approved' : 'Pre-Fund Rejected',
+          description: action === 'approve'
+            ? 'Fund is now awaiting receipt — upload bank confirmation to activate.'
+            : 'Pre-fund request has been rejected.',
+        });
       }
 
       setActionDialog(null);
@@ -424,7 +448,7 @@ export default function ApprovalsHub() {
           <span className="text-sm text-muted-foreground">Filter:</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(['all', 'withdrawal', 'cost', 'down_payment', 'user', 'mmp'] as FilterType[]).map(type => {
+          {(['all', 'withdrawal', 'cost', 'down_payment', 'user', 'mmp', 'pre_fund'] as FilterType[]).map(type => {
             const count = typeCounts[type] ?? 0;
             const isAll = type === 'all';
             const label = isAll ? 'All' : TYPE_LABELS[type as ApprovalItemType];

@@ -414,9 +414,17 @@ export default function PreFundingRegistry() {
     setBankCheckBusy(true);
     let activated = 0;
     try {
+      // Read configurable tolerance from pre_fund_settings
+      const { data: settingsRow } = await supabase
+        .from('pre_fund_settings' as any)
+        .select('bank_match_tolerance_pct')
+        .limit(1)
+        .maybeSingle();
+      const tolerancePct = ((settingsRow as any)?.bank_match_tolerance_pct ?? 2) / 100;
+
       const awaitingFunds = funds.filter(f => f.status === 'awaiting_receipt');
       for (const fund of awaitingFunds) {
-        const tolerance = Math.max(0.01, fund.amount * 0.01);
+        const tolerance = Math.max(0.01, fund.amount * tolerancePct);
         const { data: feedRows } = await supabase
           .from('pre_fund_bank_unmatched' as any)
           .select('id,amount,currency')
