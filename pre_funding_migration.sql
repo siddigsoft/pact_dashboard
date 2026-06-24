@@ -264,13 +264,29 @@ CREATE POLICY "pf_period_types_finance" ON pre_fund_period_types FOR ALL
 CREATE POLICY "pf_settings_finance"   ON pre_fund_settings FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
--- Fund requests: Finance/Admin/Super Admin ONLY — no access for any other role
+-- Fund requests: Finance/Admin/Super Admin full access; any user may SELECT if they have an assigned step
 CREATE POLICY "pf_requests_finance"   ON pre_fund_requests FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
 
--- Approval steps: Finance/Admin/Super Admin ONLY
+CREATE POLICY "pf_requests_step_assignee" ON pre_fund_requests FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM pre_fund_approval_steps
+      WHERE pre_fund_approval_steps.pre_fund_request_id = pre_fund_requests.id
+        AND pre_fund_approval_steps.assigned_user_id = auth.uid()
+    )
+  );
+
+-- Approval steps: Finance/Admin/Super Admin full access; assigned user may SELECT & UPDATE their own step
 CREATE POLICY "pf_steps_finance"      ON pre_fund_approval_steps FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin','admin','financialAdmin')) );
+
+CREATE POLICY "pf_steps_assignee_select" ON pre_fund_approval_steps FOR SELECT
+  USING ( assigned_user_id = auth.uid() );
+
+CREATE POLICY "pf_steps_assignee_update" ON pre_fund_approval_steps FOR UPDATE
+  USING ( assigned_user_id = auth.uid() )
+  WITH CHECK ( assigned_user_id = auth.uid() );
 
 -- Transactions: Finance/Admin/Super Admin ONLY
 CREATE POLICY "pf_transactions_finance" ON pre_fund_transactions FOR ALL

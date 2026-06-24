@@ -370,9 +370,20 @@ export default function ApprovalsHub() {
         // 3. Determine new fund status
         let newFundStatus: string | null = null;
         if (action === 'reject') {
-          newFundStatus = 'rejected'; // now allowed by updated CHECK
+          if (pendingStep?.is_required !== false) {
+            // Required step rejected → fund is rejected
+            newFundStatus = 'rejected';
+          } else {
+            // Optional step rejected → skip it, treat like an approval for flow purposes
+            // Check if any remaining required steps are still pending
+            const remainingRequired = steps.filter(
+              (s: any) => s.id !== pendingStep?.id && s.status === 'pending' && s.is_required
+            );
+            newFundStatus = remainingRequired.length === 0 ? 'awaiting_receipt' : null;
+            // null = stay as pending_approval, more required steps remain
+          }
         } else {
-          // Check if any required steps remain pending after this approval
+          // Approve: check if any required steps remain pending after this approval
           const remainingRequired = steps.filter(
             (s: any) => s.id !== pendingStep?.id && s.status === 'pending' && s.is_required
           );

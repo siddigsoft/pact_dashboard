@@ -502,16 +502,25 @@ export default function AccountingFinanceDashboard() {
   const loadPreFundKPI = useCallback(async () => {
     setPreFundKPI(p => ({ ...p, loading: true, error: null }));
     try {
-      const { data, error } = await supabase.from('pre_fund_requests' as any)
-        .select('status, available_balance, currency');
+      const [{ data, error }, { data: fxData }] = await Promise.all([
+        supabase.from('pre_fund_requests' as any).select('status, available_balance, currency'),
+        supabase.from('exchange_rates').select('usd_to_sdg').eq('is_active', true)
+          .order('fetched_at', { ascending: false }).limit(1).maybeSingle(),
+      ]);
       if (error?.code === '42P01') { setPreFundKPI({ data: null, loading: false, error: 'table_missing' }); return; }
       if (error) throw error;
       const rows = (data ?? []) as any[];
       const active = rows.filter((r: any) => ['active', 'low_balance'].includes(r.status));
+      const usdToSdg = Number((fxData as any)?.usd_to_sdg ?? 1) || 1;
+      const toUSD = (amount: number, currency: string) => {
+        if (currency === 'USD') return amount;
+        if (currency === 'SDG') return usdToSdg > 0 ? amount / usdToSdg : 0;
+        return amount;
+      };
       setPreFundKPI({
         data: {
           activeCount: active.length,
-          totalAvailable: active.reduce((s: number, r: any) => s + Number(r.available_balance ?? 0), 0),
+          totalAvailable: active.reduce((s: number, r: any) => s + toUSD(Number(r.available_balance ?? 0), r.currency ?? 'USD'), 0),
           lowBalanceCount: rows.filter((r: any) => r.status === 'low_balance').length,
           pendingApproval: rows.filter((r: any) => r.status === 'pending_approval').length,
         },
@@ -900,7 +909,7 @@ export default function AccountingFinanceDashboard() {
               title="Total Available Balance"
               titleAr="إجمالي الرصيد المتاح"
               value={preFundKPI.data ? formatNumber(preFundKPI.data.totalAvailable, 0) : '—'}
-              sub="Raw sum across all currencies — see Pre-Funding for per-currency detail"
+              sub="USD-equivalent total (FX-converted) — see Pre-Funding for per-currency detail"
               icon={DollarSign}
               accent={preFundKPI.data && preFundKPI.data.lowBalanceCount > 0 ? 'bg-orange-600' : 'bg-emerald-600'}
               href="/pre-funding?tab=overview"

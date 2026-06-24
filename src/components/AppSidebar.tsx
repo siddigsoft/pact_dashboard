@@ -458,8 +458,12 @@
 
     // ── Pre-Funding module ────────────────────────────────────────────
     const preFundItems: MenuGroup['items'] = [];
-    if (!isHidden('/pre-funding') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      preFundItems.push({ id: 'pre-funding', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') });
+    if (isSuperAdmin || isAdmin || isFinancialAdmin) {
+      if (!isHidden('/pre-funding'))               preFundItems.push({ id: 'pre-funding-overview',  title: 'Overview',       url: '/pre-funding',               icon: Banknote,    priority: 1, isPinned: isPinned('/pre-funding') });
+      if (!isHidden('/pre-funding/registry'))      preFundItems.push({ id: 'pre-funding-registry',  title: 'Fund Registry',  url: '/pre-funding/registry',      icon: FileText,    priority: 2, isPinned: isPinned('/pre-funding/registry') });
+      if (!isHidden('/pre-funding/approvals'))     preFundItems.push({ id: 'pre-funding-approvals', title: 'Approval Flow',  url: '/pre-funding/approvals',     icon: CheckSquare, priority: 3, isPinned: isPinned('/pre-funding/approvals') });
+      if (!isHidden('/pre-funding/reconciliation'))preFundItems.push({ id: 'pre-funding-recon',     title: 'Reconciliation', url: '/pre-funding/reconciliation', icon: Landmark,    priority: 4, isPinned: isPinned('/pre-funding/reconciliation') });
+      if (!isHidden('/pre-funding/settings'))      preFundItems.push({ id: 'pre-funding-settings',  title: 'Settings',       url: '/pre-funding/settings',      icon: Settings,    priority: 5, isPinned: isPinned('/pre-funding/settings') });
     }
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
