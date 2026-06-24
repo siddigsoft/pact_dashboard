@@ -116,15 +116,26 @@ export async function linkPaymentToPreFund(params: {
   const txnId = (txn as any)?.id;
   const newBalance = Math.max(0, (bestFund.available_balance ?? 0) - amount);
 
-  // Deduct from available_balance
-  await supabase.from('pre_fund_requests' as any)
+  // Deduct from available_balance — must succeed to preserve accounting integrity
+  const { error: balErr } = await supabase
+    .from('pre_fund_requests' as any)
     .update({ available_balance: newBalance })
     .eq('id', bestFund.id);
+  if (balErr) {
+    return { linked: false, message: `Balance deduction failed: ${balErr.message}` };
+  }
 
-  // Back-link source row
-  await supabase.from(sourceTable as any)
+  // Back-link source row — surface errors; failure leaves txn orphaned so caller knows
+  const { error: linkErr } = await supabase
+    .from(sourceTable as any)
     .update({ pre_fund_transaction_id: txnId })
     .eq('id', sourceId);
+  if (linkErr) {
+    return {
+      linked: false,
+      message: `Transaction recorded and balance deducted, but source back-link failed: ${linkErr.message}. Finance should link manually.`,
+    };
+  }
 
   return {
     linked: true,

@@ -361,6 +361,8 @@ export default function ApprovalsHub() {
         }
 
         // 3. Record individual vote (quorum model: M-of-N) then update step if threshold met
+        // stepResolved is hoisted so the fund-status block below can reference it safely.
+        let stepResolved = false;
         if (pendingStep) {
           // Upsert vote (one vote per user per step)
           await supabase.from('pre_fund_step_approvals' as any).upsert({
@@ -371,19 +373,19 @@ export default function ApprovalsHub() {
             created_at: now,
           }, { onConflict: 'step_id,user_id' });
 
-          // Count current approvals for this step
+          // Count current approvals for this step from DB (authoritative)
           const { data: voteData } = await supabase
             .from('pre_fund_step_approvals' as any)
             .select('action')
             .eq('step_id', pendingStep.id);
           const votes = (voteData as any) ?? [];
-          const approvalCount = votes.filter((v: any) => v.action === 'approved').length;
-          const anyRejected   = votes.some((v: any) => v.action === 'rejected');
+          const approvalCount  = votes.filter((v: any) => v.action === 'approved').length;
+          const anyRejected    = votes.some((v: any) => v.action === 'rejected');
           const quorumRequired = pendingStep.required_approvals ?? 1;
-          const quorumMet = approvalCount >= quorumRequired;
+          const quorumMet      = approvalCount >= quorumRequired;
 
           // Only mark the step as resolved if quorum is met or a required rejection happened
-          const stepResolved = (action === 'approve' && quorumMet) || (action === 'reject' && anyRejected);
+          stepResolved = (action === 'approve' && quorumMet) || (action === 'reject' && anyRejected);
           if (stepResolved) {
             const { error: stepErr } = await supabase
               .from('pre_fund_approval_steps')
@@ -398,7 +400,7 @@ export default function ApprovalsHub() {
           }
         }
 
-        // 3. Determine new fund status — only advance when the current step is actually resolved.
+        // 4. Determine new fund status — only advance when the current step is actually resolved.
         //    Re-query step states from DB so we never compute against stale in-memory data.
         let newFundStatus: string | null = null;
         if (action === 'reject' && pendingStep?.is_required !== false) {
