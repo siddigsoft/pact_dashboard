@@ -375,10 +375,12 @@ GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT) TO authenticated;
 -- Account 2401 — Pre-Fund Liability (Next Period) for carry-forward
 -- These are soft-created; skip if your CoA already has them.
 INSERT INTO acct_accounts (code, name_en, name_ar, account_type, subtype, is_postable)
-VALUES
-  ('2400', 'Pre-Fund Liability',             'التزام التمويل المسبق',              'liability', 'current_liability', true),
-  ('2401', 'Pre-Fund Liability (Next Period)','التزام التمويل المسبق (الفترة التالية)', 'liability', 'current_liability', true)
-ON CONFLICT (code) DO NOTHING;
+SELECT '2400', 'Pre-Fund Liability', 'التزام التمويل المسبق', 'liability', 'current_liability', true
+WHERE NOT EXISTS (SELECT 1 FROM acct_accounts WHERE code = '2400');
+
+INSERT INTO acct_accounts (code, name_en, name_ar, account_type, subtype, is_postable)
+SELECT '2401', 'Pre-Fund Liability (Next Period)', 'التزام التمويل المسبق (الفترة التالية)', 'liability', 'current_liability', true
+WHERE NOT EXISTS (SELECT 1 FROM acct_accounts WHERE code = '2401');
 
 -- ─── 13. Auto-renewal scheduler stub (run via pg_cron or Supabase Edge Function) ──
 -- This function is called by a nightly pg_cron job or Supabase Edge Function scheduler.
