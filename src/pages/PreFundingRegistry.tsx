@@ -280,9 +280,9 @@ export default function PreFundingRegistry() {
       const uploadResults = await Promise.all(
         receiptFiles.map(async (file, idx) => {
           const path = `pre-fund-receipts/${receiptDialog.fundId}/${ts}-${idx}-${file.name}`;
-          const { error: upErr } = await supabase.storage.from('financial-documents').upload(path, file, { upsert: true });
+          const { error: upErr } = await supabase.storage.from('attachments').upload(path, file, { upsert: true });
           if (upErr) throw new Error(`Failed to upload "${file.name}": ${upErr.message}`);
-          return supabase.storage.from('financial-documents').getPublicUrl(path).data.publicUrl;
+          return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl;
         })
       );
 
