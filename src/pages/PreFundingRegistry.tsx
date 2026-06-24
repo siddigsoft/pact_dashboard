@@ -129,6 +129,7 @@ export default function PreFundingRegistry() {
   const [allocLoading, setAllocLoading] = useState(false);
   const [allocForm, setAllocForm] = useState({ userId: '', amount: '', notes: '' });
   const [allocSaving, setAllocSaving] = useState(false);
+  const [allocUserSearch, setAllocUserSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,6 +157,7 @@ export default function PreFundingRegistry() {
   const openAllocDialog = async (fund: PreFundRequest) => {
     setAllocDialog({ open: true, fund });
     setAllocForm({ userId: '', amount: '', notes: '' });
+    setAllocUserSearch('');
     setAllocLoading(true);
     try {
       const [allocRes, profRes] = await Promise.all([
@@ -1160,45 +1162,124 @@ export default function PreFundingRegistry() {
             <div className="flex items-center gap-1.5 text-sm font-semibold text-violet-700 dark:text-violet-400">
               <UserPlus className="h-4 w-4" />Add / Update Allocation
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-1">
-                <Label className="text-xs mb-1 block">User</Label>
-                <Select value={allocForm.userId} onValueChange={v => setAllocForm(f => ({ ...f, userId: v }))}>
-                  <SelectTrigger className="h-9 text-sm" data-testid="select-alloc-user">
-                    <SelectValue placeholder="Select user…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allocProfiles
-                      .filter(p => !allocations.some(a => a.user_id === p.id))
-                      .map(p => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.full_name || p.email}
-                          {p.role && <span className="ml-1.5 text-muted-foreground text-xs">({p.role})</span>}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-3">
+              {/* User picker — same style as approval chain */}
               <div>
-                <Label className="text-xs mb-1 block">Amount ({allocDialog.fund?.currency})</Label>
-                <Input
-                  type="number" min="1" step="0.01"
-                  className="h-9 text-sm"
-                  placeholder="0.00"
-                  value={allocForm.amount}
-                  onChange={e => setAllocForm(f => ({ ...f, amount: e.target.value }))}
-                  data-testid="input-alloc-amount"
-                />
+                <Label className="text-xs mb-1.5 block">
+                  User <span className="text-muted-foreground font-normal">(select one)</span>
+                </Label>
+                <div className="rounded-md border bg-background overflow-hidden">
+                  {/* Search row */}
+                  <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
+                    <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                      placeholder="Search users..."
+                      value={allocUserSearch}
+                      onChange={e => setAllocUserSearch(e.target.value)}
+                      data-testid="input-alloc-user-search"
+                    />
+                    {allocUserSearch && (
+                      <button onClick={() => setAllocUserSearch('')} className="text-muted-foreground hover:text-foreground">
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Scrollable user list */}
+                  <div className="max-h-44 overflow-y-auto divide-y">
+                    {(() => {
+                      const eligible = allocProfiles.filter(p => !allocations.some(a => a.user_id === p.id));
+                      const filtered = eligible.filter(p => {
+                        const q = allocUserSearch.toLowerCase();
+                        return !q || (p.full_name ?? '').toLowerCase().includes(q) || (p.email ?? '').toLowerCase().includes(q);
+                      });
+                      if (filtered.length === 0) return (
+                        <div className="py-6 text-center text-xs text-muted-foreground">No users found</div>
+                      );
+                      return filtered.map(p => {
+                        const selected = allocForm.userId === p.id;
+                        const initials = (p.full_name || p.email || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setAllocForm(f => ({ ...f, userId: selected ? '' : p.id }))}
+                            className={cn(
+                              'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
+                              selected
+                                ? 'bg-violet-50 dark:bg-violet-900/20'
+                                : 'hover:bg-muted/50'
+                            )}
+                            data-testid={`alloc-user-${p.id}`}
+                          >
+                            {/* Checkbox */}
+                            <div className={cn(
+                              'h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                              selected ? 'bg-violet-600 border-violet-600' : 'border-muted-foreground/40'
+                            )}>
+                              {selected && <CheckCircle2 className="h-3 w-3 text-white" style={{ strokeWidth: 3 }} />}
+                            </div>
+                            {/* Avatar */}
+                            <div className={cn(
+                              'h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0',
+                              selected ? 'bg-violet-600 text-white' : 'bg-muted text-muted-foreground'
+                            )}>
+                              {initials}
+                            </div>
+                            {/* Name + email */}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{p.full_name || p.email}</div>
+                              {p.full_name && p.email && (
+                                <div className="text-xs text-muted-foreground truncate">{p.email}</div>
+                              )}
+                            </div>
+                            {/* Role badge */}
+                            {p.role && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border shrink-0">
+                                {p.role.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                  {/* Count footer */}
+                  <div className="px-3 py-1.5 border-t bg-muted/20 text-xs text-muted-foreground">
+                    {allocForm.userId ? (
+                      <span className="text-violet-600 font-medium">1 user selected</span>
+                    ) : (
+                      <span>0 selected</span>
+                    )}
+                    {' · '}
+                    <span>{allocProfiles.filter(p => !allocations.some(a => a.user_id === p.id)).length} eligible</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label className="text-xs mb-1 block">Notes (optional)</Label>
-                <Input
-                  className="h-9 text-sm"
-                  placeholder="Purpose…"
-                  value={allocForm.notes}
-                  onChange={e => setAllocForm(f => ({ ...f, notes: e.target.value }))}
-                  data-testid="input-alloc-notes"
-                />
+
+              {/* Amount + Notes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs mb-1 block">Amount ({allocDialog.fund?.currency})</Label>
+                  <Input
+                    type="number" min="1" step="0.01"
+                    className="h-9 text-sm"
+                    placeholder="0.00"
+                    value={allocForm.amount}
+                    onChange={e => setAllocForm(f => ({ ...f, amount: e.target.value }))}
+                    data-testid="input-alloc-amount"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Notes (optional)</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    placeholder="Purpose…"
+                    value={allocForm.notes}
+                    onChange={e => setAllocForm(f => ({ ...f, notes: e.target.value }))}
+                    data-testid="input-alloc-notes"
+                  />
+                </div>
               </div>
             </div>
             <Button
