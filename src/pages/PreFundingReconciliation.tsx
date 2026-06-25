@@ -603,15 +603,24 @@ export default function PreFundingReconciliation() {
           .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
           .eq('id', selectedFund.id).maybeSingle();
 
+        const fd = fundDetail as any;
+
+        // Enforce configured GL accounts — no silent hardcoded fallbacks
         if (glEvent === 'pre_fund_committed') {
-          glDebitCode  = (fundDetail as any)?.gl_liability_account ?? '2400';
-          glCreditCode = '2105';
+          if (!fd?.gl_liability_account) throw new Error('GL Liability Account not configured on this fund. Go to Registry → Edit Fund to set GL mappings before posting commitments.');
+          glDebitCode  = fd.gl_liability_account;
+          glCreditCode = fd.gl_receipt_account ?? null; // credit back to receipt account if set, else RPC handles defaults from COA settings
         } else if (glEvent === 'pre_fund_carry_forward') {
-          glDebitCode  = (fundDetail as any)?.gl_liability_account ?? '2400';
-          glCreditCode = (fundDetail as any)?.gl_cf_account ?? '2401';
+          if (!fd?.gl_liability_account) throw new Error('GL Liability Account not configured on this fund. Go to Registry → Edit Fund to set GL mappings before posting carry-forwards.');
+          if (!fd?.gl_cf_account)        throw new Error('GL Carry-Forward Account not configured on this fund. Go to Registry → Edit Fund to set the carry-forward GL account.');
+          glDebitCode  = fd.gl_liability_account;
+          glCreditCode = fd.gl_cf_account;
         } else {
-          glDebitCode  = (fundDetail as any)?.gl_liability_account ?? '2400';
-          glCreditCode = (fundDetail as any)?.gl_receipt_account   ?? '1200';
+          // payment type
+          if (!fd?.gl_liability_account) throw new Error('GL Liability Account not configured on this fund. Go to Registry → Edit Fund to set GL mappings before posting payments.');
+          if (!fd?.gl_receipt_account)   throw new Error('GL Receipt Account not configured on this fund. Go to Registry → Edit Fund to set the receipt GL account.');
+          glDebitCode  = fd.gl_liability_account;
+          glCreditCode = fd.gl_receipt_account;
         }
       }
 
@@ -675,10 +684,27 @@ export default function PreFundingReconciliation() {
       const returnAmt  = closeForm.surplus_action === 'return'        ? surplus : parseFloat(closeForm.return_amount) || 0;
       const reserveAmt = closeForm.surplus_action === 'reserve'       ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
 
-      // Fetch GL account codes from fund settings
+      // Fetch GL account codes from fund settings — ALL four are required for period close
       const { data: fundDetail } = await supabase.from('pre_fund_requests')
         .select('gl_receipt_account,gl_liability_account,gl_expense_account,gl_cf_account')
         .eq('id', selectedFund.id).maybeSingle();
+
+      const fd = fundDetail as any;
+
+      // Enforce fully-configured GL accounts before period close — no silent hardcoded fallbacks
+      const glErrors: string[] = [];
+      if (!fd?.gl_liability_account) glErrors.push('GL Liability Account');
+      if (!fd?.gl_receipt_account)   glErrors.push('GL Receipt Account');
+      if (!fd?.gl_expense_account)   glErrors.push('GL Expense Account');
+      if (!fd?.gl_cf_account && (closeForm.surplus_action === 'carry_forward' || closeForm.surplus_action === 'split'))
+        glErrors.push('GL Carry-Forward Account');
+
+      if (glErrors.length > 0) {
+        throw new Error(
+          `Cannot close period: the following GL accounts are not configured on this fund: ${glErrors.join(', ')}. ` +
+          `Go to Registry → Edit Fund to set GL mappings before closing the period.`
+        );
+      }
 
       // All writes (recon insert + fund close + GL JEs + bridge logs) run inside
       // a single Postgres transaction via the RPC — any failure rolls back everything.
@@ -699,10 +725,10 @@ export default function PreFundingReconciliation() {
           p_currency:          selectedFund.currency,
           p_notes:             closeForm.notes || null,
           p_closed_by:         currentUser?.id ?? null,
-          p_gl_liability_code: (fundDetail as any)?.gl_liability_account ?? '2400',
-          p_gl_receipt_code:   (fundDetail as any)?.gl_receipt_account   ?? '1200',
-          p_gl_expense_code:   (fundDetail as any)?.gl_expense_account   ?? '5600',
-          p_gl_cf_code:        (fundDetail as any)?.gl_cf_account        ?? '2401',
+          p_gl_liability_code: fd.gl_liability_account,
+          p_gl_receipt_code:   fd.gl_receipt_account,
+          p_gl_expense_code:   fd.gl_expense_account,
+          p_gl_cf_code:        fd.gl_cf_account ?? null,
         }
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -794,26 +820,78 @@ export default function PreFundingReconciliation() {
     }
   };
 
-  // ── Fetch approval steps with resolved user names ─────────────────────────
+  // ── Fetch approval steps — supports both single-user and multi-user/quorum model ──
   const fetchApprovalSteps = async (fundId: string): Promise<ApprovalStepRow[]> => {
+    // Fetch step configuration (supports both assigned_user_id legacy and assigned_user_ids array + quorum)
     const { data: steps } = await supabase
       .from('pre_fund_approval_steps' as any)
-      .select('step_order,step_label,assigned_user_id,status,approved_at')
+      .select('id,step_order,step_label,assigned_user_id,assigned_user_ids,required_approvals,status,approved_at')
       .eq('pre_fund_request_id', fundId)
       .order('step_order');
     if (!steps || !(steps as any[]).length) return [];
-    const userIds = [...new Set((steps as any[]).map((s: any) => s.assigned_user_id).filter(Boolean))];
-    const { data: profileRows } = userIds.length
-      ? await supabase.from('profiles').select('id,full_name,email').in('id', userIds)
-      : { data: [] };
-    const nameMap = new Map((profileRows ?? []).map((p: any) => [p.id, p.full_name || p.email || 'Unknown']));
-    return (steps as any[]).map((s: any) => ({
-      step_no: s.step_order,
-      label: s.step_label ?? `Step ${s.step_order}`,
-      assigned_name: nameMap.get(s.assigned_user_id) ?? '—',
-      status: s.status,
-      decided_at: s.approved_at,
-    }));
+
+    // Collect all unique user IDs across both legacy and array fields
+    const allUserIds = new Set<string>();
+    (steps as any[]).forEach((s: any) => {
+      if (s.assigned_user_id)   allUserIds.add(s.assigned_user_id);
+      if (Array.isArray(s.assigned_user_ids)) s.assigned_user_ids.forEach((uid: string) => allUserIds.add(uid));
+    });
+    const userIdList = [...allUserIds].filter(Boolean);
+
+    // Fetch per-user votes from pre_fund_step_approvals (quorum model)
+    const stepIds = (steps as any[]).map((s: any) => s.id).filter(Boolean);
+    const [profileRes, votesRes] = await Promise.all([
+      userIdList.length
+        ? supabase.from('profiles').select('id,full_name,email').in('id', userIdList)
+        : Promise.resolve({ data: [] }),
+      stepIds.length
+        ? (supabase as any).from('pre_fund_step_approvals').select('step_id,user_id,action,created_at').in('step_id', stepIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const nameMap  = new Map((profileRes.data ?? []).map((p: any) => [p.id, p.full_name || p.email || 'Unknown']));
+    // Map stepId → array of votes
+    const votesMap = new Map<string, any[]>();
+    for (const v of (votesRes.data ?? []) as any[]) {
+      if (!votesMap.has(v.step_id)) votesMap.set(v.step_id, []);
+      votesMap.get(v.step_id)!.push(v);
+    }
+
+    const result: ApprovalStepRow[] = [];
+    for (const s of steps as any[]) {
+      const assignedIds: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length > 0
+        ? s.assigned_user_ids
+        : s.assigned_user_id ? [s.assigned_user_id] : [];
+      const quorum   = s.required_approvals ?? 1;
+      const votes    = votesMap.get(s.id) ?? [];
+
+      if (assignedIds.length <= 1) {
+        // Legacy / single-approver: one row per step
+        const uid = assignedIds[0];
+        const vote = votes.find((v: any) => v.user_id === uid);
+        result.push({
+          step_no:       s.step_order,
+          label:         s.step_label ?? `Step ${s.step_order}`,
+          assigned_name: nameMap.get(uid ?? '') ?? '—',
+          status:        vote?.action ?? s.status ?? 'pending',
+          decided_at:    vote?.created_at ?? s.approved_at ?? null,
+        });
+      } else {
+        // Multi-approver / quorum: one row per assigned user showing their individual vote
+        const approvedCount = votes.filter((v: any) => v.action === 'approve').length;
+        for (const uid of assignedIds) {
+          const vote = votes.find((v: any) => v.user_id === uid);
+          result.push({
+            step_no:       s.step_order,
+            label:         `${s.step_label ?? `Step ${s.step_order}`} (${approvedCount}/${quorum} approved)`,
+            assigned_name: nameMap.get(uid) ?? '—',
+            status:        vote ? vote.action : 'pending',
+            decided_at:    vote?.created_at ?? null,
+          });
+        }
+      }
+    }
+    return result;
   };
 
   // ── Fetch GL journal entries for this fund ────────────────────────────────
