@@ -60,6 +60,7 @@ interface PreFundRequest {
   project_id: string | null;
   grant_id: string | null;
   matching_scope: string;
+  cost_category: string | null;
   auto_renewal_mode: string;
   auto_renewal_days_before: number | null;
   notes: string | null;
@@ -94,6 +95,7 @@ const EMPTY_FORM = {
   name: '', source: '', amount: '', currency: 'USD', period_type_id: '',
   start_date: '', end_date: '', country_id: '', project_id: '', grant_id: '',
   matching_scope: 'country_project',
+  cost_category: '',
   threshold_mode: 'pct' as 'pct' | 'fixed' | 'both',
   threshold_pct: '', threshold_amount: '',
   warning_days: '14', auto_renewal_mode: 'off', auto_renewal_days_before: '7',
@@ -324,6 +326,7 @@ export default function PreFundingRegistry() {
       period_type_id: f.period_type_id ?? '', start_date: f.start_date ?? '', end_date: f.end_date ?? '',
       country_id: f.country_id ?? '', project_id: f.project_id ?? '', grant_id: f.grant_id ?? '',
       matching_scope: f.matching_scope,
+      cost_category: f.cost_category ?? '',
       threshold_mode: tMode,
       threshold_pct:    fa.threshold_pct    != null ? String(fa.threshold_pct)    : '',
       threshold_amount: fa.threshold_amount != null ? String(fa.threshold_amount) : '',
@@ -371,6 +374,7 @@ export default function PreFundingRegistry() {
         project_id: form.project_id || null,
         grant_id: form.grant_id || null,
         matching_scope: form.matching_scope,
+        cost_category: form.matching_scope === 'country_project_category' ? (form.cost_category.trim() || null) : null,
         threshold_pct:    (form.threshold_mode === 'pct'   || form.threshold_mode === 'both') && form.threshold_pct    ? parseFloat(form.threshold_pct)    : null,
         threshold_amount: (form.threshold_mode === 'fixed' || form.threshold_mode === 'both') && form.threshold_amount ? parseFloat(form.threshold_amount) : null,
         warning_days: form.warning_days ? parseInt(form.warning_days) : (pfSettings?.default_warning_days ?? null),
@@ -1188,6 +1192,21 @@ export default function PreFundingRegistry() {
                     </SelectContent>
                   </Select>
                 </div>
+                {form.matching_scope === 'country_project_category' && (
+                  <div>
+                    <Label>Cost Category</Label>
+                    <Input
+                      value={form.cost_category}
+                      onChange={e => setForm(p => ({ ...p, cost_category: e.target.value }))}
+                      placeholder="e.g. Transportation, Accommodation…"
+                      data-testid="input-cost-category"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Only payments whose expense category matches this value will be auto-linked to this fund.
+                      Leave blank to accept any category.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <Label>Start Date</Label>
                   <Input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} data-testid="input-start-date" />
