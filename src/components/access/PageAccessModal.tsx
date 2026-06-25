@@ -59,25 +59,28 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
       const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
       return (data ?? []) as Profile[];
     },
-    staleTime: 60_000,
-    enabled: open,
+    staleTime: 120_000,
+    enabled: true,          // pre-load in background so dialog opens instantly
   });
 
   const { data: overrides = [], refetch } = useQuery<PageOverride[]>({
-    queryKey: ['pac-overrides'],
+    queryKey: ['pac-overrides', pageSlug],
     queryFn: async () => {
-      const { data } = await supabase.from('page_access_overrides').select('*');
+      const { data } = await supabase
+        .from('page_access_overrides')
+        .select('*')
+        .eq('page_slug', pageSlug);  // fetch only this page's overrides
       return (data ?? []) as PageOverride[];
     },
     staleTime: 15_000,
-    enabled: open,
+    enabled: true,          // pre-load so dialog opens instantly
   });
 
   const pageOverrideMap = useMemo(() => {
     const m: Record<string, PageOverride> = {};
-    overrides.filter(o => o.page_slug === pageSlug).forEach(o => { m[o.user_id] = o; });
+    overrides.forEach(o => { m[o.user_id] = o; });
     return m;
-  }, [overrides, pageSlug]);
+  }, [overrides]);
 
   async function applyOverride(userId: string, isBlocked: boolean, level: 'view' | 'manage' = 'view', existingId?: string) {
     setSavingId(userId);
