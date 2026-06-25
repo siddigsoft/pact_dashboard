@@ -1240,12 +1240,12 @@ export default function PreFundingRegistry() {
                       ] as const).map(({ key, label, testId, accounts, hint }) => (
                         <div key={key}>
                           <Label>{label}</Label>
-                          <Select value={(form as any)[key]} onValueChange={v => setForm(p => ({ ...p, [key]: v }))}>
+                          <Select value={(form as any)[key] || '__none__'} onValueChange={v => setForm(p => ({ ...p, [key]: v === '__none__' ? '' : v }))}>
                             <SelectTrigger data-testid={testId}>
                               <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">— None —</SelectItem>
+                              <SelectItem value="__none__">— None —</SelectItem>
                               {accounts.map(a => (
                                 <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
                               ))}
