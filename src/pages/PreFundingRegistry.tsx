@@ -452,12 +452,56 @@ export default function PreFundingRegistry() {
     if (!canManage) return;
     setDeletingTxnId(txnId);
     try {
-      const { error: e } = await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
-      if (e) throw e;
+      // Fetch the transaction so we can recalculate fund balances after removal
+      const { data: txn, error: fetchErr } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .select('id, transaction_type, amount, pre_fund_request_id')
+        .eq('id', txnId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const fundId = txn?.pre_fund_request_id;
+
+      // Remove the transaction
+      const { error: delErr } = await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
+      if (delErr) throw delErr;
+
+      // Atomically recalculate fund balances from remaining transactions so there
+      // are no orphaned/misaligned balance figures in pre_fund_requests.
+      if (fundId) {
+        const { data: remaining, error: sumErr } = await (supabase as any)
+          .from('pre_fund_transactions')
+          .select('transaction_type, amount')
+          .eq('pre_fund_request_id', fundId)
+          .not('transaction_type', 'eq', 'bank_statement');
+
+        if (!sumErr && remaining) {
+          const sum = (types: string[]) =>
+            (remaining as any[])
+              .filter((t: any) => types.includes(t.transaction_type))
+              .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+
+          const totalIn  = sum(['receipt', 'carry_forward', 'reversal']);
+          const totalOut = sum(['payment', 'commitment', 'return']);
+          const newBalance  = totalIn - totalOut;
+          const newPaid     = sum(['payment']);
+          const newCommitted = sum(['commitment']);
+
+          await (supabase as any)
+            .from('pre_fund_requests')
+            .update({
+              available_balance: Math.max(0, newBalance),
+              paid_amount:       newPaid,
+              committed_amount:  newCommitted,
+            })
+            .eq('id', fundId);
+        }
+      }
+
       setDeleteFundTxns(prev => prev.filter(t => t.id !== txnId));
-      toast({ title: 'Transaction deleted' });
+      toast({ title: 'Transaction removed — fund balance recalculated' });
     } catch (e: any) {
-      toast({ title: 'Failed to delete transaction', description: e.message, variant: 'destructive' });
+      toast({ title: 'Failed to remove transaction', description: e.message, variant: 'destructive' });
     } finally {
       setDeletingTxnId(null);
     }

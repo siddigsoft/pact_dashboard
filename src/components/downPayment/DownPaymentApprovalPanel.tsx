@@ -1790,7 +1790,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     const { data: pfData } = await supabase
       .from('pre_fund_requests' as any)
       .select('id, name, currency, available_balance')
-      .in('status', ['active', 'low_balance', 'approved'])
+      .in('status', ['active', 'low_balance'])   // 'approved' excluded — only spendable funds
+      .eq('currency', 'SDG')                      // enforce currency match with down-payment amounts
       .order('name');
     const preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
       id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
