@@ -56,10 +56,12 @@ const TXN_TYPE_CFG: Record<string, { label: string; color: string }> = {
 };
 
 const SURPLUS_OPTIONS = [
-  { value: 'carry_forward', label: 'Carry Full Surplus to Next Period' },
-  { value: 'return',        label: 'Return to Source / Donor' },
-  { value: 'split',         label: 'Split (Partial Carry + Return)' },
-  { value: 'reserve',       label: 'Leave in Reserve' },
+  { value: 'carry_forward',    label: 'Carry Full Surplus to Next Period' },
+  { value: 'return',           label: 'Return to Donor' },
+  { value: 'return_bank',      label: 'Return to Bank Account' },
+  { value: 'return_finance',   label: 'Return to Finance Department' },
+  { value: 'split',            label: 'Split (Partial Carry + Return)' },
+  { value: 'reserve',          label: 'Leave in Reserve' },
 ];
 
 // ── PDF colour constants ──────────────────────────────────────────────────────
@@ -703,9 +705,10 @@ export default function PreFundingReconciliation() {
     }
     setClosing(true);
     try {
+      const isReturnAction = ['return', 'return_bank', 'return_finance'].includes(closeForm.surplus_action);
       const carryAmt   = closeForm.surplus_action === 'carry_forward' ? surplus : parseFloat(closeForm.carry_forward_amount) || 0;
-      const returnAmt  = closeForm.surplus_action === 'return'        ? surplus : parseFloat(closeForm.return_amount) || 0;
-      const reserveAmt = closeForm.surplus_action === 'reserve'       ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
+      const returnAmt  = isReturnAction ? surplus : parseFloat(closeForm.return_amount) || 0;
+      const reserveAmt = closeForm.surplus_action === 'reserve' ? surplus : Math.max(0, surplus - carryAmt - returnAmt);
 
       // Fetch GL account codes from fund settings — ALL four are required for period close
       const { data: fundDetail } = await supabase.from('pre_fund_requests')
@@ -1279,10 +1282,12 @@ export default function PreFundingReconciliation() {
                             <div className="bg-muted/40 rounded p-1.5">
                               <p className="text-muted-foreground">{SURPLUS_OPTIONS.find(o => o.value === r.surplus_action)?.label?.split(' ')[0] ?? 'Surplus'}</p>
                               <p className="font-mono font-semibold">
-                                {r.surplus_action === 'carry_forward' && r.carry_forward_amount > 0 && `${formatNumber(r.carry_forward_amount, 0)} CF`}
-                                {r.surplus_action === 'return' && r.return_amount > 0 && `${formatNumber(r.return_amount, 0)} RT`}
-                                {r.surplus_action === 'reserve' && r.reserve_amount > 0 && `${formatNumber(r.reserve_amount, 0)} RV`}
-                                {r.surplus_action === 'split' && `CF ${formatNumber(r.carry_forward_amount ?? 0, 0)} / RT ${formatNumber(r.return_amount ?? 0, 0)}`}
+                                {r.surplus_action === 'carry_forward'  && r.carry_forward_amount > 0 && `${formatNumber(r.carry_forward_amount, 0)} CF`}
+                                {r.surplus_action === 'return'         && r.return_amount > 0 && `${formatNumber(r.return_amount, 0)} → Donor`}
+                                {r.surplus_action === 'return_bank'    && r.return_amount > 0 && `${formatNumber(r.return_amount, 0)} → Bank`}
+                                {r.surplus_action === 'return_finance' && r.return_amount > 0 && `${formatNumber(r.return_amount, 0)} → Finance`}
+                                {r.surplus_action === 'reserve'        && r.reserve_amount > 0 && `${formatNumber(r.reserve_amount, 0)} RV`}
+                                {r.surplus_action === 'split'          && `CF ${formatNumber(r.carry_forward_amount ?? 0, 0)} / RT ${formatNumber(r.return_amount ?? 0, 0)}`}
                                 {!r.surplus_action && '—'}
                               </p>
                             </div>

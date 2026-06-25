@@ -60,6 +60,8 @@ interface Settings {
   default_matching_scope: string;
   // Reconciliation action toggles
   reconciliation_action_return: boolean;
+  reconciliation_action_return_bank: boolean;
+  reconciliation_action_return_finance: boolean;
   reconciliation_action_carry_fwd: boolean;
   reconciliation_action_reserve: boolean;
 }
@@ -76,6 +78,8 @@ const DEFAULT_SETTINGS: Settings = {
   default_gl_cf_account: '',
   default_matching_scope: 'global',
   reconciliation_action_return: true,
+  reconciliation_action_return_bank: true,
+  reconciliation_action_return_finance: true,
   reconciliation_action_carry_fwd: true,
   reconciliation_action_reserve: true,
 };
@@ -610,9 +614,11 @@ export default function PreFundingSettings() {
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                { key: 'reconciliation_action_return' as const,    label: 'Return to Donor',    sub: 'Allow returning surplus cash to the donor at period close' },
-                { key: 'reconciliation_action_carry_fwd' as const, label: 'Carry Forward',       sub: 'Allow carrying forward surplus into the next period' },
-                { key: 'reconciliation_action_reserve' as const,   label: 'Reserve',             sub: 'Allow reserving surplus in a holding account' },
+                { key: 'reconciliation_action_return' as const,          label: 'Return to Donor',    sub: 'Allow returning surplus cash to the donor at period close' },
+                { key: 'reconciliation_action_return_bank' as const,     label: 'Return to Bank',     sub: 'Allow returning surplus to the originating bank account' },
+                { key: 'reconciliation_action_return_finance' as const,  label: 'Return to Finance',  sub: 'Allow returning surplus to the internal Finance department' },
+                { key: 'reconciliation_action_carry_fwd' as const,       label: 'Carry Forward',      sub: 'Allow carrying forward surplus into the next period' },
+                { key: 'reconciliation_action_reserve' as const,         label: 'Reserve',            sub: 'Allow reserving surplus in a holding account' },
               ].map(item => (
                 <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0">
                   <div>
