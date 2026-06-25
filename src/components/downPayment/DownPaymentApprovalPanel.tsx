@@ -376,7 +376,9 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     notes: string;
     uploading: boolean;
     partialPercent: number | null;
-  }>({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
+    preFundId: string | null;
+    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+  }>({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
 
   const [bulkConfirmRequests, setBulkConfirmRequests] = useState<DownPaymentRequest[]>([]);
 
@@ -1782,10 +1784,18 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     setMarkAsPaidDialog({ open: true, request: req, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
   };
 
-  const handleOpenBatchPay = (reqs: DownPaymentRequest[]) => {
+  const handleOpenBatchPay = async (reqs: DownPaymentRequest[]) => {
     const eligible = reqs.filter(r => r.status === 'approved');
     if (eligible.length === 0) return;
-    setBatchPayDialog({ open: true, requests: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
+    const { data: pfData } = await supabase
+      .from('pre_fund_requests' as any)
+      .select('id, name, currency, available_balance')
+      .in('status', ['active', 'low_balance', 'approved'])
+      .order('name');
+    const preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+      id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+    }));
+    setBatchPayDialog({ open: true, requests: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds });
   };
 
   const handleBatchPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1915,7 +1925,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 title: 'Already Paid / تم الدفع مسبقاً',
                 description: `These ${failCount} advance(s) are already marked as paid in the database. The list will now refresh.`,
               });
-              setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
+              setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
               clearSelection();
               return; // finally block still runs → refreshRequests()
             }
@@ -1954,12 +1964,80 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         }).catch(console.error);
       });
 
+      // ── Link to Pre-Fund if one was selected ───────────────────────────────
+      const { preFundId, preFunds } = batchPayDialog;
+      if (preFundId && successCount > 0) {
+        try {
+          const selectedFund = preFunds.find(f => f.id === preFundId);
+          const today = new Date().toISOString().split('T')[0];
+          const txnRows: any[] = [];
+          for (const req of reqs) {
+            const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
+            const paidAmt = isPartial && partialPercent ? Math.round(approvedAmt * partialPercent / 100) : approvedAmt;
+            txnRows.push({
+              pre_fund_request_id: preFundId,
+              transaction_type: 'payment',
+              amount: paidAmt,
+              currency: selectedFund?.currency ?? 'SDG',
+              source_table: 'down_payment_requests',
+              source_id: req.id,
+              description: `Down-payment: ${req.siteName ?? req.id}`,
+              transaction_date: today,
+              created_by: currentUser?.id ?? null,
+              reconciled: false,
+            });
+          }
+          const { data: insertedTxns } = await (supabase as any)
+            .from('pre_fund_transactions')
+            .insert(txnRows)
+            .select('id, source_id');
+
+          // Decrement available_balance, increment paid_amount on pre_fund_requests
+          const totalPaid = txnRows.reduce((s, t) => s + t.amount, 0);
+          const { data: pfRow } = await (supabase as any)
+            .from('pre_fund_requests')
+            .select('available_balance, paid_amount')
+            .eq('id', preFundId)
+            .maybeSingle();
+          if (pfRow) {
+            await (supabase as any).from('pre_fund_requests').update({
+              available_balance: Math.max(0, (pfRow.available_balance ?? 0) - totalPaid),
+              paid_amount: (pfRow.paid_amount ?? 0) + totalPaid,
+            }).eq('id', preFundId);
+          }
+
+          // Back-link each down_payment_requests row to its pre_fund_transaction
+          if (Array.isArray(insertedTxns)) {
+            for (const txn of insertedTxns) {
+              if (txn.source_id) {
+                await (supabase as any)
+                  .from('down_payment_requests')
+                  .update({ pre_fund_transaction_id: txn.id })
+                  .eq('id', txn.source_id);
+              }
+            }
+          }
+
+          toast({
+            title: 'Pre-Fund Updated / تم تحديث التمويل المسبق',
+            description: `${successCount} payment${successCount !== 1 ? 's' : ''} (${totalPaid.toLocaleString()} ${selectedFund?.currency ?? 'SDG'}) deducted from "${selectedFund?.name ?? preFundId}".`,
+          });
+        } catch (pfErr: any) {
+          console.error('[BatchPay] Pre-fund link failed:', pfErr);
+          toast({
+            title: 'Pre-Fund Link Warning',
+            description: `Payments marked as paid, but pre-fund balance update failed: ${pfErr.message}. Go to Pre-Funding → Reconciliation to link manually.`,
+            variant: 'destructive',
+          });
+        }
+      }
+
       const isPartialFinal = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
       toast({
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
         description: `${successCount} ${isPartialFinal ? `partially paid (${partialPercent}%)` : 'fully paid'} with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
       });
-      setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
+      setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
       clearSelection();
     } catch (err: any) {
       toast({ title: "Error / خطأ", description: err.message || "Batch payment failed.", variant: "destructive" });
@@ -5017,7 +5095,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         onOpenChange={(open) => {
           if (!open && !batchPayDialog.uploading) {
             batchPayDialog.proofPreviewUrls.forEach(u => { if (u) URL.revokeObjectURL(u); });
-            setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
+            setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
           }
         }}
       >
@@ -5180,6 +5258,46 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 )}
               </div>
 
+              {/* Pre-Fund selector — links payment to a specific fund and updates its balance */}
+              {batchPayDialog.preFunds.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Charge to Pre-Fund / خصم من التمويل المسبق
+                    <span className="text-muted-foreground font-normal ml-1">(optional — updates fund balance)</span>
+                  </Label>
+                  <Select
+                    value={batchPayDialog.preFundId ?? 'none'}
+                    onValueChange={v => setBatchPayDialog(prev => ({ ...prev, preFundId: v === 'none' ? null : v }))}
+                    disabled={batchPayDialog.uploading}
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="select-batch-pre-fund">
+                      <SelectValue placeholder="Select a pre-fund (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No pre-fund —</SelectItem>
+                      {batchPayDialog.preFunds.map(f => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {batchPayDialog.preFundId && (() => {
+                    const f = batchPayDialog.preFunds.find(x => x.id === batchPayDialog.preFundId);
+                    const total = batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+                    const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
+                    const paying = isPartial ? Math.round(total * (batchPayDialog.partialPercent! / 100)) : total;
+                    const afterBalance = (f?.available_balance ?? 0) - paying;
+                    return (
+                      <p className={`text-xs ${afterBalance < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
+                        After payment: {f?.currency} {afterBalance.toLocaleString()} remaining
+                        {afterBalance < 0 && ' ⚠ Exceeds available balance'}
+                      </p>
+                    );
+                  })()}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
                   Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional)</span>
@@ -5205,8 +5323,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               type="button"
               variant="outline"
               onClick={() => {
-                if (batchPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchPayDialog.proofPreviewUrl);
-                setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
+                batchPayDialog.proofPreviewUrls.forEach(u => { if (u) URL.revokeObjectURL(u); });
+                setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
               }}
               disabled={batchPayDialog.uploading}
               data-testid="button-cancel-batch-pay"
