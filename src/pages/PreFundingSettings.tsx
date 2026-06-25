@@ -344,7 +344,7 @@ export default function PreFundingSettings() {
                   <Label>Default Display Currency</Label>
                   <Select value={settings.base_currency} onValueChange={v => set('base_currency', v)}>
                     <SelectTrigger data-testid="select-base-currency-setting"><SelectValue /></SelectTrigger>
-                    <SelectContent>{['USD','SDG','EUR','GBP','SAR','AED'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    <SelectContent>{['USD','SDG','EUR','GBP','SAR','AED','JPY','CNY','CHF','CAD','AUD','NOK','SEK'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                   </Select>
                   <p className="text-[10px] text-muted-foreground mt-1">Dashboard display currency (display-only, GL always uses fund currency)</p>
                 </div>

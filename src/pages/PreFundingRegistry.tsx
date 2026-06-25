@@ -93,11 +93,21 @@ const RENEWAL_OPTIONS = [
 const EMPTY_FORM = {
   name: '', source: '', amount: '', currency: 'USD', period_type_id: '',
   start_date: '', end_date: '', country_id: '', project_id: '', grant_id: '',
-  matching_scope: 'country_project', threshold_pct: '', threshold_amount: '',
+  matching_scope: 'country_project',
+  threshold_mode: 'pct' as 'pct' | 'fixed' | 'both',
+  threshold_pct: '', threshold_amount: '',
   warning_days: '14', auto_renewal_mode: 'off', auto_renewal_days_before: '7',
   auto_renewal_bypass_approvals: false,
+  gl_receipt_account: '', gl_liability_account: '',
+  gl_expense_account: '', gl_cf_account: '',
   notes: '',
 };
+
+const THRESHOLD_MODE_OPTIONS = [
+  { value: 'pct',   label: '% of funded amount' },
+  { value: 'fixed', label: 'Fixed amount' },
+  { value: 'both',  label: 'Both (% and fixed, alerts on either)' },
+];
 
 export default function PreFundingRegistry() {
   const { hasAnyRole } = useAuthorization();
@@ -132,21 +142,31 @@ export default function PreFundingRegistry() {
   const [allocForm, setAllocForm] = useState({ userId: '', amount: '', notes: '' });
   const [allocSaving, setAllocSaving] = useState(false);
   const [allocUserSearch, setAllocUserSearch] = useState('');
+  const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [dynamicCurrencies, setDynamicCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fundsRes, ptRes, projRes] = await Promise.all([
+      const [fundsRes, ptRes, projRes, acctRes, ratesRes] = await Promise.all([
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
+        (supabase as any).from('acct_accounts').select('id,code,name').order('code'),
+        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);
       setProjects((projRes.data as any) ?? []);
-      // Use DB rows if available; fall back to built-ins if table is empty or not yet seeded
       const dbTypes = (ptRes.data as any[]) ?? [];
       setPeriodTypes(dbTypes.length > 0 ? dbTypes : BUILTIN_PERIOD_TYPES);
+      if (!acctRes.error) setAcctAccounts((acctRes.data as any) ?? []);
+      if (!ratesRes.error) {
+        const rows: any[] = ratesRes.data ?? [];
+        const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
+        rows.forEach((r: any) => { seen.add(r.from_currency); seen.add(r.to_currency); });
+        setDynamicCurrencies([...seen].sort());
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -247,14 +267,25 @@ export default function PreFundingRegistry() {
   };
   const openEdit = (f: PreFundRequest) => {
     setEditing(f);
+    const fa = f as any;
+    const hasPct   = fa.threshold_pct   != null;
+    const hasFixed = fa.threshold_amount != null;
+    const tMode: 'pct' | 'fixed' | 'both' = hasPct && hasFixed ? 'both' : hasFixed ? 'fixed' : 'pct';
     setForm({
       name: f.name, source: f.source ?? '', amount: String(f.amount), currency: f.currency,
       period_type_id: f.period_type_id ?? '', start_date: f.start_date ?? '', end_date: f.end_date ?? '',
       country_id: f.country_id ?? '', project_id: f.project_id ?? '', grant_id: f.grant_id ?? '',
-      matching_scope: f.matching_scope, threshold_pct: '', threshold_amount: '',
+      matching_scope: f.matching_scope,
+      threshold_mode: tMode,
+      threshold_pct:    fa.threshold_pct    != null ? String(fa.threshold_pct)    : '',
+      threshold_amount: fa.threshold_amount != null ? String(fa.threshold_amount) : '',
       warning_days: String(f.warning_days ?? 14),
       auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: String(f.auto_renewal_days_before ?? 7),
-      auto_renewal_bypass_approvals: (f as any).auto_renewal_bypass_approvals ?? false,
+      auto_renewal_bypass_approvals: fa.auto_renewal_bypass_approvals ?? false,
+      gl_receipt_account:   fa.gl_receipt_account   ?? '',
+      gl_liability_account: fa.gl_liability_account ?? '',
+      gl_expense_account:   fa.gl_expense_account   ?? '',
+      gl_cf_account:        fa.gl_cf_account        ?? '',
       notes: f.notes ?? '',
     });
     setShowForm(true);
@@ -292,12 +323,16 @@ export default function PreFundingRegistry() {
         project_id: form.project_id || null,
         grant_id: form.grant_id || null,
         matching_scope: form.matching_scope,
-        threshold_pct: form.threshold_pct ? parseFloat(form.threshold_pct) : null,
-        threshold_amount: form.threshold_amount ? parseFloat(form.threshold_amount) : null,
+        threshold_pct:    (form.threshold_mode === 'pct'   || form.threshold_mode === 'both') && form.threshold_pct    ? parseFloat(form.threshold_pct)    : null,
+        threshold_amount: (form.threshold_mode === 'fixed' || form.threshold_mode === 'both') && form.threshold_amount ? parseFloat(form.threshold_amount) : null,
         warning_days: form.warning_days ? parseInt(form.warning_days) : 14,
         auto_renewal_mode: form.auto_renewal_mode,
         auto_renewal_days_before: form.auto_renewal_days_before ? parseInt(form.auto_renewal_days_before) : null,
         auto_renewal_bypass_approvals: form.auto_renewal_bypass_approvals ?? false,
+        gl_receipt_account:   form.gl_receipt_account   || null,
+        gl_liability_account: form.gl_liability_account || null,
+        gl_expense_account:   form.gl_expense_account   || null,
+        gl_cf_account:        form.gl_cf_account        || null,
         notes: form.notes || null,
       };
       if (editing) {
@@ -1058,7 +1093,7 @@ export default function PreFundingRegistry() {
                   <Select value={form.currency} onValueChange={v => setForm(p => ({ ...p, currency: v }))}>
                     <SelectTrigger data-testid="select-fund-currency"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      {dynamicCurrencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1089,9 +1124,26 @@ export default function PreFundingRegistry() {
                   <Input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} data-testid="input-end-date" />
                 </div>
                 <div>
-                  <Label>Low-Balance Threshold %</Label>
-                  <Input type="number" value={form.threshold_pct} onChange={e => setForm(p => ({ ...p, threshold_pct: e.target.value }))} placeholder="e.g. 20" data-testid="input-threshold-pct" />
+                  <Label>Alert Threshold Mode</Label>
+                  <Select value={form.threshold_mode} onValueChange={v => setForm(p => ({ ...p, threshold_mode: v as any }))}>
+                    <SelectTrigger data-testid="select-threshold-mode"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {THRESHOLD_MODE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
+                {(form.threshold_mode === 'pct' || form.threshold_mode === 'both') && (
+                  <div>
+                    <Label>Low-Balance Threshold %</Label>
+                    <Input type="number" min="0" max="100" value={form.threshold_pct} onChange={e => setForm(p => ({ ...p, threshold_pct: e.target.value }))} placeholder="e.g. 20" data-testid="input-threshold-pct" />
+                  </div>
+                )}
+                {(form.threshold_mode === 'fixed' || form.threshold_mode === 'both') && (
+                  <div>
+                    <Label>Low-Balance Fixed Amount ({form.currency})</Label>
+                    <Input type="number" min="0" value={form.threshold_amount} onChange={e => setForm(p => ({ ...p, threshold_amount: e.target.value }))} placeholder="e.g. 5000" data-testid="input-threshold-amount" />
+                  </div>
+                )}
                 <div>
                   <Label>Ending-Soon Warning (days)</Label>
                   <Input type="number" value={form.warning_days} onChange={e => setForm(p => ({ ...p, warning_days: e.target.value }))} placeholder="14" data-testid="input-warning-days" />
@@ -1130,6 +1182,39 @@ export default function PreFundingRegistry() {
                     </div>
                   </div>
                 )}
+                {/* GL Account Mappings */}
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <span>GL Account Mappings</span>
+                    <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(required before activation)</span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                      { key: 'gl_receipt_account',   label: 'Receipt / Bank Account',     testId: 'select-gl-receipt'   },
+                      { key: 'gl_liability_account',  label: 'Donor Liability Account',     testId: 'select-gl-liability' },
+                      { key: 'gl_expense_account',    label: 'Expense / Payment Account',   testId: 'select-gl-expense'   },
+                      { key: 'gl_cf_account',         label: 'Carry-Forward Account',       testId: 'select-gl-cf'        },
+                    ] as const).map(({ key, label, testId }) => (
+                      <div key={key}>
+                        <Label>{label}</Label>
+                        <Select value={(form as any)[key]} onValueChange={v => setForm(p => ({ ...p, [key]: v }))}>
+                          <SelectTrigger data-testid={testId}>
+                            <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">— None —</SelectItem>
+                            {acctAccounts.map(a => (
+                              <SelectItem key={a.id} value={a.code}>{a.code} — {a.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                  {acctAccounts.length === 0 && (
+                    <p className="text-[10px] text-amber-600 mt-1">Chart of Accounts not loaded — set up COA accounts in Accounting → Chart of Accounts first, then return here to configure GL mappings.</p>
+                  )}
+                </div>
                 <div className="sm:col-span-2">
                   <Label>Notes</Label>
                   <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
