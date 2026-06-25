@@ -579,40 +579,55 @@ export default function PreFundingRegistry() {
 
       const fund = funds.find(f => f.id === receiptDialog.fundId);
 
-      // 2. Activate via shared utility using the first file as primary receipt URL
-      const glReceipt  = (fund as any)?.gl_receipt_account;
-      const glLiability = (fund as any)?.gl_liability_account;
-      if (!glReceipt || !glLiability) {
-        throw new Error(
-          `Fund "${fund?.name}" is missing GL account mappings (receipt account: ${glReceipt ?? 'not set'}, liability account: ${glLiability ?? 'not set'}). ` +
-          'Configure them in Registry → Edit Fund before activating.'
-        );
-      }
-      await activatePreFund({
-        fundId: receiptDialog.fundId,
-        fundName: fund?.name ?? 'Fund',
-        amount: fund?.amount ?? 0,
-        currency: fund?.currency ?? 'USD',
-        glReceiptCode:  glReceipt,
-        glLiabilityCode: glLiability,
-        createdBy: currentUser?.id ?? null,
-        receiptUrl: uploadResults[0],
-      });
+      // 2. Activate — with or without GL posting depending on account configuration
+      const glReceipt   = (fund as any)?.gl_receipt_account  ?? null;
+      const glLiability = (fund as any)?.gl_liability_account ?? null;
+      const hasGL = !!glReceipt && !!glLiability;
 
       const fileWord = receiptFiles.length === 1 ? 'Receipt' : `${receiptFiles.length} receipts`;
+
+      if (hasGL) {
+        // Full GL activation — posts journal entry + bank statement line
+        await activatePreFund({
+          fundId: receiptDialog.fundId,
+          fundName: fund?.name ?? 'Fund',
+          amount: fund?.amount ?? 0,
+          currency: fund?.currency ?? 'USD',
+          glReceiptCode:   glReceipt,
+          glLiabilityCode: glLiability,
+          createdBy: currentUser?.id ?? null,
+          receiptUrl: uploadResults[0],
+        });
+        toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
+      } else {
+        // GL-skipped activation — status only; GL accounts can be set later via Edit Fund
+        const { error: actErr } = await supabase
+          .from('pre_fund_requests')
+          .update({
+            status:            'active',
+            available_balance: fund?.amount ?? 0,
+            receipt_url:       uploadResults[0],
+          })
+          .eq('id', receiptDialog.fundId);
+        if (actErr) throw actErr;
+        toast({
+          title: `${fileWord} uploaded — fund is now Active`,
+          description: 'No GL posting: configure Receipt and Liability accounts in Edit Fund to post the journal entry.',
+        });
+      }
+
       try {
         await supabase.from('notification_events' as any).insert({
           event_type: 'pre_fund_activated',
           reference_id: receiptDialog.fundId,
           reference_type: 'pre_fund_request',
           title: 'Pre-Fund Activated',
-          message: `Fund "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) is now Active. GL journal entry and bank statement line have been posted.`,
+          message: `Fund "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) is now Active.${hasGL ? ' GL journal entry posted.' : ' GL accounts not yet configured.'}`,
           target_roles: ['super_admin', 'admin', 'financialAdmin'],
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: receiptDialog.fundId, fund_name: fund?.name, amount: fund?.amount, currency: fund?.currency },
         });
       } catch { /* non-blocking */ }
-      toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
       setReceiptDialog({ open: false, fundId: '', fundName: '' });
       setReceiptFiles([]);
       await load();
