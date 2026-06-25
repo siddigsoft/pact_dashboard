@@ -723,6 +723,27 @@ const MobileCostSubmission = () => {
       } else {
         toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "Payment recorded. / تم تسجيل الدفع." });
         fetchOperationalCosts();
+        // Auto-link to active pre-fund (non-blocking — payment already recorded)
+        import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
+          linkPaymentToPreFund({
+            amount: oc.amount_cents / 100,
+            currency: oc.currency,
+            countryId: (oc as any).country_id ?? null,
+            projectId: (oc as any).project_id ?? null,
+            costCategory: (oc as any).expense_category ?? null,
+            sourceTable: 'operational_cost_submissions',
+            sourceId: oc.id,
+            reference: oc.reference_number ?? null,
+            description: (oc as any).title ?? oc.description ?? null,
+            paymentDate: now,
+            createdBy: currentUser.id,
+            userId: oc.submitted_by ?? null,
+          }).then(r => {
+            if (r.linked) toast({ title: 'Linked to Pre-Fund', description: r.message });
+            else if (r.needsManualSelection) toast({ title: 'Manual Fund Link Required', description: r.message, variant: 'destructive' });
+            else console.warn('[Pre-Fund] Mobile auto-link skipped:', r.message);
+          }).catch((err: Error) => console.warn('[Pre-Fund] Mobile auto-link error:', err?.message));
+        });
         // Fire in-app + email notifications to submitter and management (non-blocking)
         const paidSubmitter = users.find(u => u.id === oc.submitted_by);
         const paidSubmitterName = paidSubmitter?.name || paidSubmitter?.email || 'Unknown';
