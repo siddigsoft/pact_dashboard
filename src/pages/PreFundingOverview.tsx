@@ -40,6 +40,7 @@ interface TxnRow {
   id: string; pre_fund_request_id: string; transaction_type: string;
   amount: number; currency: string; user_id: string | null; created_by: string | null;
   description: string | null; transaction_date: string | null;
+  reconciled: boolean | null;
 }
 
 interface ExchangeRate { from_currency: string; to_currency: string; rate: number; effective_date: string }
@@ -194,7 +195,7 @@ export default function PreFundingOverview() {
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
         (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false }),
-        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date').order('transaction_date', { ascending: false }),
+        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled').order('transaction_date', { ascending: false }),
         supabase.from('profiles').select('id,full_name,email'),
       ]);
 
@@ -487,7 +488,7 @@ export default function PreFundingOverview() {
             const unreconciledCount = txns.filter(
               t => t.pre_fund_request_id === f.id &&
                    t.transaction_type === 'payment' &&
-                   (t as any).reconciled === false
+                   t.reconciled === false
             ).length;
             const healthScore = calcHealthScore(f, unreconciledCount);
             const healthCls = healthScore >= 70
