@@ -1857,32 +1857,35 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       }
 
       if (rpcMissing) {
-        // ── Fallback: direct row-by-row updates (works before migration is applied) ─
+        // ── Fallback: direct row-by-row updates using exact DB column names ───────
         console.warn('[BatchPay] RPC not deployed yet — using direct updates as fallback');
-        const now = new Date().toISOString();
+        const fallbackNow = new Date().toISOString();
         for (const req of reqs) {
           const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
-          const paidAmt     = isPartial && partialPercent ? (approvedAmt * partialPercent / 100) : approvedAmt;
-          const newStatus   = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'paid';
+          const paidAmt     = isPartial && partialPercent ? Math.round(approvedAmt * partialPercent / 100) : approvedAmt;
+          const remaining   = isPartial && partialPercent ? approvedAmt - paidAmt : 0;
+          const newStatus   = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'fully_paid';
           const { error: rowErr } = await (supabase as any)
             .from('down_payment_requests')
             .update({
-              status:            newStatus,
-              payment_proof_url: proofUrl,
-              payment_notes:     notes.trim() || null,
-              paid_at:           now,
-              amount_paid:       paidAmt,
+              status:                    newStatus,
+              total_paid_amount:         paidAmt,
+              remaining_amount:          remaining,
+              payment_proof_url:         proofUrl,
+              payment_proof_notes:       notes.trim() || null,
+              payment_proof_uploaded_at: fallbackNow,
+              updated_at:                fallbackNow,
             })
             .eq('id', req.id);
           if (rowErr) {
             failCount++;
-            console.error('[BatchPay] Fallback row update failed:', req.id, rowErr);
+            console.error('[BatchPay] Fallback row update failed:', req.id, rowErr.message, rowErr.code);
           } else {
             successCount++;
           }
         }
         if (failCount > 0 && successCount === 0) {
-          throw new Error(`All ${failCount} updates failed. Apply the batch_mark_advances_paid SQL migration in Supabase and retry.`);
+          throw new Error(`Payment blocked by database permissions. Please ask your admin to apply the batch_mark_advances_paid SQL in Supabase SQL Editor.`);
         }
       } else {
         // ── RPC succeeded ────────────────────────────────────────────────────────
