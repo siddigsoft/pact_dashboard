@@ -878,7 +878,7 @@ export default function PreFundingReconciliation() {
         });
       } else {
         // Multi-approver / quorum: one row per assigned user showing their individual vote
-        const approvedCount = votes.filter((v: any) => v.action === 'approve').length;
+        const approvedCount = votes.filter((v: any) => v.action === 'approved').length;
         for (const uid of assignedIds) {
           const vote = votes.find((v: any) => v.user_id === uid);
           result.push({

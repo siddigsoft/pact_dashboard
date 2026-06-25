@@ -320,7 +320,7 @@ export default function PreFundingRegistry() {
             reference_type: 'pre_fund_request',
             title: 'New Pre-Fund Created',
             message: `Fund "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}) has been created as a draft and is ready for approval submission.`,
-            target_roles: ['super_admin', 'admin', 'financialadmin', 'financial_admin'],
+            target_roles: ['super_admin', 'admin', 'financialAdmin'],
             created_by: currentUser?.id ?? null,
             metadata: { fund_name: payload.name, amount: payload.amount, currency: payload.currency },
           });
@@ -396,13 +396,21 @@ export default function PreFundingRegistry() {
       const fund = funds.find(f => f.id === receiptDialog.fundId);
 
       // 2. Activate via shared utility using the first file as primary receipt URL
+      const glReceipt  = (fund as any)?.gl_receipt_account;
+      const glLiability = (fund as any)?.gl_liability_account;
+      if (!glReceipt || !glLiability) {
+        throw new Error(
+          `Fund "${fund?.name}" is missing GL account mappings (receipt account: ${glReceipt ?? 'not set'}, liability account: ${glLiability ?? 'not set'}). ` +
+          'Configure them in Registry → Edit Fund before activating.'
+        );
+      }
       await activatePreFund({
         fundId: receiptDialog.fundId,
         fundName: fund?.name ?? 'Fund',
         amount: fund?.amount ?? 0,
         currency: fund?.currency ?? 'USD',
-        glReceiptCode:  (fund as any)?.gl_receipt_account  ?? '1200',
-        glLiabilityCode:(fund as any)?.gl_liability_account ?? '2400',
+        glReceiptCode:  glReceipt,
+        glLiabilityCode: glLiability,
         createdBy: currentUser?.id ?? null,
         receiptUrl: uploadResults[0],
       });
@@ -415,7 +423,7 @@ export default function PreFundingRegistry() {
           reference_type: 'pre_fund_request',
           title: 'Pre-Fund Activated',
           message: `Fund "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) is now Active. GL journal entry and bank statement line have been posted.`,
-          target_roles: ['super_admin', 'admin', 'financialadmin', 'financial_admin'],
+          target_roles: ['super_admin', 'admin', 'financialAdmin'],
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: receiptDialog.fundId, fund_name: fund?.name, amount: fund?.amount, currency: fund?.currency },
         });
@@ -576,13 +584,19 @@ export default function PreFundingRegistry() {
           // If GL fails, this fund is skipped (stays awaiting_receipt); loop continues.
           const { data: fundDetail } = await supabase.from('pre_fund_requests')
             .select('gl_receipt_account,gl_liability_account').eq('id', fund.id).maybeSingle();
+          const glR = (fundDetail as any)?.gl_receipt_account;
+          const glL = (fundDetail as any)?.gl_liability_account;
+          if (!glR || !glL) {
+            console.warn(`[BankAPI] Skipping fund "${fund.name}" — GL accounts not configured (receipt: ${glR ?? 'missing'}, liability: ${glL ?? 'missing'}). Configure in Registry → Edit Fund.`);
+            continue;
+          }
           await activatePreFund({
             fundId: fund.id,
             fundName: fund.name,
             amount: fund.amount,
             currency: fund.currency,
-            glReceiptCode:   (fundDetail as any)?.gl_receipt_account   ?? '1200',
-            glLiabilityCode: (fundDetail as any)?.gl_liability_account ?? '2400',
+            glReceiptCode:   glR,
+            glLiabilityCode: glL,
             createdBy: currentUser?.id ?? null,
             idempotencyKeySuffix: 'bankapi',
           });

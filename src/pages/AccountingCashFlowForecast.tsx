@@ -161,7 +161,7 @@ export default function AccountingCashFlowForecast() {
       balance += net;
     }
     return rows;
-  }, [cashBalance, monthlyInflow, monthlyOutflow, openEncumbrances, openPOs]);
+  }, [cashBalance, monthlyInflow, monthlyOutflow, openEncumbrances, openPOs, preFundLiquidity, preFundCommitted]);
 
   const exportCsv = () => {
     const header = ['Month', 'Opening Balance', 'Inflows', 'Outflows', 'Net', 'Closing Balance'];
