@@ -40,6 +40,11 @@ export interface ReportSiteRow {
 export interface ReportCoordinatorRow {
   name: string;
   sitesAssigned: number;
+  /** Sites the DC has completed but coordinator has NOT yet verified */
+  dcCompleted: number;
+  /** Sites that have been verified / approved by coordinator */
+  verified: number;
+  /** Legacy alias kept for export compatibility — equals dcCompleted + verified */
   completed: number;
   inProgress: number;
   pending: number;
@@ -56,6 +61,11 @@ export interface ReportCoordinatorRow {
 export interface ReportCollectorRow {
   name: string;
   claimedSites: number;
+  /** Sites the DC has submitted/completed but coordinator has NOT yet verified */
+  dcCompletedSites: number;
+  /** Sites that have been verified / approved by coordinator */
+  verifiedSites: number;
+  /** Legacy alias — equals dcCompletedSites + verifiedSites */
   completedSites: number;
   inProgressSites: number;
   firstClaimAt: string;
@@ -272,20 +282,20 @@ function buildCoordinatorsSheet(data: MmpReportData): any {
   let r = 0;
 
   writeCell(ws, r, 0, c(`Coordinator Activity — ${data.stateName}`, TITLE_STYLE));
-  mergeRange(ws, r, 0, r, 13); r++;
+  mergeRange(ws, r, 0, r, 14); r++;
   r++;
 
   const headers = [
-    '#', 'Coordinator Name', 'Assigned', 'Completed', 'In Progress', 'Pending',
-    'Returned', 'Plan Received At', 'First Action At', 'Last Action At',
-    'Days Active', 'Stale Sites', 'Advances Issued', 'Total Adv. Requested (SDG)',
+    '#', 'Coordinator Name', 'Assigned', 'DC Done (Pending Verification)', 'Verified',
+    'In Progress', 'Pending', 'Returned', 'Plan Received At', 'First Action At',
+    'Last Action At', 'Days Active', 'Stale Sites', 'Advances Issued', 'Total Adv. Requested (SDG)',
   ];
   headers.forEach((h, i) => writeCell(ws, r, i, c(h, DARK_HEADER)));
   r++;
 
   data.coordinators.forEach((coord, idx) => {
     const row = [
-      idx + 1, coord.name, coord.sitesAssigned, coord.completed,
+      idx + 1, coord.name, coord.sitesAssigned, coord.dcCompleted, coord.verified,
       coord.inProgress, coord.pending, coord.returned,
       coord.planReceivedAt, coord.firstActionAt, coord.lastActionAt,
       coord.daysActive, coord.staleSites, coord.advancesIssued, coord.totalAdvanceRequested,
@@ -297,7 +307,7 @@ function buildCoordinatorsSheet(data: MmpReportData): any {
   });
 
   setRef(ws, r, headers.length - 1);
-  setW(ws, [4, 28, 10, 12, 12, 10, 10, 18, 18, 18, 12, 12, 14, 22]);
+  setW(ws, [4, 28, 10, 24, 10, 12, 10, 10, 18, 18, 18, 12, 12, 14, 22]);
   return ws;
 }
 
@@ -308,24 +318,26 @@ function buildCollectorsSheet(data: MmpReportData): any {
   let r = 0;
 
   writeCell(ws, r, 0, c(`Data Collector Activity — ${data.stateName}`, TITLE_STYLE));
-  mergeRange(ws, r, 0, r, 8); r++;
+  mergeRange(ws, r, 0, r, 9); r++;
   r++;
 
   const headers = [
-    '#', 'Collector Name', 'Claimed Sites', 'Completed', 'In Progress',
-    'First Claim At', 'Last Activity At', 'Advances Requested', 'Total Amt. Requested (SDG)',
+    '#', 'Collector Name', 'Claimed Sites', 'DC Done (Pending Verification)', 'Verified',
+    'In Progress', 'First Claim At', 'Last Activity At', 'Advances Requested',
+    'Total Amt. Requested (SDG)',
   ];
   headers.forEach((h, i) => writeCell(ws, r, i, c(h, DARK_HEADER)));
   r++;
 
   if (data.collectors.length === 0) {
     writeCell(ws, r, 0, c('No data collector activity recorded for this state.', META_STYLE));
-    mergeRange(ws, r, 0, r, 8);
+    mergeRange(ws, r, 0, r, 9);
     r++;
   } else {
     data.collectors.forEach((col, idx) => {
       const row = [
-        idx + 1, col.name, col.claimedSites, col.completedSites,
+        idx + 1, col.name, col.claimedSites,
+        col.dcCompletedSites, col.verifiedSites,
         col.inProgressSites, col.firstClaimAt, col.lastActivityAt,
         col.advancesRequested, col.totalAmountRequested,
       ];
@@ -336,7 +348,7 @@ function buildCollectorsSheet(data: MmpReportData): any {
   }
 
   setRef(ws, r, headers.length - 1);
-  setW(ws, [4, 30, 14, 12, 12, 18, 18, 18, 24]);
+  setW(ws, [4, 30, 14, 24, 10, 12, 18, 18, 18, 24]);
   return ws;
 }
 

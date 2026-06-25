@@ -534,10 +534,14 @@ export default function MmpStateReport({
       const firstAction = timestamps.length ? timestamps.reduce((a, b) => a < b ? a : b) : '—';
       const lastAction  = timestamps.length ? timestamps.reduce((a, b) => a > b ? a : b) : '—';
       const advTotal    = cs.reduce((sum, s) => sum + (s.advanceRequested || 0), 0);
+      const dcCompleted = cs.filter(s => s.statusCategory === 'dc_completed').length;
+      const verified    = cs.filter(s => s.statusCategory === 'verified').length;
       return {
         name,
         sitesAssigned:  cs.length,
-        completed:      cs.filter(s => s.statusCategory === 'verified' || s.statusCategory === 'dc_completed').length,
+        dcCompleted,
+        verified,
+        completed:      dcCompleted + verified,
         inProgress:     cs.filter(s => s.statusCategory === 'in_progress' || s.statusCategory === 'awaiting_dispatch').length,
         pending:        cs.filter(s => s.statusCategory === 'pending').length,
         returned:       cs.filter(s => s.statusCategory === 'returned' || s.statusCategory === 'rejected').length,
@@ -568,11 +572,15 @@ export default function MmpStateReport({
         const site = sites.find(s => s.id === a.mmp_site_entry_id);
         return site?.dataCollectorName === name;
       });
+      const dcCompletedSites = cs.filter(s => s.statusCategory === 'dc_completed').length;
+      const verifiedSites    = cs.filter(s => s.statusCategory === 'verified').length;
       return {
         name,
-        claimedSites:   cs.length,
-        completedSites: cs.filter(s => s.statusCategory === 'verified' || s.statusCategory === 'dc_completed').length,
-        inProgressSites:cs.filter(s => s.statusCategory === 'in_progress').length,
+        claimedSites:    cs.length,
+        dcCompletedSites,
+        verifiedSites,
+        completedSites:  dcCompletedSites + verifiedSites,
+        inProgressSites: cs.filter(s => s.statusCategory === 'in_progress').length,
         firstClaimAt:   claimTimes.length ? fmtShort(claimTimes.reduce((a, b) => a < b ? a : b)) : '—',
         lastActivityAt: activityTimes.length ? fmtShort(activityTimes.reduce((a, b) => a > b ? a : b)) : '—',
         advancesRequested: advancesForCollector.length,
@@ -1151,8 +1159,8 @@ export default function MmpStateReport({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {['Coordinator','Assigned','Completed','In Progress','Pending','Returned','Plan Received','First Action','Last Action','Days Active','Stale','Advances','Total Requested (SDG)'].map(h => (
-                        <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>
+                      {['Coordinator','Assigned','DC Done','Verified','In Progress','Pending','Returned','Plan Received','First Action','Last Action','Days Active','Stale','Advances','Total Requested (SDG)'].map(h => (
+                        <TableHead key={h} className={`text-xs whitespace-nowrap ${h === 'DC Done' ? 'text-teal-700 dark:text-teal-400' : h === 'Verified' ? 'text-green-700 dark:text-green-400' : ''}`}>{h}</TableHead>
                       ))}
                     </TableRow>
                   </TableHeader>
@@ -1161,7 +1169,16 @@ export default function MmpStateReport({
                       <TableRow key={coord.name} className={coord.staleSites > 0 ? 'bg-orange-50/40 dark:bg-orange-950/20' : ''}>
                         <TableCell className="font-medium text-sm">{coord.name}</TableCell>
                         <TableCell className="text-center">{coord.sitesAssigned}</TableCell>
-                        <TableCell className="text-center text-green-700">{coord.completed}</TableCell>
+                        <TableCell className="text-center font-medium">
+                          {coord.dcCompleted > 0
+                            ? <span className="text-teal-700 dark:text-teal-400">{coord.dcCompleted}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-center font-medium">
+                          {coord.verified > 0
+                            ? <span className="text-green-700 dark:text-green-400">{coord.verified}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
                         <TableCell className="text-center text-blue-700">{coord.inProgress}</TableCell>
                         <TableCell className="text-center text-amber-700">{coord.pending}</TableCell>
                         <TableCell className="text-center text-orange-700">{coord.returned}</TableCell>
@@ -1205,10 +1222,11 @@ export default function MmpStateReport({
                 <div className="space-y-1">
                   {/* Header row */}
                   <div className="grid text-[11px] font-semibold text-muted-foreground border-b pb-1 mb-1"
-                    style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
+                    style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
                     <span className="pl-7">Data Collector / Enumerator</span>
                     <span className="text-center">Claimed</span>
-                    <span className="text-center text-green-700">Completed</span>
+                    <span className="text-center text-teal-700 dark:text-teal-400">DC Done</span>
+                    <span className="text-center text-green-700 dark:text-green-400">Verified</span>
                     <span className="text-center text-blue-700">In Progress</span>
                     <span>First Claim</span>
                     <span>Last Activity</span>
@@ -1229,13 +1247,18 @@ export default function MmpStateReport({
                           className="w-full text-left hover:bg-muted/40 transition-colors"
                         >
                           <div className="grid items-center py-2 px-2 text-sm"
-                            style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
+                            style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
                             <div className="flex items-center gap-1.5 font-medium min-w-0">
                               <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                               <span className="truncate">{col.name}</span>
                             </div>
                             <span className="text-center text-sm">{col.claimedSites}</span>
-                            <span className={`text-center text-sm font-medium ${col.completedSites > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>{col.completedSites}</span>
+                            <span className={`text-center text-sm font-medium ${col.dcCompletedSites > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-muted-foreground'}`}>
+                              {col.dcCompletedSites > 0 ? col.dcCompletedSites : '—'}
+                            </span>
+                            <span className={`text-center text-sm font-medium ${col.verifiedSites > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                              {col.verifiedSites > 0 ? col.verifiedSites : '—'}
+                            </span>
                             <span className={`text-center text-sm ${col.inProgressSites > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>{col.inProgressSites}</span>
                             <span className="text-xs text-muted-foreground">{col.firstClaimAt}</span>
                             <span className="text-xs text-muted-foreground">{col.lastActivityAt}</span>
@@ -1289,18 +1312,20 @@ export default function MmpStateReport({
 
                   {/* Totals footer — below all collectors */}
                   {(() => {
-                    const totClaimed   = collectorRows.reduce((s, c) => s + c.claimedSites,          0);
-                    const totCompleted = collectorRows.reduce((s, c) => s + c.completedSites,         0);
-                    const totProgress  = collectorRows.reduce((s, c) => s + c.inProgressSites,        0);
-                    const totAdvReq    = collectorRows.reduce((s, c) => s + c.advancesRequested,       0);
-                    const totAdvAppr   = collectorRows.reduce((s, c) => s + c.advancesApproved,        0);
-                    const totSDG       = collectorRows.reduce((s, c) => s + (c.totalAmountRequested || 0), 0);
+                    const totClaimed      = collectorRows.reduce((s, c) => s + c.claimedSites,          0);
+                    const totDcCompleted  = collectorRows.reduce((s, c) => s + c.dcCompletedSites,     0);
+                    const totVerified     = collectorRows.reduce((s, c) => s + c.verifiedSites,         0);
+                    const totProgress     = collectorRows.reduce((s, c) => s + c.inProgressSites,       0);
+                    const totAdvReq       = collectorRows.reduce((s, c) => s + c.advancesRequested,     0);
+                    const totAdvAppr      = collectorRows.reduce((s, c) => s + c.advancesApproved,      0);
+                    const totSDG          = collectorRows.reduce((s, c) => s + (c.totalAmountRequested || 0), 0);
                     return (
                       <div className="grid items-center py-2 px-2 text-sm font-bold bg-muted/60 border border-border rounded-lg mt-2"
-                        style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
+                        style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 28px' }}>
                         <span className="pl-6 text-foreground">Total ({collectorRows.length} collectors)</span>
                         <span className="text-center">{totClaimed}</span>
-                        <span className={`text-center ${totCompleted > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>{totCompleted}</span>
+                        <span className={`text-center ${totDcCompleted > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-muted-foreground'}`}>{totDcCompleted || '—'}</span>
+                        <span className={`text-center ${totVerified > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>{totVerified || '—'}</span>
                         <span className={`text-center ${totProgress > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground'}`}>{totProgress}</span>
                         <span className="text-xs text-muted-foreground">—</span>
                         <span className="text-xs text-muted-foreground">—</span>
