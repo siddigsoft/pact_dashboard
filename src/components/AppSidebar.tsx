@@ -1074,6 +1074,7 @@
                   <SidebarMenuSub className="mx-2 gap-0.5 border-l border-slate-200/80 dark:border-gray-700">
                     {items.map((item) => {
                       const isActive = isNavPathActive(pathname, item.url);
+                      const isItemFavorite = isFavorite(item.url);
                       return (
                         <SidebarMenuSubItem key={item.id}>
                           <SidebarMenuSubButton
@@ -1098,6 +1099,25 @@
                               {renderItemBadge(item.id)}
                             </Link>
                           </SidebarMenuSubButton>
+                          <SidebarMenuAction
+                            showOnHover={!isItemFavorite}
+                            className={isItemFavorite ? "opacity-100" : undefined}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
+                            }}
+                            aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            data-testid={`button-favorite-${item.id}`}
+                          >
+                            <Star
+                              className={cn(
+                                "h-3 w-3",
+                                isItemFavorite
+                                  ? "text-amber-500 fill-amber-500"
+                                  : "text-muted-foreground"
+                              )}
+                            />
+                          </SidebarMenuAction>
                         </SidebarMenuSubItem>
                       );
                     })}
