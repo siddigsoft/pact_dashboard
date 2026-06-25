@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2 } from 'lucide-react';
+import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2, Users } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 
 const OverviewPanel        = lazy(() => import('./PreFundingOverview'));
@@ -9,8 +9,9 @@ const ApprovalFlowPanel    = lazy(() => import('./PreFundingApprovalFlow'));
 const ReconciliationPanel  = lazy(() => import('./PreFundingReconciliation'));
 const SettingsPanel        = lazy(() => import('./PreFundingSettings'));
 const ReportPanel          = lazy(() => import('./PreFundingReport'));
+const AllocationsPanel     = lazy(() => import('./PreFundingAllocations'));
 
-type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'settings' | 'report';
+type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'allocations' | 'settings' | 'report';
 
 type SectionDef = { id: string; label: string; icon: React.ElementType; color: string; description: string; tabs: { id: string; label: string; icon: React.ElementType; description: string }[] };
 
@@ -45,6 +46,12 @@ const SECTIONS: SectionDef[] = [
         label: 'Reconciliation',
         icon: RotateCcw,
         description: 'Reconcile transactions against each pre-fund period, choose surplus actions, close periods with GL postings, and export full PDF reconciliation reports.',
+      },
+      {
+        id: 'allocations',
+        label: 'Allocation Dashboard',
+        icon: Users,
+        description: 'Per-staff fund allocation tracker — see how much each person was assigned, how much they spent, and what remains across all active funds.',
       },
       {
         id: 'settings',
@@ -113,6 +120,7 @@ export default function PreFundingHub() {
         {tab === 'registry'        && <Suspense fallback={<PanelLoader />}><RegistryPanel /></Suspense>}
         {tab === 'approvals'       && <Suspense fallback={<PanelLoader />}><ApprovalFlowPanel /></Suspense>}
         {tab === 'reconciliation'  && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
+        {tab === 'allocations'     && <Suspense fallback={<PanelLoader />}><AllocationsPanel /></Suspense>}
         {tab === 'settings'        && <Suspense fallback={<PanelLoader />}><SettingsPanel /></Suspense>}
         {tab === 'report'          && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}
       </div>

@@ -71,6 +71,32 @@ function usedPct(amount: number, available: number): number {
   return Math.min(100, Math.max(0, Math.round((used / amount) * 100)));
 }
 
+function calcHealthScore(f: PreFundRow): number {
+  let score = 100;
+  const pct = usedPct(f.amount, f.available_balance);
+  if (pct >= 95) score -= 40;
+  else if (pct >= 80) score -= 25;
+  else if (pct >= 60) score -= 10;
+  if (f.end_date) {
+    const days = differenceInDays(parseISO(f.end_date), new Date());
+    if (days < 0)   score -= 45;
+    else if (days <= 7)  score -= 30;
+    else if (days <= 14) score -= 20;
+    else if (days <= 30) score -= 10;
+  }
+  if (f.low_balance_alert) score -= 15;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function calcBurnDaysLeft(f: PreFundRow): number | null {
+  if (!f.start_date || f.paid_amount <= 0 || f.available_balance <= 0) return null;
+  const elapsed = differenceInDays(new Date(), parseISO(f.start_date));
+  if (elapsed <= 0) return null;
+  const daily = f.paid_amount / elapsed;
+  if (daily <= 0) return null;
+  return Math.round(f.available_balance / daily);
+}
+
 export default function PreFundingOverview() {
   const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
@@ -194,16 +220,44 @@ export default function PreFundingOverview() {
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-700 dark:text-amber-400">
             No exchange rates found for <strong>{baseCurrency}</strong> — totals are shown at 1:1. Go to{' '}
-            <button
-              className="underline font-medium hover:no-underline"
-              onClick={() => navigate('/accounting?tab=exchange-rates')}
-            >
+            <button className="underline font-medium hover:no-underline" onClick={() => navigate('/accounting?tab=exchange-rates')}>
               Accounting → Exchange Rates
             </button>{' '}
             to add rates, or switch display currency to USD.
           </AlertDescription>
         </Alert>
       )}
+
+      {/* ── Expiry Alerts Banner ─────────────────────────────────────────────── */}
+      {!loading && (() => {
+        const expiring = activeFunds.filter(f => {
+          if (!f.end_date || f.available_balance <= 0) return false;
+          const d = differenceInDays(parseISO(f.end_date), new Date());
+          return d >= 0 && d <= 30;
+        });
+        if (expiring.length === 0) return null;
+        return (
+          <Alert className="border-amber-300 bg-amber-50/80 dark:bg-amber-950/20">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertDescription>
+              <span className="font-semibold text-amber-700 dark:text-amber-400">
+                {expiring.length} fund{expiring.length !== 1 ? 's' : ''} expiring within 30 days with remaining balance — action required:
+              </span>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {expiring.map(f => {
+                  const d = differenceInDays(parseISO(f.end_date!), new Date());
+                  const urgency = d <= 7 ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+                  return (
+                    <span key={f.id} className={cn('text-xs px-2 py-0.5 rounded-full font-medium', urgency)}>
+                      {f.name} — {f.currency} {formatNumber(f.available_balance, 0)} left · {d}d remaining
+                    </span>
+                  );
+                })}
+              </div>
+            </AlertDescription>
+          </Alert>
+        );
+      })()}
 
       {/* Aggregate KPI row */}
       {!loading && (
@@ -280,6 +334,12 @@ export default function PreFundingOverview() {
             const baseAmount = toBase(f.amount, f.currency);
             const baseCommit = toBase(f.committed_amount, f.currency);
 
+            const healthScore = calcHealthScore(f);
+            const burnDays   = calcBurnDaysLeft(f);
+            const healthCls  = healthScore >= 70 ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300'
+                             : healthScore >= 40 ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300'
+                             :                    'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300';
+
             return (
               <Card
                 key={f.id}
@@ -294,7 +354,12 @@ export default function PreFundingOverview() {
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       {statusBadge(f.status)}
-                      {renewalBadge(f.auto_renewal_mode)}
+                      <div className="flex items-center gap-1">
+                        {renewalBadge(f.auto_renewal_mode)}
+                        <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 font-semibold', healthCls)} title="Fund health score (0–100)">
+                          ♥ {healthScore}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -332,21 +397,31 @@ export default function PreFundingOverview() {
                     </div>
                   )}
 
-                  {/* Period info */}
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t pt-2">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {f.start_date && f.end_date
-                        ? <span>{format(parseISO(f.start_date), 'MMM d')} – {format(parseISO(f.end_date), 'MMM d, yyyy')}</span>
-                        : <span>{f.period_type_name ?? 'No period set'}</span>}
+                  {/* Period info + burn rate */}
+                  <div className="border-t pt-2 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {f.start_date && f.end_date
+                          ? <span>{format(parseISO(f.start_date), 'MMM d')} – {format(parseISO(f.end_date), 'MMM d, yyyy')}</span>
+                          : <span>{f.period_type_name ?? 'No period set'}</span>}
+                      </div>
+                      {daysLeft !== null && daysLeft >= 0 && (
+                        <span className={cn('font-medium', endingSoonFlag ? 'text-amber-600' : '')}>
+                          {daysLeft}d left
+                        </span>
+                      )}
+                      {daysLeft !== null && daysLeft < 0 && (
+                        <span className="text-rose-600 font-medium">Expired</span>
+                      )}
                     </div>
-                    {daysLeft !== null && daysLeft >= 0 && (
-                      <span className={cn('font-medium', endingSoonFlag ? 'text-amber-600' : '')}>
-                        {daysLeft}d left
-                      </span>
-                    )}
-                    {daysLeft !== null && daysLeft < 0 && (
-                      <span className="text-rose-600 font-medium">Expired</span>
+                    {burnDays !== null && (
+                      <div className={cn('flex items-center gap-1 text-[10px]',
+                        burnDays <= 14 ? 'text-rose-600' : burnDays <= 30 ? 'text-amber-600' : 'text-muted-foreground'
+                      )}>
+                        <TrendingDown className="h-3 w-3 shrink-0" />
+                        <span>At current burn rate: balance lasts ~{burnDays}d</span>
+                      </div>
                     )}
                   </div>
 

@@ -18,7 +18,8 @@ import { Separator } from '@/components/ui/separator';
 import {
   RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, Lock,
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
-  Calendar, Plus, Banknote, Shuffle,
+  Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
+  ExternalLink, ChevronDown, History,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -290,23 +291,56 @@ async function generateDonorStatementPDF(
   });
   y = (doc as any).lastAutoTable.finalY + 10;
 
-  // ── Disbursement breakdown ────────────────────────────────────────────────
-  const payments = transactions.filter(t => t.transaction_type === 'payment');
-  if (payments.length > 0) {
-    y = sectionHeader(doc, 'Disbursement Detail', y);
+  // ── Transactions grouped by type (enhanced for donors) ───────────────────
+  const typeGroups: Record<string, PreFundTransaction[]> = {};
+  transactions.forEach(t => {
+    if (!typeGroups[t.transaction_type]) typeGroups[t.transaction_type] = [];
+    typeGroups[t.transaction_type].push(t);
+  });
+  const typeOrder = ['receipt','payment','commitment','carry_forward','return','reversal','adjustment'];
+  const sortedTypes = typeOrder.filter(k => typeGroups[k]?.length);
+  const typeSummary: [string, string, string][] = [];
+
+  for (const txType of sortedTypes) {
+    const group = typeGroups[txType];
+    const label = (TXN_TYPE_CFG[txType]?.label ?? txType).toUpperCase();
+    const subtotal = group.reduce((s, t) => s + t.amount, 0);
+    typeSummary.push([label, `${group.length} transactions`, `${fund.currency} ${formatNumber(subtotal, 0)}`]);
+
+    if (y > 230) { doc.addPage(); y = 36; }
+    y = sectionHeader(doc, `${TXN_TYPE_CFG[txType]?.label ?? txType} Detail`, y);
     autoTable(doc, {
       startY: y,
       head: [['Date', 'Reference', 'Description', `Amount (${fund.currency})`]],
-      body: payments.map(t => [
+      body: group.map(t => [
         format(parseISO(t.transaction_date), 'MMM d, yyyy'),
         t.reference ?? '—',
         t.description ?? '—',
         formatNumber(t.amount, 0),
       ]),
+      foot: [[{ content: `${label} SUBTOTAL`, colSpan: 3, styles: { fontStyle: 'bold' } }, { content: formatNumber(subtotal, 0), styles: { fontStyle: 'bold', halign: 'right' } }]],
+      showFoot: 'lastPage',
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+      footStyles: { fillColor: GREY_BG, textColor: NAVY_LIGHT },
+      alternateRowStyles: { fillColor: GREY_BG },
+      columnStyles: { 3: { halign: 'right' } },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // ── Category summary table ────────────────────────────────────────────────
+  if (typeSummary.length > 1) {
+    if (y > 230) { doc.addPage(); y = 36; }
+    y = sectionHeader(doc, 'Summary by Transaction Type', y);
+    autoTable(doc, {
+      startY: y,
+      head: [['Type', 'Count', 'Total Amount']],
+      body: typeSummary,
       styles: { fontSize: 9, cellPadding: 2.5 },
       headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: GREY_BG },
-      columnStyles: { 3: { halign: 'right' } },
+      columnStyles: { 2: { halign: 'right' } },
     });
     y = (doc as any).lastAutoTable.finalY + 10;
   }
@@ -389,6 +423,23 @@ export default function PreFundingReconciliation() {
   const [matchingFeed, setMatchingFeed] = useState(false);
   const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
 
+  // Auto-link retry
+  const [unlinkedSubs, setUnlinkedSubs]     = useState<any[]>([]);
+  const [loadingUnlinked, setLoadingUnlinked] = useState(false);
+  const [showUnlinked, setShowUnlinked]     = useState(false);
+  const [retryingId, setRetryingId]         = useState<string | null>(null);
+
+  // Transaction drill-down
+  const [drillTxn, setDrillTxn]     = useState<PreFundTransaction | null>(null);
+  const [drillSrc, setDrillSrc]     = useState<any | null>(null);
+  const [loadingDrill, setLoadingDrill] = useState(false);
+
+  // CSV import
+  const [showCsvImport, setShowCsvImport] = useState(false);
+  const [csvText, setCsvText]         = useState('');
+  const [csvParsed, setCsvParsed]     = useState<{ date: string; amount: string; reference: string; description: string }[]>([]);
+  const [importing, setImporting]     = useState(false);
+
   const loadFunds = useCallback(async () => {
     setLoading(true);
     try {
@@ -420,8 +471,114 @@ export default function PreFundingReconciliation() {
     if (selectedFund) {
       setTxnForm(p => ({ ...p, currency: selectedFund.currency }));
       loadTxns(selectedFund.id);
+      loadUnlinkedPayments(selectedFund.id);
     }
   }, [selectedFund, loadTxns]);
+
+  // ── Auto-link retry ──────────────────────────────────────────────────────
+  const loadUnlinkedPayments = useCallback(async (fundId: string) => {
+    setLoadingUnlinked(true);
+    try {
+      const { data: linked } = await supabase
+        .from('pre_fund_transactions')
+        .select('source_id')
+        .eq('pre_fund_request_id', fundId)
+        .not('source_id', 'is', null);
+      const linkedIds = (linked ?? []).map((r: any) => r.source_id).filter(Boolean);
+
+      const [ocsRes, dpRes] = await Promise.all([
+        supabase.from('operational_cost_submissions').select('id,title,amount,currency,status,submitted_at').eq('status', 'paid').not('id', 'in', linkedIds.length ? `(${linkedIds.join(',')})` : '(00000000-0000-0000-0000-000000000000)'),
+        supabase.from('down_payment_requests').select('id,title,amount,currency,status,created_at').eq('status', 'fully_paid').not('id', 'in', linkedIds.length ? `(${linkedIds.join(',')})` : '(00000000-0000-0000-0000-000000000000)'),
+      ]);
+
+      const ocs = (ocsRes.data ?? []).map((r: any) => ({ ...r, _source: 'operational_cost_submissions', _date: r.submitted_at ?? r.created_at }));
+      const dp  = (dpRes.data ?? []).map((r: any) => ({ ...r, _source: 'down_payment_requests', _date: r.created_at }));
+      setUnlinkedSubs([...ocs, ...dp].slice(0, 50));
+    } catch { setUnlinkedSubs([]); }
+    finally { setLoadingUnlinked(false); }
+  }, []);
+
+  const handleRetryLink = async (sub: any) => {
+    if (!selectedFund) return;
+    setRetryingId(sub.id);
+    try {
+      await supabase.from('pre_fund_transactions').insert({
+        pre_fund_request_id: selectedFund.id,
+        transaction_type: 'payment',
+        amount: sub.amount,
+        currency: sub.currency ?? selectedFund.currency,
+        reference: sub.id,
+        description: sub.title ?? 'Linked payment',
+        transaction_date: sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0],
+        source_table: sub._source,
+        source_id: sub.id,
+        reconciled: false,
+      });
+      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}` });
+      loadTxns(selectedFund.id);
+      loadUnlinkedPayments(selectedFund.id);
+    } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }
+    finally { setRetryingId(null); }
+  };
+
+  // ── Transaction drill-down ───────────────────────────────────────────────
+  const handleDrillDown = async (txn: PreFundTransaction) => {
+    setDrillTxn(txn);
+    setDrillSrc(null);
+    if (!txn.source_table || !txn.source_id) return;
+    setLoadingDrill(true);
+    try {
+      const { data } = await (supabase as any).from(txn.source_table).select('*').eq('id', txn.source_id).maybeSingle();
+      setDrillSrc(data ?? null);
+    } catch { setDrillSrc(null); }
+    finally { setLoadingDrill(false); }
+  };
+
+  // ── CSV import ───────────────────────────────────────────────────────────
+  const parseCsv = (text: string) => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) { setCsvParsed([]); return; }
+    const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+    const dateIdx = header.findIndex(h => h.includes('date'));
+    const amtIdx  = header.findIndex(h => h.includes('amount') || h.includes('amt'));
+    const refIdx  = header.findIndex(h => h.includes('ref') || h.includes('reference'));
+    const descIdx = header.findIndex(h => h.includes('desc') || h.includes('description') || h.includes('narration'));
+    const parsed = lines.slice(1).map(line => {
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      return {
+        date:        dateIdx >= 0 ? cols[dateIdx] ?? '' : '',
+        amount:      amtIdx  >= 0 ? cols[amtIdx]  ?? '' : '',
+        reference:   refIdx  >= 0 ? cols[refIdx]  ?? '' : '',
+        description: descIdx >= 0 ? cols[descIdx] ?? '' : cols.join(' '),
+      };
+    }).filter(r => r.amount && parseFloat(r.amount) > 0);
+    setCsvParsed(parsed);
+  };
+
+  const handleCsvImport = async () => {
+    if (!selectedFund || csvParsed.length === 0) return;
+    setImporting(true);
+    try {
+      const rows = csvParsed.map(r => ({
+        pre_fund_request_id: selectedFund.id,
+        transaction_type: 'payment',
+        amount: Math.abs(parseFloat(r.amount)),
+        currency: selectedFund.currency,
+        reference: r.reference || null,
+        description: r.description || null,
+        transaction_date: r.date || new Date().toISOString().split('T')[0],
+        reconciled: false,
+      }));
+      const { error } = await supabase.from('pre_fund_transactions').insert(rows);
+      if (error) throw error;
+      toast({ title: `${rows.length} transaction${rows.length !== 1 ? 's' : ''} imported` });
+      setShowCsvImport(false);
+      setCsvText('');
+      setCsvParsed([]);
+      loadTxns(selectedFund.id);
+    } catch (e: any) { toast({ title: 'Import failed', description: e.message, variant: 'destructive' }); }
+    finally { setImporting(false); }
+  };
 
   const handleAddTxn = async () => {
     if (!selectedFund || !txnForm.amount || !txnForm.transaction_date) { toast({ title: 'Required fields missing', variant: 'destructive' }); return; }
@@ -843,13 +1000,58 @@ export default function PreFundingReconciliation() {
                 </CardContent>
               </Card>
 
-              {/* Transaction table */}
+              {/* ── Auto-Link Retry Panel ──────────────────────────────────────── */}
+              {(unlinkedSubs.length > 0 || loadingUnlinked) && (
+                <div className="border rounded-lg overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-900/20 text-sm font-medium transition-colors"
+                    onClick={() => setShowUnlinked(p => !p)}
+                    data-testid="button-toggle-unlinked"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Link2 className="h-4 w-4 text-amber-600" />
+                      <span className="text-amber-700 dark:text-amber-400">
+                        {loadingUnlinked ? 'Checking unlinked payments…' : `${unlinkedSubs.length} paid submission${unlinkedSubs.length !== 1 ? 's' : ''} not linked to this fund`}
+                      </span>
+                      {!loadingUnlinked && unlinkedSubs.length > 0 && (
+                        <Badge className="bg-amber-500 text-white text-[10px] h-4 px-1.5">{unlinkedSubs.length}</Badge>
+                      )}
+                    </div>
+                    <ChevronDown className={cn('h-4 w-4 text-amber-600 transition-transform', showUnlinked ? 'rotate-180' : '')} />
+                  </button>
+                  {showUnlinked && (
+                    <div className="divide-y max-h-56 overflow-y-auto">
+                      {unlinkedSubs.map(sub => (
+                        <div key={sub.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40" data-testid={`row-unlinked-${sub.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{sub.title ?? sub.id}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {sub._source === 'down_payment_requests' ? 'Down-payment' : 'Cost submission'} · {sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}
+                            </p>
+                          </div>
+                          <span className="font-mono text-sm shrink-0">{sub.currency} {formatNumber(sub.amount, 0)}</span>
+                          <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => handleRetryLink(sub)} disabled={retryingId === sub.id} data-testid={`button-link-${sub.id}`}>
+                            <Link2 className="h-3.5 w-3.5 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Transaction table ──────────────────────────────────────────── */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold">Transactions</h3>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAddTxn(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />Add Transaction
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCsvImport(true)} data-testid="button-csv-import">
+                      <Upload className="h-3.5 w-3.5 mr-1" />Import CSV
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAddTxn(true)}>
+                      <Plus className="h-3.5 w-3.5 mr-1" />Add Transaction
+                    </Button>
+                  </div>
                 </div>
                 {txnLoading ? (
                   <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
@@ -873,7 +1075,12 @@ export default function PreFundingReconciliation() {
                       </TableHeader>
                       <TableBody>
                         {transactions.map(t => (
-                          <TableRow key={t.id} data-testid={`row-txn-${t.id}`}>
+                          <TableRow
+                            key={t.id}
+                            data-testid={`row-txn-${t.id}`}
+                            className="cursor-pointer hover:bg-muted/40"
+                            onClick={() => handleDrillDown(t)}
+                          >
                             <TableCell className="text-xs whitespace-nowrap">{format(parseISO(t.transaction_date), 'MMM d, yyyy')}</TableCell>
                             <TableCell>
                               <span className={cn('text-xs font-medium', TXN_TYPE_CFG[t.transaction_type]?.color)}>
@@ -883,7 +1090,7 @@ export default function PreFundingReconciliation() {
                             <TableCell className="text-xs text-muted-foreground">{t.reference ?? '—'}</TableCell>
                             <TableCell className="text-xs max-w-[160px] truncate">{t.description ?? '—'}</TableCell>
                             <TableCell className="text-right font-mono text-sm">{t.currency} {formatNumber(t.amount, 0)}</TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                               <button
                                 onClick={() => handleReconcileTxn(t.id, !t.reconciled)}
                                 className={cn('h-5 w-5 rounded-full border-2 transition-colors mx-auto flex items-center justify-center',
@@ -909,28 +1116,76 @@ export default function PreFundingReconciliation() {
                 )}
               </div>
 
-              {/* Past reconciliations */}
+              {/* ── Past Reconciliations Timeline ─────────────────────────── */}
               {reconciliations.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold mb-2">Past Reconciliations</h3>
-                  <div className="space-y-2">
-                    {reconciliations.map(r => (
-                      <div key={r.id} className="flex items-center justify-between p-3 border rounded-lg text-sm" data-testid={`card-recon-${r.id}`}>
-                        <div>
-                          <span className="font-medium">{r.period_start && r.period_end ? `${format(parseISO(r.period_start), 'MMM d')} – ${format(parseISO(r.period_end), 'MMM d, yyyy')}` : '—'}</span>
-                          <div className="text-[11px] text-muted-foreground mt-0.5">
-                            Surplus action: {SURPLUS_OPTIONS.find(o => o.value === r.surplus_action)?.label ?? r.surplus_action}
-                            {r.closed_at && ` · Closed ${format(parseISO(r.closed_at), 'MMM d, yyyy')}`}
+                  <div className="flex items-center gap-2 mb-3">
+                    <History className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Reconciliation History</h3>
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{reconciliations.length}</Badge>
+                  </div>
+                  <div className="relative space-y-0 pl-4">
+                    {/* Timeline line */}
+                    <div className="absolute left-0 top-2 bottom-2 w-px bg-border" />
+                    {reconciliations.map((r, idx) => (
+                      <div key={r.id} className="relative mb-3 last:mb-0" data-testid={`card-recon-${r.id}`}>
+                        {/* Timeline dot */}
+                        <div className="absolute -left-[17px] top-3 h-3 w-3 rounded-full bg-emerald-500 border-2 border-background" />
+                        <div className="border rounded-lg p-3 bg-card ml-2 text-sm">
+                          {/* Header row */}
+                          <div className="flex items-start justify-between gap-2 flex-wrap">
+                            <div>
+                              <span className="font-semibold">
+                                {r.period_start && r.period_end
+                                  ? `${format(parseISO(r.period_start), 'MMM d')} – ${format(parseISO(r.period_end), 'MMM d, yyyy')}`
+                                  : `Reconciliation #${idx + 1}`}
+                              </span>
+                              {r.closed_at && (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  Closed {format(parseISO(r.closed_at), 'MMM d, yyyy HH:mm')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                                <Lock className="h-3 w-3 mr-1" />Closed
+                              </Badge>
+                              {r.pdf_url && (
+                                <a href={r.pdf_url} target="_blank" rel="noreferrer">
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Download className="h-3.5 w-3.5" /></Button>
+                                </a>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                            <Lock className="h-3 w-3 mr-1" />Closed
-                          </Badge>
-                          {r.pdf_url && (
-                            <a href={r.pdf_url} target="_blank" rel="noreferrer">
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Download className="h-3.5 w-3.5" /></Button>
-                            </a>
+                          {/* Financial summary grid */}
+                          <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                            <div className="bg-muted/40 rounded p-1.5">
+                              <p className="text-muted-foreground">Total Funded</p>
+                              <p className="font-mono font-semibold">{selectedFund.currency} {formatNumber(r.total_funded ?? 0, 0)}</p>
+                            </div>
+                            <div className="bg-muted/40 rounded p-1.5">
+                              <p className="text-muted-foreground">Total Paid</p>
+                              <p className="font-mono font-semibold text-sky-600">{selectedFund.currency} {formatNumber(r.total_paid ?? 0, 0)}</p>
+                            </div>
+                            <div className="bg-muted/40 rounded p-1.5">
+                              <p className="text-muted-foreground">Variance</p>
+                              <p className={cn('font-mono font-semibold', (r.variance ?? 0) < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                                {selectedFund.currency} {formatNumber(r.variance ?? 0, 0)}
+                              </p>
+                            </div>
+                            <div className="bg-muted/40 rounded p-1.5">
+                              <p className="text-muted-foreground">{SURPLUS_OPTIONS.find(o => o.value === r.surplus_action)?.label?.split(' ')[0] ?? 'Surplus'}</p>
+                              <p className="font-mono font-semibold">
+                                {r.surplus_action === 'carry_forward' && r.carry_forward_amount > 0 && `${formatNumber(r.carry_forward_amount, 0)} CF`}
+                                {r.surplus_action === 'return' && r.return_amount > 0 && `${formatNumber(r.return_amount, 0)} RT`}
+                                {r.surplus_action === 'reserve' && r.reserve_amount > 0 && `${formatNumber(r.reserve_amount, 0)} RV`}
+                                {r.surplus_action === 'split' && `CF ${formatNumber(r.carry_forward_amount ?? 0, 0)} / RT ${formatNumber(r.return_amount ?? 0, 0)}`}
+                                {!r.surplus_action && '—'}
+                              </p>
+                            </div>
+                          </div>
+                          {r.notes && (
+                            <p className="mt-2 text-[11px] text-muted-foreground italic">{r.notes}</p>
                           )}
                         </div>
                       </div>
@@ -983,6 +1238,137 @@ export default function PreFundingReconciliation() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddTxn(false)}>Cancel</Button>
             <Button onClick={handleAddTxn} disabled={saving} data-testid="button-save-txn">{saving ? 'Adding…' : 'Add'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Transaction Drill-Down Dialog ──────────────────────────────────── */}
+      <Dialog open={!!drillTxn} onOpenChange={v => { if (!v) { setDrillTxn(null); setDrillSrc(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ExternalLink className="h-4 w-4" />
+              Transaction Detail
+            </DialogTitle>
+          </DialogHeader>
+          {drillTxn && (
+            <div className="space-y-4 py-1">
+              {/* Core transaction fields */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  ['Date',        format(parseISO(drillTxn.transaction_date), 'MMMM d, yyyy')],
+                  ['Type',        TXN_TYPE_CFG[drillTxn.transaction_type]?.label ?? drillTxn.transaction_type],
+                  ['Amount',      `${drillTxn.currency} ${formatNumber(drillTxn.amount, 0)}`],
+                  ['Reference',   drillTxn.reference ?? '—'],
+                  ['Description', drillTxn.description ?? '—'],
+                  ['Reconciled',  drillTxn.reconciled ? 'Yes' : 'No'],
+                  ['Source',      drillTxn.source_table ? drillTxn.source_table.replace(/_/g, ' ') : '—'],
+                ].map(([k, v]) => (
+                  <div key={k} className={k === 'Description' ? 'col-span-2' : ''}>
+                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{k}</p>
+                    <p className="font-medium mt-0.5">{v}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Source record details */}
+              {drillTxn.source_id && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                      Source Record {loadingDrill && '(loading…)'}
+                    </p>
+                    {loadingDrill ? (
+                      <div className="space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-4 w-full" />)}</div>
+                    ) : drillSrc ? (
+                      <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1.5">
+                        {(['title','name','amount','currency','status','submitted_at','created_at','notes'] as const).filter(k => drillSrc[k] != null).map(k => (
+                          <div key={k} className="flex justify-between gap-4">
+                            <span className="text-muted-foreground capitalize">{String(k).replace(/_/g, ' ')}</span>
+                            <span className="font-medium truncate max-w-[220px] text-right">
+                              {String(k).includes('_at') ? format(parseISO(drillSrc[k]), 'MMM d, yyyy HH:mm') : String(drillSrc[k])}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No source record found or source table not accessible.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDrillTxn(null); setDrillSrc(null); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── CSV Import Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={showCsvImport} onOpenChange={v => { setShowCsvImport(v); if (!v) { setCsvText(''); setCsvParsed([]); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Import Transactions from CSV
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <Alert>
+              <AlertDescription className="text-xs">
+                Expected columns (in any order): <strong>date</strong>, <strong>amount</strong>, <strong>reference</strong>, <strong>description</strong>.
+                First row must be a header. All rows will be imported as <em>Payment</em> transactions for the selected fund.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Paste CSV content</Label>
+              <Textarea
+                value={csvText}
+                onChange={e => { setCsvText(e.target.value); parseCsv(e.target.value); }}
+                rows={8}
+                placeholder={`date,amount,reference,description\n2025-01-15,5000,TXN-001,Field supplies\n2025-01-20,2500,TXN-002,Transport costs`}
+                className="font-mono text-xs mt-1"
+                data-testid="textarea-csv-content"
+              />
+            </div>
+            {csvParsed.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-2">{csvParsed.length} row{csvParsed.length !== 1 ? 's' : ''} parsed — preview:</p>
+                <div className="rounded-lg border overflow-x-auto max-h-48">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead>Description</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {csvParsed.slice(0, 10).map((r, i) => (
+                        <TableRow key={i} data-testid={`row-csv-preview-${i}`}>
+                          <TableCell className="text-xs">{r.date}</TableCell>
+                          <TableCell className="text-xs font-mono">{selectedFund?.currency} {r.amount}</TableCell>
+                          <TableCell className="text-xs">{r.reference || '—'}</TableCell>
+                          <TableCell className="text-xs max-w-[160px] truncate">{r.description}</TableCell>
+                        </TableRow>
+                      ))}
+                      {csvParsed.length > 10 && (
+                        <TableRow><TableCell colSpan={4} className="text-xs text-muted-foreground text-center">…and {csvParsed.length - 10} more</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowCsvImport(false); setCsvText(''); setCsvParsed([]); }}>Cancel</Button>
+            <Button onClick={handleCsvImport} disabled={csvParsed.length === 0 || importing} data-testid="button-confirm-csv-import">
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              {importing ? 'Importing…' : `Import ${csvParsed.length} Row${csvParsed.length !== 1 ? 's' : ''}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
