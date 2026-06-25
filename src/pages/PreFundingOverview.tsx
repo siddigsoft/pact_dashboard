@@ -86,15 +86,22 @@ function usedPct(amount: number, available: number): number {
   return Math.min(100, Math.max(0, Math.round(((amount - available) / amount) * 100)));
 }
 
-function calcHealthScore(f: PreFundRow): number {
+function calcHealthScore(f: PreFundRow, unreconciledPayments: number): number {
   let score = 100;
+  // Factor 1: % used (balance exhaustion)
   const pct = usedPct(f.amount, f.available_balance);
   if (pct >= 95) score -= 40; else if (pct >= 80) score -= 25; else if (pct >= 60) score -= 10;
+  // Factor 2: days remaining
   if (f.end_date) {
     const d = differenceInDays(parseISO(f.end_date), new Date());
     if (d < 0) score -= 45; else if (d <= 7) score -= 30; else if (d <= 14) score -= 20; else if (d <= 30) score -= 10;
   }
+  // Factor 3: low balance flag
   if (f.low_balance_alert) score -= 15;
+  // Factor 4: unreconciled payment transactions (each one is a loose end)
+  if (unreconciledPayments >= 10) score -= 15;
+  else if (unreconciledPayments >= 5) score -= 10;
+  else if (unreconciledPayments >= 2) score -= 5;
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
@@ -470,17 +477,24 @@ export default function PreFundingOverview() {
             const baseAvail  = toBase(f.available_balance, f.currency);
             const baseAmount = toBase(f.amount, f.currency);
             const baseCommit = toBase(f.committed_amount, f.currency);
-            const healthScore = calcHealthScore(f);
             const burnDays    = calcBurnDaysLeft(f);
+
+            const fundAllocs = allocsByFund.get(f.id) ?? [];
+            const fundTxnsByUser = txnsByFundUser.get(f.id) ?? new Map();
+            const isOpen = expanded.has(f.id);
+
+            // Unreconciled payment count — factored into health score and shown as pill
+            const unreconciledCount = txns.filter(
+              t => t.pre_fund_request_id === f.id &&
+                   t.transaction_type === 'payment' &&
+                   (t as any).reconciled === false
+            ).length;
+            const healthScore = calcHealthScore(f, unreconciledCount);
             const healthCls = healthScore >= 70
               ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300'
               : healthScore >= 40
               ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300'
               : 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300';
-
-            const fundAllocs = allocsByFund.get(f.id) ?? [];
-            const fundTxnsByUser = txnsByFundUser.get(f.id) ?? new Map();
-            const isOpen = expanded.has(f.id);
 
             return (
               <Card
@@ -498,7 +512,16 @@ export default function PreFundingOverview() {
                     <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
                       {statusBadge(f.status)}
                       {renewalBadge(f.auto_renewal_mode)}
-                      <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 font-semibold', healthCls)} title="Fund health score (0–100)">
+                      {unreconciledCount > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/20 dark:text-orange-300"
+                          title={`${unreconciledCount} unreconciled payment transaction${unreconciledCount !== 1 ? 's' : ''}`}
+                        >
+                          ⚠ {unreconciledCount} unreconciled
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 font-semibold', healthCls)} title="Fund health score (0–100): weighted from % used, days remaining, and unreconciled payments">
                         ♥ {healthScore}
                       </Badge>
                     </div>

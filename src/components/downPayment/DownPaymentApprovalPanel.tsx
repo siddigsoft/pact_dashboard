@@ -1834,23 +1834,23 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       const now = new Date().toISOString();
       const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
 
-      let successCount = 0;
-      let failCount = 0;
-      for (const req of reqs) {
-        const approved = req.approvedAmount || req.requestedAmount;
-        const paidAmount = isPartial ? Math.round(approved * (partialPercent! / 100)) : approved;
-        const remainingAmount = isPartial ? approved - paidAmount : 0;
-        const newStatus = isPartial ? 'partially_paid' : 'fully_paid';
-        const { error } = await supabase.from('down_payment_requests').update({
-          status: newStatus,
-          total_paid_amount: paidAmount,
-          remaining_amount: remainingAmount,
-          updated_at: now,
-          payment_proof_url: proofUrl,
-          payment_proof_uploaded_at: now,
-          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
-        } as any).eq('id', req.id);
-        if (error) { failCount++; } else { successCount++; }
+      // Call SECURITY DEFINER RPC — bypasses RLS and trigger issues
+      const { data: rpcData, error: rpcError } = await supabase.rpc('batch_mark_advances_paid', {
+        p_request_ids: reqs.map(r => r.id),
+        p_proof_url:   proofUrl,
+        p_notes:       notes.trim() || null,
+        p_partial_pct: isPartial ? partialPercent : null,
+      });
+
+      if (rpcError) {
+        console.error('[BatchPay] RPC error:', rpcError);
+        throw new Error(rpcError.message || 'Batch payment RPC failed');
+      }
+
+      const successCount: number = (rpcData as any)?.success_count ?? 0;
+      const failCount:    number = (rpcData as any)?.fail_count    ?? 0;
+      if (failCount > 0) {
+        console.warn('[BatchPay] Some advances failed:', (rpcData as any)?.errors);
       }
 
       // Consolidated notifications — one per requester
