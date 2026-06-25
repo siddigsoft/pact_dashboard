@@ -1891,7 +1891,14 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         // ── RPC succeeded ────────────────────────────────────────────────────────
         successCount = (rpcData as any)?.success_count ?? 0;
         failCount    = (rpcData as any)?.fail_count    ?? 0;
-        if (failCount > 0) console.warn('[BatchPay] Some advances failed:', (rpcData as any)?.errors);
+        if (failCount > 0) {
+          const errObj = (rpcData as any)?.errors ?? {};
+          const errMsgs = Object.values(errObj).join(' | ');
+          console.warn('[BatchPay] Some advances failed:', errObj);
+          if (successCount === 0) {
+            throw new Error(`All ${failCount} row(s) failed inside the database. Reason: ${errMsgs || 'unknown — check Supabase logs'}`);
+          }
+        }
       }
 
       // Consolidated notifications — one per requester
