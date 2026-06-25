@@ -142,7 +142,7 @@ export default function PreFundingRegistry() {
   const [allocForm, setAllocForm] = useState({ userId: '', amount: '', notes: '' });
   const [allocSaving, setAllocSaving] = useState(false);
   const [allocUserSearch, setAllocUserSearch] = useState('');
-  const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name_en: string }[]>([]);
   const [dynamicCurrencies, setDynamicCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
   const [pfSettings, setPfSettings] = useState<{ default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null>(null);
 
@@ -153,7 +153,7 @@ export default function PreFundingRegistry() {
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
-        (supabase as any).from('acct_accounts').select('id,code,name').order('code'),
+        (supabase as any).from('acct_accounts').select('id,code,name_en').order('code'),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
         (supabase as any).from('pre_fund_settings').select('default_warning_days,default_renewal_mode,default_threshold_pct').maybeSingle(),
       ]);
@@ -1212,7 +1212,7 @@ export default function PreFundingRegistry() {
                           <SelectContent>
                             <SelectItem value="">— None —</SelectItem>
                             {acctAccounts.map(a => (
-                              <SelectItem key={a.id} value={a.code}>{a.code} — {a.name}</SelectItem>
+                              <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

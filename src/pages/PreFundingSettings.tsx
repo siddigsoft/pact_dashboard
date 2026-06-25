@@ -111,7 +111,7 @@ export default function PreFundingSettings() {
   const [matchDialog, setMatchDialog]  = useState<{ item: UnmatchedItem; funds: { id: string; name: string; currency: string; amount: number }[] } | null>(null);
   const [matchFundId, setMatchFundId]  = useState('');
   const [matchingId, setMatchingId]    = useState<string | null>(null);
-  const [acctAccounts, setAcctAccounts] = useState<{ code: string; name: string }[]>([]);
+  const [acctAccounts, setAcctAccounts] = useState<{ code: string; name_en: string }[]>([]);
   const [settingsCurrencies, setSettingsCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
 
   const load = useCallback(async () => {
@@ -120,7 +120,7 @@ export default function PreFundingSettings() {
       const [sRes, ptRes, acctRes, ratesRes] = await Promise.all([
         supabase.from('pre_fund_settings').select('*').maybeSingle(),
         supabase.from('pre_fund_period_types').select('*').order('display_order'),
-        (supabase as any).from('acct_accounts').select('code,name').order('code'),
+        (supabase as any).from('acct_accounts').select('code,name_en').order('code'),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
       ]);
       // Surface SELECT errors (e.g. RLS blocking or table missing)
@@ -570,7 +570,7 @@ export default function PreFundingSettings() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">— None —</SelectItem>
-                        {acctAccounts.map(a => <SelectItem key={a.code} value={a.code}>{a.code} — {a.name}</SelectItem>)}
+                        {acctAccounts.map(a => <SelectItem key={a.code} value={a.code}>{a.code} — {a.name_en}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>
