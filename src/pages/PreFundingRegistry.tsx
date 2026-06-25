@@ -191,15 +191,30 @@ export default function PreFundingRegistry() {
     setAllocUserSearch('');
     setAllocLoading(true);
     try {
-      const [allocRes, profRes] = await Promise.all([
-        (supabase as any).from('pre_fund_allocations')
-          .select('*').eq('pre_fund_request_id', fund.id).order('created_at'),
-        supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
-      ]);
+      // Load existing allocations — tolerate table-not-exist gracefully
+      const allocRes = await (supabase as any)
+        .from('pre_fund_allocations')
+        .select('*')
+        .eq('pre_fund_request_id', fund.id)
+        .order('created_at');
       setAllocations(allocRes.data ?? []);
+    } catch { /* table may not exist yet */ }
+
+    try {
+      // Load profiles separately so an alloc-table error never hides the user list
+      const profRes = await supabase
+        .from('profiles')
+        .select('id,full_name,email,role')
+        .order('full_name');
+      if (profRes.error) {
+        toast({ title: 'Could not load users', description: profRes.error.message, variant: 'destructive' });
+      }
       setAllocProfiles(profRes.data ?? []);
-    } catch { /* ignore */ }
-    finally { setAllocLoading(false); }
+    } catch (e: any) {
+      toast({ title: 'Could not load users', description: e?.message ?? 'Unknown error loading profiles', variant: 'destructive' });
+    } finally {
+      setAllocLoading(false);
+    }
   };
 
   const handleAddAllocation = async () => {
@@ -1392,7 +1407,12 @@ export default function PreFundingRegistry() {
                   </div>
                   {/* Scrollable user list */}
                   <div className="max-h-44 overflow-y-auto divide-y">
-                    {(() => {
+                    {allocLoading ? (
+                      <div className="py-6 text-center text-xs text-muted-foreground">
+                        <RefreshCw className="h-4 w-4 mx-auto mb-1.5 animate-spin opacity-50" />
+                        Loading users…
+                      </div>
+                    ) : (() => {
                       const eligible = allocProfiles.filter(p => !allocations.some(a => a.user_id === p.id));
                       const filtered = eligible.filter(p => {
                         const q = allocUserSearch.toLowerCase();
