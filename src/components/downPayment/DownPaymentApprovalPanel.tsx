@@ -1888,20 +1888,37 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           throw new Error(`Payment blocked by database permissions. Please ask your admin to apply the batch_mark_advances_paid SQL in Supabase SQL Editor.`);
         }
       } else {
-        // ── RPC succeeded ────────────────────────────────────────────────────────
+        // ── RPC path ─────────────────────────────────────────────────────────────
         successCount = (rpcData as any)?.success_count ?? 0;
         failCount    = (rpcData as any)?.fail_count    ?? 0;
         if (failCount > 0) {
-          const errObj = (rpcData as any)?.errors ?? {};
-          const errMsgs = Object.values(errObj).join(' | ');
+          const errObj  = (rpcData as any)?.errors ?? {};
+          const errMsgs = (Object.values(errObj) as string[]);
           console.warn('[BatchPay] Some advances failed:', errObj);
+
           if (successCount === 0) {
-            throw new Error(`All ${failCount} row(s) failed inside the database. Reason: ${errMsgs || 'unknown — check Supabase logs'}`);
+            // Check whether every row failed because it was already paid
+            const allAlreadyPaid = errMsgs.length > 0 && errMsgs.every(m =>
+              typeof m === 'string' && (m.includes('fully_paid') || m.includes('partially_paid'))
+            );
+            if (allAlreadyPaid) {
+              // Advances were already paid by a previous attempt — treat as success
+              toast({
+                title: 'Already Paid / تم الدفع مسبقاً',
+                description: `These ${failCount} advance(s) were already marked as paid in the database. The list will now refresh.`,
+              });
+              setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
+              clearSelection();
+              return; // finally will still run → refreshRequests()
+            }
+            throw new Error(
+              `All ${failCount} row(s) failed. Reason: ${errMsgs.join(' | ') || 'unknown — check Supabase logs'}`
+            );
           }
         }
       }
 
-      // Consolidated notifications — one per requester
+      // ── Notifications ─────────────────────────────────────────────────────────
       const byUser = reqs.reduce<Record<string, Array<{ siteName: string; amount: number }>>>((acc, req) => {
         const uid = req.requestedBy;
         if (!acc[uid]) acc[uid] = [];
@@ -1936,11 +1953,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       });
       setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
       clearSelection();
-      refreshRequests();
     } catch (err: any) {
       toast({ title: "Error / خطأ", description: err.message || "Batch payment failed.", variant: "destructive" });
     } finally {
+      // Always reset loading state AND refresh the list so UI stays in sync
       setBatchPayDialog(prev => ({ ...prev, uploading: false }));
+      refreshRequests();
     }
   };
 
