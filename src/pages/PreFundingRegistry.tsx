@@ -110,9 +110,10 @@ const THRESHOLD_MODE_OPTIONS = [
 ];
 
 export default function PreFundingRegistry() {
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const isSuper = isSuperAdmin();
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [funds, setFunds]           = useState<PreFundRequest[]>([]);
@@ -130,6 +131,9 @@ export default function PreFundingRegistry() {
   const [saving, setSaving]         = useState(false);
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [deleting, setDeleting]     = useState(false);
+  const [deleteFundTxns, setDeleteFundTxns]   = useState<any[]>([]);
+  const [deleteFundTxnsLoading, setDeleteFundTxnsLoading] = useState(false);
+  const [deletingTxnId, setDeletingTxnId]     = useState<string | null>(null);
   const [receiptDialog, setReceiptDialog] = useState<{ open: boolean; fundId: string; fundName: string }>({ open: false, fundId: '', fundName: '' });
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [uploading, setUploading]   = useState(false);
@@ -184,6 +188,21 @@ export default function PreFundingRegistry() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load transactions whenever a fund is targeted for deletion
+  useEffect(() => {
+    if (!deleteId) { setDeleteFundTxns([]); return; }
+    setDeleteFundTxnsLoading(true);
+    (supabase as any)
+      .from('pre_fund_transactions')
+      .select('id,transaction_type,amount,currency,transaction_date,description,reference_number')
+      .eq('pre_fund_request_id', deleteId)
+      .order('transaction_date', { ascending: false })
+      .then(({ data }: any) => {
+        setDeleteFundTxns(data ?? []);
+        setDeleteFundTxnsLoading(false);
+      });
+  }, [deleteId]);
 
   const openAllocDialog = async (fund: PreFundRequest) => {
     setAllocDialog({ open: true, fund });
@@ -402,6 +421,14 @@ export default function PreFundingRegistry() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    if (!isSuper) {
+      toast({ title: 'Permission denied', description: 'Only Super Admin can delete pre-funds.', variant: 'destructive' });
+      return;
+    }
+    if (deleteFundTxns.length > 0) {
+      toast({ title: 'Cannot delete fund', description: 'Delete all transactions first.', variant: 'destructive' });
+      return;
+    }
     setDeleting(true);
     try {
       const { error: e } = await supabase.from('pre_fund_requests').delete().eq('id', deleteId);
@@ -413,6 +440,21 @@ export default function PreFundingRegistry() {
       toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDeleteFundTxn = async (txnId: string) => {
+    if (!isSuper) return;
+    setDeletingTxnId(txnId);
+    try {
+      const { error: e } = await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
+      if (e) throw e;
+      setDeleteFundTxns(prev => prev.filter(t => t.id !== txnId));
+      toast({ title: 'Transaction deleted' });
+    } catch (e: any) {
+      toast({ title: 'Failed to delete transaction', description: e.message, variant: 'destructive' });
+    } finally {
+      setDeletingTxnId(null);
     }
   };
 
@@ -900,11 +942,13 @@ export default function PreFundingRegistry() {
                           <Users className="h-3.5 w-3.5" />Users
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      {['draft', 'closed'].includes(f.status) && (
-                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete fund" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}>
+                      {isSuper && (
+                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund (Super Admin)" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {isSuper && (
+                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete fund (Super Admin only)" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
@@ -1330,15 +1374,105 @@ export default function PreFundingRegistry() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
-      <Dialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Pre-Fund?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">This cannot be undone. Only draft and closed funds can be deleted.</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting} data-testid="button-confirm-delete">{deleting ? 'Deleting…' : 'Delete'}</Button>
-          </DialogFooter>
+      {/* ── Delete Fund Dialog (Super Admin only) ──────────────────────────── */}
+      <Dialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Pre-Fund
+              <Badge variant="outline" className="text-[10px] ml-1 text-amber-700 border-amber-300 bg-amber-50">Super Admin Only</Badge>
+            </DialogTitle>
+          </DialogHeader>
+
+          {deleteFundTxnsLoading ? (
+            <div className="py-8 flex flex-col items-center gap-2 text-muted-foreground">
+              <RefreshCw className="h-5 w-5 animate-spin opacity-40" />
+              <span className="text-sm">Checking transactions…</span>
+            </div>
+          ) : deleteFundTxns.length > 0 ? (
+            <>
+              {/* Blocked — show transactions that must be deleted first */}
+              <Alert className="border-destructive/40 bg-destructive/5">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <AlertDescription className="text-sm text-destructive font-medium">
+                  This fund has <strong>{deleteFundTxns.length}</strong> transaction{deleteFundTxns.length !== 1 ? 's' : ''}.
+                  You must delete each one individually before the fund can be removed.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {deleteFundTxns.map(txn => (
+                  <div key={txn.id} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm" data-testid={`row-del-txn-${txn.id}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant="outline" className={cn(
+                        'text-[10px] capitalize shrink-0',
+                        txn.transaction_type === 'receipt'    ? 'text-emerald-700 border-emerald-300 bg-emerald-50' :
+                        txn.transaction_type === 'payment'    ? 'text-red-700 border-red-300 bg-red-50' :
+                        txn.transaction_type === 'commitment' ? 'text-amber-700 border-amber-300 bg-amber-50' :
+                        'text-slate-600 border-slate-300'
+                      )}>
+                        {txn.transaction_type ?? 'txn'}
+                      </Badge>
+                      <span className="truncate text-muted-foreground text-xs">
+                        {txn.transaction_date ? format(parseISO(txn.transaction_date), 'dd MMM yyyy') : '—'}
+                        {txn.description ? ` · ${txn.description}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-xs font-semibold">
+                        {(txn.amount ?? 0).toLocaleString()} {txn.currency ?? ''}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 border-destructive/30"
+                        onClick={() => handleDeleteFundTxn(txn.id)}
+                        disabled={deletingTxnId === txn.id}
+                        title="Delete this transaction"
+                        data-testid={`button-delete-txn-${txn.id}`}
+                      >
+                        {deletingTxnId === txn.id
+                          ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          : <Trash2 className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteId(null)}>Close</Button>
+                <Button variant="destructive" disabled title="Delete all transactions above first">
+                  <Trash2 className="h-4 w-4 mr-1.5" />Delete Fund ({deleteFundTxns.length} txn{deleteFundTxns.length !== 1 ? 's' : ''} remaining)
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              {/* No transactions — safe to delete */}
+              <div className="flex flex-col items-center gap-3 py-4">
+                <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <Trash2 className="h-6 w-6 text-destructive" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-sm">
+                    Delete "{funds.find(f => f.id === deleteId)?.name ?? 'this fund'}"?
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    No transactions found — this fund can be safely deleted.
+                    <br />This action <strong>cannot be undone</strong>.
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={deleting} data-testid="button-confirm-delete">
+                  {deleting ? <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />Deleting…</> : <><Trash2 className="h-4 w-4 mr-1.5" />Delete Fund</>}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
