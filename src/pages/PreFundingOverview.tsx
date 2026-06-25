@@ -39,7 +39,7 @@ interface AllocRow {
 interface TxnRow {
   id: string; pre_fund_request_id: string; transaction_type: string;
   amount: number; currency: string; user_id: string | null; created_by: string | null;
-  description: string | null;
+  description: string | null; transaction_date: string | null;
 }
 
 interface ExchangeRate { from_currency: string; to_currency: string; rate: number; effective_date: string }
@@ -98,6 +98,59 @@ function calcHealthScore(f: PreFundRow): number {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+function SpendRateSparkline({ fundId, txns, currency }: { fundId: string; txns: TxnRow[]; currency: string }) {
+  const WEEKS = 8;
+  const now = new Date();
+  const buckets = Array.from({ length: WEEKS }, (_, i) => {
+    const end = new Date(now);
+    end.setDate(now.getDate() - (WEEKS - 1 - i) * 7);
+    const start = new Date(end);
+    start.setDate(end.getDate() - 6);
+    return { start, end, total: 0, label: format(start, 'MMM d') };
+  });
+
+  const fundPayments = txns.filter(
+    t => t.pre_fund_request_id === fundId &&
+         t.transaction_type === 'payment' &&
+         t.transaction_date
+  );
+  for (const t of fundPayments) {
+    const d = parseISO(t.transaction_date!);
+    for (const b of buckets) {
+      if (d >= b.start && d <= b.end) { b.total += t.amount; break; }
+    }
+  }
+
+  if (buckets.every(b => b.total === 0)) return null;
+
+  const maxVal = Math.max(...buckets.map(b => b.total), 1);
+
+  return (
+    <div className="mt-2.5 pt-2.5 border-t">
+      <p className="text-[10px] text-muted-foreground mb-1.5 flex items-center gap-1">
+        <TrendingDown className="h-3 w-3 shrink-0" />
+        Weekly payment spend — last 8 wks
+      </p>
+      <div className="flex items-end gap-0.5 h-8" title="Weekly payment spend rate">
+        {buckets.map((b, i) => {
+          const pct = b.total > 0 ? Math.max(10, (b.total / maxVal) * 100) : 0;
+          const cls = (b.total / maxVal) > 0.7 ? 'bg-rose-400 dark:bg-rose-500' :
+                      (b.total / maxVal) > 0.4 ? 'bg-amber-400 dark:bg-amber-500' :
+                      b.total > 0 ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-muted';
+          return (
+            <div
+              key={i}
+              className={cn('flex-1 rounded-sm transition-all', cls)}
+              style={{ height: b.total > 0 ? `${pct}%` : '12%', opacity: b.total > 0 ? 1 : 0.3 }}
+              title={b.total > 0 ? `${b.label}: ${currency} ${formatNumber(b.total, 0)}` : `${b.label}: no spend`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function calcBurnDaysLeft(f: PreFundRow): number | null {
   if (!f.start_date || f.paid_amount <= 0 || f.available_balance <= 0) return null;
   const elapsed = differenceInDays(new Date(), parseISO(f.start_date));
@@ -134,7 +187,7 @@ export default function PreFundingOverview() {
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
         (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false }),
-        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description').order('transaction_date', { ascending: false }),
+        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date').order('transaction_date', { ascending: false }),
         supabase.from('profiles').select('id,full_name,email'),
       ]);
 
@@ -458,7 +511,7 @@ export default function PreFundingOverview() {
                   {/* Top row: balance bar + key amounts + period info */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                    {/* Col 1 — Balance bar */}
+                    {/* Col 1 — Balance bar + spend rate sparkline */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-end">
                         <span className="text-[11px] text-muted-foreground">Used {pct}%</span>
@@ -475,6 +528,7 @@ export default function PreFundingOverview() {
                           <span>{baseCurrency}: {formatNumber(baseAvail, 0)} avail · {formatNumber(baseAmount, 0)} total</span>
                         </div>
                       )}
+                      <SpendRateSparkline fundId={f.id} txns={txns} currency={f.currency} />
                     </div>
 
                     {/* Col 2 — Amounts grid */}

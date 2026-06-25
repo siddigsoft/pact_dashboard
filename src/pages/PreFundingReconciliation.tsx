@@ -252,6 +252,7 @@ async function generateDonorStatementPDF(
   fund: PreFundSummary,
   transactions: PreFundTransaction[],
   approvalSteps: ApprovalStepRow[],
+  categoryMap?: Map<string, string>,
 ): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const period = fund.start_date && fund.end_date
@@ -331,7 +332,7 @@ async function generateDonorStatementPDF(
     y = (doc as any).lastAutoTable.finalY + 8;
   }
 
-  // ── Category summary table ────────────────────────────────────────────────
+  // ── Summary by transaction type ───────────────────────────────────────────
   if (typeSummary.length > 1) {
     if (y > 230) { doc.addPage(); y = 36; }
     y = sectionHeader(doc, 'Summary by Transaction Type', y);
@@ -345,6 +346,46 @@ async function generateDonorStatementPDF(
       columnStyles: { 2: { halign: 'right' } },
     });
     y = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  // ── Expenditure by cost category (from source OCS records) ───────────────
+  if (categoryMap && categoryMap.size > 0) {
+    const catPayments = transactions.filter(t =>
+      t.transaction_type === 'payment' && t.source_id && categoryMap.has(t.source_id)
+    );
+    if (catPayments.length > 0) {
+      const catGroups: Record<string, { txns: PreFundTransaction[]; total: number }> = {};
+      catPayments.forEach(t => {
+        const cat = categoryMap.get(t.source_id!) ?? 'General';
+        if (!catGroups[cat]) catGroups[cat] = { txns: [], total: 0 };
+        catGroups[cat].txns.push(t);
+        catGroups[cat].total += t.amount;
+      });
+      const grandTotal = catPayments.reduce((s, t) => s + t.amount, 0);
+
+      if (y > 230) { doc.addPage(); y = 36; }
+      y = sectionHeader(doc, 'Expenditure by Category', y);
+      autoTable(doc, {
+        startY: y,
+        head: [['Cost Category', 'Transactions', `Amount (${fund.currency})`, '% of Total']],
+        body: Object.entries(catGroups)
+          .sort((a, b) => b[1].total - a[1].total)
+          .map(([cat, g]) => [
+            cat,
+            String(g.txns.length),
+            formatNumber(g.total, 0),
+            grandTotal > 0 ? `${Math.round((g.total / grandTotal) * 100)}%` : '—',
+          ]),
+        foot: [['TOTAL', String(catPayments.length), formatNumber(grandTotal, 0), '100%']],
+        showFoot: 'lastPage',
+        styles: { fontSize: 9, cellPadding: 2.5 },
+        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
+        footStyles: { fillColor: GREY_BG, textColor: NAVY_LIGHT, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: GREY_BG },
+        columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
   }
 
   // ── Approval signatories ──────────────────────────────────────────────────
@@ -761,6 +802,20 @@ export default function PreFundingReconciliation() {
       if (result && result.success === false) throw new Error(result.error ?? 'Period close RPC failed.');
 
       toast({ title: 'Period closed', description: 'GL journal entry created (draft) — review in GL module.' });
+      try {
+        await supabase.from('notification_events' as any).insert({
+          event_type: 'pre_fund_period_closed',
+          actor_id: currentUser?.id ?? null,
+          entity_id: selectedFund.id,
+          entity_type: 'pre_fund_request',
+          payload: {
+            fund_name: selectedFund.name,
+            currency: selectedFund.currency,
+            surplus: surplus,
+            surplus_action: closeForm.surplus_action,
+          },
+        });
+      } catch { /* notifications are non-blocking */ }
       setShowClose(false);
       await Promise.all([loadFunds(), loadTxns(selectedFund.id)]);
       setSelected(null);
@@ -993,8 +1048,22 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setGeneratingPdf(true);
     try {
+      // Build category map from source OCS records (expense_category field)
+      const categoryMap = new Map<string, string>();
+      const ocsLinked = transactions.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id);
+      if (ocsLinked.length > 0) {
+        const sourceIds = [...new Set(ocsLinked.map(t => t.source_id!))];
+        const { data: srcData } = await supabase
+          .from('operational_cost_submissions')
+          .select('id,expense_category')
+          .in('id', sourceIds);
+        (srcData ?? []).forEach((r: any) => {
+          if (r.expense_category) categoryMap.set(r.id, r.expense_category);
+        });
+      }
+
       const approvalSteps = await fetchApprovalSteps(selectedFund.id);
-      const { blob, filename } = await generateDonorStatementPDF(selectedFund, transactions, approvalSteps);
+      const { blob, filename } = await generateDonorStatementPDF(selectedFund, transactions, approvalSteps, categoryMap.size > 0 ? categoryMap : undefined);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
