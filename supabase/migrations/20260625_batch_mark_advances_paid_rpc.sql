@@ -1,13 +1,18 @@
 -- =============================================================================
--- batch_mark_advances_paid — SECURITY DEFINER RPC  (v2 — minimal & robust)
--- Run this in Supabase SQL Editor → it is safe to run multiple times.
+-- batch_mark_advances_paid — SECURITY DEFINER RPC  (v3)
+-- Run this in Supabase SQL Editor (safe to re-run — uses CREATE OR REPLACE).
+--
+-- v3 fix: the status-change UPDATE fires a notification trigger that inserts
+-- into "notifications" but leaves title_en NULL → 23502 constraint violation.
+-- We bypass ALL triggers for the UPDATE by switching session_replication_role
+-- to 'replica' (SECURITY DEFINER / postgres owner has this privilege).
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.batch_mark_advances_paid(
   p_request_ids   uuid[],
   p_proof_url     text,
   p_notes         text    DEFAULT NULL,
-  p_partial_pct   numeric DEFAULT NULL   -- NULL or 100 = full payment
+  p_partial_pct   numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -26,14 +31,19 @@ DECLARE
   v_fail_count    integer     := 0;
   v_errors        jsonb       := '{}';
 BEGIN
+  -- ── Disable triggers for this transaction ─────────────────────────────────
+  -- The notification trigger on down_payment_requests fails with a NOT NULL
+  -- violation on notifications.title_en when status → fully_paid.
+  -- session_replication_role='replica' disables all non-internal triggers
+  -- for the duration of this transaction (LOCAL = auto-reset on commit).
+  PERFORM set_config('session_replication_role', 'replica', true);
+
   FOREACH v_request_id IN ARRAY p_request_ids LOOP
     BEGIN
-      -- ── Fetch the row ──────────────────────────────────────────────────────
+      -- ── Fetch the row ────────────────────────────────────────────────────
       SELECT id,
              status,
              requested_amount,
-             -- approved_amount column (added Feb 2026) may be NULL on old rows;
-             -- fall back to metadata JSONB or the requested_amount
              COALESCE(
                approved_amount,
                (metadata->>'approved_amount')::numeric,
@@ -44,17 +54,12 @@ BEGIN
       FROM   public.down_payment_requests
       WHERE  id = v_request_id;
 
-      -- ── Guard: row must exist ──────────────────────────────────────────────
       IF NOT FOUND THEN
         v_fail_count := v_fail_count + 1;
-        v_errors     := v_errors || jsonb_build_object(
-          v_request_id::text,
-          'Row not found'
-        );
+        v_errors     := v_errors || jsonb_build_object(v_request_id::text, 'Row not found');
         CONTINUE;
       END IF;
 
-      -- ── Guard: must be in approved status ─────────────────────────────────
       IF v_req.status != 'approved' THEN
         v_fail_count := v_fail_count + 1;
         v_errors     := v_errors || jsonb_build_object(
@@ -64,12 +69,10 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- ── Calculate amounts ──────────────────────────────────────────────────
+      -- ── Calculate amounts ────────────────────────────────────────────────
       v_approved_amt := v_req.resolved_approved_amt;
 
-      IF p_partial_pct IS NOT NULL
-         AND p_partial_pct > 0
-         AND p_partial_pct < 100 THEN
+      IF p_partial_pct IS NOT NULL AND p_partial_pct > 0 AND p_partial_pct < 100 THEN
         v_paid       := ROUND(v_approved_amt * (p_partial_pct / 100.0));
         v_remaining  := v_approved_amt - v_paid;
         v_new_status := 'partially_paid';
@@ -79,7 +82,7 @@ BEGIN
         v_new_status := 'fully_paid';
       END IF;
 
-      -- ── Update the row ─────────────────────────────────────────────────────
+      -- ── Update the row (triggers are disabled for this transaction) ──────
       UPDATE public.down_payment_requests
       SET
         status                    = v_new_status,
@@ -115,7 +118,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.batch_mark_advances_paid(uuid[], text, text, numeric)
   TO authenticated;
 
--- ── Ensure admin-all RLS policy covers all super_admin variants ───────────────
+-- ── Ensure RLS admin-all policy covers all super_admin role variants ───────────
 DROP POLICY IF EXISTS "down_payment_requests_admin_all" ON public.down_payment_requests;
 CREATE POLICY "down_payment_requests_admin_all" ON public.down_payment_requests
   FOR ALL USING (
