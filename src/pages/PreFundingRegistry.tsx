@@ -431,7 +431,7 @@ export default function PreFundingRegistry() {
       return;
     }
     if (deleteFundTxns.length > 0) {
-      toast({ title: 'Cannot delete fund', description: 'Delete all transactions first.', variant: 'destructive' });
+      toast({ title: 'Cannot delete fund', description: 'Delete all transactions first, or use Force Delete (Super Admin).', variant: 'destructive' });
       return;
     }
     setDeleting(true);
@@ -443,6 +443,35 @@ export default function PreFundingRegistry() {
       await load();
     } catch (e: any) {
       toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Super Admin only — deletes all transactions in one batch then removes the fund
+  const handleForceDelete = async () => {
+    if (!deleteId || !isSuper) return;
+    setDeleting(true);
+    try {
+      // 1. Bulk-delete all transactions for this fund
+      const { error: txnErr } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .delete()
+        .eq('pre_fund_request_id', deleteId);
+      if (txnErr) throw txnErr;
+
+      // 2. Delete the fund itself
+      const { error: fundErr } = await supabase
+        .from('pre_fund_requests')
+        .delete()
+        .eq('id', deleteId);
+      if (fundErr) throw fundErr;
+
+      toast({ title: 'Fund force-deleted', description: 'Fund and all its transactions have been permanently removed.' });
+      setDeleteId(null);
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Force delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setDeleting(false);
     }
@@ -1505,11 +1534,33 @@ export default function PreFundingRegistry() {
                 ))}
               </div>
 
-              <DialogFooter>
+              {isSuper && (
+                <Alert className="border-orange-300 bg-orange-50 dark:bg-orange-950/20">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-xs text-orange-800 dark:text-orange-300">
+                    <strong>Super Admin:</strong> Force Delete removes all {deleteFundTxns.length} transaction{deleteFundTxns.length !== 1 ? 's' : ''} and the fund in one step. This is <strong>irreversible</strong>.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <DialogFooter className="gap-2">
                 <Button variant="outline" onClick={() => setDeleteId(null)}>Close</Button>
-                <Button variant="destructive" disabled title="Delete all transactions above first">
-                  <Trash2 className="h-4 w-4 mr-1.5" />Delete Fund ({deleteFundTxns.length} txn{deleteFundTxns.length !== 1 ? 's' : ''} remaining)
-                </Button>
+                {isSuper ? (
+                  <Button
+                    variant="destructive"
+                    onClick={handleForceDelete}
+                    disabled={deleting}
+                    data-testid="button-force-delete-fund"
+                  >
+                    {deleting
+                      ? <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />Deleting…</>
+                      : <><Trash2 className="h-4 w-4 mr-1.5" />Force Delete Fund + {deleteFundTxns.length} Txn{deleteFundTxns.length !== 1 ? 's' : ''}</>}
+                  </Button>
+                ) : (
+                  <Button variant="destructive" disabled title="Delete all transactions above first">
+                    <Trash2 className="h-4 w-4 mr-1.5" />Delete Fund ({deleteFundTxns.length} txn{deleteFundTxns.length !== 1 ? 's' : ''} remaining)
+                  </Button>
+                )}
               </DialogFooter>
             </>
           ) : (
