@@ -111,7 +111,7 @@ export default function PreFundingSettings() {
   const [matchDialog, setMatchDialog]  = useState<{ item: UnmatchedItem; funds: { id: string; name: string; currency: string; amount: number }[] } | null>(null);
   const [matchFundId, setMatchFundId]  = useState('');
   const [matchingId, setMatchingId]    = useState<string | null>(null);
-  const [acctAccounts, setAcctAccounts] = useState<{ code: string; name_en: string }[]>([]);
+  const [acctAccounts, setAcctAccounts] = useState<{ code: string; name_en: string; is_active: boolean; is_postable: boolean }[]>([]);
   const [settingsCurrencies, setSettingsCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
 
   const load = useCallback(async () => {
@@ -120,7 +120,7 @@ export default function PreFundingSettings() {
       const [sRes, ptRes, acctRes, ratesRes] = await Promise.all([
         supabase.from('pre_fund_settings').select('*').maybeSingle(),
         supabase.from('pre_fund_period_types').select('*').order('display_order'),
-        (supabase as any).from('acct_accounts').select('code,name_en').order('code'),
+        (supabase as any).from('acct_accounts').select('code,name_en,is_active,is_postable').order('code'),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
       ]);
       // Surface SELECT errors (e.g. RLS blocking or table missing)
@@ -132,7 +132,15 @@ export default function PreFundingSettings() {
         toast({ title: 'Could not load period types', description: ptRes.error.message, variant: 'destructive' });
       }
       setPeriodTypes((ptRes.data as any) ?? []);
-      if (!acctRes.error) setAcctAccounts((acctRes.data as any) ?? []);
+      if (!acctRes.error) {
+        // Filter to active+postable, then deduplicate by code (keep first per code)
+        // This prevents multiple accounts with the same code appearing as "double-selected"
+        const seen = new Set<string>();
+        const deduped = ((acctRes.data as any[]) ?? [])
+          .filter((a: any) => a.is_active && a.is_postable)
+          .filter((a: any) => { if (seen.has(a.code)) return false; seen.add(a.code); return true; });
+        setAcctAccounts(deduped);
+      }
       if (!ratesRes.error) {
         const rows: any[] = ratesRes.data ?? [];
         const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);

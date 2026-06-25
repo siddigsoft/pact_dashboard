@@ -142,7 +142,7 @@ export default function PreFundingRegistry() {
   const [allocForm, setAllocForm] = useState({ userId: '', amount: '', notes: '' });
   const [allocSaving, setAllocSaving] = useState(false);
   const [allocUserSearch, setAllocUserSearch] = useState('');
-  const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name_en: string }[]>([]);
+  const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name_en: string; is_active: boolean; is_postable: boolean }[]>([]);
   const [dynamicCurrencies, setDynamicCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
   const [pfSettings, setPfSettings] = useState<{ default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null>(null);
 
@@ -153,7 +153,7 @@ export default function PreFundingRegistry() {
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
-        (supabase as any).from('acct_accounts').select('id,code,name_en').order('code'),
+        (supabase as any).from('acct_accounts').select('id,code,name_en,is_active,is_postable').order('code'),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
         (supabase as any).from('pre_fund_settings').select('default_warning_days,default_renewal_mode,default_threshold_pct').maybeSingle(),
       ]);
@@ -162,7 +162,13 @@ export default function PreFundingRegistry() {
       setProjects((projRes.data as any) ?? []);
       const dbTypes = (ptRes.data as any[]) ?? [];
       setPeriodTypes(dbTypes.length > 0 ? dbTypes : BUILTIN_PERIOD_TYPES);
-      if (!acctRes.error) setAcctAccounts((acctRes.data as any) ?? []);
+      if (!acctRes.error) {
+        const seen = new Set<string>();
+        const deduped = ((acctRes.data as any[]) ?? [])
+          .filter((a: any) => a.is_active && a.is_postable)
+          .filter((a: any) => { if (seen.has(a.code)) return false; seen.add(a.code); return true; });
+        setAcctAccounts(deduped);
+      }
       if (!ratesRes.error) {
         const rows: any[] = ratesRes.data ?? [];
         const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
@@ -1197,27 +1203,43 @@ export default function PreFundingRegistry() {
                     <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(required before activation)</span>
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {([
-                      { key: 'gl_receipt_account',   label: 'Receipt / Bank Account',     testId: 'select-gl-receipt'   },
-                      { key: 'gl_liability_account',  label: 'Donor Liability Account',     testId: 'select-gl-liability' },
-                      { key: 'gl_expense_account',    label: 'Expense / Payment Account',   testId: 'select-gl-expense'   },
-                      { key: 'gl_cf_account',         label: 'Carry-Forward Account',       testId: 'select-gl-cf'        },
-                    ] as const).map(({ key, label, testId }) => (
-                      <div key={key}>
-                        <Label>{label}</Label>
-                        <Select value={(form as any)[key]} onValueChange={v => setForm(p => ({ ...p, [key]: v }))}>
-                          <SelectTrigger data-testid={testId}>
-                            <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="">— None —</SelectItem>
-                            {acctAccounts.map(a => (
-                              <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))}
+                    {(() => {
+                      // For the Cash/Bank receipt account: filter by fund currency so only matching
+                      // bank accounts appear (e.g. SDG fund → only "Cash at Bank — SDG" accounts).
+                      // Fall back to the full list if no currency-matched accounts exist.
+                      const cur = form.currency?.toUpperCase() ?? '';
+                      const bankAccounts = cur
+                        ? (() => {
+                            const filtered = acctAccounts.filter(a =>
+                              a.name_en.toUpperCase().includes(cur)
+                            );
+                            return filtered.length > 0 ? filtered : acctAccounts;
+                          })()
+                        : acctAccounts;
+
+                      return ([
+                        { key: 'gl_receipt_account',  label: 'Receipt / Bank Account',    testId: 'select-gl-receipt',   accounts: bankAccounts,   hint: cur ? `Showing ${cur} accounts` : '' },
+                        { key: 'gl_liability_account', label: 'Donor Liability Account',   testId: 'select-gl-liability', accounts: acctAccounts,   hint: '' },
+                        { key: 'gl_expense_account',   label: 'Expense / Payment Account', testId: 'select-gl-expense',   accounts: acctAccounts,   hint: '' },
+                        { key: 'gl_cf_account',        label: 'Carry-Forward Account',     testId: 'select-gl-cf',        accounts: acctAccounts,   hint: '' },
+                      ] as const).map(({ key, label, testId, accounts, hint }) => (
+                        <div key={key}>
+                          <Label>{label}</Label>
+                          <Select value={(form as any)[key]} onValueChange={v => setForm(p => ({ ...p, [key]: v }))}>
+                            <SelectTrigger data-testid={testId}>
+                              <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">— None —</SelectItem>
+                              {accounts.map(a => (
+                                <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {hint && <p className="text-[10px] text-sky-600 mt-0.5">{hint}</p>}
+                        </div>
+                      ));
+                    })()}
                   </div>
                   {acctAccounts.length === 0 && (
                     <p className="text-[10px] text-amber-600 mt-1">Chart of Accounts not loaded — set up COA accounts in Accounting → Chart of Accounts first, then return here to configure GL mappings.</p>
