@@ -1965,65 +1965,96 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       });
 
       // ── Link to Pre-Fund if one was selected ───────────────────────────────
+      // Uses link_payment_atomically_rpc (atomic: insert txn + debit fund balance +
+      // allocation deduction in one DB transaction). Only charges rows that the
+      // DB confirms are actually in a paid status — never assumes reqs === paid.
       const { preFundId, preFunds } = batchPayDialog;
       if (preFundId && successCount > 0) {
         try {
-          const selectedFund = preFunds.find(f => f.id === preFundId);
-          const today = new Date().toISOString().split('T')[0];
-          const txnRows: any[] = [];
-          for (const req of reqs) {
-            const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
-            const paidAmt = isPartial && partialPercent ? Math.round(approvedAmt * partialPercent / 100) : approvedAmt;
-            txnRows.push({
-              pre_fund_request_id: preFundId,
-              transaction_type: 'payment',
-              amount: paidAmt,
-              currency: selectedFund?.currency ?? 'SDG',
-              source_table: 'down_payment_requests',
-              source_id: req.id,
-              description: `Down-payment: ${req.siteName ?? req.id}`,
-              transaction_date: today,
-              created_by: currentUser?.id ?? null,
-              reconciled: false,
-            });
-          }
-          const { data: insertedTxns } = await (supabase as any)
-            .from('pre_fund_transactions')
-            .insert(txnRows)
-            .select('id, source_id');
+          // Authoritative paid-status check — covers partial RPC failures
+          const { data: confirmedPaid, error: checkErr } = await (supabase as any)
+            .from('down_payment_requests')
+            .select('id, approved_amount, requested_amount, submitted_by')
+            .in('id', reqs.map(r => r.id))
+            .in('status', ['fully_paid', 'partially_paid']);
 
-          // Decrement available_balance, increment paid_amount on pre_fund_requests
-          const totalPaid = txnRows.reduce((s, t) => s + t.amount, 0);
-          const { data: pfRow } = await (supabase as any)
-            .from('pre_fund_requests')
-            .select('available_balance, paid_amount')
-            .eq('id', preFundId)
-            .maybeSingle();
-          if (pfRow) {
-            await (supabase as any).from('pre_fund_requests').update({
-              available_balance: Math.max(0, (pfRow.available_balance ?? 0) - totalPaid),
-              paid_amount: (pfRow.paid_amount ?? 0) + totalPaid,
-            }).eq('id', preFundId);
-          }
+          if (checkErr) throw new Error(`Could not verify paid status: ${checkErr.message}`);
 
-          // Back-link each down_payment_requests row to its pre_fund_transaction
-          if (Array.isArray(insertedTxns)) {
-            for (const txn of insertedTxns) {
-              if (txn.source_id) {
-                await (supabase as any)
+          const paidIdSet = new Set((confirmedPaid ?? []).map((r: any) => r.id));
+          // Map original req objects to confirmed-paid ones (preserving name etc.)
+          const confirmedReqs = reqs.filter(r => paidIdSet.has(r.id));
+
+          if (confirmedReqs.length === 0) {
+            console.warn('[BatchPay] Pre-fund skip — no DB-confirmed paid rows found');
+          } else {
+            const selectedFund = preFunds.find(f => f.id === preFundId);
+            const today = new Date().toISOString().split('T')[0];
+            let pfLinked = 0;
+            let pfTotal = 0;
+
+            for (const req of confirmedReqs) {
+              const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
+              const paidAmt = isPartial && partialPercent
+                ? Math.round(approvedAmt * partialPercent / 100)
+                : approvedAmt;
+
+              // Atomic: single RPC handles pre_fund_transactions insert +
+              //         available_balance debit + allocation deduction in one tx.
+              const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
+                'link_payment_atomically_rpc', {
+                  p_fund_id:      preFundId,
+                  p_amount:       paidAmt,
+                  p_currency:     selectedFund?.currency ?? 'SDG',
+                  p_source_table: 'down_payment_requests',
+                  p_source_id:    req.id,
+                  p_reference:    null,
+                  p_description:  `Down-payment: ${req.siteName ?? req.id}`,
+                  p_payment_date: today,
+                  p_created_by:   currentUser?.id ?? null,
+                  p_user_id:      req.requestedBy ?? null,
+                  p_receipt_url:  proofUrl ?? null,
+                }
+              );
+
+              if (rpcErr) {
+                console.warn(`[BatchPay] Pre-fund atomic link failed for ${req.id}:`, rpcErr.message);
+                continue;
+              }
+              if (rpcResult?.success === false) {
+                console.warn(`[BatchPay] Pre-fund link rejected for ${req.id}:`, rpcResult.error);
+                continue;
+              }
+
+              pfLinked++;
+              pfTotal += paidAmt;
+
+              // Best-effort back-link (non-critical — transaction + balance already committed)
+              if (rpcResult?.transaction_id) {
+                (supabase as any)
                   .from('down_payment_requests')
-                  .update({ pre_fund_transaction_id: txn.id })
-                  .eq('id', txn.source_id);
+                  .update({ pre_fund_transaction_id: rpcResult.transaction_id })
+                  .eq('id', req.id)
+                  .then(({ error: blErr }: { error: any }) => {
+                    if (blErr) console.warn('[BatchPay] Back-link update failed for', req.id, blErr.message);
+                  });
               }
             }
-          }
 
-          toast({
-            title: 'Pre-Fund Updated / تم تحديث التمويل المسبق',
-            description: `${successCount} payment${successCount !== 1 ? 's' : ''} (${totalPaid.toLocaleString()} ${selectedFund?.currency ?? 'SDG'}) deducted from "${selectedFund?.name ?? preFundId}".`,
-          });
+            if (pfLinked > 0) {
+              toast({
+                title: 'Pre-Fund Updated / تم تحديث التمويل المسبق',
+                description: `${pfLinked} payment${pfLinked !== 1 ? 's' : ''} (${pfTotal.toLocaleString()} ${selectedFund?.currency ?? 'SDG'}) deducted from "${selectedFund?.name ?? preFundId}".`,
+              });
+            } else {
+              toast({
+                title: 'Pre-Fund Link Warning',
+                description: 'Payments were recorded but could not be linked to the pre-fund automatically. Go to Pre-Funding → Reconciliation to link manually.',
+                variant: 'destructive',
+              });
+            }
+          }
         } catch (pfErr: any) {
-          console.error('[BatchPay] Pre-fund link failed:', pfErr);
+          console.error('[BatchPay] Pre-fund link error:', pfErr);
           toast({
             title: 'Pre-Fund Link Warning',
             description: `Payments marked as paid, but pre-fund balance update failed: ${pfErr.message}. Go to Pre-Funding → Reconciliation to link manually.`,
