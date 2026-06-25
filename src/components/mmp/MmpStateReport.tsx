@@ -109,9 +109,10 @@ const stageInfo = (cat: string): { stage: number; total: number; label: string }
     pending:           { stage: 1, label: 'Not Started'       },
     awaiting_dispatch: { stage: 2, label: 'Awaiting Dispatch' },
     in_progress:       { stage: 3, label: 'Active Field Work' },
+    dc_completed:      { stage: 4, label: 'DC Completed'      },
     returned:          { stage: 2, label: 'Returned'          },
     rejected:          { stage: 0, label: 'Rejected'          },
-    verified:          { stage: 4, label: 'Complete'          },
+    verified:          { stage: 5, label: 'Verified'          },
   };
   const info = MAP[cat] || { stage: 1, label: 'Not Started' };
   return { ...info, total: 4 };
@@ -120,8 +121,10 @@ const stageInfo = (cat: string): { stage: number; total: number; label: string }
 const nextStep = (status: string): string => {
   const s = (status || '').toLowerCase().trim();
   // Complete
-  if (['verified','approved','approved and costed','costed','completed','wfp_confirmed','cp_verified'].includes(s))
+  if (['verified','approved','approved and costed','costed','wfp_confirmed','cp_verified'].includes(s))
     return 'No action needed — complete';
+  if (s === 'completed')
+    return 'Coordinator: review and verify the completed visit data';
   // Pending supervisor sign-off
   if (['submitted','submitted_for_review'].includes(s))
     return 'Supervisor: verify and approve the submitted data';
@@ -156,7 +159,11 @@ const nextStep = (status: string): string => {
 
 const VERIFIED_STATUSES = new Set([
   'verified', 'approved', 'approved and costed', 'costed',
-  'completed', 'wfp_confirmed', 'submitted', 'submitted_for_review', 'cp_verified',
+  'wfp_confirmed', 'cp_verified',
+]);
+// DC has completed the visit but coordinator has not yet verified/approved
+const DC_COMPLETED_STATUSES = new Set([
+  'completed', 'submitted', 'submitted_for_review',
 ]);
 const AWAITING_DISPATCH_STATUSES = new Set([
   'forwarded', 'forwarded_to_fom', 'forwarded_fom',
@@ -174,6 +181,7 @@ const RETURNED_STATUSES = new Set([
 function statusCategory(status: string): ReportSiteRow['statusCategory'] {
   const s = (status || '').toLowerCase().trim();
   if (VERIFIED_STATUSES.has(s))          return 'verified';
+  if (DC_COMPLETED_STATUSES.has(s))      return 'dc_completed';
   if (RETURNED_STATUSES.has(s))          return 'returned';
   if (s === 'rejected' || s === 'declined') return 'rejected';
   if (AWAITING_DISPATCH_STATUSES.has(s)) return 'awaiting_dispatch';
@@ -183,6 +191,7 @@ function statusCategory(status: string): ReportSiteRow['statusCategory'] {
 
 const STATUS_BADGE: Record<string, string> = {
   verified:          'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  dc_completed:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
   in_progress:       'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   awaiting_dispatch: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
   returned:          'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
@@ -191,6 +200,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 const STATUS_ROW: Record<string, string> = {
   verified:          'bg-green-50/40 dark:bg-green-950/10',
+  dc_completed:      'bg-teal-50/40 dark:bg-teal-950/10',
   in_progress:       'bg-blue-50/40 dark:bg-blue-950/10',
   awaiting_dispatch: 'bg-sky-50/40 dark:bg-sky-950/10',
   returned:          'bg-orange-50/40 dark:bg-orange-950/10',
@@ -527,7 +537,7 @@ export default function MmpStateReport({
       return {
         name,
         sitesAssigned:  cs.length,
-        completed:      cs.filter(s => s.statusCategory === 'verified').length,
+        completed:      cs.filter(s => s.statusCategory === 'verified' || s.statusCategory === 'dc_completed').length,
         inProgress:     cs.filter(s => s.statusCategory === 'in_progress' || s.statusCategory === 'awaiting_dispatch').length,
         pending:        cs.filter(s => s.statusCategory === 'pending').length,
         returned:       cs.filter(s => s.statusCategory === 'returned' || s.statusCategory === 'rejected').length,
@@ -561,7 +571,7 @@ export default function MmpStateReport({
       return {
         name,
         claimedSites:   cs.length,
-        completedSites: cs.filter(s => s.statusCategory === 'verified').length,
+        completedSites: cs.filter(s => s.statusCategory === 'verified' || s.statusCategory === 'dc_completed').length,
         inProgressSites:cs.filter(s => s.statusCategory === 'in_progress').length,
         firstClaimAt:   claimTimes.length ? fmtShort(claimTimes.reduce((a, b) => a < b ? a : b)) : '—',
         lastActivityAt: activityTimes.length ? fmtShort(activityTimes.reduce((a, b) => a > b ? a : b)) : '—',
@@ -597,7 +607,9 @@ export default function MmpStateReport({
       const d = site.daysInCurrentStatus;
       if (site.statusCategory === 'in_progress' && d >= 7)
         items.push({ category: 'Stale Site', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: `In progress for ${d} days with no status change`, daysAffected: d });
-      if (['in_progress','verified'].includes(site.statusCategory) &&
+      if (site.statusCategory === 'dc_completed' && d >= 3)
+        items.push({ category: 'Pending Verification', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: `DC completed ${d} day${d !== 1 ? 's' : ''} ago — coordinator verification needed`, daysAffected: d });
+      if (['in_progress','dc_completed','verified'].includes(site.statusCategory) &&
           (!site.advanceStatus || site.advanceStatus === '' || ['cancelled','rejected'].includes(site.advanceStatus)))
         items.push({ category: 'Missing Advance', siteName: site.siteName, locality: site.locality, coordinator: site.coordinatorName, dataCollector: site.dataCollectorName, detail: site.advanceStatus && ['cancelled','rejected'].includes(site.advanceStatus) ? `Advance was ${site.advanceStatus} — new request needed` : 'Site accepted/completed but no advance fund requested', daysAffected: d });
       if (site.statusCategory === 'returned')
@@ -615,16 +627,17 @@ export default function MmpStateReport({
   // ── Derived: summary numbers ───────────────────────────────────────────────
   const cycleSummary = useMemo(() => {
     const verified         = sites.filter(s => s.statusCategory === 'verified').length;
+    const dcCompleted      = sites.filter(s => s.statusCategory === 'dc_completed').length;
     const awaitingDispatch = sites.filter(s => s.statusCategory === 'awaiting_dispatch').length;
     const inProgress       = sites.filter(s => s.statusCategory === 'in_progress').length;
     const returned         = sites.filter(s => s.statusCategory === 'returned').length;
     const rejected         = sites.filter(s => s.statusCategory === 'rejected').length;
     const pending          = sites.filter(s => s.statusCategory === 'pending').length;
     const total            = sites.length;
-    // Only flag sites where a collector is already involved (accepted/in-progress/verified)
+    // Only flag sites where a collector is already involved (accepted/in-progress/completed/verified)
     // — pending/not-started sites don't need an advance yet
     const noAdvance  = sites.filter(s =>
-      ['in_progress', 'verified'].includes(s.statusCategory) &&
+      ['in_progress', 'dc_completed', 'verified'].includes(s.statusCategory) &&
       (!s.advanceStatus || s.advanceStatus === '' || ['cancelled', 'rejected'].includes(s.advanceStatus))
     ).length;
 
@@ -639,7 +652,7 @@ export default function MmpStateReport({
       types.forEach(at => {
         const cur = atMap.get(at) || { count: 0, verified: 0 };
         cur.count++;
-        if (s.statusCategory === 'verified') cur.verified++;
+        if (s.statusCategory === 'verified' || s.statusCategory === 'dc_completed') cur.verified++;
         atMap.set(at, cur);
       });
     });
@@ -648,8 +661,8 @@ export default function MmpStateReport({
       .sort((a, b) => b.count - a.count);
 
     return {
-      totalSites: total, verified, awaitingDispatch, inProgress, returned, rejected, pending,
-      coveragePct: total > 0 ? Math.round((verified / total) * 100) : 0,
+      totalSites: total, verified, dcCompleted, awaitingDispatch, inProgress, returned, rejected, pending,
+      coveragePct: total > 0 ? Math.round(((verified + dcCompleted) / total) * 100) : 0,
       noAdvance,
       totalAdvanceRequested: advancesDetail.reduce((s, a) => s + (Number(a.requested_amount) || 0), 0),
       totalAdvanceApproved:  advancesDetail.reduce((s, a) => s + (Number(a.approved_amount)  || 0), 0),
@@ -793,6 +806,7 @@ export default function MmpStateReport({
           {[
             { label: 'Total Sites',       value: cycleSummary.totalSites,        cls: 'font-bold text-foreground' },
             { label: 'Verified',          value: cycleSummary.verified,           cls: 'text-green-700 dark:text-green-400' },
+            { label: 'Completed (DC)',    value: cycleSummary.dcCompleted,        cls: 'text-teal-700 dark:text-teal-400' },
             { label: 'Field Work',        value: cycleSummary.inProgress,         cls: 'text-blue-700 dark:text-blue-400' },
             { label: 'Awaiting Dispatch', value: cycleSummary.awaitingDispatch,   cls: 'text-indigo-700 dark:text-indigo-400' },
             { label: 'Pending',           value: cycleSummary.pending,            cls: 'text-amber-700 dark:text-amber-400' },
@@ -852,6 +866,7 @@ export default function MmpStateReport({
                   {[
                     { label: 'Total Sites',                  value: cycleSummary.totalSites,          cls: '' },
                     { label: 'Verified / Approved',          value: cycleSummary.verified,            cls: 'text-green-700 dark:text-green-400' },
+                    { label: 'Completed (DC)',               value: cycleSummary.dcCompleted,         cls: 'text-teal-700 dark:text-teal-400' },
                     { label: 'Active Field Work',            value: cycleSummary.inProgress,          cls: 'text-blue-700 dark:text-blue-400' },
                     { label: 'Awaiting Dispatch',            value: cycleSummary.awaitingDispatch,    cls: 'text-sky-700 dark:text-sky-400' },
                     { label: 'Pending / Not Started',        value: cycleSummary.pending,             cls: 'text-amber-700 dark:text-amber-400' },
@@ -868,12 +883,13 @@ export default function MmpStateReport({
                 </div>
                 {cycleSummary.totalSites > 0 && (
                   <div className="mt-3 h-3 rounded-full overflow-hidden bg-muted flex">
-                    <div className="bg-green-500" style={{ width: `${(cycleSummary.verified         / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-blue-400"  style={{ width: `${(cycleSummary.inProgress       / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-sky-400"   style={{ width: `${(cycleSummary.awaitingDispatch / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-amber-400" style={{ width: `${(cycleSummary.pending          / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-orange-400"style={{ width: `${(cycleSummary.returned         / cycleSummary.totalSites) * 100}%` }} />
-                    <div className="bg-red-500"   style={{ width: `${(cycleSummary.rejected         / cycleSummary.totalSites) * 100}%` }} />
+                    <div className="bg-green-500" style={{ width: `${(cycleSummary.verified         / cycleSummary.totalSites) * 100}%` }} title="Verified / Approved" />
+                    <div className="bg-teal-500"  style={{ width: `${(cycleSummary.dcCompleted      / cycleSummary.totalSites) * 100}%` }} title="Completed (DC)" />
+                    <div className="bg-blue-400"  style={{ width: `${(cycleSummary.inProgress       / cycleSummary.totalSites) * 100}%` }} title="Active Field Work" />
+                    <div className="bg-sky-400"   style={{ width: `${(cycleSummary.awaitingDispatch / cycleSummary.totalSites) * 100}%` }} title="Awaiting Dispatch" />
+                    <div className="bg-amber-400" style={{ width: `${(cycleSummary.pending          / cycleSummary.totalSites) * 100}%` }} title="Pending / Not Started" />
+                    <div className="bg-orange-400"style={{ width: `${(cycleSummary.returned         / cycleSummary.totalSites) * 100}%` }} title="Returned" />
+                    <div className="bg-red-500"   style={{ width: `${(cycleSummary.rejected         / cycleSummary.totalSites) * 100}%` }} title="Rejected" />
                   </div>
                 )}
               </div>
