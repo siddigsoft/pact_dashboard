@@ -10,7 +10,7 @@ import * as XLSX from 'xlsx';
 import {
   TrendingUp, TrendingDown, DollarSign, ChevronLeft, ChevronRight, Download,
   Loader2, FileSpreadsheet, FileText, BarChart2, CheckCircle2, AlertCircle,
-  CreditCard, Users, Banknote,
+  CreditCard, Users, Banknote, Wallet,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -74,6 +74,24 @@ interface ActiveSubscription {
   currency: string;
   billing_cycle: string;
   is_active: boolean;
+}
+interface PreFundTransaction {
+  id: string;
+  transaction_type: string | null;
+  amount: number | null;
+  currency: string | null;
+  transaction_date: string | null;
+  description: string | null;
+  fund_name?: string | null;
+}
+interface PreFundSummary {
+  id: string;
+  name: string;
+  available_balance: number | null;
+  total_amount: number | null;
+  paid_amount: number | null;
+  currency: string | null;
+  status: string | null;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -196,9 +214,60 @@ export default function MonthEndFinancialSummary() {
     subscriptions.reduce((s, sub) => s + monthlyEquivalent(Number(sub.amount) || 0, sub.billing_cycle), 0),
     [subscriptions]);
 
+  // ── 4. Pre-Fund Activity for the period ───────────────────────────────────
+  const { data: preFundTxns = [], isLoading: loadingPFTxns } = useQuery<PreFundTransaction[]>({
+    queryKey: ['month-end-pf-txns', periodLabel],
+    ...CACHE,
+    queryFn: async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('pre_fund_transactions')
+          .select('id, transaction_type, amount, currency, transaction_date, description, pre_fund_requests(name)')
+          .gte('transaction_date', format(periodStart, 'yyyy-MM-dd'))
+          .lte('transaction_date', format(periodEnd, 'yyyy-MM-dd'));
+        if (error) return [];
+        return ((data ?? []) as any[]).map((r: any) => ({
+          ...r,
+          fund_name: r.pre_fund_requests?.name ?? null,
+        })) as PreFundTransaction[];
+      } catch { return []; }
+    },
+  });
+
+  const { data: activeFunds = [], isLoading: loadingActiveFunds } = useQuery<PreFundSummary[]>({
+    queryKey: ['month-end-pf-funds', periodLabel],
+    ...CACHE,
+    queryFn: async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('pre_fund_requests')
+          .select('id, name, available_balance, total_amount, paid_amount, currency, status')
+          .eq('status', 'active')
+          .lte('start_date', format(periodEnd, 'yyyy-MM-dd'))
+          .gte('end_date', format(periodStart, 'yyyy-MM-dd'));
+        if (error) return [];
+        return (data ?? []) as PreFundSummary[];
+      } catch { return []; }
+    },
+  });
+
+  const preFundReceived = useMemo(() =>
+    preFundTxns.filter(t => t.transaction_type === 'receipt').reduce((s, t) => s + (Number(t.amount) || 0), 0),
+    [preFundTxns]);
+  const preFundPaid = useMemo(() =>
+    preFundTxns.filter(t => t.transaction_type === 'payment').reduce((s, t) => s + (Number(t.amount) || 0), 0),
+    [preFundTxns]);
+  const preFundCommitted = useMemo(() =>
+    preFundTxns.filter(t => t.transaction_type === 'commitment').reduce((s, t) => s + (Number(t.amount) || 0), 0),
+    [preFundTxns]);
+  const preFundAvailable = useMemo(() =>
+    activeFunds.reduce((s, f) => s + (Number(f.available_balance) || 0), 0),
+    [activeFunds]);
+  const preFundVariance = preFundReceived - preFundPaid - preFundCommitted;
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const netPosition = totalReceivables - totalPayroll - totalSubscriptions;
-  const isLoading = loadingPayroll || loadingPayrollItems || loadingMilestones || loadingRetainerInvoices || loadingSubs;
+  const isLoading = loadingPayroll || loadingPayrollItems || loadingMilestones || loadingRetainerInvoices || loadingSubs || loadingPFTxns || loadingActiveFunds;
 
   // ── Export PDF ─────────────────────────────────────────────────────────────
   function exportPDF() {
@@ -223,6 +292,12 @@ export default function MonthEndFinancialSummary() {
       ['Retainer Invoices Receivable', fmt(retainerInvoices.reduce((s, r) => s + (Number(r.amount) || 0), 0)), 'Outstanding'],
       ['Total Receivables', fmt(totalReceivables), 'Milestones + Retainer'],
       ['Subscription Costs (Monthly Est.)', fmt(totalSubscriptions), `${subscriptions.length} active subscriptions`],
+      ...(preFundTxns.length > 0 || activeFunds.length > 0 ? [
+        ['Pre-Fund Received', fmt(preFundReceived), `${preFundTxns.filter(t=>t.transaction_type==='receipt').length} receipts`],
+        ['Pre-Fund Paid Out', fmt(preFundPaid), `${preFundTxns.filter(t=>t.transaction_type==='payment').length} payments`],
+        ['Pre-Fund Committed', fmt(preFundCommitted), `${preFundTxns.filter(t=>t.transaction_type==='commitment').length} commitments`],
+        ['Pre-Fund Available Balance', fmt(preFundAvailable), `${activeFunds.length} active funds`],
+      ] : []),
       ['NET POSITION', fmt(netPosition), `Receivable − Payroll − Subscriptions`],
     ];
 
@@ -279,6 +354,15 @@ export default function MonthEndFinancialSummary() {
       ['Retainer Invoices Receivable', retainerInvoices.reduce((s, r) => s + (Number(r.amount) || 0), 0), 'Outstanding'],
       ['Total Receivables', totalReceivables, 'Milestones + Retainer'],
       ['Subscription Costs (Monthly Est.)', totalSubscriptions, `${subscriptions.length} active subscriptions`],
+      ...(preFundTxns.length > 0 || activeFunds.length > 0 ? [
+        [],
+        ['PRE-FUND ACTIVITY', '', ''],
+        ['Pre-Fund Received', preFundReceived, `${preFundTxns.filter(t=>t.transaction_type==='receipt').length} receipts`],
+        ['Pre-Fund Paid Out', preFundPaid, `${preFundTxns.filter(t=>t.transaction_type==='payment').length} payments`],
+        ['Pre-Fund Committed', preFundCommitted, `${preFundTxns.filter(t=>t.transaction_type==='commitment').length} commitments`],
+        ['Pre-Fund Available Balance', preFundAvailable, `${activeFunds.length} active funds`],
+        ['Pre-Fund Variance (Received−Paid−Committed)', preFundVariance, ''],
+      ] : []),
       [],
       ['NET POSITION', netPosition, 'Receivable − Payroll − Subscriptions'],
     ];
@@ -398,6 +482,61 @@ export default function MonthEndFinancialSummary() {
 
         {/* Breakdown Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          {/* Pre-Fund Activity */}
+          <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 md:col-span-3">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-violet-500" />Pre-Fund Activity
+              </CardTitle>
+              <CardDescription className="text-xs">Transactions within this period · {activeFunds.length} active fund{activeFunds.length !== 1 ? 's' : ''}</CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-4">
+              {loadingPFTxns || loadingActiveFunds ? (
+                <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin opacity-30" /></div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 text-center" data-testid="pf-received">
+                    <p className="text-xs text-muted-foreground mb-1">Received</p>
+                    <p className="text-base font-bold text-emerald-700">{fmt(preFundReceived)}</p>
+                  </div>
+                  <div className="rounded-lg border bg-red-50 dark:bg-red-950/20 px-4 py-3 text-center" data-testid="pf-paid">
+                    <p className="text-xs text-muted-foreground mb-1">Paid Out</p>
+                    <p className="text-base font-bold text-red-700">{fmt(preFundPaid)}</p>
+                  </div>
+                  <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-center" data-testid="pf-committed">
+                    <p className="text-xs text-muted-foreground mb-1">Committed</p>
+                    <p className="text-base font-bold text-amber-700">{fmt(preFundCommitted)}</p>
+                  </div>
+                  <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-center" data-testid="pf-available">
+                    <p className="text-xs text-muted-foreground mb-1">Available Balance</p>
+                    <p className="text-base font-bold text-slate-700 dark:text-slate-200">{fmt(preFundAvailable)}</p>
+                  </div>
+                  <div className={`rounded-lg border px-4 py-3 text-center ${preFundVariance >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-red-50 dark:bg-red-950/20'}`} data-testid="pf-variance">
+                    <p className="text-xs text-muted-foreground mb-1">Variance</p>
+                    <p className={`text-base font-bold ${preFundVariance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{fmt(preFundVariance)}</p>
+                    <p className="text-[10px] text-muted-foreground">Received − Paid − Committed</p>
+                  </div>
+                </div>
+              )}
+              {preFundTxns.length > 0 && (
+                <div className="mt-3 space-y-1 max-h-32 overflow-y-auto">
+                  {preFundTxns.slice(0, 6).map(t => (
+                    <div key={t.id} className="flex items-center justify-between text-xs border rounded px-3 py-1.5" data-testid={`row-pf-txn-${t.id}`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className={`text-[10px] capitalize shrink-0 ${t.transaction_type === 'receipt' ? 'text-emerald-700 border-emerald-300' : t.transaction_type === 'payment' ? 'text-red-700 border-red-300' : 'text-amber-700 border-amber-300'}`}>
+                          {t.transaction_type ?? '—'}
+                        </Badge>
+                        <span className="truncate text-muted-foreground">{t.fund_name ?? t.description ?? '—'}</span>
+                      </div>
+                      <span className="ml-2 font-semibold shrink-0">{fmt(Number(t.amount) || 0, t.currency ?? 'SDG')}</span>
+                    </div>
+                  ))}
+                  {preFundTxns.length > 6 && <p className="text-xs text-muted-foreground text-center">+{preFundTxns.length - 6} more transactions</p>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Payroll */}
           <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
@@ -524,6 +663,15 @@ export default function MonthEndFinancialSummary() {
                 <SummaryRow label="Retainer Invoices" value={fmt(retainerInvoices.reduce((s, r) => s + (Number(r.amount) || 0), 0))} note={`${retainerInvoices.length} outstanding`} variant="credit" />
                 <SummaryRow label="Total Receivables" value={fmt(totalReceivables)} note="Milestones + Retainers" variant="credit-bold" />
                 <SummaryRow label="Subscription Costs (Est.)" value={fmt(totalSubscriptions)} note={`${subscriptions.length} active`} variant="debit" />
+                {preFundTxns.length > 0 || activeFunds.length > 0 ? (
+                  <>
+                    <tr><td colSpan={3} className="pt-3 pb-1 text-xs font-semibold text-violet-700 uppercase tracking-wide">Pre-Fund Activity</td></tr>
+                    <SummaryRow label="Pre-Fund Received" value={fmt(preFundReceived)} note={`${preFundTxns.filter(t=>t.transaction_type==='receipt').length} receipts`} variant="credit" />
+                    <SummaryRow label="Pre-Fund Paid Out" value={fmt(preFundPaid)} note={`${preFundTxns.filter(t=>t.transaction_type==='payment').length} payments`} variant="debit" />
+                    {preFundCommitted > 0 && <SummaryRow label="Pre-Fund Committed" value={fmt(preFundCommitted)} note={`${preFundTxns.filter(t=>t.transaction_type==='commitment').length} commitments`} variant="debit" />}
+                    <SummaryRow label="Pre-Fund Available Balance" value={fmt(preFundAvailable)} note={`${activeFunds.length} active fund${activeFunds.length!==1?'s':''}`} variant={preFundAvailable >= 0 ? 'credit-bold' : 'debit'} />
+                  </>
+                ) : null}
                 <tr className="border-t-2 border-slate-300">
                   <td className="py-3 font-bold text-base">Net Financial Position</td>
                   <td className="py-3 text-right font-bold text-xl" style={{ color: netPosition >= 0 ? '#059669' : '#dc2626' }}>

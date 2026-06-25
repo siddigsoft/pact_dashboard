@@ -23,16 +23,26 @@ export interface FundLinkResult {
  * userId is not provided.
  *
  * Matching priority (highest score wins):
- *  3 — country + project match
- *  2 — project-only match
- *  1 — country-only match
+ *  4 — country + project + cost_category match  (scope = country_project_category)
+ *  3 — country + project match  (scope = country_project OR scope = country_project_category without category)
+ *  2 — project-only match       (scope = project)
+ *  1 — country-only match       (scope = country)
  *  0.5 — any active fund in same currency with sufficient balance
+ *
+ * When scope is country_project_category, a fund with a non-null cost_category that does NOT
+ * match costCategory is excluded (score stays at 3 only if country+project match and cost_category
+ * is null/unset; score is -1 if cost_category is set but mismatches).
  */
 export async function linkPaymentToPreFund(params: {
   amount: number;
   currency: string;
   countryId?: string | null;
   projectId?: string | null;
+  /**
+   * Expense / cost category from the source record (e.g. OCS expense_category).
+   * Required to get a score-4 match on funds scoped to country_project_category.
+   */
+  costCategory?: string | null;
   sourceTable: 'operational_cost_submissions' | 'down_payment_requests';
   sourceId: string;
   reference?: string | null;
@@ -46,7 +56,7 @@ export async function linkPaymentToPreFund(params: {
   receiptUrl?: string | null;
 }): Promise<FundLinkResult> {
   const {
-    amount, currency, countryId, projectId,
+    amount, currency, countryId, projectId, costCategory,
     sourceTable, sourceId, reference, description,
     paymentDate, createdBy, userId, receiptUrl,
   } = params;
@@ -60,7 +70,7 @@ export async function linkPaymentToPreFund(params: {
   // ── Read-only: load and score candidates ────────────────────────────────
   const { data: activeFunds, error: fetchErr } = await (supabase as any)
     .from('pre_fund_requests')
-    .select('id,name,matching_scope,country_id,project_id,available_balance,currency')
+    .select('id,name,matching_scope,country_id,project_id,cost_category,available_balance,currency')
     .eq('status', 'active')
     .eq('currency', currency)
     .lte('start_date', today)
@@ -89,8 +99,27 @@ export async function linkPaymentToPreFund(params: {
   const scored = (activeFunds as any[]).map(f => {
     const scope: string = f.matching_scope ?? 'country';
     let score = 0;
-    if ((scope === 'country_project' || scope === 'country_project_category') &&
-        countryId && projectId && f.country_id === countryId && f.project_id === projectId) {
+
+    const countryProjectMatch = countryId && projectId
+      && f.country_id === countryId && f.project_id === projectId;
+
+    if (scope === 'country_project_category') {
+      if (countryProjectMatch) {
+        const fundCategory: string | null = f.cost_category ?? null;
+        if (fundCategory) {
+          // Fund has a specific category — only match if the payment's category matches exactly
+          if (costCategory && costCategory === fundCategory) {
+            score = 4; // perfect triple-match: country + project + category
+          } else {
+            // Category mismatch — this fund is ineligible for this payment
+            return { fund: f, score: -1, userAllocation: null };
+          }
+        } else {
+          // Fund has no category restriction — treat as a country+project match
+          score = 3;
+        }
+      }
+    } else if (scope === 'country_project' && countryProjectMatch) {
       score = 3;
     } else if (scope === 'project' && projectId && f.project_id === projectId) {
       score = 2;

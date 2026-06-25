@@ -491,6 +491,7 @@ export default function DownPaymentApproval() {
           currency: 'SDG',
           countryId: (req as any).country_id ?? null,
           projectId: (req as any).project_id ?? null,
+          costCategory: (req as any).expense_category ?? (req as any).category ?? null,
           sourceTable: 'down_payment_requests',
           sourceId: req.id,
           reference: (req as any).reference_number ?? null,
