@@ -502,19 +502,38 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setRetryingId(sub.id);
     try {
-      await supabase.from('pre_fund_transactions').insert({
-        pre_fund_request_id: selectedFund.id,
-        transaction_type: 'payment',
-        amount: sub.amount,
-        currency: sub.currency ?? selectedFund.currency,
-        reference: sub.id,
-        description: sub.title ?? 'Linked payment',
-        transaction_date: sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0],
-        source_table: sub._source,
-        source_id: sub.id,
-        reconciled: false,
+      // Fetch GL codes — must be configured before linking a payment (affects balances + GL)
+      const { data: fd } = await supabase
+        .from('pre_fund_requests')
+        .select('gl_liability_account,gl_receipt_account')
+        .eq('id', selectedFund.id)
+        .maybeSingle();
+      if (!fd?.gl_liability_account) throw new Error('GL Liability Account not configured on this fund. Go to Registry → Edit Fund to set GL mappings before linking payments.');
+      if (!fd?.gl_receipt_account)   throw new Error('GL Receipt Account not configured on this fund. Go to Registry → Edit Fund to set the receipt GL account.');
+
+      // Route through the canonical atomic RPC — updates available_balance, paid_amount, and GL
+      const { data: result, error: rpcErr } = await (supabase as any).rpc('add_pre_fund_transaction_rpc', {
+        p_fund_id:          selectedFund.id,
+        p_fund_name:        selectedFund.name,
+        p_transaction_type: 'payment',
+        p_amount:           sub.amount,
+        p_currency:         sub.currency ?? selectedFund.currency,
+        p_reference:        sub.id,
+        p_description:      sub.title ?? 'Linked payment',
+        p_transaction_date: sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0],
+        p_created_by:       currentUser?.id ?? null,
+        p_gl_debit_code:    fd.gl_liability_account,
+        p_gl_credit_code:   fd.gl_receipt_account,
       });
-      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}` });
+      if (rpcErr) throw new Error(rpcErr.message);
+      if (result && result.success === false) throw new Error(result.error ?? 'Link RPC failed.');
+
+      // Back-link the source record so it knows which fund transaction covers it
+      if (sub._source && sub.id) {
+        await (supabase as any).from(sub._source).update({ pre_fund_transaction_id: result?.transaction_id ?? null }).eq('id', sub.id);
+      }
+
+      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${result?.gl_posted ? ' — GL entry posted.' : ''}` });
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
     } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }
@@ -559,19 +578,23 @@ export default function PreFundingReconciliation() {
     if (!selectedFund || csvParsed.length === 0) return;
     setImporting(true);
     try {
+      // CSV import creates bank_statement rows — these are reconciliation helpers ONLY.
+      // They do NOT affect available_balance / paid_amount and do NOT trigger GL postings.
+      // Use type 'bank_statement' (not 'payment') so they are excluded from accounting totals
+      // and the GL bridge never picks them up.
       const rows = csvParsed.map(r => ({
         pre_fund_request_id: selectedFund.id,
-        transaction_type: 'payment',
+        transaction_type: 'bank_statement',
         amount: Math.abs(parseFloat(r.amount)),
         currency: selectedFund.currency,
         reference: r.reference || null,
-        description: r.description || null,
+        description: r.description ? `[Bank Statement] ${r.description}` : '[Bank Statement Import]',
         transaction_date: r.date || new Date().toISOString().split('T')[0],
         reconciled: false,
       }));
       const { error } = await supabase.from('pre_fund_transactions').insert(rows);
       if (error) throw error;
-      toast({ title: `${rows.length} transaction${rows.length !== 1 ? 's' : ''} imported` });
+      toast({ title: `${rows.length} bank statement row${rows.length !== 1 ? 's' : ''} imported for reconciliation matching`, description: 'These are reference-only entries and do not affect fund balances or GL.' });
       setShowCsvImport(false);
       setCsvText('');
       setCsvParsed([]);
@@ -980,8 +1003,10 @@ export default function PreFundingReconciliation() {
     finally { setGeneratingPdf(false); }
   };
 
-  const totalReconciled = transactions.filter(t => t.reconciled).reduce((s, t) => s + t.amount, 0);
-  const totalUnreconciled = transactions.filter(t => !t.reconciled).reduce((s, t) => s + t.amount, 0);
+  // Exclude bank_statement rows (reconciliation-only references) from all financial totals
+  const accountingTxns = transactions.filter(t => t.transaction_type !== 'bank_statement');
+  const totalReconciled = accountingTxns.filter(t => t.reconciled).reduce((s, t) => s + t.amount, 0);
+  const totalUnreconciled = accountingTxns.filter(t => !t.reconciled).reduce((s, t) => s + t.amount, 0);
 
   if (!canAccess) return (
     <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
@@ -1184,9 +1209,9 @@ export default function PreFundingReconciliation() {
                         <TableRow className="bg-muted/30 font-semibold">
                           <TableCell colSpan={4} className="text-xs">Totals</TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {selectedFund.currency} {formatNumber(transactions.reduce((s, t) => s + t.amount, 0), 0)}
+                            {selectedFund.currency} {formatNumber(accountingTxns.reduce((s, t) => s + t.amount, 0), 0)}
                           </TableCell>
-                          <TableCell className="text-center text-xs text-muted-foreground">{transactions.filter(t => t.reconciled).length}/{transactions.length}</TableCell>
+                          <TableCell className="text-center text-xs text-muted-foreground">{accountingTxns.filter(t => t.reconciled).length}/{accountingTxns.length}</TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
