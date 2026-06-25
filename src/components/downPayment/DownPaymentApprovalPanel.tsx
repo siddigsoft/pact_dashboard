@@ -1897,19 +1897,27 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           console.warn('[BatchPay] Some advances failed:', errObj);
 
           if (successCount === 0) {
-            // Check whether every row failed because it was already paid
-            const allAlreadyPaid = errMsgs.length > 0 && errMsgs.every(m =>
-              typeof m === 'string' && (m.includes('fully_paid') || m.includes('partially_paid'))
-            );
-            if (allAlreadyPaid) {
-              // Advances were already paid by a previous attempt — treat as success
+            // Directly verify the actual DB status — covers both:
+            //  • v2 RPC: fails with "Cannot pay: current status is fully_paid"
+            //  • v1 RPC: UPDATE succeeded but wallet INSERT failed → rows ARE paid in DB
+            const { data: statusCheck } = await (supabase as any)
+              .from('down_payment_requests')
+              .select('id,status')
+              .in('id', reqs.map(r => r.id));
+
+            const allActuallyPaid = Array.isArray(statusCheck) &&
+              statusCheck.length > 0 &&
+              statusCheck.every((row: any) => ['fully_paid', 'partially_paid'].includes(row.status));
+
+            if (allActuallyPaid) {
+              // Rows are paid in DB — a previous attempt succeeded on the UPDATE
               toast({
                 title: 'Already Paid / تم الدفع مسبقاً',
-                description: `These ${failCount} advance(s) were already marked as paid in the database. The list will now refresh.`,
+                description: `These ${failCount} advance(s) are already marked as paid in the database. The list will now refresh.`,
               });
               setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
               clearSelection();
-              return; // finally will still run → refreshRequests()
+              return; // finally block still runs → refreshRequests()
             }
             throw new Error(
               `All ${failCount} row(s) failed. Reason: ${errMsgs.join(' | ') || 'unknown — check Supabase logs'}`
