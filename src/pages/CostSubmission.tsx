@@ -8789,8 +8789,8 @@ const CostSubmission = () => {
           }
         }}
       >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
               <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
                 <Wallet className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -8803,7 +8803,7 @@ const CostSubmission = () => {
           </DialogHeader>
 
           {markAsPaidDialog.submission && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 pr-1 -mr-1">
               {/* Submission summary */}
               <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50/60 dark:bg-green-950/20 p-3.5 flex items-start gap-3">
                 <div className="h-9 w-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
@@ -8920,7 +8920,7 @@ const CostSubmission = () => {
             </div>
           )}
 
-          <DialogFooter className="gap-2 pt-1">
+          <DialogFooter className="gap-2 pt-1 flex-shrink-0">
             <Button
               type="button"
               variant="outline"
