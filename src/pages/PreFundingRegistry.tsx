@@ -144,16 +144,18 @@ export default function PreFundingRegistry() {
   const [allocUserSearch, setAllocUserSearch] = useState('');
   const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
   const [dynamicCurrencies, setDynamicCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
+  const [pfSettings, setPfSettings] = useState<{ default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fundsRes, ptRes, projRes, acctRes, ratesRes] = await Promise.all([
+      const [fundsRes, ptRes, projRes, acctRes, ratesRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
         (supabase as any).from('acct_accounts').select('id,code,name').order('code'),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
+        (supabase as any).from('pre_fund_settings').select('default_warning_days,default_renewal_mode,default_threshold_pct').maybeSingle(),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);
@@ -167,6 +169,7 @@ export default function PreFundingRegistry() {
         rows.forEach((r: any) => { seen.add(r.from_currency); seen.add(r.to_currency); });
         setDynamicCurrencies([...seen].sort());
       }
+      if (!settingsRes.error && settingsRes.data) setPfSettings(settingsRes.data as any);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -260,7 +263,12 @@ export default function PreFundingRegistry() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ ...EMPTY_FORM });
+    setForm({
+      ...EMPTY_FORM,
+      warning_days: pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : '',
+      auto_renewal_mode: pfSettings?.default_renewal_mode ?? EMPTY_FORM.auto_renewal_mode,
+      threshold_pct: pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : '',
+    });
     setDialogStep(1);
     setProjectSearch('');
     setShowForm(true);
@@ -279,8 +287,8 @@ export default function PreFundingRegistry() {
       threshold_mode: tMode,
       threshold_pct:    fa.threshold_pct    != null ? String(fa.threshold_pct)    : '',
       threshold_amount: fa.threshold_amount != null ? String(fa.threshold_amount) : '',
-      warning_days: String(f.warning_days ?? 14),
-      auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: String(f.auto_renewal_days_before ?? 7),
+      warning_days: f.warning_days != null ? String(f.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
+      auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: f.auto_renewal_days_before != null ? String(f.auto_renewal_days_before) : '',
       auto_renewal_bypass_approvals: fa.auto_renewal_bypass_approvals ?? false,
       gl_receipt_account:   fa.gl_receipt_account   ?? '',
       gl_liability_account: fa.gl_liability_account ?? '',
@@ -325,7 +333,7 @@ export default function PreFundingRegistry() {
         matching_scope: form.matching_scope,
         threshold_pct:    (form.threshold_mode === 'pct'   || form.threshold_mode === 'both') && form.threshold_pct    ? parseFloat(form.threshold_pct)    : null,
         threshold_amount: (form.threshold_mode === 'fixed' || form.threshold_mode === 'both') && form.threshold_amount ? parseFloat(form.threshold_amount) : null,
-        warning_days: form.warning_days ? parseInt(form.warning_days) : 14,
+        warning_days: form.warning_days ? parseInt(form.warning_days) : (pfSettings?.default_warning_days ?? null),
         auto_renewal_mode: form.auto_renewal_mode,
         auto_renewal_days_before: form.auto_renewal_days_before ? parseInt(form.auto_renewal_days_before) : null,
         auto_renewal_bypass_approvals: form.auto_renewal_bypass_approvals ?? false,

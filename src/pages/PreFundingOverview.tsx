@@ -228,7 +228,7 @@ export default function PreFundingOverview() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {['USD', 'SDG', 'EUR', 'GBP', 'SAR', ...rates.map(r => r.from_currency), ...rates.map(r => r.to_currency)].filter((v, i, a) => a.indexOf(v) === i).map(c => (
+              {[...new Set([...funds.map(f => f.currency), ...rates.map(r => r.from_currency), ...rates.map(r => r.to_currency)])].sort().map(c => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>

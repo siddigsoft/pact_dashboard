@@ -81,7 +81,7 @@ const TXN_COLORS: Record<string, string> = {
   reversal: '#8b5cf6', carry_forward: '#0ea5e9', return: '#06b6d4', adjustment: '#64748b',
 };
 
-const CURRENCIES = ['All', 'USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED'];
+// CURRENCIES built dynamically from loaded data — see state below
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +119,7 @@ export default function PreFundingReport() {
   const [profiles, setProfiles]     = useState<Map<string, string>>(new Map());
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [currencies, setCurrencies] = useState<string[]>(['All']);
 
   // Filters
   const [statusFilter, setStatusFilter]     = useState('all');
@@ -196,6 +197,15 @@ export default function PreFundingReport() {
       setAllocations(enrichedAllocs);
       setProjects((projRes.data as any) ?? []);
       setProfiles(profMap);
+
+      // Build currency list from fund currencies + exchange rate pairs
+      const ratesRes = await (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency');
+      const currSet = new Set<string>();
+      enrichedFunds.forEach(f => { if (f.currency) currSet.add(f.currency); });
+      if (!ratesRes.error) {
+        (ratesRes.data ?? []).forEach((r: any) => { currSet.add(r.from_currency); currSet.add(r.to_currency); });
+      }
+      setCurrencies(['All', ...[...currSet].sort()]);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -661,7 +671,7 @@ export default function PreFundingReport() {
           <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {currencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>

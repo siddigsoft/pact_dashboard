@@ -70,10 +70,10 @@ const DEFAULT_SETTINGS: Settings = {
   bank_api_enabled: false, bank_api_url: null, bank_api_key_hint: null,
   integration_bank_recon: true, integration_cashflow: true, integration_encumbrance: true,
   default_renewal_mode: 'off', default_base_currency: 'USD',
-  default_gl_receipt_account: '1200',
-  default_gl_liability_account: '2400',
-  default_gl_expense_account: '7000',
-  default_gl_cf_account: '2401',
+  default_gl_receipt_account: '',
+  default_gl_liability_account: '',
+  default_gl_expense_account: '',
+  default_gl_cf_account: '',
   default_matching_scope: 'global',
   reconciliation_action_return: true,
   reconciliation_action_carry_fwd: true,
@@ -111,13 +111,17 @@ export default function PreFundingSettings() {
   const [matchDialog, setMatchDialog]  = useState<{ item: UnmatchedItem; funds: { id: string; name: string; currency: string; amount: number }[] } | null>(null);
   const [matchFundId, setMatchFundId]  = useState('');
   const [matchingId, setMatchingId]    = useState<string | null>(null);
+  const [acctAccounts, setAcctAccounts] = useState<{ code: string; name: string }[]>([]);
+  const [settingsCurrencies, setSettingsCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [sRes, ptRes] = await Promise.all([
+      const [sRes, ptRes, acctRes, ratesRes] = await Promise.all([
         supabase.from('pre_fund_settings').select('*').maybeSingle(),
         supabase.from('pre_fund_period_types').select('*').order('display_order'),
+        (supabase as any).from('acct_accounts').select('code,name').order('code'),
+        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
       ]);
       // Surface SELECT errors (e.g. RLS blocking or table missing)
       if (sRes.error && !sRes.error.message.includes('does not exist') && !sRes.error.message.includes('relation')) {
@@ -128,6 +132,13 @@ export default function PreFundingSettings() {
         toast({ title: 'Could not load period types', description: ptRes.error.message, variant: 'destructive' });
       }
       setPeriodTypes((ptRes.data as any) ?? []);
+      if (!acctRes.error) setAcctAccounts((acctRes.data as any) ?? []);
+      if (!ratesRes.error) {
+        const rows: any[] = ratesRes.data ?? [];
+        const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
+        rows.forEach((r: any) => { seen.add(r.from_currency); seen.add(r.to_currency); });
+        setSettingsCurrencies([...seen].sort());
+      }
     } catch (e: any) {
       if (!e?.message?.includes('does not exist') && !e?.message?.includes('relation')) {
         toast({ title: 'Failed to load settings', description: e.message + ' — run pre_funding_migration.sql first', variant: 'destructive' });
@@ -344,7 +355,7 @@ export default function PreFundingSettings() {
                   <Label>Default Display Currency</Label>
                   <Select value={settings.base_currency} onValueChange={v => set('base_currency', v)}>
                     <SelectTrigger data-testid="select-base-currency-setting"><SelectValue /></SelectTrigger>
-                    <SelectContent>{['USD','SDG','EUR','GBP','SAR','AED','JPY','CNY','CHF','CAD','AUD','NOK','SEK'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    <SelectContent>{settingsCurrencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                   </Select>
                   <p className="text-[10px] text-muted-foreground mt-1">Dashboard display currency (display-only, GL always uses fund currency)</p>
                 </div>
@@ -536,27 +547,32 @@ export default function PreFundingSettings() {
               <CardDescription className="text-[11px]">COA codes pre-populated when creating a new fund. Override per-fund in the Registry. The GL Bridge engine resolves these codes to account IDs at posting time.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {acctAccounts.length === 0 && (
+                <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded p-2">
+                  No Chart of Accounts found. Set up accounts in <strong>Accounting → Chart of Accounts</strong> first, then return here to configure GL defaults.
+                </p>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label>Cash / Bank Account (DR on receipt)</Label>
-                  <Input value={settings.default_gl_receipt_account} onChange={e => set('default_gl_receipt_account', e.target.value)} placeholder="1200" data-testid="input-gl-receipt" />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Debited when fund is received from donor</p>
-                </div>
-                <div>
-                  <Label>Pre-Fund Liability Account (CR on receipt / DR on payment)</Label>
-                  <Input value={settings.default_gl_liability_account} onChange={e => set('default_gl_liability_account', e.target.value)} placeholder="2400" data-testid="input-gl-liability" />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Deferred liability cleared as cash is disbursed</p>
-                </div>
-                <div>
-                  <Label>Programme Expense Account (CR on period close variance)</Label>
-                  <Input value={settings.default_gl_expense_account} onChange={e => set('default_gl_expense_account', e.target.value)} placeholder="7000" data-testid="input-gl-expense" />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Recognises residual balance as cost on period close</p>
-                </div>
-                <div>
-                  <Label>Carry-Forward Reserve Account (CR on carry-forward)</Label>
-                  <Input value={settings.default_gl_cf_account} onChange={e => set('default_gl_cf_account', e.target.value)} placeholder="2401" data-testid="input-gl-cf" />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Liability rolled to next period when surplus action = carry_forward</p>
-                </div>
+                {([
+                  { key: 'default_gl_receipt_account',   label: 'Cash / Bank Account (DR on receipt)',                    hint: 'Debited when fund is received from donor',                                  testId: 'select-gl-receipt'   },
+                  { key: 'default_gl_liability_account',  label: 'Pre-Fund Liability Account (CR receipt / DR payment)',   hint: 'Deferred liability cleared as cash is disbursed',                           testId: 'select-gl-liability' },
+                  { key: 'default_gl_expense_account',    label: 'Programme Expense Account (CR on period-close variance)',hint: 'Recognises residual balance as cost on period close',                        testId: 'select-gl-expense'   },
+                  { key: 'default_gl_cf_account',         label: 'Carry-Forward Reserve Account (CR on carry-forward)',    hint: 'Liability rolled to next period when surplus action = carry_forward',        testId: 'select-gl-cf'        },
+                ] as const).map(({ key, label, hint, testId }) => (
+                  <div key={key}>
+                    <Label>{label}</Label>
+                    <Select value={(settings as any)[key] ?? ''} onValueChange={v => set(key, v)}>
+                      <SelectTrigger data-testid={testId}>
+                        <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— None —</SelectItem>
+                        {acctAccounts.map(a => <SelectItem key={a.code} value={a.code}>{a.code} — {a.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>
+                  </div>
+                ))}
               </div>
               <Separator />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
