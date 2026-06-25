@@ -116,7 +116,8 @@ export default function PreFundingRegistry() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const isSuper = isSuperAdmin();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canManage = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canAccess = canManage;
 
   const [funds, setFunds]           = useState<PreFundRequest[]>([]);
   const [periodTypes, setPeriodTypes]= useState<PeriodType[]>([]);
@@ -197,7 +198,7 @@ export default function PreFundingRegistry() {
     setDeleteFundTxnsLoading(true);
     (supabase as any)
       .from('pre_fund_transactions')
-      .select('id,transaction_type,amount,currency,transaction_date,description,reference_number')
+      .select('id,transaction_type,amount,currency,transaction_date,description,reference')
       .eq('pre_fund_request_id', deleteId)
       .order('transaction_date', { ascending: false })
       .then(({ data }: any) => {
@@ -425,8 +426,8 @@ export default function PreFundingRegistry() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    if (!isSuper) {
-      toast({ title: 'Permission denied', description: 'Only Super Admin can delete pre-funds.', variant: 'destructive' });
+    if (!canManage) {
+      toast({ title: 'Permission denied', description: 'Admin or higher required to delete pre-funds.', variant: 'destructive' });
       return;
     }
     if (deleteFundTxns.length > 0) {
@@ -448,7 +449,7 @@ export default function PreFundingRegistry() {
   };
 
   const handleDeleteFundTxn = async (txnId: string) => {
-    if (!isSuper) return;
+    if (!canManage) return;
     setDeletingTxnId(txnId);
     try {
       const { error: e } = await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
@@ -946,13 +947,13 @@ export default function PreFundingRegistry() {
                           <Users className="h-3.5 w-3.5" />Users
                         </Button>
                       )}
-                      {isSuper && (
-                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund (Super Admin)" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
+                      {canManage && (
+                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {isSuper && (
-                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete fund (Super Admin only)" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}>
+                      {canManage && (
+                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete fund" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}

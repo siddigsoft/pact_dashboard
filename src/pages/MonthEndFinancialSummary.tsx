@@ -88,7 +88,7 @@ interface PreFundSummary {
   id: string;
   name: string;
   available_balance: number | null;
-  total_amount: number | null;
+  amount: number | null;
   paid_amount: number | null;
   currency: string | null;
   status: string | null;
@@ -241,7 +241,7 @@ export default function MonthEndFinancialSummary() {
       try {
         const { data, error } = await (supabase as any)
           .from('pre_fund_requests')
-          .select('id, name, available_balance, total_amount, paid_amount, currency, status')
+          .select('id, name, available_balance, amount, paid_amount, currency, status')
           .eq('status', 'active')
           .lte('start_date', format(periodEnd, 'yyyy-MM-dd'))
           .gte('end_date', format(periodStart, 'yyyy-MM-dd'));
