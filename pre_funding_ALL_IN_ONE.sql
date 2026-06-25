@@ -1501,6 +1501,9 @@ CREATE INDEX IF NOT EXISTS idx_pf_alloc_user ON pre_fund_allocations(user_id);
 
 ALTER TABLE pre_fund_allocations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "pf_alloc_admin_all"   ON pre_fund_allocations;
+DROP POLICY IF EXISTS "pf_alloc_self_select" ON pre_fund_allocations;
+
 -- Finance/admin: full access
 CREATE POLICY "pf_alloc_admin_all" ON pre_fund_allocations FOR ALL TO authenticated
   USING (
