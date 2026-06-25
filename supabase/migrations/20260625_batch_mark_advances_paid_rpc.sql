@@ -1,11 +1,10 @@
 -- =============================================================================
--- batch_mark_advances_paid — SECURITY DEFINER RPC  (v3)
--- Run this in Supabase SQL Editor (safe to re-run — uses CREATE OR REPLACE).
+-- batch_mark_advances_paid — SECURITY DEFINER RPC  (v4)
+-- Run this in Supabase SQL Editor AFTER running:
+--   20260625_fix_notifications_title_en.sql
 --
--- v3 fix: the status-change UPDATE fires a notification trigger that inserts
--- into "notifications" but leaves title_en NULL → 23502 constraint violation.
--- We bypass ALL triggers for the UPDATE by switching session_replication_role
--- to 'replica' (SECURITY DEFINER / postgres owner has this privilege).
+-- Safe to re-run — uses CREATE OR REPLACE.
+-- No policy DDL in this file (avoids deadlock with concurrent sessions).
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.batch_mark_advances_paid(
@@ -31,16 +30,9 @@ DECLARE
   v_fail_count    integer     := 0;
   v_errors        jsonb       := '{}';
 BEGIN
-  -- ── Disable triggers for this transaction ─────────────────────────────────
-  -- The notification trigger on down_payment_requests fails with a NOT NULL
-  -- violation on notifications.title_en when status → fully_paid.
-  -- session_replication_role='replica' disables all non-internal triggers
-  -- for the duration of this transaction (LOCAL = auto-reset on commit).
-  PERFORM set_config('session_replication_role', 'replica', true);
-
   FOREACH v_request_id IN ARRAY p_request_ids LOOP
     BEGIN
-      -- ── Fetch the row ────────────────────────────────────────────────────
+      -- Fetch the row
       SELECT id,
              status,
              requested_amount,
@@ -69,7 +61,7 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- ── Calculate amounts ────────────────────────────────────────────────
+      -- Calculate amounts
       v_approved_amt := v_req.resolved_approved_amt;
 
       IF p_partial_pct IS NOT NULL AND p_partial_pct > 0 AND p_partial_pct < 100 THEN
@@ -82,7 +74,7 @@ BEGIN
         v_new_status := 'fully_paid';
       END IF;
 
-      -- ── Update the row (triggers are disabled for this transaction) ──────
+      -- Update the row
       UPDATE public.down_payment_requests
       SET
         status                    = v_new_status,
@@ -117,19 +109,3 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.batch_mark_advances_paid(uuid[], text, text, numeric)
   TO authenticated;
-
--- ── Ensure RLS admin-all policy covers all super_admin role variants ───────────
-DROP POLICY IF EXISTS "down_payment_requests_admin_all" ON public.down_payment_requests;
-CREATE POLICY "down_payment_requests_admin_all" ON public.down_payment_requests
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-        AND p.role IN (
-          'admin', 'Admin',
-          'financialAdmin', 'FinancialAdmin',
-          'super_admin', 'SuperAdmin', 'superAdmin', 'Super Admin',
-          'ict', 'ICT'
-        )
-    )
-  );
