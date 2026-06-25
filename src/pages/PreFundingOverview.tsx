@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -41,7 +41,7 @@ interface PreFundRow {
   ending_soon_alert: boolean;
 }
 
-interface ExchangeRate { currency: string; rate_to_usd: number }
+interface ExchangeRate { from_currency: string; to_currency: string; rate: number; effective_date: string }
 interface Settings { base_currency: string }
 
 const STATUS_CFG: Record<string, { label: string; color: string; badgeCls: string }> = {
@@ -117,12 +117,13 @@ export default function PreFundingOverview() {
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
-        supabase.from('acct_exchange_rates' as any).select('currency,rate_to_usd').eq('is_active', true),
+        supabase.from('acct_exchange_rates' as any).select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
       setFunds((fundsRes.data as any) ?? []);
-      setRates((ratesRes.data as any) ?? []);
+      if (ratesRes.error && !ratesRes.error.message.includes('does not exist')) throw ratesRes.error;
+      setRates((ratesRes.data as ExchangeRate[]) ?? []);
       if (settingsRes.data) {
         const s = settingsRes.data as any;
         setSettings({ base_currency: s.base_currency ?? 'USD' });
@@ -143,14 +144,47 @@ export default function PreFundingOverview() {
     setRefreshing(false);
   };
 
-  const rateMap = new Map<string, number>(rates.map(r => [r.currency, r.rate_to_usd]));
+  // Build latest-rate map from acct_exchange_rates (from_currency→to_currency pairs).
+  // Rows are ordered effective_date DESC so first-seen per pair is the most recent.
+  const latestRateMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rates) {
+      const key = `${r.from_currency}→${r.to_currency}`;
+      if (!m.has(key)) m.set(key, r.rate);
+    }
+    return m;
+  }, [rates]);
+
+  function getConversionRate(from: string, to: string): number | null {
+    if (from === to) return 1;
+    const direct = latestRateMap.get(`${from}→${to}`);
+    if (direct !== undefined) return direct;
+    const inverse = latestRateMap.get(`${to}→${from}`);
+    if (inverse !== undefined) return 1 / inverse;
+    // Via USD bridge
+    const fromToUSD = from === 'USD' ? 1 : latestRateMap.get(`${from}→USD`) ?? (latestRateMap.has(`USD→${from}`) ? 1 / latestRateMap.get(`USD→${from}`)! : null);
+    const usdToBase = to === 'USD' ? 1 : latestRateMap.get(`USD→${to}`) ?? (latestRateMap.has(`${to}→USD`) ? 1 / latestRateMap.get(`${to}→USD`)! : null);
+    if (fromToUSD !== null && usdToBase !== null) return fromToUSD! * usdToBase!;
+    return null;
+  }
 
   function toBase(amount: number, currency: string): number {
     if (currency === baseCurrency) return amount;
-    const toUSD = rateMap.get(currency) ?? 1;
-    const fromUSD = rateMap.get(baseCurrency) ?? 1;
-    return (amount * toUSD) / fromUSD;
+    const r = getConversionRate(currency, baseCurrency);
+    if (r === null) return 0; // missing rate: treat as 0 (not 1:1) to avoid misleading totals
+    return amount * r;
   }
+
+  const missingRateCurrencies = useMemo(() => {
+    const missing = new Set<string>();
+    for (const f of funds) {
+      if (f.currency !== baseCurrency && getConversionRate(f.currency, baseCurrency) === null) {
+        missing.add(f.currency);
+      }
+    }
+    return [...missing];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funds, latestRateMap, baseCurrency]);
 
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));
@@ -194,7 +228,7 @@ export default function PreFundingOverview() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {['USD', 'SDG', 'EUR', 'GBP', 'SAR', ...rates.map(r => r.currency)].filter((v, i, a) => a.indexOf(v) === i).map(c => (
+              {['USD', 'SDG', 'EUR', 'GBP', 'SAR', ...rates.map(r => r.from_currency), ...rates.map(r => r.to_currency)].filter((v, i, a) => a.indexOf(v) === i).map(c => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>
@@ -215,15 +249,16 @@ export default function PreFundingOverview() {
         </Alert>
       )}
 
-      {!loading && !error && rates.length === 0 && baseCurrency !== 'USD' && (
+      {!loading && !error && missingRateCurrencies.length > 0 && (
         <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-700 dark:text-amber-400">
-            No exchange rates found for <strong>{baseCurrency}</strong> — totals are shown at 1:1. Go to{' '}
-            <button className="underline font-medium hover:no-underline" onClick={() => navigate('/accounting?tab=exchange-rates')}>
-              Accounting → Exchange Rates
-            </button>{' '}
-            to add rates, or switch display currency to USD.
+            No exchange rate found for{' '}
+            <strong>{missingRateCurrencies.join(', ')}</strong> → {baseCurrency}.
+            Funds in these currencies are excluded from aggregate totals to avoid incorrect figures.{' '}
+            <button className="underline font-medium hover:no-underline" onClick={() => navigate('/accounting/multi-currency')}>
+              Add rates in Accounting → Multi-Currency
+            </button>.
           </AlertDescription>
         </Alert>
       )}
