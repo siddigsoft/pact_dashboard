@@ -561,12 +561,15 @@ export default function PreFundingSettings() {
                 ] as const).map(({ key, label, hint, testId }) => (
                   <div key={key}>
                     <Label>{label}</Label>
-                    <Select value={(settings as any)[key] ?? ''} onValueChange={v => set(key, v)}>
+                    <Select
+                      value={(settings as any)[key] || '__none__'}
+                      onValueChange={v => set(key, v === '__none__' ? '' : v)}
+                    >
                       <SelectTrigger data-testid={testId}>
                         <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts'} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
+                        <SelectItem value="__none__">— None —</SelectItem>
                         {acctAccounts.map(a => <SelectItem key={a.code} value={a.code}>{a.code} — {a.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
