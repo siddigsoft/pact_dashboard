@@ -455,46 +455,108 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   currentUserId: string; onUploaded: () => void;
 }) {
   const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  const fileRef   = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  // Each entry tracks the File plus its relative path (populated for folder uploads)
+  const [files, setFiles] = useState<Array<{ file: File; relativePath: string }>>([]);
   const [secLevel, setSecLevel] = useState<SecurityLevel>('internal');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  const addFiles = (raw: FileList | File[]) => {
+    const entries = Array.from(raw).map(f => ({
+      file: f,
+      relativePath: (f as any).webkitRelativePath || f.name,
+    }));
+    setFiles(prev => [...prev, ...entries]);
+  };
+
   async function handleUpload() {
     if (files.length === 0) return;
     setUploading(true); setProgress(0);
-    // Only paths whose DB insert NEVER completed — these are the true orphans to roll back
     const pendingOrphanPaths: string[] = [];
+
     try {
+      // ── Folder-upload: reconstruct subfolder hierarchy in workspace_folders ──
+      const isFolderUpload = files.some(item => item.relativePath.includes('/'));
+      // path-segment → workspace_folders DB id
+      const folderIdMap: Record<string, string> = {};
+
+      if (isFolderUpload) {
+        // Collect every unique parent-folder path (not the file itself)
+        const folderPaths = new Set<string>();
+        for (const item of files) {
+          const parts = item.relativePath.split('/');
+          for (let depth = 1; depth < parts.length; depth++) {
+            folderPaths.add(parts.slice(0, depth).join('/'));
+          }
+        }
+        // Create shallowest folders first so parent IDs exist when children need them
+        const sorted = Array.from(folderPaths).sort(
+          (a, b) => a.split('/').length - b.split('/').length
+        );
+        for (const folderPath of sorted) {
+          const parts      = folderPath.split('/');
+          const name       = parts[parts.length - 1];
+          const parentPath = parts.slice(0, -1).join('/');
+          const parentId   = parentPath ? (folderIdMap[parentPath] ?? null) : folderId;
+          const { data: created, error: folderErr } = await (supabase as any)
+            .from('workspace_folders')
+            .insert({
+              name, parent_folder_id: parentId,
+              security_level: secLevel, created_by: currentUserId,
+              is_system_folder: false, archived: false,
+            })
+            .select('id')
+            .single();
+          if (folderErr) throw folderErr;
+          folderIdMap[folderPath] = created.id;
+        }
+      }
+
+      // ── Upload each file into the correct folder ──────────────────────────────
       for (let i = 0; i < files.length; i++) {
-        const f = files[i];
+        const { file: f, relativePath } = files[i];
+
+        // Determine target folder: for folder uploads, resolve from path map
+        let targetFolderId: string | null = folderId;
+        if (isFolderUpload) {
+          const parts      = relativePath.split('/');
+          const parentPath = parts.slice(0, -1).join('/');
+          targetFolderId   = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
+        }
+
         const path = `${currentUserId}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const { error: uploadErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
+        const { error: uploadErr } = await supabase.storage
+          .from('workspace-files').upload(path, f, { upsert: false });
         if (uploadErr) throw uploadErr;
-        // Track as orphan until DB insert succeeds
         pendingOrphanPaths.push(path);
+
         const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
         const { error: dbErr } = await supabase.from('workspace_files').insert({
-          folder_id: folderId, name: f.name, description: description || null,
+          folder_id: targetFolderId, name: f.name, description: description || null,
           storage_path: path, public_url: urlData?.publicUrl ?? null,
           file_size: f.size, mime_type: f.type, extension: ext,
           security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
           tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         });
         if (dbErr) throw dbErr;
-        // DB insert committed — no longer an orphan
         const idx = pendingOrphanPaths.indexOf(path);
         if (idx >= 0) pendingOrphanPaths.splice(idx, 1);
         setProgress(Math.round(((i + 1) / files.length) * 100));
       }
-      toast({ title: `${files.length} file${files.length > 1 ? 's' : ''} uploaded`, description: `Security: ${SEC_CFG[secLevel].label}` });
+
+      toast({
+        title: `${files.length} file${files.length !== 1 ? 's' : ''} uploaded`,
+        description: isFolderUpload
+          ? `Folder structure recreated · Security: ${SEC_CFG[secLevel].label}`
+          : `Security: ${SEC_CFG[secLevel].label}`,
+      });
       onUploaded(); onClose(); setFiles([]); setDescription(''); setTags('');
     } catch (e: any) {
-      // Rollback: remove only storage objects whose DB insert never completed
       if (pendingOrphanPaths.length > 0) {
         try { await supabase.storage.from('workspace-files').remove(pendingOrphanPaths); } catch { /* best effort */ }
       }
@@ -502,13 +564,15 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
     } finally { setUploading(false); }
   }
 
+  const isFolderMode = files.some(item => item.relativePath.includes('/'));
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-[#1D3461]" />
-            Upload Files
+            Upload Files or Folders
           </DialogTitle>
           <p className="text-xs text-muted-foreground">to {folderName || 'Root'}</p>
         </DialogHeader>
@@ -516,26 +580,65 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
         <div className="space-y-4">
           {/* Drop zone */}
           <div
-            onClick={() => fileRef.current?.click()}
-            className="border-2 border-dashed border-[#1D3461]/30 hover:border-[#1D3461]/60 rounded-2xl p-8 text-center cursor-pointer transition-colors"
+            className="border-2 border-dashed border-[#1D3461]/30 hover:border-[#1D3461]/60 rounded-2xl p-6 text-center transition-colors"
             onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); setFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]); }}
+            onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
           >
             <Upload className="h-8 w-8 text-[#1D3461]/40 mx-auto mb-2" />
-            <p className="text-sm font-medium text-[#1D3461]">Click or drag files here</p>
-            <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel, PowerPoint, Images, ZIP — up to 50 MB</p>
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])} />
+            <p className="text-sm font-medium text-[#1D3461] mb-3">Drag files or a folder here</p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1D3461]/30 hover:bg-[#1D3461]/5 text-[#1D3461] transition-colors"
+                data-testid="button-pick-files"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Choose Files
+              </button>
+              <button
+                type="button"
+                onClick={() => folderRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1D3461]/30 hover:bg-[#1D3461]/5 text-[#1D3461] transition-colors"
+                data-testid="button-pick-folder"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                Choose Folder
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">PDF, Word, Excel, PowerPoint, Images, ZIP — up to 50 MB each</p>
+            {/* Files input */}
+            <input
+              ref={fileRef} type="file" multiple className="hidden"
+              onChange={e => addFiles(e.target.files ?? [])}
+            />
+            {/* Folder input — webkitdirectory preserves relative paths */}
+            <input
+              ref={folderRef} type="file" multiple className="hidden"
+              // @ts-ignore — webkitdirectory is a non-standard but universally supported attribute
+              webkitdirectory=""
+              onChange={e => addFiles(e.target.files ?? [])}
+            />
           </div>
 
+          {/* File list */}
           {files.length > 0 && (
-            <div className="space-y-1.5 max-h-32 overflow-y-auto">
-              {files.map((f, i) => {
-                const Icon = getFileIcon(f.type);
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {isFolderMode && (
+                <p className="text-[11px] text-[#1D3461] font-medium flex items-center gap-1 mb-1">
+                  <FolderOpen className="h-3 w-3" />
+                  Folder upload — subfolders will be created automatically
+                </p>
+              )}
+              {files.map((item, i) => {
+                const Icon = getFileIcon(item.file.type);
                 return (
                   <div key={i} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
                     <Icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="text-xs flex-1 truncate">{f.name}</span>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtSize(f.size)}</span>
+                    <span className="text-xs flex-1 truncate" title={item.relativePath}>
+                      {isFolderMode ? item.relativePath : item.file.name}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtSize(item.file.size)}</span>
                     <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500">
                       <X className="h-3 w-3" />
                     </button>
@@ -586,7 +689,9 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           <Button variant="outline" size="sm" onClick={onClose} disabled={uploading}>Cancel</Button>
           <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041]" onClick={handleUpload} disabled={uploading || files.length === 0}>
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
-            Upload {files.length > 0 ? files.length : ''} File{files.length !== 1 ? 's' : ''}
+            {isFolderMode
+              ? `Upload Folder (${files.length} file${files.length !== 1 ? 's' : ''})`
+              : `Upload ${files.length > 0 ? files.length : ''} File${files.length !== 1 ? 's' : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>
