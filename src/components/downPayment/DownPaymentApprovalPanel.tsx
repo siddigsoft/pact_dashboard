@@ -1834,7 +1834,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       const now = new Date().toISOString();
       const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
 
-      // Call SECURITY DEFINER RPC — bypasses RLS and trigger issues
+      // ── Try SECURITY DEFINER RPC first (bypasses RLS / trigger issues) ─────
       const { data: rpcData, error: rpcError } = await supabase.rpc('batch_mark_advances_paid', {
         p_request_ids: reqs.map(r => r.id),
         p_proof_url:   proofUrl,
@@ -1842,15 +1842,53 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         p_partial_pct: isPartial ? partialPercent : null,
       });
 
-      if (rpcError) {
+      let successCount = 0;
+      let failCount    = 0;
+
+      const rpcMissing = rpcError && (
+        rpcError.code === 'PGRST202' ||
+        (rpcError.message ?? '').toLowerCase().includes('could not find the function') ||
+        (rpcError.message ?? '').toLowerCase().includes('does not exist')
+      );
+
+      if (rpcError && !rpcMissing) {
         console.error('[BatchPay] RPC error:', rpcError);
         throw new Error(rpcError.message || 'Batch payment RPC failed');
       }
 
-      const successCount: number = (rpcData as any)?.success_count ?? 0;
-      const failCount:    number = (rpcData as any)?.fail_count    ?? 0;
-      if (failCount > 0) {
-        console.warn('[BatchPay] Some advances failed:', (rpcData as any)?.errors);
+      if (rpcMissing) {
+        // ── Fallback: direct row-by-row updates (works before migration is applied) ─
+        console.warn('[BatchPay] RPC not deployed yet — using direct updates as fallback');
+        const now = new Date().toISOString();
+        for (const req of reqs) {
+          const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
+          const paidAmt     = isPartial && partialPercent ? (approvedAmt * partialPercent / 100) : approvedAmt;
+          const newStatus   = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'paid';
+          const { error: rowErr } = await (supabase as any)
+            .from('down_payment_requests')
+            .update({
+              status:            newStatus,
+              payment_proof_url: proofUrl,
+              payment_notes:     notes.trim() || null,
+              paid_at:           now,
+              amount_paid:       paidAmt,
+            })
+            .eq('id', req.id);
+          if (rowErr) {
+            failCount++;
+            console.error('[BatchPay] Fallback row update failed:', req.id, rowErr);
+          } else {
+            successCount++;
+          }
+        }
+        if (failCount > 0 && successCount === 0) {
+          throw new Error(`All ${failCount} updates failed. Apply the batch_mark_advances_paid SQL migration in Supabase and retry.`);
+        }
+      } else {
+        // ── RPC succeeded ────────────────────────────────────────────────────────
+        successCount = (rpcData as any)?.success_count ?? 0;
+        failCount    = (rpcData as any)?.fail_count    ?? 0;
+        if (failCount > 0) console.warn('[BatchPay] Some advances failed:', (rpcData as any)?.errors);
       }
 
       // Consolidated notifications — one per requester
