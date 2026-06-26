@@ -173,7 +173,7 @@ export async function linkPaymentToPreFund(params: {
   const best = scored[0];
   const bestFund = best.fund;
 
-  // ── Atomic write via RPC (preferred — includes GL posting) ──────────────
+  // ── Atomic write via RPC (includes balance deduction, allocation deduction, GL posting) ──
   const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
     'link_payment_atomically_rpc', {
       p_fund_id:      bestFund.id,
@@ -190,96 +190,30 @@ export async function linkPaymentToPreFund(params: {
     }
   );
 
-  // ── Direct DB fallback (no GL posting — used when RPC not yet deployed) ──
-  if (rpcErr || (rpcResult && rpcResult.success === false)) {
-    return await _directLinkFallback({
-      fund: bestFund, amount, currency, sourceTable, sourceId,
-      reference, description, today, createdBy, submitterId,
-      receiptUrl, userAllocation: best.userAllocation,
-    });
+  if (rpcErr) {
+    // PGRST202 = PostgREST "function not found" — SQL migration not yet run
+    const isNotDeployed =
+      (rpcErr as any).code === 'PGRST202' ||
+      String(rpcErr.message).toLowerCase().includes('could not find the function') ||
+      String(rpcErr.message).toLowerCase().includes('does not exist');
+    if (isNotDeployed) {
+      return {
+        linked: false,
+        message:
+          'Pre-funding SQL not yet deployed. Run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor to enable automatic payment linking.',
+      };
+    }
+    return { linked: false, message: `Linkage RPC failed: ${rpcErr.message}` };
+  }
+  if (rpcResult && rpcResult.success === false) {
+    return { linked: false, message: rpcResult.error ?? 'Linkage failed.' };
   }
 
-  // Allocation deduction is inside link_payment_atomically_rpc — same DB transaction.
   return {
     linked: true,
     fundId: bestFund.id,
     fundName: bestFund.name,
     transactionId: rpcResult?.transaction_id,
     message: `Linked to "${bestFund.name}"`,
-  };
-}
-
-/** Direct-write fallback used when the atomic RPC is not yet deployed to Supabase. */
-async function _directLinkFallback(p: {
-  fund: any; amount: number; currency: string;
-  sourceTable: string; sourceId: string;
-  reference?: string | null; description?: string | null;
-  today: string; createdBy?: string | null; submitterId?: string | null;
-  receiptUrl?: string | null; userAllocation: any;
-}): Promise<FundLinkResult> {
-  const { fund, amount, currency, sourceTable, sourceId,
-    reference, description, today, createdBy, submitterId,
-    receiptUrl, userAllocation } = p;
-
-  // 1. Insert pre_fund_transactions row
-  const { data: txnRow, error: txnErr } = await (supabase as any)
-    .from('pre_fund_transactions')
-    .insert({
-      pre_fund_request_id: fund.id,
-      transaction_type:    'payment',
-      amount,
-      currency,
-      reference:           reference ?? null,
-      description:         description ?? null,
-      transaction_date:    today,
-      created_by:          createdBy ?? null,
-      user_id:             submitterId ?? null,
-      source_table:        sourceTable,
-      source_id:           sourceId,
-      receipt_url:         receiptUrl ?? null,
-      reconciled:          false,
-    })
-    .select('id')
-    .single();
-
-  if (txnErr) return { linked: false, message: `Fallback insert failed: ${txnErr.message}` };
-
-  const transactionId: string = txnRow?.id;
-
-  // 2. Deduct from fund balance
-  const { error: balErr } = await (supabase as any)
-    .from('pre_fund_requests')
-    .update({
-      available_balance: fund.available_balance - amount,
-      paid_amount:       (fund.paid_amount ?? 0) + amount,
-    })
-    .eq('id', fund.id);
-
-  if (balErr) {
-    // Best-effort cleanup of the orphaned transaction row
-    await (supabase as any).from('pre_fund_transactions').delete().eq('id', transactionId);
-    return { linked: false, message: `Balance update failed: ${balErr.message}` };
-  }
-
-  // 3. Back-link the source record
-  await (supabase as any)
-    .from(sourceTable)
-    .update({ pre_fund_transaction_id: transactionId })
-    .eq('id', sourceId);
-
-  // 4. Deduct from submitter's personal allocation (if allocated)
-  if (userAllocation) {
-    await (supabase as any)
-      .from('pre_fund_allocations')
-      .update({ spent_amount: Number(userAllocation.spent_amount) + amount })
-      .eq('id', userAllocation.id);
-  }
-
-  return {
-    linked: true,
-    fundId:        fund.id,
-    fundName:      fund.name,
-    transactionId,
-    message:       `Linked to "${fund.name}" (direct write — GL posting pending SQL deployment)`,
   };
 }

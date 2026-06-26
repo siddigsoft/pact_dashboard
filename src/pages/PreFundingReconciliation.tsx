@@ -19,7 +19,7 @@ import {
   RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, Lock,
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
   Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
-  ExternalLink, ChevronDown, History, Trash2, Filter,
+  ExternalLink, ChevronDown, History, Trash2, Filter, AlertCircle,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -473,6 +473,8 @@ export default function PreFundingReconciliation() {
   const [retryingId, setRetryingId]           = useState<string | null>(null);
   const [unlinkedFrom, setUnlinkedFrom]       = useState('');
   const [unlinkedTo, setUnlinkedTo]           = useState('');
+  /** True when the link RPC is missing from the DB — prompts Finance to run the SQL migration */
+  const [rpcMissing, setRpcMissing]           = useState(false);
   const [openCategories, setOpenCategories]   = useState<Record<string, boolean>>({ ocs: true, dp: true, ef: true });
 
   // Unlink / remove a linked transaction
@@ -608,7 +610,7 @@ export default function PreFundingReconciliation() {
         .eq('id', selectedFund.id)
         .maybeSingle();
 
-      // Try canonical atomic RPC first (includes GL posting)
+      // Route through the canonical atomic RPC — updates available_balance, paid_amount, and GL
       const txnDate = sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0];
       const { data: result, error: rpcErr } = await (supabase as any).rpc('add_pre_fund_transaction_rpc', {
         p_fund_id:          selectedFund.id,
@@ -623,49 +625,26 @@ export default function PreFundingReconciliation() {
         p_gl_debit_code:    fd?.gl_liability_account ?? null,
         p_gl_credit_code:   fd?.gl_receipt_account ?? null,
       });
-
-      let transactionId: string | null = result?.transaction_id ?? null;
-      let glPosted = result?.gl_posted ?? false;
-
-      // Direct DB fallback when RPC not yet deployed
-      if (rpcErr || (result && result.success === false)) {
-        const { data: txnRow, error: insErr } = await (supabase as any)
-          .from('pre_fund_transactions')
-          .insert({
-            pre_fund_request_id: selectedFund.id,
-            transaction_type:    'payment',
-            amount:              sub.amount,
-            currency:            sub.currency ?? selectedFund.currency,
-            reference:           sub.id,
-            description:         sub.title ?? 'Linked payment',
-            transaction_date:    txnDate,
-            created_by:          currentUser?.id ?? null,
-            source_table:        sub._source ?? null,
-            source_id:           sub.id ?? null,
-            reconciled:          false,
-          })
-          .select('id')
-          .single();
-        if (insErr) throw new Error(insErr.message);
-        transactionId = txnRow?.id ?? null;
-
-        // Update fund balance
-        const { error: balErr } = await supabase
-          .from('pre_fund_requests')
-          .update({
-            available_balance: selectedFund.available_balance - sub.amount,
-            paid_amount:       (selectedFund.paid_amount ?? 0) + sub.amount,
-          })
-          .eq('id', selectedFund.id);
-        if (balErr) throw new Error(balErr.message);
+      if (rpcErr) {
+        const isNotDeployed =
+          (rpcErr as any).code === 'PGRST202' ||
+          String(rpcErr.message).toLowerCase().includes('could not find the function') ||
+          String(rpcErr.message).toLowerCase().includes('does not exist');
+        if (isNotDeployed) setRpcMissing(true);
+        throw new Error(
+          isNotDeployed
+            ? 'SQL migration required — run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor.'
+            : rpcErr.message
+        );
       }
+      if (result && result.success === false) throw new Error(result.error ?? 'Link RPC failed.');
 
       // Back-link the source record so it knows which fund transaction covers it
       if (sub._source && sub.id) {
-        await (supabase as any).from(sub._source).update({ pre_fund_transaction_id: transactionId }).eq('id', sub.id);
+        await (supabase as any).from(sub._source).update({ pre_fund_transaction_id: result?.transaction_id ?? null }).eq('id', sub.id);
       }
 
-      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${glPosted ? ' — GL entry posted.' : ''}` });
+      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${result?.gl_posted ? ' — GL entry posted.' : ''}` });
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
     } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }
@@ -1411,6 +1390,17 @@ export default function PreFundingReconciliation() {
                   </button>
                   {showUnlinked && (
                     <div>
+                      {/* SQL migration required banner */}
+                      {rpcMissing && (
+                        <div className="flex items-start gap-2 px-4 py-3 bg-rose-50 dark:bg-rose-950/30 border-b border-rose-200 dark:border-rose-800">
+                          <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                          <div className="text-xs text-rose-700 dark:text-rose-300 leading-relaxed">
+                            <strong>SQL migration required</strong> — the pre-funding database functions are not yet deployed.
+                            Run <code className="font-mono bg-rose-100 dark:bg-rose-900/40 px-1 rounded">pre_funding_atomic_rpcs.sql</code> in the{' '}
+                            <strong>Supabase SQL Editor</strong> to enable linking. Payments shown below are waiting to be linked.
+                          </div>
+                        </div>
+                      )}
                       {/* Date range filter */}
                       <div className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b flex-wrap">
                         <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
