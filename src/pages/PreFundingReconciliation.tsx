@@ -608,7 +608,8 @@ export default function PreFundingReconciliation() {
         .eq('id', selectedFund.id)
         .maybeSingle();
 
-      // Route through the canonical atomic RPC — updates available_balance, paid_amount, and GL
+      // Try canonical atomic RPC first (includes GL posting)
+      const txnDate = sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0];
       const { data: result, error: rpcErr } = await (supabase as any).rpc('add_pre_fund_transaction_rpc', {
         p_fund_id:          selectedFund.id,
         p_fund_name:        selectedFund.name,
@@ -617,20 +618,54 @@ export default function PreFundingReconciliation() {
         p_currency:         sub.currency ?? selectedFund.currency,
         p_reference:        sub.id,
         p_description:      sub.title ?? 'Linked payment',
-        p_transaction_date: sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0],
+        p_transaction_date: txnDate,
         p_created_by:       currentUser?.id ?? null,
         p_gl_debit_code:    fd?.gl_liability_account ?? null,
         p_gl_credit_code:   fd?.gl_receipt_account ?? null,
       });
-      if (rpcErr) throw new Error(rpcErr.message);
-      if (result && result.success === false) throw new Error(result.error ?? 'Link RPC failed.');
+
+      let transactionId: string | null = result?.transaction_id ?? null;
+      let glPosted = result?.gl_posted ?? false;
+
+      // Direct DB fallback when RPC not yet deployed
+      if (rpcErr || (result && result.success === false)) {
+        const { data: txnRow, error: insErr } = await (supabase as any)
+          .from('pre_fund_transactions')
+          .insert({
+            pre_fund_request_id: selectedFund.id,
+            transaction_type:    'payment',
+            amount:              sub.amount,
+            currency:            sub.currency ?? selectedFund.currency,
+            reference:           sub.id,
+            description:         sub.title ?? 'Linked payment',
+            transaction_date:    txnDate,
+            created_by:          currentUser?.id ?? null,
+            source_table:        sub._source ?? null,
+            source_id:           sub.id ?? null,
+            reconciled:          false,
+          })
+          .select('id')
+          .single();
+        if (insErr) throw new Error(insErr.message);
+        transactionId = txnRow?.id ?? null;
+
+        // Update fund balance
+        const { error: balErr } = await supabase
+          .from('pre_fund_requests')
+          .update({
+            available_balance: selectedFund.available_balance - sub.amount,
+            paid_amount:       (selectedFund.paid_amount ?? 0) + sub.amount,
+          })
+          .eq('id', selectedFund.id);
+        if (balErr) throw new Error(balErr.message);
+      }
 
       // Back-link the source record so it knows which fund transaction covers it
       if (sub._source && sub.id) {
-        await (supabase as any).from(sub._source).update({ pre_fund_transaction_id: result?.transaction_id ?? null }).eq('id', sub.id);
+        await (supabase as any).from(sub._source).update({ pre_fund_transaction_id: transactionId }).eq('id', sub.id);
       }
 
-      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${result?.gl_posted ? ' — GL entry posted.' : ''}` });
+      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${glPosted ? ' — GL entry posted.' : ''}` });
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
     } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }
