@@ -491,15 +491,16 @@ export default function DownPaymentApproval() {
           amount: req.approvedAmount ?? req.requestedAmount,
           currency: 'SDG',
           countryId: (req as any).country_id ?? null,
-          projectId: (req as any).project_id ?? null,
-          costCategory: (req as any).expense_category ?? (req as any).category ?? null,
+          projectId: null,
+          costCategory: null,
           sourceTable: 'down_payment_requests',
           sourceId: req.id,
-          reference: (req as any).reference_number ?? null,
-          description: (req as any).purpose ?? (req as any).description ?? null,
-          paymentDate: now,
+          reference: null,
+          description: req.justification ?? `Down-payment: ${req.siteName ?? req.id}`,
+          paymentDate: (req as any).fully_paid_at ?? now,
           createdBy: null,
-          userId: (req as any).requestedBy ?? null,
+          userId: req.requestedBy ?? null,
+          receiptUrl: req.paymentProofUrl ?? null,
         }).then(r => {
           if (!r.linked) {
             toast({

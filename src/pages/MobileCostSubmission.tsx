@@ -750,6 +750,13 @@ const MobileCostSubmission = () => {
         fetchOperationalCosts();
         // Auto-link to active pre-fund (non-blocking — payment already recorded)
         import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
+          // Extract first receipt URL from supporting_documents for GL audit trail
+          const firstReceipt = (() => {
+            const docs = (oc as any).supporting_documents;
+            if (!docs) return null;
+            const arr = Array.isArray(docs) ? docs : (typeof docs === 'string' ? JSON.parse(docs) : null);
+            return arr?.[0]?.url ?? arr?.[0] ?? null;
+          })();
           linkPaymentToPreFund({
             amount: oc.amount_cents / 100,
             currency: oc.currency,
@@ -763,6 +770,7 @@ const MobileCostSubmission = () => {
             paymentDate: now,
             createdBy: currentUser.id,
             userId: oc.submitted_by ?? null,
+            receiptUrl: typeof firstReceipt === 'string' ? firstReceipt : null,
           }).then(r => {
             if (r.linked) {
               toast({ title: '✅ Linked to Pre-Fund', description: r.message });
