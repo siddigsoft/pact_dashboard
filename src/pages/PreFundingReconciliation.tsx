@@ -19,7 +19,7 @@ import {
   RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, Lock,
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
   Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
-  ExternalLink, ChevronDown, History,
+  ExternalLink, ChevronDown, History, Trash2, Filter,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -467,10 +467,16 @@ export default function PreFundingReconciliation() {
   const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
 
   // Auto-link retry
-  const [unlinkedSubs, setUnlinkedSubs]     = useState<any[]>([]);
+  const [unlinkedSubs, setUnlinkedSubs]       = useState<any[]>([]);
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
-  const [showUnlinked, setShowUnlinked]     = useState(false);
-  const [retryingId, setRetryingId]         = useState<string | null>(null);
+  const [showUnlinked, setShowUnlinked]       = useState(false);
+  const [retryingId, setRetryingId]           = useState<string | null>(null);
+  const [unlinkedFrom, setUnlinkedFrom]       = useState('');
+  const [unlinkedTo, setUnlinkedTo]           = useState('');
+
+  // Unlink / remove a linked transaction
+  const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
+  const [unlinkingId, setUnlinkingId]           = useState<string | null>(null);
 
   // Transaction drill-down
   const [drillTxn, setDrillTxn]     = useState<PreFundTransaction | null>(null);
@@ -605,6 +611,73 @@ export default function PreFundingReconciliation() {
       loadUnlinkedPayments(selectedFund.id);
     } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }
     finally { setRetryingId(null); }
+  };
+
+  // ── Unlink / remove a linked transaction ────────────────────────────────
+  const handleUnlinkTxn = async () => {
+    const txn = confirmUnlinkTxn;
+    if (!txn || !selectedFund) return;
+    setUnlinkingId(txn.id);
+    setConfirmUnlinkTxn(null);
+    try {
+      // 1. Delete the pre_fund_transactions row
+      const { error: delErr } = await supabase
+        .from('pre_fund_transactions')
+        .delete()
+        .eq('id', txn.id);
+      if (delErr) throw new Error(delErr.message);
+
+      // 2. Restore fund balance (reverse the payment deduction)
+      const { error: balErr } = await supabase
+        .from('pre_fund_requests')
+        .update({
+          available_balance: selectedFund.available_balance + txn.amount,
+          paid_amount:       Math.max(0, selectedFund.paid_amount - txn.amount),
+        })
+        .eq('id', selectedFund.id);
+      if (balErr) throw new Error(balErr.message);
+
+      // 3. If transaction was linked to a source record, clear the back-link
+      if (txn.source_table && txn.source_id) {
+        await (supabase as any)
+          .from(txn.source_table)
+          .update({ pre_fund_transaction_id: null })
+          .eq('id', txn.source_id);
+      }
+
+      // 4. Restore allocation spent_amount if there is an allocation for the source
+      if (txn.source_table && txn.source_id) {
+        const { data: srcRow } = await (supabase as any)
+          .from(txn.source_table)
+          .select('requested_by,submitted_by')
+          .eq('id', txn.source_id)
+          .maybeSingle();
+        const userId = srcRow?.requested_by ?? srcRow?.submitted_by ?? null;
+        if (userId) {
+          const { data: alloc } = await supabase
+            .from('pre_fund_allocations')
+            .select('id,spent_amount')
+            .eq('pre_fund_request_id', selectedFund.id)
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (alloc) {
+            await supabase
+              .from('pre_fund_allocations')
+              .update({ spent_amount: Math.max(0, (alloc.spent_amount ?? 0) - txn.amount) })
+              .eq('id', alloc.id);
+          }
+        }
+      }
+
+      toast({ title: 'Unlinked', description: `Transaction removed and balance of ${selectedFund.currency} ${formatNumber(txn.amount, 0)} restored to fund.` });
+      loadFunds();
+      loadTxns(selectedFund.id);
+      loadUnlinkedPayments(selectedFund.id);
+    } catch (e: any) {
+      toast({ title: 'Unlink failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUnlinkingId(null);
+    }
   };
 
   // ── Transaction drill-down ───────────────────────────────────────────────
@@ -1219,21 +1292,71 @@ export default function PreFundingReconciliation() {
                     <ChevronDown className={cn('h-4 w-4 text-amber-600 transition-transform', showUnlinked ? 'rotate-180' : '')} />
                   </button>
                   {showUnlinked && (
-                    <div className="divide-y max-h-56 overflow-y-auto">
-                      {unlinkedSubs.map(sub => (
-                        <div key={sub.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40" data-testid={`row-unlinked-${sub.id}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{sub.title ?? sub.id}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {sub._source === 'down_payment_requests' ? 'Down-payment' : 'Cost submission'} · {sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}
-                            </p>
-                          </div>
-                          <span className="font-mono text-sm shrink-0">{sub.currency} {formatNumber(sub.amount, 0)}</span>
-                          <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => handleRetryLink(sub)} disabled={retryingId === sub.id} data-testid={`button-link-${sub.id}`}>
-                            <Link2 className="h-3.5 w-3.5 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
-                          </Button>
-                        </div>
-                      ))}
+                    <div>
+                      {/* Date range filter */}
+                      <div className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b flex-wrap">
+                        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-xs text-muted-foreground shrink-0">Filter by date:</span>
+                        <Input
+                          type="date" value={unlinkedFrom}
+                          onChange={e => setUnlinkedFrom(e.target.value)}
+                          className="h-6 text-xs w-36 px-2"
+                          data-testid="input-unlinked-from"
+                        />
+                        <span className="text-xs text-muted-foreground">→</span>
+                        <Input
+                          type="date" value={unlinkedTo}
+                          onChange={e => setUnlinkedTo(e.target.value)}
+                          className="h-6 text-xs w-36 px-2"
+                          data-testid="input-unlinked-to"
+                        />
+                        {(unlinkedFrom || unlinkedTo) && (
+                          <button onClick={() => { setUnlinkedFrom(''); setUnlinkedTo(''); }} className="text-xs text-muted-foreground hover:text-foreground underline" data-testid="button-clear-date-filter">Clear</button>
+                        )}
+                      </div>
+                      <div className="divide-y max-h-64 overflow-y-auto">
+                        {unlinkedSubs
+                          .filter(sub => {
+                            if (!sub._date) return true;
+                            const d = sub._date.split('T')[0];
+                            if (unlinkedFrom && d < unlinkedFrom) return false;
+                            if (unlinkedTo   && d > unlinkedTo)   return false;
+                            return true;
+                          })
+                          .map(sub => (
+                            <div key={sub.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40" data-testid={`row-unlinked-${sub.id}`}>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{sub.title ?? sub.id}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {sub._source === 'down_payment_requests' ? 'Down-payment' : 'Cost submission'} · {sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}
+                                </p>
+                              </div>
+                              <span className="font-mono text-sm shrink-0">{sub.currency} {formatNumber(sub.amount, 0)}</span>
+                              {/* Custom date override for linking */}
+                              <Input
+                                type="date"
+                                defaultValue={sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0]}
+                                className="h-7 text-xs w-32 px-2 shrink-0"
+                                id={`link-date-${sub.id}`}
+                                data-testid={`input-link-date-${sub.id}`}
+                                title="Override the transaction date for this link"
+                              />
+                              <Button
+                                size="sm" variant="outline"
+                                className="h-7 text-xs shrink-0"
+                                onClick={() => {
+                                  const dateEl = document.getElementById(`link-date-${sub.id}`) as HTMLInputElement | null;
+                                  handleRetryLink({ ...sub, _date: dateEl?.value ?? sub._date });
+                                }}
+                                disabled={retryingId === sub.id}
+                                data-testid={`button-link-${sub.id}`}
+                              >
+                                <Link2 className="h-3.5 w-3.5 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
+                              </Button>
+                            </div>
+                          ))
+                        }
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1270,6 +1393,7 @@ export default function PreFundingReconciliation() {
                           <TableHead>Description</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                           <TableHead className="text-center">Reconciled</TableHead>
+                          <TableHead className="text-center w-10"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1300,10 +1424,22 @@ export default function PreFundingReconciliation() {
                                 {t.reconciled && <CheckCircle2 className="h-3 w-3" />}
                               </button>
                             </TableCell>
+                            <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                              <button
+                                onClick={() => setConfirmUnlinkTxn(t)}
+                                disabled={unlinkingId === t.id}
+                                title="Unlink — removes this transaction and restores the fund balance"
+                                className="h-6 w-6 flex items-center justify-center mx-auto rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-40"
+                                data-testid={`button-unlink-${t.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </TableCell>
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30 font-semibold">
                           <TableCell colSpan={4} className="text-xs">Totals</TableCell>
+
                           <TableCell className="text-right font-mono text-sm">
                             {selectedFund.currency} {formatNumber(accountingTxns.reduce((s, t) => s + t.amount, 0), 0)}
                           </TableCell>
@@ -1619,6 +1755,56 @@ export default function PreFundingReconciliation() {
             <Button variant="outline" onClick={() => setShowClose(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleClosePeriod} disabled={closing} data-testid="button-confirm-close">
               {closing ? 'Closing…' : 'Close Period'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Unlink confirmation dialog ──────────────────────────────────────── */}
+      <Dialog open={!!confirmUnlinkTxn} onOpenChange={open => { if (!open) setConfirmUnlinkTxn(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600">
+              <Trash2 className="h-4 w-4" /> Remove Linked Transaction
+            </DialogTitle>
+          </DialogHeader>
+          {confirmUnlinkTxn && (
+            <div className="space-y-3 py-1">
+              <p className="text-sm text-muted-foreground">
+                This will permanently remove this transaction from the fund and restore the balance.
+              </p>
+              <div className="rounded-lg border p-3 space-y-1 bg-muted/30 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type</span>
+                  <span className="font-medium">{TXN_TYPE_CFG[confirmUnlinkTxn.transaction_type]?.label ?? confirmUnlinkTxn.transaction_type}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="font-medium">{format(parseISO(confirmUnlinkTxn.transaction_date), 'MMM d, yyyy')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount</span>
+                  <span className="font-mono font-semibold">{confirmUnlinkTxn.currency} {formatNumber(confirmUnlinkTxn.amount, 0)}</span>
+                </div>
+                {confirmUnlinkTxn.description && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Description</span>
+                    <span className="text-right max-w-[180px] truncate">{confirmUnlinkTxn.description}</span>
+                  </div>
+                )}
+              </div>
+              <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                  Balance will be restored by {confirmUnlinkTxn.currency} {formatNumber(confirmUnlinkTxn.amount, 0)}. The original payment record is not deleted.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmUnlinkTxn(null)} data-testid="button-cancel-unlink">Cancel</Button>
+            <Button variant="destructive" onClick={handleUnlinkTxn} data-testid="button-confirm-unlink">
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove & Restore Balance
             </Button>
           </DialogFooter>
         </DialogContent>
