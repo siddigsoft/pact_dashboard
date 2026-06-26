@@ -467,12 +467,13 @@ export default function PreFundingReconciliation() {
   const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
 
   // Auto-link retry
-  const [unlinkedSubs, setUnlinkedSubs]       = useState<any[]>([]);
+  const [unlinkedSubs, setUnlinkedSubs]       = useState<{ ocs: any[]; dp: any[]; ef: any[] }>({ ocs: [], dp: [], ef: [] });
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
   const [showUnlinked, setShowUnlinked]       = useState(false);
   const [retryingId, setRetryingId]           = useState<string | null>(null);
   const [unlinkedFrom, setUnlinkedFrom]       = useState('');
   const [unlinkedTo, setUnlinkedTo]           = useState('');
+  const [openCategories, setOpenCategories]   = useState<Record<string, boolean>>({ ocs: true, dp: true, ef: true });
 
   // Unlink / remove a linked transaction
   const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
@@ -538,38 +539,64 @@ export default function PreFundingReconciliation() {
       const excludeClause = (ids: string[]) =>
         ids.length ? `(${ids.join(',')})` : '(00000000-0000-0000-0000-000000000000)';
 
-      const [ocsRes, dpRes] = await Promise.all([
+      const [ocsRes, dpRes, efRes] = await Promise.all([
         supabase
           .from('operational_cost_submissions')
           .select('id,title,description,amount_cents,currency,status,submitted_at,submitted_by')
           .eq('status', 'paid')
-          .not('id', 'in', excludeClause(linkedIds)),
+          .not('id', 'in', excludeClause(linkedIds))
+          .order('submitted_at', { ascending: false })
+          .limit(500),
         supabase
           .from('down_payment_requests')
-          .select('id,justification,requested_amount,approved_amount,status,created_at,requested_by')
+          .select('id,justification,requested_amount,approved_amount,status,created_at,requested_by,fully_paid_at')
           .eq('status', 'fully_paid')
-          .not('id', 'in', excludeClause(linkedIds)),
+          .not('id', 'in', excludeClause(linkedIds))
+          .order('fully_paid_at', { ascending: false })
+          .limit(500),
+        // Enumerator / transport fees from MMP site entries
+        (supabase as any)
+          .from('mmp_site_entries')
+          .select('id,site_name,visit_date,enumerator_id,transport_fee,enumerator_fee,currency,payment_status,paid_at,enumerator_name')
+          .eq('payment_status', 'paid')
+          .not('id', 'in', excludeClause(linkedIds))
+          .order('visit_date', { ascending: false })
+          .limit(500),
       ]);
 
       const ocs = (ocsRes.data ?? []).map((r: any) => ({
         ...r,
         _source: 'operational_cost_submissions',
+        _category: 'ocs',
         _date: r.submitted_at ?? r.created_at,
         amount: (r.amount_cents ?? 0) / 100,
+        currency: r.currency ?? 'SDG',
         title: r.title ?? r.description ?? `Submission ${r.id.slice(0, 8)}`,
         userId: r.submitted_by ?? null,
       }));
       const dp = (dpRes.data ?? []).map((r: any) => ({
         ...r,
         _source: 'down_payment_requests',
-        _date: r.created_at,
+        _category: 'dp',
+        _date: r.fully_paid_at ?? r.created_at,
         amount: r.approved_amount ?? r.requested_amount ?? 0,
         currency: 'SDG',
         title: r.justification ?? `Down-payment ${r.id.slice(0, 8)}`,
         userId: r.requested_by ?? null,
       }));
-      setUnlinkedSubs([...ocs, ...dp].slice(0, 50));
-    } catch { setUnlinkedSubs([]); }
+      // Enumerator fees: sum transport_fee + enumerator_fee per entry
+      const ef = (efRes.data ?? []).map((r: any) => ({
+        ...r,
+        _source: 'mmp_site_entries',
+        _category: 'ef',
+        _date: r.paid_at ?? r.visit_date,
+        amount: (r.transport_fee ?? 0) + (r.enumerator_fee ?? 0),
+        currency: r.currency ?? 'SDG',
+        title: `${r.site_name ?? 'Site'} — ${r.enumerator_name ?? r.enumerator_id?.slice(0, 8) ?? 'Enumerator'}`,
+        userId: r.enumerator_id ?? null,
+      })).filter((r: any) => r.amount > 0);
+      setUnlinkedSubs({ ocs, dp, ef });
+    } catch { setUnlinkedSubs({ ocs: [], dp: [], ef: [] }); }
     finally { setLoadingUnlinked(false); }
   }, []);
 
@@ -1273,7 +1300,66 @@ export default function PreFundingReconciliation() {
               </Card>
 
               {/* ── Auto-Link Retry Panel ──────────────────────────────────────── */}
-              {(unlinkedSubs.length > 0 || loadingUnlinked) && (
+              {(() => {
+                const totalUnlinked = unlinkedSubs.ocs.length + unlinkedSubs.dp.length + unlinkedSubs.ef.length;
+                if (!totalUnlinked && !loadingUnlinked) return null;
+
+                const filterSub = (sub: any) => {
+                  if (!sub._date) return true;
+                  const d = sub._date.split('T')[0];
+                  if (unlinkedFrom && d < unlinkedFrom) return false;
+                  if (unlinkedTo   && d > unlinkedTo)   return false;
+                  return true;
+                };
+
+                const CategorySection = ({ catKey, label, items, color }: { catKey: string; label: string; items: any[]; color: string }) => {
+                  const filtered = items.filter(filterSub);
+                  if (!filtered.length) return null;
+                  const open = openCategories[catKey] !== false;
+                  return (
+                    <div className="border-b last:border-b-0">
+                      <button
+                        className={cn('w-full flex items-center justify-between px-4 py-2 text-xs font-semibold uppercase tracking-wide transition-colors hover:bg-muted/40', color)}
+                        onClick={() => setOpenCategories(p => ({ ...p, [catKey]: !open }))}
+                        data-testid={`button-cat-${catKey}`}
+                      >
+                        <span>{label} <span className="font-normal normal-case tracking-normal opacity-70">({filtered.length})</span></span>
+                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? 'rotate-180' : '')} />
+                      </button>
+                      {open && filtered.map(sub => (
+                        <div key={sub.id} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-muted/30 border-t border-muted/40" data-testid={`row-unlinked-${sub.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate text-xs">{sub.title ?? sub.id}</p>
+                            <p className="text-[11px] text-muted-foreground">{sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}</p>
+                          </div>
+                          <span className="font-mono text-xs shrink-0 text-muted-foreground">{sub.currency} {formatNumber(sub.amount, 0)}</span>
+                          <Input
+                            type="date"
+                            defaultValue={sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0]}
+                            className="h-6 text-xs w-28 px-1.5 shrink-0"
+                            id={`link-date-${sub.id}`}
+                            data-testid={`input-link-date-${sub.id}`}
+                            title="Override the transaction date for this link"
+                          />
+                          <Button
+                            size="sm" variant="outline"
+                            className="h-6 text-xs shrink-0 px-2"
+                            onClick={() => {
+                              const dateEl = document.getElementById(`link-date-${sub.id}`) as HTMLInputElement | null;
+                              handleRetryLink({ ...sub, _date: dateEl?.value ?? sub._date });
+                            }}
+                            disabled={retryingId === sub.id}
+                            data-testid={`button-link-${sub.id}`}
+                          >
+                            <Link2 className="h-3 w-3 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                };
+
+                return (
                 <div className="border rounded-lg overflow-hidden">
                   <button
                     className="w-full flex items-center justify-between px-4 py-2.5 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-900/20 text-sm font-medium transition-colors"
@@ -1283,10 +1369,10 @@ export default function PreFundingReconciliation() {
                     <div className="flex items-center gap-2">
                       <Link2 className="h-4 w-4 text-amber-600" />
                       <span className="text-amber-700 dark:text-amber-400">
-                        {loadingUnlinked ? 'Checking unlinked payments…' : `${unlinkedSubs.length} paid submission${unlinkedSubs.length !== 1 ? 's' : ''} not linked to this fund`}
+                        {loadingUnlinked ? 'Checking unlinked payments…' : `${totalUnlinked} paid payment${totalUnlinked !== 1 ? 's' : ''} not linked to this fund`}
                       </span>
-                      {!loadingUnlinked && unlinkedSubs.length > 0 && (
-                        <Badge className="bg-amber-500 text-white text-[10px] h-4 px-1.5">{unlinkedSubs.length}</Badge>
+                      {!loadingUnlinked && totalUnlinked > 0 && (
+                        <Badge className="bg-amber-500 text-white text-[10px] h-4 px-1.5">{totalUnlinked}</Badge>
                       )}
                     </div>
                     <ChevronDown className={cn('h-4 w-4 text-amber-600 transition-transform', showUnlinked ? 'rotate-180' : '')} />
@@ -1297,70 +1383,24 @@ export default function PreFundingReconciliation() {
                       <div className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b flex-wrap">
                         <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <span className="text-xs text-muted-foreground shrink-0">Filter by date:</span>
-                        <Input
-                          type="date" value={unlinkedFrom}
-                          onChange={e => setUnlinkedFrom(e.target.value)}
-                          className="h-6 text-xs w-36 px-2"
-                          data-testid="input-unlinked-from"
-                        />
+                        <Input type="date" value={unlinkedFrom} onChange={e => setUnlinkedFrom(e.target.value)} className="h-6 text-xs w-36 px-2" data-testid="input-unlinked-from" />
                         <span className="text-xs text-muted-foreground">→</span>
-                        <Input
-                          type="date" value={unlinkedTo}
-                          onChange={e => setUnlinkedTo(e.target.value)}
-                          className="h-6 text-xs w-36 px-2"
-                          data-testid="input-unlinked-to"
-                        />
+                        <Input type="date" value={unlinkedTo} onChange={e => setUnlinkedTo(e.target.value)} className="h-6 text-xs w-36 px-2" data-testid="input-unlinked-to" />
                         {(unlinkedFrom || unlinkedTo) && (
                           <button onClick={() => { setUnlinkedFrom(''); setUnlinkedTo(''); }} className="text-xs text-muted-foreground hover:text-foreground underline" data-testid="button-clear-date-filter">Clear</button>
                         )}
                       </div>
-                      <div className="divide-y max-h-64 overflow-y-auto">
-                        {unlinkedSubs
-                          .filter(sub => {
-                            if (!sub._date) return true;
-                            const d = sub._date.split('T')[0];
-                            if (unlinkedFrom && d < unlinkedFrom) return false;
-                            if (unlinkedTo   && d > unlinkedTo)   return false;
-                            return true;
-                          })
-                          .map(sub => (
-                            <div key={sub.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40" data-testid={`row-unlinked-${sub.id}`}>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate">{sub.title ?? sub.id}</p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  {sub._source === 'down_payment_requests' ? 'Down-payment' : 'Cost submission'} · {sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}
-                                </p>
-                              </div>
-                              <span className="font-mono text-sm shrink-0">{sub.currency} {formatNumber(sub.amount, 0)}</span>
-                              {/* Custom date override for linking */}
-                              <Input
-                                type="date"
-                                defaultValue={sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0]}
-                                className="h-7 text-xs w-32 px-2 shrink-0"
-                                id={`link-date-${sub.id}`}
-                                data-testid={`input-link-date-${sub.id}`}
-                                title="Override the transaction date for this link"
-                              />
-                              <Button
-                                size="sm" variant="outline"
-                                className="h-7 text-xs shrink-0"
-                                onClick={() => {
-                                  const dateEl = document.getElementById(`link-date-${sub.id}`) as HTMLInputElement | null;
-                                  handleRetryLink({ ...sub, _date: dateEl?.value ?? sub._date });
-                                }}
-                                disabled={retryingId === sub.id}
-                                data-testid={`button-link-${sub.id}`}
-                              >
-                                <Link2 className="h-3.5 w-3.5 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
-                              </Button>
-                            </div>
-                          ))
-                        }
+                      {/* Category sections */}
+                      <div className="max-h-80 overflow-y-auto">
+                        <CategorySection catKey="ocs" label="Cost Submissions" items={unlinkedSubs.ocs} color="text-sky-700 dark:text-sky-400 bg-sky-50/60 dark:bg-sky-950/20" />
+                        <CategorySection catKey="dp"  label="Down Payments"    items={unlinkedSubs.dp}  color="text-violet-700 dark:text-violet-400 bg-violet-50/60 dark:bg-violet-950/20" />
+                        <CategorySection catKey="ef"  label="Enumerator / Transport Fees" items={unlinkedSubs.ef} color="text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20" />
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
 
               {/* ── Transaction table ──────────────────────────────────────────── */}
               <div>
