@@ -545,23 +545,20 @@ export default function PreFundingReconciliation() {
           .select('id,title,description,amount_cents,currency,status,submitted_at,submitted_by')
           .eq('status', 'paid')
           .not('id', 'in', excludeClause(linkedIds))
-          .order('submitted_at', { ascending: false })
-          .limit(500),
+          .order('submitted_at', { ascending: false }),
         supabase
           .from('down_payment_requests')
           .select('id,justification,requested_amount,approved_amount,status,created_at,requested_by,fully_paid_at')
           .eq('status', 'fully_paid')
           .not('id', 'in', excludeClause(linkedIds))
-          .order('fully_paid_at', { ascending: false })
-          .limit(500),
+          .order('fully_paid_at', { ascending: false }),
         // Enumerator / transport fees from MMP site entries
         (supabase as any)
           .from('mmp_site_entries')
           .select('id,site_name,visit_date,enumerator_id,transport_fee,enumerator_fee,currency,payment_status,paid_at,enumerator_name')
           .eq('payment_status', 'paid')
           .not('id', 'in', excludeClause(linkedIds))
-          .order('visit_date', { ascending: false })
-          .limit(500),
+          .order('visit_date', { ascending: false }),
       ]);
 
       const ocs = (ocsRes.data ?? []).map((r: any) => ({
