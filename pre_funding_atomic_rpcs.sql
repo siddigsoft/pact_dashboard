@@ -379,6 +379,9 @@ GRANT EXECUTE ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUI
 -- RPC 3: add_pre_fund_transaction_rpc
 -- Wraps: txn insert + optional GL JE + lines + bridge log
 -- ────────────────────────────────────────────────────────────────────────────
+-- Drop any existing overload so CREATE OR REPLACE can change defaults safely.
+DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text);
+DROP FUNCTION IF EXISTS add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text);
 CREATE OR REPLACE FUNCTION add_pre_fund_transaction_rpc(
   p_fund_id          UUID,
   p_fund_name        TEXT,
