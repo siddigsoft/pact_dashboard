@@ -38,6 +38,7 @@ import { exportSubmissionsToExcel, exportSubmissionsToPDF, exportOutstandingToEx
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import { EmailNotificationService } from "@/services/email-notification.service";
 import { NotificationTriggerService } from "@/services/NotificationTriggerService";
+import { dispatchNotification } from '@/lib/notify';
 import { EmailCCInput } from "@/components/EmailCCInput";
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from "@/utils/financialStatementPdf";
 import { generateFinancialStatementExcel } from "@/utils/financialStatementExcel";
@@ -126,6 +127,18 @@ async function notifyManagementTeam(
       link: '/cost-submission', relatedEntityType: 'costSubmission',
       sendEmail: true, emailActionUrl: '/cost-submission', emailActionLabel: 'View Submission',
     })));
+    // WhatsApp — fire for all cost events so management always receives it on WA too
+    dispatchNotification({
+      event: event === 'cost_paid' ? 'payment_processed' : 'cost_status_update',
+      recipientIds: ids,
+      titleEn: msg.title, titleAr: msg.titleAr,
+      messageEn: msg.message, messageAr: msg.titleAr,
+      priority: msg.priority,
+      entityType: 'costSubmission',
+      actionUrl: '/cost-submission',
+      sendEmail: false,
+      sendWhatsApp: true,
+    }).catch(() => {/* non-fatal */});
   } catch (e) { console.warn('[CostNotify] Management notification failed (non-fatal):', e); }
 }
 
@@ -153,6 +166,18 @@ async function notifySubmitterOfCostStatus(
       link: '/cost-submission', relatedEntityType: 'costSubmission',
       sendEmail: true, emailActionUrl: '/cost-submission', emailActionLabel: 'View My Submissions',
     });
+    // WhatsApp — notify submitter on every status change including payment
+    dispatchNotification({
+      event: event === 'cost_paid' ? 'payment_processed' : 'cost_status_update',
+      recipientIds: [submittedBy],
+      titleEn: msg.title, titleAr: msg.titleAr,
+      messageEn: msg.message, messageAr: msg.messageAr,
+      priority: event === 'cost_rejected' ? 'high' : 'normal',
+      entityType: 'costSubmission',
+      actionUrl: '/cost-submission',
+      sendEmail: false,
+      sendWhatsApp: true,
+    }).catch(() => {/* non-fatal */});
   } catch (e) { console.warn('[CostNotify] Submitter notification failed (non-fatal):', e); }
 }
 

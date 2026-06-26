@@ -28,6 +28,7 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments } from '@/utils/downPaymentExport';
+import { dispatchNotification } from '@/lib/notify';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -502,6 +503,25 @@ export default function DownPaymentApproval() {
         }).then(r => { if (!r.linked) console.warn('[Pre-Fund] DP link skipped:', r.message); })
           .catch((err: Error) => console.warn('[Pre-Fund] DP link error:', err?.message));
       });
+      // Notify the advance requester via in-app + WhatsApp (fire-and-forget)
+      const requestedBy = (req as any).requestedBy ?? null;
+      if (requestedBy) {
+        const paidAmount = (req.approvedAmount ?? req.requestedAmount).toLocaleString();
+        dispatchNotification({
+          event: 'payment_processed',
+          recipientIds: [requestedBy],
+          titleEn: 'Transport Advance Paid ✅',
+          titleAr: 'تم صرف السلفة ✅',
+          messageEn: `Your transport advance of ${paidAmount} SDG has been marked as fully paid. Please confirm receipt in your wallet.`,
+          messageAr: `تم تحديد سلفتك البالغة ${paidAmount} جنيه كمدفوعة بالكامل. يرجى تأكيد الاستلام في محفظتك.`,
+          priority: 'high',
+          entityType: 'downPayment',
+          entityId: req.id,
+          actionUrl: '/wallet',
+          sendEmail: true,
+          sendWhatsApp: true,
+        }).catch(console.warn);
+      }
       // Force a page refresh of the down payment context
       window.location.reload();
     } catch (err) {

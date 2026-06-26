@@ -82,6 +82,7 @@ import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { dispatchNotification } from '@/lib/notify';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
@@ -1948,20 +1949,36 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         const isSingle = items.length === 1;
         const total = items.reduce((s, i) => s + i.amount, 0);
         const breakdown = items.map(i => `• ${i.siteName} — ${i.amount.toLocaleString()} SDG`).join('\n');
+        const notifTitle = isSingle
+          ? 'Transport Advance Paid / تم صرف السلفة'
+          : `${items.length} Transport Advances Paid / تم صرف ${items.length} سلف`;
+        const notifMsg = isSingle
+          ? `Your transport advance for "${items[0].siteName}" (${items[0].amount.toLocaleString()} SDG) has been paid. Please confirm receipt in your wallet.`
+          : `${items.length} of your transport advances have been paid.\n\nTotal: ${total.toLocaleString()} SDG\n\n${breakdown}\n\nPlease confirm receipt in your wallet.`;
         NotificationTriggerService.send({
           userId,
-          title: isSingle
-            ? 'Transport Advance Paid / تم صرف السلفة'
-            : `${items.length} Transport Advances Paid / تم صرف ${items.length} سلف`,
-          message: isSingle
-            ? `Your transport advance for "${items[0].siteName}" (${items[0].amount.toLocaleString()} SDG) has been paid. Please confirm receipt in your wallet.`
-            : `${items.length} of your transport advances have been paid.\n\nTotal: ${total.toLocaleString()} SDG\n\n${breakdown}\n\nPlease confirm receipt in your wallet.`,
+          title: notifTitle,
+          message: notifMsg,
           type: 'success',
           category: 'financial',
           priority: 'high',
           link: '/wallet',
           sendEmail: true,
           emailActionLabel: 'Confirm in Wallet',
+        }).catch(console.error);
+        // WhatsApp — batch payment confirmation sent via WA for each requester
+        dispatchNotification({
+          event: 'payment_processed',
+          recipientIds: [userId],
+          titleEn: notifTitle,
+          titleAr: isSingle ? 'تم صرف السلفة ✅' : `تم صرف ${items.length} سلف ✅`,
+          messageEn: notifMsg,
+          messageAr: notifMsg,
+          priority: 'high',
+          entityType: 'downPayment',
+          actionUrl: '/wallet',
+          sendEmail: false,
+          sendWhatsApp: true,
         }).catch(console.error);
       });
 
