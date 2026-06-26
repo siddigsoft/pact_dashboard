@@ -529,13 +529,39 @@ export default function PreFundingReconciliation() {
         .not('source_id', 'is', null);
       const linkedIds = (linked ?? []).map((r: any) => r.source_id).filter(Boolean);
 
+      const excludeClause = (ids: string[]) =>
+        ids.length ? `(${ids.join(',')})` : '(00000000-0000-0000-0000-000000000000)';
+
       const [ocsRes, dpRes] = await Promise.all([
-        supabase.from('operational_cost_submissions').select('id,title,amount,currency,status,submitted_at').eq('status', 'paid').not('id', 'in', linkedIds.length ? `(${linkedIds.join(',')})` : '(00000000-0000-0000-0000-000000000000)'),
-        supabase.from('down_payment_requests').select('id,title,amount,currency,status,created_at').eq('status', 'fully_paid').not('id', 'in', linkedIds.length ? `(${linkedIds.join(',')})` : '(00000000-0000-0000-0000-000000000000)'),
+        supabase
+          .from('operational_cost_submissions')
+          .select('id,title,description,amount_cents,currency,status,submitted_at,submitted_by')
+          .eq('status', 'paid')
+          .not('id', 'in', excludeClause(linkedIds)),
+        supabase
+          .from('down_payment_requests')
+          .select('id,justification,requested_amount,approved_amount,status,created_at,requested_by')
+          .eq('status', 'fully_paid')
+          .not('id', 'in', excludeClause(linkedIds)),
       ]);
 
-      const ocs = (ocsRes.data ?? []).map((r: any) => ({ ...r, _source: 'operational_cost_submissions', _date: r.submitted_at ?? r.created_at }));
-      const dp  = (dpRes.data ?? []).map((r: any) => ({ ...r, _source: 'down_payment_requests', _date: r.created_at }));
+      const ocs = (ocsRes.data ?? []).map((r: any) => ({
+        ...r,
+        _source: 'operational_cost_submissions',
+        _date: r.submitted_at ?? r.created_at,
+        amount: (r.amount_cents ?? 0) / 100,
+        title: r.title ?? r.description ?? `Submission ${r.id.slice(0, 8)}`,
+        userId: r.submitted_by ?? null,
+      }));
+      const dp = (dpRes.data ?? []).map((r: any) => ({
+        ...r,
+        _source: 'down_payment_requests',
+        _date: r.created_at,
+        amount: r.approved_amount ?? r.requested_amount ?? 0,
+        currency: 'SDG',
+        title: r.justification ?? `Down-payment ${r.id.slice(0, 8)}`,
+        userId: r.requested_by ?? null,
+      }));
       setUnlinkedSubs([...ocs, ...dp].slice(0, 50));
     } catch { setUnlinkedSubs([]); }
     finally { setLoadingUnlinked(false); }
@@ -545,14 +571,12 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setRetryingId(sub.id);
     try {
-      // Fetch GL codes — must be configured before linking a payment (affects balances + GL)
+      // Fetch GL codes — optional, only used when both are configured
       const { data: fd } = await supabase
         .from('pre_fund_requests')
         .select('gl_liability_account,gl_receipt_account')
         .eq('id', selectedFund.id)
         .maybeSingle();
-      if (!fd?.gl_liability_account) throw new Error('GL Liability Account not configured on this fund. Go to Registry → Edit Fund to set GL mappings before linking payments.');
-      if (!fd?.gl_receipt_account)   throw new Error('GL Receipt Account not configured on this fund. Go to Registry → Edit Fund to set the receipt GL account.');
 
       // Route through the canonical atomic RPC — updates available_balance, paid_amount, and GL
       const { data: result, error: rpcErr } = await (supabase as any).rpc('add_pre_fund_transaction_rpc', {
@@ -565,8 +589,9 @@ export default function PreFundingReconciliation() {
         p_description:      sub.title ?? 'Linked payment',
         p_transaction_date: sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0],
         p_created_by:       currentUser?.id ?? null,
-        p_gl_debit_code:    fd.gl_liability_account,
-        p_gl_credit_code:   fd.gl_receipt_account,
+        p_user_id:          sub.userId ?? null,
+        p_gl_debit_code:    fd?.gl_liability_account ?? null,
+        p_gl_credit_code:   fd?.gl_receipt_account ?? null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
       if (result && result.success === false) throw new Error(result.error ?? 'Link RPC failed.');
