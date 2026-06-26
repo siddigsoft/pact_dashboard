@@ -764,10 +764,20 @@ const MobileCostSubmission = () => {
             createdBy: currentUser.id,
             userId: oc.submitted_by ?? null,
           }).then(r => {
-            if (r.linked) toast({ title: 'Linked to Pre-Fund', description: r.message });
-            else if (r.needsManualSelection) toast({ title: 'Manual Fund Link Required', description: r.message, variant: 'destructive' });
-            else console.warn('[Pre-Fund] Mobile auto-link skipped:', r.message);
-          }).catch((err: Error) => console.warn('[Pre-Fund] Mobile auto-link error:', err?.message));
+            if (r.linked) {
+              toast({ title: '✅ Linked to Pre-Fund', description: r.message });
+            } else {
+              toast({
+                title: '⚠️ Pre-Fund Link Failed',
+                description: r.message + ' — Use Reconciliation → Link Now to link manually.',
+                variant: 'destructive',
+              });
+            }
+          }).catch((err: Error) => toast({
+            title: '⚠️ Pre-Fund Link Error',
+            description: (err?.message ?? 'Unknown error') + ' — Link manually in Reconciliation.',
+            variant: 'destructive',
+          }));
         });
         // Fire in-app + email notifications to submitter and management (non-blocking)
         const paidSubmitter = users.find(u => u.id === oc.submitted_by);

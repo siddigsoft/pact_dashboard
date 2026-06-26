@@ -129,24 +129,23 @@ export async function linkPaymentToPreFund(params: {
       score = 0.5;
     }
 
-    // Allocation guard: check submitterId against the fund's allocation list
+    // Allocation guard: only block when the submitter IS allocated but has
+    // insufficient personal balance. If the submitter has no allocation entry
+    // at all, still allow the link — the fund balance deducts, but no
+    // per-person allocation row is touched.
     const fundAllocs = allocsByFund[f.id] ?? [];
     let userAllocation: any = null;
-    if (fundAllocs.length > 0) {
-      // submitterId = field staff who made the payment (not the finance admin)
-      const myAlloc = submitterId
-        ? fundAllocs.find(a => a.user_id === submitterId)
-        : null;
-      if (!myAlloc) {
-        // Fund is allocation-gated and this submitter has no allocation
-        return { fund: f, score: -1, userAllocation: null };
+    if (fundAllocs.length > 0 && submitterId) {
+      const myAlloc = fundAllocs.find(a => a.user_id === submitterId);
+      if (myAlloc) {
+        const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
+        if (remaining < amount) {
+          // Submitter IS allocated but their personal budget is exhausted — hard block
+          return { fund: f, score: -1, userAllocation: null };
+        }
+        userAllocation = myAlloc;
       }
-      const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
-      if (remaining < amount) {
-        // Allocated but insufficient personal balance remaining
-        return { fund: f, score: -1, userAllocation: null };
-      }
-      userAllocation = myAlloc;
+      // submitterId not in allocation list → allow link, skip allocation deduction
     }
 
     return { fund: f, score, userAllocation };

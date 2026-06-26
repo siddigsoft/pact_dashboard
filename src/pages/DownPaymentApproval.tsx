@@ -500,8 +500,19 @@ export default function DownPaymentApproval() {
           paymentDate: now,
           createdBy: null,
           userId: (req as any).requestedBy ?? null,
-        }).then(r => { if (!r.linked) console.warn('[Pre-Fund] DP link skipped:', r.message); })
-          .catch((err: Error) => console.warn('[Pre-Fund] DP link error:', err?.message));
+        }).then(r => {
+          if (!r.linked) {
+            toast({
+              title: '⚠️ Pre-Fund Link Failed',
+              description: r.message + ' — Use Reconciliation → Link Now to link manually.',
+              variant: 'destructive',
+            });
+          }
+        }).catch((err: Error) => toast({
+          title: '⚠️ Pre-Fund Link Error',
+          description: (err?.message ?? 'Unknown error') + ' — Link manually in Reconciliation.',
+          variant: 'destructive',
+        }));
       });
       // Notify the advance requester via in-app + WhatsApp (fire-and-forget)
       const requestedBy = (req as any).requestedBy ?? null;
