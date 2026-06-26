@@ -589,7 +589,6 @@ export default function PreFundingReconciliation() {
         p_description:      sub.title ?? 'Linked payment',
         p_transaction_date: sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0],
         p_created_by:       currentUser?.id ?? null,
-        p_user_id:          sub.userId ?? null,
         p_gl_debit_code:    fd?.gl_liability_account ?? null,
         p_gl_credit_code:   fd?.gl_receipt_account ?? null,
       });
