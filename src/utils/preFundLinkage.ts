@@ -125,27 +125,31 @@ export async function linkPaymentToPreFund(params: {
       score = 2;
     } else if (scope === 'country' && countryId && f.country_id === countryId) {
       score = 1;
-    } else if ((f.available_balance ?? 0) >= amount) {
-      score = 0.5;
     }
+    // NOTE: No generic same-currency fallback — if no scope matches, score stays 0
+    // and the fund is excluded. Finance must link manually in that case.
 
-    // Allocation guard: only block when the submitter IS allocated but has
-    // insufficient personal balance. If the submitter has no allocation entry
-    // at all, still allow the link — the fund balance deducts, but no
-    // per-person allocation row is touched.
+    // Allocation guard: when a fund has ANY allocations defined, the submitter
+    // MUST be in the list with sufficient remaining personal balance.
+    // There is no bypass: an unallocated submitter on an allocated fund is blocked.
     const fundAllocs = allocsByFund[f.id] ?? [];
     let userAllocation: any = null;
-    if (fundAllocs.length > 0 && submitterId) {
-      const myAlloc = fundAllocs.find(a => a.user_id === submitterId);
-      if (myAlloc) {
-        const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
-        if (remaining < amount) {
-          // Submitter IS allocated but their personal budget is exhausted — hard block
-          return { fund: f, score: -1, userAllocation: null };
-        }
-        userAllocation = myAlloc;
+    if (fundAllocs.length > 0) {
+      if (!submitterId) {
+        // Fund has allocations but no submitter identity — cannot enforce, block
+        return { fund: f, score: -1, userAllocation: null };
       }
-      // submitterId not in allocation list → allow link, skip allocation deduction
+      const myAlloc = fundAllocs.find(a => a.user_id === submitterId);
+      if (!myAlloc) {
+        // Submitter has NO allocation row — blocked (allocation controls must be respected)
+        return { fund: f, score: -1, userAllocation: null };
+      }
+      const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
+      if (remaining < amount) {
+        // Submitter IS allocated but their personal budget is exhausted — hard block
+        return { fund: f, score: -1, userAllocation: null };
+      }
+      userAllocation = myAlloc;
     }
 
     return { fund: f, score, userAllocation };
