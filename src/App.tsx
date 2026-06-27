@@ -293,6 +293,19 @@ const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Pre-Funding: finance/admin full access; coordinators/supervisors/field staff can
+// view their own allocation and participate in approval flows.
+const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
+  const { hasAnyRole } = useAuthorization();
+  const allowed = hasAnyRole([
+    'super_admin', 'admin', 'financialAdmin',
+    'coordinator', 'supervisor', 'fom', 'dataTeam',
+    'data_collector', 'employee',
+  ]);
+  if (!allowed) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+};
+
 // Notification display component
 const AppNotifications = () => {
   const { notifications, remove } = useNotifications();
@@ -574,7 +587,7 @@ const AppRoutes = () => {
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
-        <Route path="/pre-funding" element={<FinanceAdminRoute><PageWrapper><PreFundingHub /></PageWrapper></FinanceAdminRoute>} />
+        <Route path="/pre-funding" element={<PreFundingRoute><PageWrapper><PreFundingHub /></PageWrapper></PreFundingRoute>} />
         <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
         <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />
         <Route path="/pre-funding/approvals" element={<Navigate to="/pre-funding?tab=approvals" replace />} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -77,7 +78,10 @@ function roleBadge(role: string) {
 
 export default function PreFundingAllocations() {
   const { hasAnyRole } = useAuthorization();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const { currentUser } = useAppContext();
+  // Finance/Admin can see everyone; other roles see only their own row
+  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canAccess = isFinanceAdmin || !!currentUser?.id;
 
   const [allAllocations, setAll] = useState<AllocRow[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -89,10 +93,17 @@ export default function PreFundingAllocations() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: allocData, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('pre_fund_allocations')
         .select('id,user_id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,created_at')
         .order('created_at', { ascending: false });
+
+      // Non-finance users only see their own allocations
+      if (!isFinanceAdmin && currentUser?.id) {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data: allocData, error } = await query;
       if (error && !error.message.includes('does not exist')) throw error;
       const allocs: any[] = allocData ?? [];
 
@@ -135,7 +146,7 @@ export default function PreFundingAllocations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isFinanceAdmin, currentUser?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -179,6 +190,7 @@ export default function PreFundingAllocations() {
     </div>
   );
 
+
   return (
     <div className="space-y-5 p-4 md:p-6">
       {/* Header */}
@@ -186,10 +198,12 @@ export default function PreFundingAllocations() {
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Users className="h-5 w-5 text-violet-600" />
-            Allocation Dashboard
+            {isFinanceAdmin ? 'Allocation Dashboard' : 'My Pre-Fund Allocation'}
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Per-staff fund allocations — how much each person was assigned, spent, and has remaining
+            {isFinanceAdmin
+              ? 'Per-staff fund allocations — how much each person was assigned, spent, and has remaining'
+              : 'Your personal fund allocation — what you were assigned, what has been spent, and what remains'}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-allocs">
@@ -199,13 +213,16 @@ export default function PreFundingAllocations() {
 
       {/* KPI row */}
       {!loading && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Staff Allocated', value: String(staff.length), sub: 'unique people', icon: Users, accent: 'bg-violet-600' },
-            { label: 'Total Allocated', value: formatNumber(totalAllocated, 0), sub: 'across all funds', icon: Wallet, accent: 'bg-sky-600' },
-            { label: 'Total Spent',     value: formatNumber(totalSpent, 0),     sub: 'from allocations', icon: TrendingDown, accent: 'bg-emerald-600' },
-            { label: 'Over Budget',     value: String(overUsed),    sub: 'staff exceeded limit', icon: AlertTriangle, accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
-          ].map(k => (
+        <div className={`grid gap-3 ${isFinanceAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
+          {(isFinanceAdmin ? [
+            { label: 'Staff Allocated', value: String(staff.length),           sub: 'unique people',       icon: Users,          accent: 'bg-violet-600' },
+            { label: 'Total Allocated', value: formatNumber(totalAllocated, 0), sub: 'across all funds',   icon: Wallet,         accent: 'bg-sky-600' },
+            { label: 'Total Spent',     value: formatNumber(totalSpent, 0),     sub: 'from allocations',   icon: TrendingDown,   accent: 'bg-emerald-600' },
+            { label: 'Over Budget',     value: String(overUsed),                sub: 'staff exceeded limit', icon: AlertTriangle, accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
+          ] : [
+            { label: 'My Allocation',   value: formatNumber(totalAllocated, 0), sub: 'assigned to you',    icon: Wallet,         accent: 'bg-sky-600' },
+            { label: 'Spent So Far',    value: formatNumber(totalSpent, 0),     sub: 'against your fund',  icon: TrendingDown,   accent: totalSpent > totalAllocated ? 'bg-rose-600' : 'bg-emerald-600' },
+          ]).map(k => (
             <Card key={k.label}>
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-start justify-between gap-2">
@@ -224,7 +241,8 @@ export default function PreFundingAllocations() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters — only show for finance/admin who see all staff */}
+      {isFinanceAdmin && (
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -246,6 +264,7 @@ export default function PreFundingAllocations() {
           </SelectContent>
         </Select>
       </div>
+      )}
 
       {/* Staff list */}
       {loading ? (
@@ -253,8 +272,8 @@ export default function PreFundingAllocations() {
       ) : staff.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border rounded-xl">
           <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">No allocations found</p>
-          <p className="text-sm mt-1">Allocate staff in the Fund Registry → User Allocations dialog</p>
+          <p className="font-medium">{isFinanceAdmin ? 'No allocations found' : 'No allocation assigned to you yet'}</p>
+          <p className="text-sm mt-1">{isFinanceAdmin ? 'Allocate staff in the Fund Registry → User Allocations dialog' : 'Contact your finance team to set up your pre-fund allocation.'}</p>
         </div>
       ) : (
         <div className="space-y-2">

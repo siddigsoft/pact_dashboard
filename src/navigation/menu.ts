@@ -25,6 +25,7 @@ import {
   BookOpen,
   Inbox,
   CheckSquare,
+  Banknote,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -129,6 +130,9 @@ export const getWorkflowMenuGroups = (
     financeItems.push({ id: 'finance-hub', title: 'Finance Hub', url: '/finance-hub', icon: DollarSign, priority: 3, isPinned: isPinned('/finance-hub') });
   if (!isHidden('/accounting') && (isAdmin || isSuperAdmin || isFinancialAdmin || isAuditor))
     financeItems.push({ id: 'accounting-hub', title: 'Accounting', url: '/accounting', icon: BookOpen, priority: 4, isPinned: isPinned('/accounting') });
+  // Pre-Funding: finance/admin see full module; coordinators, supervisors, FOM, data collectors see their own allocation
+  if (!isHidden('/pre-funding') && (isAdmin || isSuperAdmin || isFinancialAdmin || isCoordinator || isSupervisor || isFOM || isDataCollector || hasRole('employee') || hasRole('dataTeam')))
+    financeItems.push({ id: 'pre-funding', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 5, isPinned: isPinned('/pre-funding') });
   if (financeItems.length) groups.push({ id: 'finance', label: 'Finance', order: 5, items: financeItems });
 
   // 7. Analytics Hub
