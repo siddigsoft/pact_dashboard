@@ -112,25 +112,45 @@ export default function PreFundingAllocations() {
       const userIds  = [...new Set(allocs.map((a: any) => a.user_id).filter(Boolean))];
       const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id).filter(Boolean))];
 
-      // Use paid_amount from pre_fund_requests — the authoritative field updated
-      // atomically by link_payment_atomically_rpc. No need to aggregate transactions.
-      const [profilesRes, fundsRes] = await Promise.all([
+      // Fetch profiles, fund metadata, AND actual per-user payments from pre_fund_transactions
+      const [profilesRes, fundsRes, txnRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,role').in('id', userIds),
-        (supabase as any).from('pre_fund_requests').select('id,name,status,paid_amount,currency').in('id', fundIds),
+        (supabase as any).from('pre_fund_requests').select('id,name,status,currency').in('id', fundIds),
+        // Aggregate actual payments per user per fund from the transactions table
+        (supabase as any)
+          .from('pre_fund_transactions')
+          .select('user_id,pre_fund_request_id,amount,transaction_type')
+          .in('pre_fund_request_id', fundIds)
+          .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
       ]);
 
       const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
       const fundMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, f]));
 
+      // Build per-user per-fund spend map from actual transaction rows
+      // payment + commitment = outgoing; reversal + return = credits back
+      const spendKey = (userId: string, fundId: string) => `${userId}::${fundId}`;
+      const spendMap = new Map<string, number>();
+      for (const t of (txnRes.data ?? []) as any[]) {
+        if (!t.user_id || !t.pre_fund_request_id) continue;
+        const key = spendKey(t.user_id, t.pre_fund_request_id);
+        const prev = spendMap.get(key) ?? 0;
+        const amt  = Number(t.amount) || 0;
+        // reversal / return reduce the spend; payment / commitment add to it
+        const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
+        spendMap.set(key, Math.max(0, prev + delta));
+      }
+
       const enriched: AllocRow[] = allocs.map((a: any) => {
         const p = profileMap.get(a.user_id) as any;
         const f = fundMap.get(a.pre_fund_request_id) as any;
-        // paid_amount on pre_fund_requests is the authoritative fund-level spend
-        const fundPaid = Number(f?.paid_amount ?? 0);
+        // Per-user actual spend from pre_fund_transactions; fall back to allocation's spent_amount
+        const txnSpent = spendMap.get(spendKey(a.user_id, a.pre_fund_request_id));
+        const spent    = txnSpent !== undefined ? txnSpent : Number(a.spent_amount ?? 0);
         return {
           ...a,
           allocated_amount: Number(a.allocated_amount),
-          spent_amount: fundPaid,
+          spent_amount: spent,
           fund_name:   f?.name   ?? 'Unknown Fund',
           fund_status: f?.status ?? 'unknown',
           user_name:   p?.full_name ?? p?.email ?? 'Unknown',
