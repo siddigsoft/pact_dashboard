@@ -2021,15 +2021,15 @@ export default function PreFundingReconciliation() {
 
       {/* ── Transaction Drill-Down Dialog ──────────────────────────────────── */}
       <Dialog open={!!drillTxn} onOpenChange={v => { if (!v) { setDrillTxn(null); setDrillSrc(null); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ExternalLink className="h-4 w-4" />
               Transaction Detail
             </DialogTitle>
           </DialogHeader>
           {drillTxn && (
-            <div className="space-y-4 py-1">
+            <div className="space-y-4 py-1 overflow-y-auto flex-1 pr-1">
               {/* Core transaction fields */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 {([
@@ -2184,7 +2184,7 @@ export default function PreFundingReconciliation() {
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="shrink-0 pt-2 border-t">
             <Button variant="outline" onClick={() => { setDrillTxn(null); setDrillSrc(null); }}>Close</Button>
           </DialogFooter>
         </DialogContent>
