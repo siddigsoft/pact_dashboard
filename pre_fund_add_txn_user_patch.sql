@@ -36,13 +36,15 @@ WHERE  pft.reference     = dp.id::TEXT
   AND  dp.requested_by   IS NOT NULL;
 
 -- Enumerator / Transport Fees (stored in mmp_site_entries; data collector = accepted_by)
+-- accepted_by is text in mmp_site_entries, cast to UUID
 UPDATE pre_fund_transactions pft
-SET    user_id = mse.accepted_by
+SET    user_id = mse.accepted_by::UUID
 FROM   mmp_site_entries mse
 WHERE  pft.reference        = mse.id::TEXT
   AND  pft.transaction_type = 'payment'
   AND  pft.user_id          IS NULL
-  AND  mse.accepted_by      IS NOT NULL;
+  AND  mse.accepted_by      IS NOT NULL
+  AND  mse.accepted_by ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 
 -- Fallback: if still NULL, default to created_by (whoever recorded the transaction)
 UPDATE pre_fund_transactions
