@@ -889,6 +889,14 @@ export default function PreFundingReconciliation() {
   };
 
   // ── Transaction drill-down ───────────────────────────────────────────────
+  // Fields in source records that hold user UUIDs and need name resolution
+  const USER_ID_FIELDS = new Set([
+    'requested_by','submitted_by','accepted_by','approved_by','rejected_by',
+    'reviewed_by','paid_by','received_by','processed_by','created_by',
+    'updated_by','cancelled_by','confirmed_by','verified_by',
+  ]);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   const handleDrillDown = async (txn: PreFundTransaction) => {
     setDrillTxn(txn);
     setDrillSrc(null);
@@ -897,6 +905,26 @@ export default function PreFundingReconciliation() {
     try {
       const { data } = await (supabase as any).from(txn.source_table).select('*').eq('id', txn.source_id).maybeSingle();
       setDrillSrc(data ?? null);
+
+      // Resolve any user-id fields in the source record into profileMap
+      if (data) {
+        const newIds = new Set<string>();
+        for (const [k, v] of Object.entries(data)) {
+          if (typeof v === 'string' && UUID_RE.test(v) &&
+              (USER_ID_FIELDS.has(k) || k.endsWith('_by') || k.endsWith('_user_id'))) {
+            newIds.add(v);
+          }
+        }
+        if (newIds.size > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles').select('id,full_name,email').in('id', [...newIds]);
+          setProfileMap(prev => {
+            const next = new Map(prev);
+            (profiles ?? []).forEach((p: any) => next.set(p.id, p.full_name || p.email || 'Unknown'));
+            return next;
+          });
+        }
+      }
     } catch { setDrillSrc(null); }
     finally { setLoadingDrill(false); }
   };
@@ -2111,20 +2139,42 @@ export default function PreFundingReconciliation() {
                     ) : drillSrc ? (
                       <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1.5">
                         {Object.entries(drillSrc)
-                          .filter(([k, v]) => v != null && !['id','pre_fund_request_id','user_id','created_by'].includes(k))
-                          .slice(0, 12)
-                          .map(([k, v]) => (
-                          <div key={k} className="flex justify-between gap-4">
-                            <span className="text-muted-foreground capitalize shrink-0">{k.replace(/_/g, ' ')}</span>
-                            <span className="font-medium truncate max-w-[240px] text-right">
-                              {k.includes('_at') || k.includes('_date')
-                                ? (() => { try { return format(parseISO(String(v)), 'MMM d, yyyy HH:mm'); } catch { return String(v); } })()
-                                : k.includes('receipt') || k.includes('url') || k.includes('proof')
-                                  ? <a href={String(v)} target="_blank" rel="noreferrer" className="text-sky-600 underline">View file</a>
-                                  : String(v)}
-                            </span>
-                          </div>
-                        ))}
+                          .filter(([k, v]) => v != null && v !== '' && !['id','pre_fund_request_id','mmp_id','mmp_file_id'].includes(k))
+                          .slice(0, 14)
+                          .map(([k, v]) => {
+                            // Friendly label
+                            const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                            // Resolve value
+                            let display: React.ReactNode;
+                            const str = String(v);
+                            if (k.includes('_at') || k.includes('_date')) {
+                              try { display = format(parseISO(str), 'MMM d, yyyy HH:mm'); } catch { display = str; }
+                            } else if (k.includes('receipt') || k.includes('url') || k.includes('proof')) {
+                              display = <a href={str} target="_blank" rel="noreferrer" className="text-sky-600 underline">View file</a>;
+                            } else if (
+                              UUID_RE.test(str) &&
+                              (USER_ID_FIELDS.has(k) || k.endsWith('_by') || k.endsWith('_user_id'))
+                            ) {
+                              // Resolve UUID to name
+                              display = (
+                                <span className="flex items-center gap-1">
+                                  <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  {profileMap.get(str) ?? str.slice(0, 8) + '…'}
+                                </span>
+                              );
+                            } else if (UUID_RE.test(str)) {
+                              // Generic UUID — show shortened
+                              display = str.slice(0, 8) + '…';
+                            } else {
+                              display = str;
+                            }
+                            return (
+                              <div key={k} className="flex justify-between gap-4">
+                                <span className="text-muted-foreground shrink-0">{label}</span>
+                                <span className="font-medium truncate max-w-[240px] text-right">{display}</span>
+                              </div>
+                            );
+                          })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground italic">No source record found or not accessible.</p>
