@@ -1992,7 +1992,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           // Authoritative paid-status check — covers partial RPC failures
           const { data: confirmedPaid, error: checkErr } = await (supabase as any)
             .from('down_payment_requests')
-            .select('id, approved_amount, requested_amount, submitted_by')
+            .select('id, approved_amount, requested_amount, requested_by')
             .in('id', reqs.map(r => r.id))
             .in('status', ['fully_paid', 'partially_paid']);
 
@@ -2009,6 +2009,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             const today = new Date().toISOString().split('T')[0];
             let pfLinked = 0;
             let pfTotal = 0;
+            let rpcNotDeployed = false;
 
             for (const req of confirmedReqs) {
               const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
@@ -2035,6 +2036,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               );
 
               if (rpcErr) {
+                const notDeployed =
+                  (rpcErr as any).code === 'PGRST202' ||
+                  String(rpcErr.message).toLowerCase().includes('could not find the function') ||
+                  String(rpcErr.message).toLowerCase().includes('does not exist');
+                if (notDeployed) { rpcNotDeployed = true; break; }
                 console.warn(`[BatchPay] Pre-fund atomic link failed for ${req.id}:`, rpcErr.message);
                 continue;
               }
@@ -2062,6 +2068,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               toast({
                 title: 'Pre-Fund Updated / تم تحديث التمويل المسبق',
                 description: `${pfLinked} payment${pfLinked !== 1 ? 's' : ''} (${pfTotal.toLocaleString()} ${selectedFund?.currency ?? 'SDG'}) deducted from "${selectedFund?.name ?? preFundId}".`,
+              });
+            } else if (rpcNotDeployed) {
+              toast({
+                title: '⚠️ SQL Migration Required',
+                description: 'Run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor to enable fund linking. Payments are saved — use Pre-Funding → Reconciliation → Link Now once deployed.',
+                variant: 'destructive',
               });
             } else {
               toast({
