@@ -82,18 +82,6 @@ const FUND_STATUS_CFG: Record<string, string> = {
   closed:           'bg-slate-100 text-slate-500',
 };
 
-const APPROVER_ROLE_KEYS = new Set([
-  'superadmin', 'super_admin', 'admin',
-  'employee',
-  'datateam', 'data_team',
-  'fieldoperationmanagerfom', 'fom', 'field operation manager (fom)', 'field operation manager',
-  'countrydirector', 'country_director', 'cd',
-]);
-function isApproverRole(role: string | null | undefined): boolean {
-  if (!role) return false;
-  return APPROVER_ROLE_KEYS.has(role.toLowerCase().replace(/[\s\-]/g, ''));
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PreFundingApprovalFlow() {
@@ -124,9 +112,9 @@ export default function PreFundingApprovalFlow() {
   const [actionDialog, setActionDialog]     = useState<{ step: ApprovalStep; action: 'approve' | 'reject' } | null>(null);
   const [actionNotes, setActionNotes]       = useState('');
 
-  // Eligible approvers
+  // Eligible approvers — any active/approved user (no role restriction)
   const eligibleUsers = useMemo(() =>
-    users.filter(u => (u.profileStatus === 'approved' || u.isApproved) && isApproverRole(u.role)),
+    users.filter(u => u.profileStatus === 'approved' || u.isApproved),
     [users]
   );
   const filteredEligibleUsers = useMemo(() =>

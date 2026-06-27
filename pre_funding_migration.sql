@@ -573,12 +573,15 @@ DECLARE
   v_je_id           UUID;
   v_ik              TEXT;
 BEGIN
-  -- Role guard: only service_role (pg_cron / Edge Function scheduler) or postgres
-  -- superuser may call this function.  Blank JWT role and 'authenticated' are
-  -- explicitly rejected — no regular user or unauthenticated caller may invoke it.
-  v_jwt_role := coalesce(current_setting('request.jwt.claims.role', true), '');
-  IF v_jwt_role NOT IN ('service_role', 'postgres') THEN
-    RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (role="%"). Must be service_role or postgres.', v_jwt_role;
+  -- Access guard: allow pg_cron / supabase scheduler (current_user = postgres/supabase_admin),
+  -- Edge Function callers (JWT role = service_role), or direct superuser access.
+  -- JWT claims are absent in pg_cron context so we check current_user first.
+  IF current_user NOT IN ('postgres', 'supabase_admin', 'supabase_auth_admin')
+     AND coalesce(current_setting('request.jwt.claims.role', true), '') NOT IN ('service_role')
+  THEN
+    RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (db_user="%" jwt_role="%"). Must be postgres, supabase_admin, or service_role.',
+      current_user,
+      coalesce(current_setting('request.jwt.claims.role', true), '');
   END IF;
   -- Mark funds ending within warning_days as ending_soon
   UPDATE pre_fund_requests
