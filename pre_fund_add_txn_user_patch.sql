@@ -35,14 +35,14 @@ WHERE  pft.reference     = dp.id::TEXT
   AND  pft.user_id       IS NULL
   AND  dp.requested_by   IS NOT NULL;
 
--- Enumerator Fees (enumerator_id is the field staff)
+-- Enumerator / Transport Fees (stored in mmp_site_entries, enumerator_id is the field staff)
 UPDATE pre_fund_transactions pft
-SET    user_id = ef.enumerator_id
-FROM   enumerator_fees ef
-WHERE  pft.reference     = ef.id::TEXT
+SET    user_id = mse.enumerator_id
+FROM   mmp_site_entries mse
+WHERE  pft.reference     = mse.id::TEXT
   AND  pft.transaction_type = 'payment'
   AND  pft.user_id       IS NULL
-  AND  ef.enumerator_id  IS NOT NULL;
+  AND  mse.enumerator_id IS NOT NULL;
 
 -- Fallback: if still NULL, default to created_by (whoever recorded the transaction)
 UPDATE pre_fund_transactions
