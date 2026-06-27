@@ -13,8 +13,9 @@ import {
   Banknote, RefreshCw, AlertTriangle, TrendingDown, Calendar,
   ChevronRight, DollarSign, Clock, Lock,
   Globe, ArrowUpDown, Users, ChevronDown, ChevronUp,
-  Flame, Layers, User,
+  Flame, Layers, User, Receipt, ArrowRight,
 } from 'lucide-react';
+import { usePreFundPaymentGate } from '@/hooks/usePreFundPaymentGate';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -172,6 +173,7 @@ export default function PreFundingOverview() {
   const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
   const [funds, setFunds]         = useState<PreFundRow[]>([]);
   const [allocs, setAllocs]       = useState<AllocRow[]>([]);
@@ -350,6 +352,42 @@ export default function PreFundingOverview() {
           </Button>
         </div>
       </div>
+
+      {/* ── Pre-Funding Action Banner (for allocated non-admin users) ─────── */}
+      {gateStatus === 'prefund_only' && !canAccess && (
+        <div className="rounded-xl border border-emerald-400/50 bg-emerald-50 dark:bg-emerald-900/15 p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-start gap-3 flex-1">
+            <Receipt className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-semibold text-emerald-800 dark:text-emerald-300 text-sm">
+                You have an active pre-fund allocation / لديك تخصيص تمويل مسبق نشط
+              </p>
+              {allocatedFunds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {allocatedFunds.map(f => (
+                    <span key={f.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-800/40 text-emerald-800 dark:text-emerald-300 font-medium border border-emerald-300/50">
+                      {f.name} · {f.currency} {f.remaining.toLocaleString()} remaining
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                Submit your field expenses here — they will be deducted from your allocation automatically.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+            onClick={() => navigate('/cost-submission?prefund_mode=1')}
+            data-testid="button-submit-expense-prefund"
+          >
+            <Receipt className="h-3.5 w-3.5" />
+            Submit Expense
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive">

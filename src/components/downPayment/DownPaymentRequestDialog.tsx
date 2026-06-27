@@ -8,9 +8,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2, DollarSign, AlertTriangle, Banknote } from 'lucide-react';
+import { Plus, Trash2, DollarSign, AlertTriangle, Banknote, ShieldX, ArrowRight } from 'lucide-react';
 import { PaymentType, InstallmentPlan } from '@/types/down-payment';
 import { normalizeRole } from '@/utils/roleMapping';
+import { usePreFundPaymentGate } from '@/hooks/usePreFundPaymentGate';
 
 interface DownPaymentRequestDialogProps {
   open: boolean;
@@ -42,6 +43,7 @@ export function DownPaymentRequestDialog({
   const { currentUser } = useUser();
   const { createRequest } = useDownPayment();
   const { toast } = useToast();
+  const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
   
   const [paymentType, setPaymentType] = useState<PaymentType>('full_advance');
   const [requestedAmount, setRequestedAmount] = useState(transportationBudget);
@@ -133,6 +135,55 @@ export function DownPaymentRequestDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {/* Pre-Fund Payment Gate */}
+        {gateStatus === 'prefund_only' && (
+          <div className="rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-900/15 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <ShieldX className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  Use Pre-Funding page for your advance / استخدم صفحة التمويل المسبق للسلفة
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  You are allocated to an active pre-fund. All advances must be requested through the Pre-Funding section so they are linked to your allocation.
+                </p>
+                {allocatedFunds.length > 0 && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                    Your fund: {allocatedFunds.map(f => f.name).join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <a href="/pre-funding?tab=registry" onClick={() => onOpenChange(false)}>
+                <Button size="sm" variant="outline" className="border-amber-400 text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 gap-1.5" data-testid="button-goto-prefunding">
+                  Go to Pre-Funding <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+              <Button size="sm" variant="ghost" onClick={() => onOpenChange(false)} data-testid="button-gate-cancel">Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        {gateStatus === 'no_access' && (
+          <div className="rounded-lg border border-rose-400/50 bg-rose-50 dark:bg-rose-900/15 p-4 space-y-2">
+            <div className="flex items-start gap-3">
+              <ShieldX className="w-5 h-5 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">
+                  Payment access not enabled / صلاحية الدفع غير مفعّلة
+                </p>
+                <p className="text-xs text-rose-700 dark:text-rose-400">
+                  You are not linked to any active pre-fund. Contact your administrator to get allocated to a pre-fund before requesting advances.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => onOpenChange(false)} data-testid="button-gate-cancel-noaccess">Close</Button>
+          </div>
+        )}
+
+        {/* Normal form — only shown when gate allows */}
+        {(gateStatus === 'allowed' || gateStatus === 'loading') && (
         <div className="space-y-6">
 
           {/* Bank Account Gate */}
@@ -325,7 +376,15 @@ export function DownPaymentRequestDialog({
             />
           </div>
         </div>
+        )}
 
+        {(gateStatus === 'prefund_only' || gateStatus === 'no_access') && (
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+          </DialogFooter>
+        )}
+
+        {(gateStatus === 'allowed' || gateStatus === 'loading') && (
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
             Cancel
@@ -339,6 +398,7 @@ export function DownPaymentRequestDialog({
             {submitting ? 'Submitting...' : 'Submit Request'}
           </Button>
         </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
