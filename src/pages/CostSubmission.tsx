@@ -231,10 +231,8 @@ const CostSubmission = () => {
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
 
-  // Pre-Fund payment gate — determines if user can submit costs here or must use Pre-Funding page
+  // Pre-Fund gate — provides allocation context for auto-linking; does NOT block submission
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
-  // Users arriving from Pre-Funding page via ?prefund_mode=1 bypass the redirect gate
-  const prefundMode = searchParams.get('prefund_mode') === '1';
   
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
 
@@ -3281,68 +3279,26 @@ const CostSubmission = () => {
         {canSubmitOperationalCosts && (
           <TabsContent value="submit" className="space-y-4">
 
-            {/* ── Pre-Fund Payment Gate ────────────────────────────────────────── */}
-            {gateStatus === 'prefund_only' && !prefundMode && (
-              <div className="rounded-xl border border-amber-400/50 bg-amber-50 dark:bg-amber-900/15 p-5 space-y-4">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                  <div className="space-y-1.5">
-                    <p className="font-semibold text-amber-800 dark:text-amber-300">
-                      Submit expenses from the Pre-Funding section / قدّم مصاريفك من قسم التمويل المسبق
-                    </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-400">
-                      You are allocated to an active pre-fund. All cost submissions must go through
-                      the Pre-Funding section so they are automatically linked to your allocation and
-                      deducted from your personal fund balance.
-                    </p>
-                    {allocatedFunds.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {allocatedFunds.map(f => (
-                          <span key={f.id} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-800/40 text-amber-800 dark:text-amber-300 font-medium border border-amber-300/60 dark:border-amber-700">
-                            <DollarSign className="h-3 w-3" />
-                            {f.name} · {f.currency} {f.remaining.toLocaleString()} remaining
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
-                    onClick={() => navigate('/cost-submission?prefund_mode=1')}
-                    data-testid="button-use-prefund-mode"
-                  >
-                    <ArrowRight className="h-3.5 w-3.5" />
-                    Submit via Pre-Funding
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => navigate('/pre-funding?tab=registry')} data-testid="button-goto-prefunding-registry">
-                    Go to Pre-Funding page
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {gateStatus === 'no_access' && (
-              <div className="rounded-xl border border-rose-400/50 bg-rose-50 dark:bg-rose-900/15 p-5 space-y-3">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="h-5 w-5 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-rose-800 dark:text-rose-300">
-                      Cost submission not available / تقديم التكاليف غير متاح
-                    </p>
-                    <p className="text-sm text-rose-700 dark:text-rose-400">
-                      You are not linked to any active pre-fund. Contact your administrator to
-                      get allocated to a pre-fund before you can submit expenses.
-                    </p>
+            {/* ── Pre-Fund allocation notice (soft, non-blocking) ───────────── */}
+            {gateStatus === 'prefund_only' && allocatedFunds.length > 0 && (
+              <div className="rounded-xl border border-sky-400/40 bg-sky-50 dark:bg-sky-900/15 p-4 flex items-start gap-3">
+                <ShieldCheck className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 shrink-0" />
+                <div className="space-y-1 flex-1">
+                  <p className="text-sm font-semibold text-sky-800 dark:text-sky-300">
+                    This submission will be auto-linked to your pre-fund allocation / سيتم ربط هذا الطلب بمخصصك التمويلي تلقائياً
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allocatedFunds.map(f => (
+                      <span key={f.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-800/40 text-sky-800 dark:text-sky-300 font-medium border border-sky-200/60">
+                        <DollarSign className="h-3 w-3" />
+                        {f.name} · {f.currency} {f.remaining.toLocaleString()} remaining
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Normal form — shown only when allowed (super admin) or prefund bypass mode */}
-            {(gateStatus === 'allowed' || prefundMode) && (<>
             {editingSubmission && (
               <Alert className="mb-4">
                 <Pencil className="h-4 w-4" />
@@ -3386,7 +3342,6 @@ const CostSubmission = () => {
                 setActiveTab("history");
               }}
             />
-            </>)}
           </TabsContent>
         )}
 

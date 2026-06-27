@@ -379,7 +379,7 @@ export default function PreFundingOverview() {
           <Button
             size="sm"
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-            onClick={() => navigate('/cost-submission?prefund_mode=1')}
+            onClick={() => navigate('/cost-submission')}
             data-testid="button-submit-expense-prefund"
           >
             <Receipt className="h-3.5 w-3.5" />

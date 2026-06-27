@@ -19,7 +19,7 @@ import {
   Plus, Pencil, Trash2, Upload, FileText, RefreshCw, Search,
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
-  Users, UserPlus, Wallet,
+  Users, UserPlus, Wallet, TrendingUp,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -311,6 +311,35 @@ export default function PreFundingRegistry() {
       warning_days: pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : '',
       auto_renewal_mode: pfSettings?.default_renewal_mode ?? EMPTY_FORM.auto_renewal_mode,
       threshold_pct: pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : '',
+    });
+    setDialogStep(1);
+    setProjectSearch('');
+    setShowForm(true);
+  };
+
+  const openTopUp = (f: PreFundRequest) => {
+    setEditing(null);
+    const fa = f as any;
+    setForm({
+      ...EMPTY_FORM,
+      name: `Top-up — ${f.name}`,
+      source: f.source ?? '',
+      currency: f.currency,
+      country_id: f.country_id ?? '',
+      project_id: f.project_id ?? '',
+      grant_id: f.grant_id ?? '',
+      matching_scope: f.matching_scope,
+      cost_category: f.cost_category ?? '',
+      period_type_id: f.period_type_id ?? '',
+      threshold_mode: fa.threshold_pct != null ? 'pct' : 'fixed',
+      threshold_pct: fa.threshold_pct != null ? String(fa.threshold_pct) : (pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : ''),
+      warning_days: f.warning_days != null ? String(f.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
+      auto_renewal_mode: f.auto_renewal_mode,
+      gl_receipt_account:   fa.gl_receipt_account   ?? '',
+      gl_liability_account: fa.gl_liability_account ?? '',
+      gl_expense_account:   fa.gl_expense_account   ?? '',
+      gl_cf_account:        fa.gl_cf_account        ?? '',
+      notes: `Top-up request for fund: ${f.name}`,
     });
     setDialogStep(1);
     setProjectSearch('');
@@ -1033,6 +1062,11 @@ export default function PreFundingRegistry() {
                       {['active', 'low_balance'].includes(f.status) && (
                         <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-violet-600 border-violet-300 hover:bg-violet-50 gap-1.5" title="Manage user allocations" onClick={() => openAllocDialog(f)} data-testid={`button-users-${f.id}`}>
                           <Users className="h-3.5 w-3.5" />Users
+                        </Button>
+                      )}
+                      {['active', 'low_balance'].includes(f.status) && canManage && (
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50 gap-1.5" title="Request a top-up for this fund" onClick={() => openTopUp(f)} data-testid={`button-topup-${f.id}`}>
+                          <TrendingUp className="h-3.5 w-3.5" />Top-up
                         </Button>
                       )}
                       {canManage && (
