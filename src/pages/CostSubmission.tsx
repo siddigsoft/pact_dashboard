@@ -2594,6 +2594,10 @@ const CostSubmission = () => {
     if (!deleteConfirm) return;
     setActionProcessing(true);
     try {
+      // Reverse any pre-fund linkage first (restores fund balance + allocation)
+      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
+      await unlinkPaymentFromPreFund('operational_cost_submissions', deleteConfirm.id);
+
       let query = supabase
         .from('operational_cost_submissions')
         .delete()

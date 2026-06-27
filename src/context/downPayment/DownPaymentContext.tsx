@@ -24,6 +24,7 @@ import {
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { unlinkPaymentFromPreFund } from '@/utils/preFundLinkage';
 
 interface RevertToPendingData {
   requestId: string;
@@ -1137,6 +1138,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const deleteRequest = async (requestId: string): Promise<boolean> => {
     try {
       const now = new Date().toISOString();
+
+      // Reverse any pre-fund linkage first (restores fund balance + allocation)
+      await unlinkPaymentFromPreFund('down_payment_requests', requestId);
 
       const { data: updated, error } = await supabase
         .from('down_payment_requests')
