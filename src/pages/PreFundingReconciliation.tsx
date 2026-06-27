@@ -20,12 +20,15 @@ import {
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
   Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
   ExternalLink, ChevronDown, History, Trash2, Filter, AlertCircle,
+  Info, Receipt, User, Clock, FileSpreadsheet,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 interface PreFundSummary {
   id: string; name: string; source: string | null; currency: string;
@@ -37,6 +40,8 @@ interface PreFundTransaction {
   amount: number; currency: string; reference: string | null; description: string | null;
   transaction_date: string; reconciled: boolean; reconciled_at: string | null;
   source_table: string | null; source_id: string | null; created_at: string;
+  user_id: string | null; created_by: string | null; receipt_url: string | null;
+  gl_journal_entry_id: string | null;
 }
 interface Reconciliation {
   id: string; pre_fund_request_id: string; period_start: string | null; period_end: string | null;
@@ -436,6 +441,105 @@ async function generateDonorStatementPDF(
   return { blob: doc.output('blob'), filename };
 }
 
+// ── Excel Reconciliation Export ───────────────────────────────────────────
+function generateReconciliationExcel(
+  fund: PreFundSummary,
+  transactions: PreFundTransaction[],
+  profileMap: Map<string, string>,
+  reconciliations: Reconciliation[],
+): { buffer: ArrayBuffer; filename: string } {
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Fund Summary ─────────────────────────────────────────────
+  const period = fund.start_date && fund.end_date
+    ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
+    : '—';
+  const summaryRows = [
+    ['PACT – Pre-Fund Reconciliation Report'],
+    ['Generated', format(new Date(), 'MMMM d, yyyy HH:mm')],
+    [],
+    ['FUND DETAILS'],
+    ['Fund Name',       fund.name],
+    ['Donor / Source',  fund.source ?? '—'],
+    ['Currency',        fund.currency],
+    ['Reporting Period',period],
+    ['Status',          fund.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
+    [],
+    ['FINANCIAL SUMMARY'],
+    ['Item',            'Amount'],
+    ['Total Funded',    fund.amount],
+    ['Total Paid Out',  fund.paid_amount],
+    ['Total Committed', fund.committed_amount],
+    ['Available Balance',fund.available_balance],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{ wch: 22 }, { wch: 36 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Fund Summary');
+
+  // ── Sheet 2: All Transactions ─────────────────────────────────────────
+  const txnHeader = [
+    'Date', 'Created At', 'Type', 'Reference', 'Description',
+    'Source Module', 'Source Record ID',
+    `Amount (${fund.currency})`, 'Reconciled', 'Reconciled At',
+    'Paid By (User)', 'Recorded By',
+    'Receipt URL', 'GL Journal Entry',
+  ];
+  const txnRows = transactions.map(t => [
+    t.transaction_date,
+    t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+    TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
+    t.reference ?? '—',
+    t.description ?? '—',
+    t.source_table ? t.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—',
+    t.source_id ?? '—',
+    t.amount,
+    t.reconciled ? 'Yes' : 'No',
+    t.reconciled_at ? format(parseISO(t.reconciled_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+    t.user_id ? (profileMap.get(t.user_id) ?? t.user_id) : '—',
+    t.created_by ? (profileMap.get(t.created_by) ?? t.created_by) : '—',
+    t.receipt_url ?? '—',
+    t.gl_journal_entry_id ?? '—',
+  ]);
+  const wsTxns = XLSX.utils.aoa_to_sheet([txnHeader, ...txnRows]);
+  wsTxns['!cols'] = [
+    { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 36 },
+    { wch: 26 }, { wch: 38 }, { wch: 16 }, { wch: 10 }, { wch: 20 },
+    { wch: 24 }, { wch: 24 }, { wch: 54 }, { wch: 38 },
+  ];
+  // Bold header row
+  const range = XLSX.utils.decode_range(wsTxns['!ref'] ?? 'A1');
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = wsTxns[XLSX.utils.encode_cell({ r: 0, c })];
+    if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: '0F2041' } }, font_color: { rgb: 'FFFFFF' } };
+  }
+  XLSX.utils.book_append_sheet(wb, wsTxns, 'Transactions');
+
+  // ── Sheet 3: Reconciliation History ──────────────────────────────────
+  if (reconciliations.length > 0) {
+    const reconHeader = ['Period Start', 'Period End', 'Closed At', 'Total Funded', 'Total Paid', 'Total Committed', 'Variance', 'Surplus Action', 'Carry Forward', 'Returned', 'Notes'];
+    const reconRows = reconciliations.map(r => [
+      r.period_start ?? '—',
+      r.period_end ?? '—',
+      r.closed_at ? format(parseISO(r.closed_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+      r.total_funded ?? 0,
+      r.total_paid ?? 0,
+      r.total_committed ?? 0,
+      r.variance ?? 0,
+      r.surplus_action?.replace(/_/g, ' ') ?? '—',
+      r.carry_forward_amount ?? 0,
+      r.return_amount ?? 0,
+      r.notes ?? '—',
+    ]);
+    const wsRecon = XLSX.utils.aoa_to_sheet([reconHeader, ...reconRows]);
+    wsRecon['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 20 }, ...Array(8).fill({ wch: 14 })];
+    XLSX.utils.book_append_sheet(wb, wsRecon, 'Reconciliation History');
+  }
+
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+  const filename = `PreFund-Recon-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
+  return { buffer, filename };
+}
+
 async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string): Promise<string | null> {
   const path = `pre-fund-pdfs/${fundId}/${filename}`;
   const { error } = await supabase.storage.from('financial-documents').upload(path, blob, { contentType: 'application/pdf', upsert: true });
@@ -492,6 +596,10 @@ export default function PreFundingReconciliation() {
   const [csvParsed, setCsvParsed]     = useState<{ date: string; amount: string; reference: string; description: string }[]>([]);
   const [importing, setImporting]     = useState(false);
 
+  // Profile name map (user_id → full name) for transaction table
+  const [profileMap, setProfileMap]   = useState<Map<string, string>>(new Map());
+  const [exportingExcel, setExportingExcel] = useState(false);
+
   const loadFunds = useCallback(async () => {
     setLoading(true);
     try {
@@ -512,8 +620,25 @@ export default function PreFundingReconciliation() {
         supabase.from('pre_fund_transactions').select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false }),
         supabase.from('pre_fund_reconciliations').select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false }),
       ]);
-      setTxns((txnRes.data as any) ?? []);
+      const txns = (txnRes.data as any) ?? [];
+      setTxns(txns);
       setRecons((reconRes.data as any) ?? []);
+
+      // Load profiles for user_id + created_by in transactions
+      const userIds = new Set<string>();
+      txns.forEach((t: PreFundTransaction) => {
+        if (t.user_id)    userIds.add(t.user_id);
+        if (t.created_by) userIds.add(t.created_by);
+      });
+      if (userIds.size > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles').select('id,full_name,email').in('id', [...userIds]);
+        const map = new Map<string, string>();
+        (profiles ?? []).forEach((p: any) => map.set(p.id, p.full_name || p.email || 'Unknown'));
+        setProfileMap(map);
+      } else {
+        setProfileMap(new Map());
+      }
     } catch (e: any) { toast({ title: 'Failed to load transactions', description: e.message, variant: 'destructive' }); }
     finally { setTxnLoading(false); }
   }, [toast]);
@@ -1210,6 +1335,21 @@ export default function PreFundingReconciliation() {
     finally { setGeneratingPdf(false); }
   };
 
+  const handleExportExcel = async () => {
+    if (!selectedFund) return;
+    setExportingExcel(true);
+    try {
+      const { buffer, filename } = generateReconciliationExcel(selectedFund, transactions, profileMap, reconciliations);
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Excel exported', description: `${filename} — ${transactions.length} transactions` });
+    } catch (e: any) {
+      toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
+    } finally { setExportingExcel(false); }
+  };
+
   // Exclude bank_statement rows (reconciliation-only references) from all financial totals
   const accountingTxns = transactions.filter(t => t.transaction_type !== 'bank_statement');
   const totalReconciled = accountingTxns.filter(t => t.reconciled).reduce((s, t) => s + t.amount, 0);
@@ -1229,33 +1369,44 @@ export default function PreFundingReconciliation() {
         <Button variant="outline" size="sm" onClick={loadFunds}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Fund list */}
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Active Funds</h3>
-          {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-lg" />)}</div>
-          ) : funds.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">No active funds to reconcile.</div>
-          ) : funds.map(f => (
-            <button key={f.id} onClick={() => setSelected(f)}
-              className={cn('w-full text-left p-3 rounded-lg border transition-all',
-                selectedFund?.id === f.id ? 'bg-primary/5 border-primary ring-1 ring-primary' : 'bg-card hover:bg-muted/40'
-              )} data-testid={`button-recon-fund-${f.id}`}>
-              <div className="font-medium text-sm truncate">{f.name}</div>
-              <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
-                <span>{f.currency} {formatNumber(f.available_balance, 0)} available</span>
-                <Badge variant="outline" className={cn('text-[10px]',
-                  f.status === 'active' ? 'bg-emerald-50 text-emerald-700' :
-                  f.status === 'closed' ? 'bg-slate-100 text-slate-500' : 'bg-orange-50 text-orange-700'
-                )}>{f.status.replace('_', ' ')}</Badge>
-              </div>
-            </button>
-          ))}
-        </div>
+      {/* ── Fund selector bar ──────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/30 px-4 py-2.5">
+        <span className="text-sm font-medium text-muted-foreground shrink-0">Active Fund:</span>
+        {loading ? (
+          <Skeleton className="h-9 w-64 rounded-md" />
+        ) : (
+          <Select
+            value={selectedFund?.id ?? ''}
+            onValueChange={id => setSelected(funds.find(f => f.id === id) ?? null)}
+          >
+            <SelectTrigger className="h-9 w-72 text-sm" data-testid="select-recon-fund">
+              <SelectValue placeholder="Select a fund to reconcile…" />
+            </SelectTrigger>
+            <SelectContent>
+              {funds.map(f => (
+                <SelectItem key={f.id} value={f.id} data-testid={`option-fund-${f.id}`}>
+                  <span className="font-medium">{f.name}</span>
+                  <span className="ml-2 text-muted-foreground text-xs">· {f.currency} {formatNumber(f.available_balance, 0)} avail.</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {selectedFund && (
+          <>
+            <Badge className={cn('text-[11px]',
+              selectedFund.status === 'active'       ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+              selectedFund.status === 'closed'       ? 'bg-slate-100 text-slate-500 border-slate-200' :
+              selectedFund.status === 'low_balance'  ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                                                       'bg-orange-100 text-orange-700 border-orange-200'
+            )}>{selectedFund.status.replace(/_/g, ' ')}</Badge>
+            <span className="text-[11px] text-muted-foreground ml-auto">{funds.length} fund{funds.length !== 1 ? 's' : ''} total</span>
+          </>
+        )}
+      </div>
 
-        {/* Reconciliation panel */}
-        <div className="lg:col-span-2 space-y-4">
+      {/* ── Full-width reconciliation panel ─────────────────────────────────── */}
+      <div className="space-y-4">
           {!selectedFund ? (
             <div className="flex items-center justify-center h-48 text-muted-foreground text-sm border rounded-xl bg-muted/20">Select a fund to reconcile</div>
           ) : (
@@ -1274,6 +1425,9 @@ export default function PreFundingReconciliation() {
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPDF} disabled={generatingPdf}>
                         <Download className="h-3.5 w-3.5 mr-1" />{generatingPdf ? 'Generating…' : 'Recon PDF'}
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportExcel} disabled={exportingExcel} data-testid="button-export-excel">
+                        <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />{exportingExcel ? 'Exporting…' : 'Export Excel'}
                       </Button>
                       {['active', 'low_balance'].includes(selectedFund.status) && (
                         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleMatchBankFeed} disabled={matchingFeed} data-testid="button-match-bank-feed">
@@ -1296,13 +1450,25 @@ export default function PreFundingReconciliation() {
                 <CardContent className="px-4 pb-4">
                   <div className="grid grid-cols-4 gap-3 text-center">
                     {[
-                      { label: 'Total Funded', value: selectedFund.amount, color: 'text-foreground' },
-                      { label: 'Paid Out',     value: selectedFund.paid_amount,      color: 'text-sky-600' },
-                      { label: 'Committed',    value: selectedFund.committed_amount, color: 'text-violet-600' },
-                      { label: 'Available',    value: selectedFund.available_balance,color: selectedFund.available_balance < selectedFund.amount * 0.2 ? 'text-rose-600' : 'text-emerald-600' },
+                      { label: 'Total Funded', value: selectedFund.amount, color: 'text-foreground', tip: null },
+                      { label: 'Paid Out',     value: selectedFund.paid_amount,      color: 'text-sky-600',    tip: null },
+                      { label: 'Committed',    value: selectedFund.committed_amount, color: 'text-violet-600', tip: 'Funds reserved for approved plans or pending payments that have not yet been physically disbursed. They reduce your Available balance immediately — like a hold — so the money cannot be double-spent.' },
+                      { label: 'Available',    value: selectedFund.available_balance,color: selectedFund.available_balance < selectedFund.amount * 0.2 ? 'text-rose-600' : 'text-emerald-600', tip: null },
                     ].map(s => (
                       <div key={s.label} className="bg-muted/40 rounded-lg p-2">
-                        <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                        <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          {s.label}
+                          {s.tip && (
+                            <TooltipProvider delayDuration={200}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground/60 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs text-xs">{s.tip}</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </p>
                         <p className={cn('font-bold font-mono text-sm', s.color)}>{selectedFund.currency} {formatNumber(s.value, 0)}</p>
                       </div>
                     ))}
@@ -1426,8 +1592,16 @@ export default function PreFundingReconciliation() {
 
               {/* ── Transaction table ──────────────────────────────────────────── */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold">Transactions</h3>
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    Transactions
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{transactions.length}</Badge>
+                    {transactions.some(t => t.receipt_url) && (
+                      <span className="text-[10px] text-muted-foreground font-normal flex items-center gap-1">
+                        <Receipt className="h-3 w-3" />{transactions.filter(t => t.receipt_url).length} with receipt
+                      </span>
+                    )}
+                  </h3>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCsvImport(true)} data-testid="button-csv-import">
                       <Upload className="h-3.5 w-3.5 mr-1" />Import CSV
@@ -1448,14 +1622,18 @@ export default function PreFundingReconciliation() {
                   <div className="rounded-lg border overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
+                        <TableRow className="text-[11px]">
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
                           <TableHead>Type</TableHead>
                           <TableHead>Reference</TableHead>
                           <TableHead>Description</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead><span className="flex items-center gap-1"><User className="h-3 w-3" />Paid By</span></TableHead>
+                          <TableHead><span className="flex items-center gap-1"><Clock className="h-3 w-3" />Recorded</span></TableHead>
                           <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="text-center">Reconciled</TableHead>
-                          <TableHead className="text-center w-10"></TableHead>
+                          <TableHead className="text-center w-8"><Receipt className="h-3 w-3 mx-auto" /></TableHead>
+                          <TableHead className="text-center">Recon</TableHead>
+                          <TableHead className="text-center w-8"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1463,18 +1641,57 @@ export default function PreFundingReconciliation() {
                           <TableRow
                             key={t.id}
                             data-testid={`row-txn-${t.id}`}
-                            className="cursor-pointer hover:bg-muted/40"
+                            className="cursor-pointer hover:bg-muted/40 text-xs"
                             onClick={() => handleDrillDown(t)}
                           >
-                            <TableCell className="text-xs whitespace-nowrap">{format(parseISO(t.transaction_date), 'MMM d, yyyy')}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <div>{format(parseISO(t.transaction_date), 'MMM d, yyyy')}</div>
+                              <div className="text-[10px] text-muted-foreground/70">{format(parseISO(t.created_at), 'HH:mm')}</div>
+                            </TableCell>
                             <TableCell>
-                              <span className={cn('text-xs font-medium', TXN_TYPE_CFG[t.transaction_type]?.color)}>
+                              <span className={cn('font-medium', TXN_TYPE_CFG[t.transaction_type]?.color)}>
                                 {TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type}
                               </span>
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{t.reference ?? '—'}</TableCell>
-                            <TableCell className="text-xs max-w-[160px] truncate">{t.description ?? '—'}</TableCell>
-                            <TableCell className="text-right font-mono text-sm">{t.currency} {formatNumber(t.amount, 0)}</TableCell>
+                            <TableCell className="text-muted-foreground max-w-[100px] truncate">{t.reference ?? '—'}</TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <span className="line-clamp-2">{t.description ?? '—'}</span>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground whitespace-nowrap">
+                              {t.source_table ? t.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace('Down Payment Requests', 'Down-Payment').replace('Operational Cost Submissions', 'Op.Cost').replace('Pre Fund Transactions', 'Manual') : '—'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {t.user_id ? (
+                                <span className="flex items-center gap-1">
+                                  <User className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                  {profileMap.get(t.user_id) ?? <span className="text-muted-foreground italic">Unknown</span>}
+                                </span>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {t.created_by ? (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                  <span className="text-muted-foreground">{profileMap.get(t.created_by) ?? t.created_by.slice(0, 8)}</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground/50">{format(parseISO(t.created_at), 'MMM d HH:mm')}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">{t.currency} {formatNumber(t.amount, 0)}</TableCell>
+                            <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                              {t.receipt_url ? (
+                                <a href={t.receipt_url} target="_blank" rel="noreferrer"
+                                  className="flex items-center justify-center h-6 w-6 mx-auto rounded hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-600 transition-colors"
+                                  title="View receipt"
+                                  data-testid={`link-receipt-${t.id}`}
+                                >
+                                  <Receipt className="h-3.5 w-3.5" />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground/30 text-[10px]">—</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                               <button
                                 onClick={() => handleReconcileTxn(t.id, !t.reconciled)}
@@ -1500,12 +1717,13 @@ export default function PreFundingReconciliation() {
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30 font-semibold">
-                          <TableCell colSpan={4} className="text-xs">Totals</TableCell>
-
+                          <TableCell colSpan={7} className="text-xs">Totals</TableCell>
                           <TableCell className="text-right font-mono text-sm">
                             {selectedFund.currency} {formatNumber(accountingTxns.reduce((s, t) => s + t.amount, 0), 0)}
                           </TableCell>
+                          <TableCell />
                           <TableCell className="text-center text-xs text-muted-foreground">{accountingTxns.filter(t => t.reconciled).length}/{accountingTxns.length}</TableCell>
+                          <TableCell />
                         </TableRow>
                       </TableBody>
                     </Table>
@@ -1595,7 +1813,6 @@ export default function PreFundingReconciliation() {
             </>
           )}
         </div>
-      </div>
 
       {/* Add Transaction Dialog */}
       <Dialog open={showAddTxn} onOpenChange={setShowAddTxn}>
@@ -1654,44 +1871,101 @@ export default function PreFundingReconciliation() {
             <div className="space-y-4 py-1">
               {/* Core transaction fields */}
               <div className="grid grid-cols-2 gap-3 text-sm">
-                {[
-                  ['Date',        format(parseISO(drillTxn.transaction_date), 'MMMM d, yyyy')],
-                  ['Type',        TXN_TYPE_CFG[drillTxn.transaction_type]?.label ?? drillTxn.transaction_type],
-                  ['Amount',      `${drillTxn.currency} ${formatNumber(drillTxn.amount, 0)}`],
-                  ['Reference',   drillTxn.reference ?? '—'],
-                  ['Description', drillTxn.description ?? '—'],
-                  ['Reconciled',  drillTxn.reconciled ? 'Yes' : 'No'],
-                  ['Source',      drillTxn.source_table ? drillTxn.source_table.replace(/_/g, ' ') : '—'],
-                ].map(([k, v]) => (
-                  <div key={k} className={k === 'Description' ? 'col-span-2' : ''}>
+                {([
+                  ['Payment Date',    format(parseISO(drillTxn.transaction_date), 'MMMM d, yyyy')],
+                  ['Recorded At',     format(parseISO(drillTxn.created_at), 'MMM d, yyyy HH:mm')],
+                  ['Type',            TXN_TYPE_CFG[drillTxn.transaction_type]?.label ?? drillTxn.transaction_type],
+                  ['Amount',          `${drillTxn.currency} ${formatNumber(drillTxn.amount, 0)}`],
+                  ['Reference',       drillTxn.reference ?? '—'],
+                  ['Source Module',   drillTxn.source_table ? drillTxn.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Manual Entry'],
+                  ['Reconciled',      drillTxn.reconciled ? `Yes — ${drillTxn.reconciled_at ? format(parseISO(drillTxn.reconciled_at), 'MMM d, yyyy HH:mm') : ''}` : 'No'],
+                  ['GL Journal',      drillTxn.gl_journal_entry_id ?? '—'],
+                ] as [string,string][]).map(([k, v]) => (
+                  <div key={k}>
                     <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{k}</p>
-                    <p className="font-medium mt-0.5">{v}</p>
+                    <p className="font-medium mt-0.5 text-sm">{v}</p>
                   </div>
                 ))}
+                <div className="col-span-2">
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Description</p>
+                  <p className="font-medium mt-0.5 text-sm">{drillTxn.description ?? '—'}</p>
+                </div>
               </div>
+
+              {/* People */}
+              {(drillTxn.user_id || drillTxn.created_by) && (
+                <>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {drillTxn.user_id && (
+                      <div>
+                        <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1"><User className="h-3 w-3" />Paid By</p>
+                        <p className="font-medium mt-0.5">{profileMap.get(drillTxn.user_id) ?? drillTxn.user_id.slice(0,8)}</p>
+                      </div>
+                    )}
+                    {drillTxn.created_by && (
+                      <div>
+                        <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1"><Clock className="h-3 w-3" />Recorded By</p>
+                        <p className="font-medium mt-0.5">{profileMap.get(drillTxn.created_by) ?? drillTxn.created_by.slice(0,8)}</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Receipt */}
+              {drillTxn.receipt_url && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1 mb-2"><Receipt className="h-3 w-3" />Receipt / Proof of Payment</p>
+                    {drillTxn.receipt_url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ? (
+                      <a href={drillTxn.receipt_url} target="_blank" rel="noreferrer">
+                        <img src={drillTxn.receipt_url} alt="Receipt" className="max-h-48 rounded-lg border object-contain w-full hover:opacity-90 transition-opacity" />
+                      </a>
+                    ) : (
+                      <a href={drillTxn.receipt_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-lg px-3 py-2 border border-sky-200 dark:border-sky-800"
+                      >
+                        <Receipt className="h-4 w-4 shrink-0" />
+                        View Receipt / Attachment
+                        <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
+                      </a>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Source record details */}
               {drillTxn.source_id && (
                 <>
                   <Separator />
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                      Source Record {loadingDrill && '(loading…)'}
+                      Source Record {loadingDrill && <span className="text-[10px] font-normal">(loading…)</span>}
                     </p>
                     {loadingDrill ? (
                       <div className="space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-4 w-full" />)}</div>
                     ) : drillSrc ? (
                       <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1.5">
-                        {(['title','name','amount','currency','status','submitted_at','created_at','notes'] as const).filter(k => drillSrc[k] != null).map(k => (
+                        {Object.entries(drillSrc)
+                          .filter(([k, v]) => v != null && !['id','pre_fund_request_id','user_id','created_by'].includes(k))
+                          .slice(0, 12)
+                          .map(([k, v]) => (
                           <div key={k} className="flex justify-between gap-4">
-                            <span className="text-muted-foreground capitalize">{String(k).replace(/_/g, ' ')}</span>
-                            <span className="font-medium truncate max-w-[220px] text-right">
-                              {String(k).includes('_at') ? format(parseISO(drillSrc[k]), 'MMM d, yyyy HH:mm') : String(drillSrc[k])}
+                            <span className="text-muted-foreground capitalize shrink-0">{k.replace(/_/g, ' ')}</span>
+                            <span className="font-medium truncate max-w-[240px] text-right">
+                              {k.includes('_at') || k.includes('_date')
+                                ? (() => { try { return format(parseISO(String(v)), 'MMM d, yyyy HH:mm'); } catch { return String(v); } })()
+                                : k.includes('receipt') || k.includes('url') || k.includes('proof')
+                                  ? <a href={String(v)} target="_blank" rel="noreferrer" className="text-sky-600 underline">View file</a>
+                                  : String(v)}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground italic">No source record found or source table not accessible.</p>
+                      <p className="text-sm text-muted-foreground italic">No source record found or not accessible.</p>
                     )}
                   </div>
                 </>
