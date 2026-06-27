@@ -9,6 +9,7 @@ import { TransferReceiptDetails } from "@/types/receipt-details";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/context/user/UserContext";
 import { ReceiptDetailsDialog } from "./ReceiptDetailsDialog";
+import { FilePreviewDialog } from "@/components/ui/FilePreviewDialog";
 import { 
   Upload, 
   File, 
@@ -37,6 +38,7 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
   const { currentUser } = useUser();
   const { logEvent } = useAuditLog();
   const [isUploading, setIsUploading] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string } | null>(null);
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
   const [pendingReceiptDoc, setPendingReceiptDoc] = useState<{
     url: string;
@@ -361,7 +363,7 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => window.open(doc.url, '_blank')}
+                        onClick={() => setPreviewFile({ url: doc.url, filename: doc.filename })}
                         data-testid={`button-view-${index}`}
                       >
                         View
@@ -396,6 +398,13 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
           initialData={editingReceiptDetails}
         />
       )}
+
+      <FilePreviewDialog
+        open={!!previewFile}
+        onOpenChange={(o) => { if (!o) setPreviewFile(null); }}
+        url={previewFile?.url ?? ''}
+        filename={previewFile?.filename}
+      />
     </div>
   );
 };

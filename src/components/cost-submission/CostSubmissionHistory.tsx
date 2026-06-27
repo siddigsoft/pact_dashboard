@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { FilePreviewDialog } from "@/components/ui/FilePreviewDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
   const { toast } = useToast();
   
   const [selectedSubmission, setSelectedSubmission] = useState<SiteVisitCostSubmission | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string } | null>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showBulkApproveDialog, setShowBulkApproveDialog] = useState(false);
@@ -873,7 +875,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                                     key={index}
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => window.open(doc.url, '_blank')}
+                                    onClick={() => setPreviewFile({ url: doc.url, filename: doc.filename })}
                                     className="justify-start"
                                     data-testid={`button-document-${index}`}
                                   >
@@ -1084,6 +1086,13 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FilePreviewDialog
+        open={!!previewFile}
+        onOpenChange={(o) => { if (!o) setPreviewFile(null); }}
+        url={previewFile?.url ?? ''}
+        filename={previewFile?.filename}
+      />
     </div>
   );
 };

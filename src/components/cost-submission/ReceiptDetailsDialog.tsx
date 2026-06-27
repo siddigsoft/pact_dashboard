@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { FilePreviewDialog } from "@/components/ui/FilePreviewDialog";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import {
   CheckCircle,
   AlertTriangle,
   XCircle,
-  ExternalLink,
+  Eye,
   Calendar,
   Building2,
   User,
@@ -86,6 +87,7 @@ export function ReceiptDetailsDialog({
 
   const [formData, setFormData] = useState<Partial<TransferReceiptDetails>>(getDefaultFormData());
   const [validation, setValidation] = useState<ReturnType<typeof validateReceiptDetails> | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -133,6 +135,7 @@ export function ReceiptDetailsDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
@@ -160,10 +163,10 @@ export function ReceiptDetailsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(receiptImageUrl, "_blank")}
+                    onClick={() => setPreviewOpen(true)}
                     data-testid="button-view-receipt"
                   >
-                    <ExternalLink className="h-4 w-4 mr-2" />
+                    <Eye className="h-4 w-4 mr-2" />
                     View Receipt
                   </Button>
                 </div>
@@ -397,6 +400,14 @@ export function ReceiptDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <FilePreviewDialog
+      open={previewOpen}
+      onOpenChange={setPreviewOpen}
+      url={receiptImageUrl}
+      filename={filename}
+    />
+  </>
   );
 }
 
