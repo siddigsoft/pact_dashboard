@@ -604,6 +604,11 @@ export default function PreFundingReconciliation() {
   // Inline receipt preview
   const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
 
+  // Super-admin allocation deduction — user picker for manual payments
+  const isSuperAdmin = hasAnyRole(['super_admin']);
+  const [txnAllocUserId, setTxnAllocUserId] = useState<string | null>(null);
+  const [allocUsers, setAllocUsers] = useState<{ id: string; name: string; allocated: number; spent: number; currency: string }[]>([]);
+
   // Group transactions that share the same receipt_url (batch receipts)
   const receiptGroupMap = useMemo(() => {
     const map = new Map<string, PreFundTransaction[]>();
@@ -669,6 +674,24 @@ export default function PreFundingReconciliation() {
       setTxnForm(p => ({ ...p, currency: selectedFund.currency }));
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
+      // Load allocated users for this fund (for super-admin user picker)
+      (async () => {
+        const { data: allocs } = await (supabase as any)
+          .from('pre_fund_allocations')
+          .select('user_id,allocated_amount,spent_amount,currency')
+          .eq('pre_fund_request_id', selectedFund.id);
+        if (!allocs || allocs.length === 0) { setAllocUsers([]); return; }
+        const uids = allocs.map((a: any) => a.user_id).filter(Boolean);
+        const { data: profiles } = await supabase.from('profiles').select('id,full_name,email').in('id', uids);
+        const pMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name || p.email || p.id.slice(0,8)]));
+        setAllocUsers(allocs.map((a: any) => ({
+          id:        a.user_id,
+          name:      pMap.get(a.user_id) ?? a.user_id.slice(0, 8),
+          allocated: Number(a.allocated_amount),
+          spent:     Number(a.spent_amount ?? 0),
+          currency:  a.currency ?? selectedFund.currency,
+        })));
+      })();
     }
   }, [selectedFund, loadTxns]);
 
@@ -769,6 +792,8 @@ export default function PreFundingReconciliation() {
         p_created_by:       currentUser?.id ?? null,
         p_gl_debit_code:    fd?.gl_liability_account ?? null,
         p_gl_credit_code:   fd?.gl_receipt_account ?? null,
+        // Pass the field-staff user so their allocation is deducted automatically
+        p_user_id:          sub.userId ?? null,
       });
       if (rpcErr) {
         const isNotDeployed =
@@ -985,6 +1010,10 @@ export default function PreFundingReconciliation() {
           p_created_by:       currentUser?.id ?? null,
           p_gl_debit_code:    glDebitCode,
           p_gl_credit_code:   glCreditCode,
+          // Super-admin: deduct from selected user's allocation (null = no deduction)
+          p_user_id: (isSuperAdmin && txnForm.transaction_type === 'payment' && txnAllocUserId)
+            ? txnAllocUserId
+            : null,
         }
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -1869,13 +1898,13 @@ export default function PreFundingReconciliation() {
         </div>
 
       {/* Add Transaction Dialog */}
-      <Dialog open={showAddTxn} onOpenChange={setShowAddTxn}>
+      <Dialog open={showAddTxn} onOpenChange={(o) => { setShowAddTxn(o); if (!o) setTxnAllocUserId(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Add Transaction</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div>
               <Label>Type</Label>
-              <Select value={txnForm.transaction_type} onValueChange={v => setTxnForm(p => ({ ...p, transaction_type: v }))}>
+              <Select value={txnForm.transaction_type} onValueChange={v => { setTxnForm(p => ({ ...p, transaction_type: v })); if (v !== 'payment') setTxnAllocUserId(null); }}>
                 <SelectTrigger data-testid="select-txn-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(TXN_TYPE_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
@@ -1904,9 +1933,59 @@ export default function PreFundingReconciliation() {
               <Label>Description</Label>
               <Textarea value={txnForm.description} onChange={e => setTxnForm(p => ({ ...p, description: e.target.value }))} rows={2} data-testid="textarea-txn-desc" />
             </div>
+
+            {/* Super-admin only: deduct from a specific user's allocation */}
+            {isSuperAdmin && txnForm.transaction_type === 'payment' && (
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5" />
+                  Deduct from staff allocation <span className="font-normal opacity-70">(super-admin only)</span>
+                </p>
+                {allocUsers.length === 0 ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 opacity-80">No allocations set up for this fund yet.</p>
+                ) : (
+                  <>
+                    <Select value={txnAllocUserId ?? '__none__'} onValueChange={v => setTxnAllocUserId(v === '__none__' ? null : v)} data-testid="select-alloc-user">
+                      <SelectTrigger className="h-8 text-xs bg-white dark:bg-background">
+                        <SelectValue placeholder="No deduction (skip allocation)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No deduction</SelectItem>
+                        {allocUsers.map(u => {
+                          const remaining = u.allocated - u.spent;
+                          return (
+                            <SelectItem key={u.id} value={u.id} data-testid={`option-alloc-user-${u.id}`}>
+                              <span className="flex items-center gap-2">
+                                <span className="font-medium">{u.name}</span>
+                                <span className="text-muted-foreground text-[10px]">
+                                  {u.currency} {formatNumber(remaining, 0)} remaining
+                                </span>
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {txnAllocUserId && (() => {
+                      const u = allocUsers.find(x => x.id === txnAllocUserId);
+                      if (!u) return null;
+                      const remaining = u.allocated - u.spent;
+                      const amt = parseFloat(txnForm.amount) || 0;
+                      const overBudget = amt > remaining;
+                      return (
+                        <div className={`text-xs rounded px-2 py-1 ${overBudget ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'}`}>
+                          {u.name}: {u.currency} {formatNumber(u.spent, 0)} spent / {formatNumber(u.allocated, 0)} allocated · {formatNumber(remaining, 0)} remaining
+                          {overBudget && <span className="font-semibold ml-1">⚠ Payment exceeds remaining allocation</span>}
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddTxn(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowAddTxn(false); setTxnAllocUserId(null); }}>Cancel</Button>
             <Button onClick={handleAddTxn} disabled={saving} data-testid="button-save-txn">{saving ? 'Adding…' : 'Add'}</Button>
           </DialogFooter>
         </DialogContent>
