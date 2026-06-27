@@ -101,27 +101,11 @@ export default function PreFundingAllocations() {
       const userIds  = [...new Set(allocs.map((a: any) => a.user_id).filter(Boolean))];
       const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id).filter(Boolean))];
 
-      // Compute spent dynamically from actual payment transactions.
-      // We aggregate at FUND level (not per-user) because the allocated users are
-      // budget holders / accountable officers — not necessarily the same people who
-      // submitted the individual payments. Each allocated user sees the full fund
-      // spend so they know how much of their allocation has been consumed.
-      const { data: txnData } = await (supabase as any)
-        .from('pre_fund_transactions')
-        .select('pre_fund_request_id,amount')
-        .in('pre_fund_request_id', fundIds)
-        .eq('transaction_type', 'payment');
-
-      // Build a map: fundId → total spent (all payments from that fund)
-      const spentMap = new Map<string, number>();
-      for (const t of (txnData ?? [])) {
-        const key = t.pre_fund_request_id;
-        spentMap.set(key, (spentMap.get(key) ?? 0) + Number(t.amount));
-      }
-
+      // Use paid_amount from pre_fund_requests — the authoritative field updated
+      // atomically by link_payment_atomically_rpc. No need to aggregate transactions.
       const [profilesRes, fundsRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,role').in('id', userIds),
-        supabase.from('pre_fund_requests').select('id,name,status').in('id', fundIds),
+        (supabase as any).from('pre_fund_requests').select('id,name,status,paid_amount,currency').in('id', fundIds),
       ]);
 
       const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
@@ -130,12 +114,12 @@ export default function PreFundingAllocations() {
       const enriched: AllocRow[] = allocs.map((a: any) => {
         const p = profileMap.get(a.user_id) as any;
         const f = fundMap.get(a.pre_fund_request_id) as any;
-        // Fund-level spend: total payments from this fund regardless of who submitted
-        const dynamicSpent = spentMap.get(a.pre_fund_request_id);
+        // paid_amount on pre_fund_requests is the authoritative fund-level spend
+        const fundPaid = Number(f?.paid_amount ?? 0);
         return {
           ...a,
           allocated_amount: Number(a.allocated_amount),
-          spent_amount: dynamicSpent !== undefined ? dynamicSpent : Number(a.spent_amount ?? 0),
+          spent_amount: fundPaid,
           fund_name:   f?.name   ?? 'Unknown Fund',
           fund_status: f?.status ?? 'unknown',
           user_name:   p?.full_name ?? p?.email ?? 'Unknown',
