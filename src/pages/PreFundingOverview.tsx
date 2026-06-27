@@ -172,7 +172,9 @@ function calcBurnDaysLeft(f: PreFundRow): number | null {
 export default function PreFundingOverview() {
   const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  // Finance/admin: full management; coordinators/supervisors/field staff: read-only balance view
+  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const canAccess = isFinanceAdmin || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee']);
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
   const [funds, setFunds]         = useState<PreFundRow[]>([]);
@@ -347,14 +349,16 @@ export default function PreFundingOverview() {
             <RefreshCw className={cn('h-4 w-4 mr-1.5', refreshing && 'animate-spin')} />
             Refresh
           </Button>
+          {isFinanceAdmin && (
           <Button size="sm" onClick={() => navigate('/pre-funding?tab=registry')} data-testid="button-new-fund">
             + New Fund
           </Button>
+          )}
         </div>
       </div>
 
       {/* ── Pre-Funding Action Banner (for allocated non-admin users) ─────── */}
-      {gateStatus === 'prefund_only' && !canAccess && (
+      {gateStatus === 'prefund_only' && !isFinanceAdmin && (
         <div className="rounded-xl border border-emerald-400/50 bg-emerald-50 dark:bg-emerald-900/15 p-4 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-start gap-3 flex-1">
             <Receipt className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
@@ -504,7 +508,7 @@ export default function PreFundingOverview() {
           <Banknote className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No pre-funds found</p>
           <p className="text-sm mt-1">Create your first fund in the Fund Registry</p>
-          <Button className="mt-4" onClick={() => navigate('/pre-funding?tab=registry')}>+ New Pre-Fund</Button>
+          {isFinanceAdmin && <Button className="mt-4" onClick={() => navigate('/pre-funding?tab=registry')}>+ New Pre-Fund</Button>}
         </div>
       ) : (
         <div className="space-y-4">
@@ -665,7 +669,7 @@ export default function PreFundingOverview() {
                       <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/pre-funding?tab=registry')} data-testid={`button-view-fund-${f.id}`}>
                         View
                       </Button>
-                      {['active', 'low_balance'].includes(f.status) && (
+                      {isFinanceAdmin && ['active', 'low_balance'].includes(f.status) && (
                         <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/pre-funding?tab=reconciliation')}>
                           Reconcile <ChevronRight className="h-3.5 w-3.5 ml-1" />
                         </Button>
