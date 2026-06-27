@@ -725,7 +725,7 @@ export default function PreFundingReconciliation() {
         // Enumerator / transport fees from MMP site entries
         (supabase as any)
           .from('mmp_site_entries')
-          .select('id,site_name,visit_date,enumerator_id,transport_fee,enumerator_fee,currency,payment_status,paid_at,enumerator_name')
+          .select('id,site_name,visit_date,accepted_by,assigned_to,transport_fee,enumerator_fee,currency,payment_status,paid_at,enumerator_name')
           .eq('payment_status', 'paid')
           .not('id', 'in', excludeClause(linkedIds))
           .order('visit_date', { ascending: false }),
@@ -759,8 +759,8 @@ export default function PreFundingReconciliation() {
         _date: r.paid_at ?? r.visit_date,
         amount: (r.transport_fee ?? 0) + (r.enumerator_fee ?? 0),
         currency: r.currency ?? 'SDG',
-        title: `${r.site_name ?? 'Site'} — ${r.enumerator_name ?? r.enumerator_id?.slice(0, 8) ?? 'Enumerator'}`,
-        userId: r.enumerator_id ?? null,
+        title: `${r.site_name ?? 'Site'} — ${r.enumerator_name ?? 'Enumerator'}`,
+        userId: r.accepted_by ?? r.assigned_to ?? null,
       })).filter((r: any) => r.amount > 0);
       setUnlinkedSubs({ ocs, dp, ef });
     } catch { setUnlinkedSubs({ ocs: [], dp: [], ef: [] }); }
