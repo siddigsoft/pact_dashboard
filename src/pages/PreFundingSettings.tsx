@@ -44,7 +44,7 @@ interface Settings {
   auto_renewal_grace_hours: number;
   bank_match_tolerance_pct: number;
   bank_api_enabled: boolean;
-  bank_api_url: string | null;
+  bank_api_url_hint: string | null;   // domain hint only — full URL encrypted server-side
   bank_api_key_hint: string | null;
   integration_bank_recon: boolean;
   integration_cashflow: boolean;
@@ -69,7 +69,7 @@ interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   base_currency: 'USD', default_threshold_pct: 20, default_warning_days: 14,
   auto_renewal_grace_hours: 24, bank_match_tolerance_pct: 2,
-  bank_api_enabled: false, bank_api_url: null, bank_api_key_hint: null,
+  bank_api_enabled: false, bank_api_url_hint: null, bank_api_key_hint: null,
   integration_bank_recon: true, integration_cashflow: true, integration_encumbrance: true,
   default_renewal_mode: 'off', default_base_currency: 'USD',
   default_gl_receipt_account: '',
@@ -109,6 +109,7 @@ export default function PreFundingSettings() {
   const [ptForm, setPtForm]            = useState({ name: '', day_count: '' });
   const [ptSaving, setPtSaving]        = useState(false);
   const [bankApiKey, setBankApiKey]    = useState('');
+  const [bankApiUrl, setBankApiUrl]    = useState('');   // new URL input; stored encrypted, never in plain payload
   const [showApiKey, setShowApiKey]    = useState(false);
   const [unmatchedItems, setUnmatchedItems] = useState<UnmatchedItem[]>([]);
   const [loadingUnmatched, setLoadingUnmatched] = useState(false);
@@ -245,9 +246,11 @@ export default function PreFundingSettings() {
     try {
       const payload: any = { ...settings };
       delete payload.id;
-      // Never persist the raw key — strip it from the payload
+      // Never persist bank credentials in plaintext — strip all sensitive fields from the payload
       delete payload.bank_api_key_hint;
       delete payload.bank_api_key_encrypted;
+      delete payload.bank_api_url_hint;       // read-only hint — set only via encrypted RPC
+      delete payload.bank_api_url_encrypted;  // encrypted blob — never in direct upsert
 
       // Upsert on singleton_lock — works whether the row exists or not,
       // and avoids the INSERT-RLS failure when id is unknown after a fresh migration.
@@ -260,18 +263,18 @@ export default function PreFundingSettings() {
       const savedId = (data as any)?.id ?? settings.id;
       if (savedId) setSettings(p => ({ ...p, id: savedId }));
 
-      // If a new API key was entered, store it encrypted via the security-definer RPC.
-      // The raw key is never stored in the settings payload above.
-      if (bankApiKey.trim() && savedId) {
-        const { error: rpcErr } = await supabase.rpc('store_pre_fund_bank_key' as any, {
-          p_settings_id: savedId,
-          p_key: bankApiKey.trim(),
-        });
-        if (rpcErr) throw new Error(`Key encryption failed: ${rpcErr.message} — ensure store_pre_fund_bank_key RPC is deployed`);
+      // If a new API key or URL was entered, store both encrypted via the security-definer RPC.
+      // Neither the raw key nor the raw URL are ever stored in the settings payload above.
+      if ((bankApiKey.trim() || bankApiUrl.trim()) && savedId) {
+        const rpcPayload: any = { p_settings_id: savedId, p_key: bankApiKey.trim() || 'UNCHANGED_PLACEHOLDER' };
+        if (bankApiUrl.trim()) rpcPayload.p_url = bankApiUrl.trim();
+        const { error: rpcErr } = await supabase.rpc('store_pre_fund_bank_key' as any, rpcPayload);
+        if (rpcErr) throw new Error(`Credential encryption failed: ${rpcErr.message} — ensure store_pre_fund_bank_key RPC is deployed`);
       }
 
       toast({ title: 'Settings saved' });
       setBankApiKey('');
+      setBankApiUrl('');
       setShowApiKey(false);
       await load();
     } catch (e: any) {
@@ -472,8 +475,19 @@ export default function PreFundingSettings() {
             {settings.bank_api_enabled && (
               <CardContent className="space-y-4">
                 <div>
-                  <Label>Webhook / Polling API URL</Label>
-                  <Input value={settings.bank_api_url ?? ''} onChange={e => set('bank_api_url', e.target.value)} placeholder="https://bank-api.example.com/feed" data-testid="input-bank-url" />
+                  <Label>
+                    Webhook / Polling API URL
+                    {settings.bank_api_url_hint && (
+                      <span className="text-muted-foreground text-[10px] ml-1">(current: {settings.bank_api_url_hint})</span>
+                    )}
+                  </Label>
+                  <Input
+                    value={bankApiUrl}
+                    onChange={e => setBankApiUrl(e.target.value)}
+                    placeholder="Enter new URL to update (leave blank to keep current)"
+                    data-testid="input-bank-url"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">URL is encrypted at rest. Only a domain hint is displayed after save.</p>
                 </div>
                 <div>
                   <Label>API Key {settings.bank_api_key_hint && <span className="text-muted-foreground text-[10px] ml-1">(current: ···{settings.bank_api_key_hint})</span>}</Label>

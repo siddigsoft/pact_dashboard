@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   auto_renewal_grace_hours    INTEGER NOT NULL DEFAULT 24,
   bank_match_tolerance_pct    NUMERIC(5,2) NOT NULL DEFAULT 2,
   bank_api_enabled            BOOLEAN NOT NULL DEFAULT false,
-  bank_api_url                TEXT,
+  bank_api_url_hint           TEXT,              -- domain hint only (e.g. bank-api.ex…), never full URL
+  bank_api_url_encrypted      BYTEA,             -- pgcrypto-encrypted full URL (server-only)
   bank_api_key_hint           TEXT,              -- only last 4 chars, never the full key
   bank_api_key_encrypted      BYTEA,             -- pgcrypto-encrypted full key (server-only)
   integration_bank_recon      BOOLEAN NOT NULL DEFAULT true,
@@ -502,7 +503,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION store_pre_fund_bank_key(
   p_settings_id UUID,
-  p_key         TEXT
+  p_key         TEXT,
+  p_url         TEXT DEFAULT NULL   -- bank API URL; encrypted here, never stored plaintext
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -514,7 +516,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
   ) THEN
-    RAISE EXCEPTION 'Insufficient privileges to store bank API key';
+    RAISE EXCEPTION 'Insufficient privileges to store bank API credentials';
   END IF;
 
   -- Resolve passphrase from DB setting (set once per deploy via ALTER DATABASE).
@@ -531,6 +533,13 @@ BEGIN
   UPDATE pre_fund_settings
   SET bank_api_key_encrypted = pgp_sym_encrypt(p_key, v_passphrase),
       bank_api_key_hint      = '...' || RIGHT(p_key, 4),
+      -- Encrypt URL if provided; store domain-only hint for display
+      bank_api_url_encrypted = CASE WHEN p_url IS NOT NULL AND p_url <> ''
+                                    THEN pgp_sym_encrypt(p_url, v_passphrase)
+                                    ELSE bank_api_url_encrypted END,
+      bank_api_url_hint      = CASE WHEN p_url IS NOT NULL AND p_url <> ''
+                                    THEN SUBSTRING(regexp_replace(p_url, '^https?://', ''), 1, 20) || '…'
+                                    ELSE bank_api_url_hint END,
       updated_at             = now()
   WHERE id = p_settings_id;
 
@@ -541,7 +550,9 @@ END;
 $$;
 
 -- Grant execute to authenticated users (RLS inside the function gates by role)
-GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT, TEXT) TO authenticated;
+-- Keep backward-compatible 2-arg signature grant as well
+DROP FUNCTION IF EXISTS store_pre_fund_bank_key(UUID, TEXT);
 
 -- ─── 12. GL Bridge account code (add to CoA if not exists) ───────────────────
 -- Account 2400 — Pre-Fund Liability (deferred pre-fund liability)

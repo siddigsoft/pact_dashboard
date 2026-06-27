@@ -70,6 +70,11 @@ export function DownPaymentRequestDialog({
 
   const handleSubmit = async () => {
     if (!currentUser) return;
+    // Defence-in-depth: reject if gate hasn't resolved or is blocked
+    if (gateStatus !== 'allowed') {
+      toast({ title: 'Payment not allowed / الدفع غير مسموح', description: 'Use the Pre-Funding section to request advances, or contact your administrator.', variant: 'destructive' });
+      return;
+    }
 
     if (!currentUser.bankAccount?.accountNumber) {
       toast({ title: 'Bank Account Required / مطلوب حساب بنكي', description: 'Please add your bank account details in Settings → Profile → Bank Account before requesting an advance.', variant: 'destructive' });
@@ -182,8 +187,16 @@ export function DownPaymentRequestDialog({
           </div>
         )}
 
-        {/* Normal form — only shown when gate allows */}
-        {(gateStatus === 'allowed' || gateStatus === 'loading') && (
+        {/* Loading state — treat as blocked until resolved */}
+        {gateStatus === 'loading' && (
+          <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
+            <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            Checking payment eligibility…
+          </div>
+        )}
+
+        {/* Normal form — only shown when gate explicitly allows */}
+        {gateStatus === 'allowed' && (
         <div className="space-y-6">
 
           {/* Bank Account Gate */}
@@ -384,7 +397,7 @@ export function DownPaymentRequestDialog({
           </DialogFooter>
         )}
 
-        {(gateStatus === 'allowed' || gateStatus === 'loading') && (
+        {gateStatus === 'allowed' && (
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
             Cancel
