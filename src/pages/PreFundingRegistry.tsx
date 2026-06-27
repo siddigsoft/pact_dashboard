@@ -615,35 +615,28 @@ export default function PreFundingRegistry() {
 
       const fileWord = receiptFiles.length === 1 ? 'Receipt' : `${receiptFiles.length} receipts`;
 
-      if (hasGL) {
-        // Full GL activation — posts journal entry + bank statement line
-        await activatePreFund({
-          fundId: receiptDialog.fundId,
-          fundName: fund?.name ?? 'Fund',
-          amount: fund?.amount ?? 0,
-          currency: fund?.currency ?? 'USD',
-          glReceiptCode:   glReceipt,
-          glLiabilityCode: glLiability,
-          createdBy: currentUser?.id ?? null,
-          receiptUrl: uploadResults[0],
-        });
-        toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
-      } else {
-        // GL-skipped activation — status only; GL accounts can be set later via Edit Fund
-        const { error: actErr } = await supabase
-          .from('pre_fund_requests')
-          .update({
-            status:            'active',
-            available_balance: fund?.amount ?? 0,
-            receipt_url:       uploadResults[0],
-          })
-          .eq('id', receiptDialog.fundId);
-        if (actErr) throw actErr;
+      if (!hasGL) {
+        // Block activation until GL accounts are configured — prevent ledger divergence
         toast({
-          title: `${fileWord} uploaded — fund is now Active`,
-          description: 'No GL posting: configure Receipt and Liability accounts in Edit Fund to post the journal entry.',
+          title: 'GL Accounts Required',
+          description: 'This fund is missing a Receipt (bank) account or Donor Liability account. Open Edit Fund and configure both GL accounts before uploading the receipt.',
+          variant: 'destructive',
         });
+        return;
       }
+
+      // Full GL activation — posts journal entry + bank statement line via RPC
+      await activatePreFund({
+        fundId: receiptDialog.fundId,
+        fundName: fund?.name ?? 'Fund',
+        amount: fund?.amount ?? 0,
+        currency: fund?.currency ?? 'USD',
+        glReceiptCode:   glReceipt,
+        glLiabilityCode: glLiability,
+        createdBy: currentUser?.id ?? null,
+        receiptUrl: uploadResults[0],
+      });
+      toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
 
       try {
         await supabase.from('notification_events' as any).insert({
