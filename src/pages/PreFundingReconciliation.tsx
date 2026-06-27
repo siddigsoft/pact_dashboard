@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -29,6 +29,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { FilePreviewDialog } from '@/components/ui/FilePreviewDialog';
 
 interface PreFundSummary {
   id: string; name: string; source: string | null; currency: string;
@@ -599,6 +600,25 @@ export default function PreFundingReconciliation() {
   // Profile name map (user_id → full name) for transaction table
   const [profileMap, setProfileMap]   = useState<Map<string, string>>(new Map());
   const [exportingExcel, setExportingExcel] = useState(false);
+
+  // Inline receipt preview
+  const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
+
+  // Group transactions that share the same receipt_url (batch receipts)
+  const receiptGroupMap = useMemo(() => {
+    const map = new Map<string, PreFundTransaction[]>();
+    for (const t of transactions) {
+      if (!t.receipt_url) continue;
+      const group = map.get(t.receipt_url) ?? [];
+      group.push(t);
+      map.set(t.receipt_url, group);
+    }
+    // Keep only groups with 2+ transactions (true batch)
+    for (const [url, group] of map) {
+      if (group.length < 2) map.delete(url);
+    }
+    return map;
+  }, [transactions]);
 
   const loadFunds = useCallback(async () => {
     setLoading(true);
@@ -1593,14 +1613,29 @@ export default function PreFundingReconciliation() {
               {/* ── Transaction table ──────────────────────────────────────────── */}
               <div>
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 flex-wrap">
                     Transactions
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{transactions.length}</Badge>
-                    {transactions.some(t => t.receipt_url) && (
-                      <span className="text-[10px] text-muted-foreground font-normal flex items-center gap-1">
-                        <Receipt className="h-3 w-3" />{transactions.filter(t => t.receipt_url).length} with receipt
-                      </span>
-                    )}
+                    {transactions.some(t => t.receipt_url) && (() => {
+                      const withReceipt = transactions.filter(t => t.receipt_url).length;
+                      const batchCount  = receiptGroupMap.size;
+                      const batchTxns   = [...receiptGroupMap.values()].reduce((s, g) => s + g.length, 0);
+                      const batchTotal  = [...receiptGroupMap.values()].reduce((s, g) => s + g.reduce((a, t) => a + t.amount, 0), 0);
+                      const currency    = transactions.find(t => t.currency)?.currency ?? '';
+                      return (
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] text-muted-foreground font-normal flex items-center gap-1">
+                            <Receipt className="h-3 w-3" />{withReceipt} with receipt
+                          </span>
+                          {batchCount > 0 && (
+                            <span className="text-[10px] font-normal flex items-center gap-1 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded px-1.5 py-0.5">
+                              <Shuffle className="h-2.5 w-2.5" />
+                              {batchCount} batch {batchCount === 1 ? 'receipt' : 'receipts'} · {batchTxns} txns · {currency} {formatNumber(batchTotal, 0)}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </h3>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCsvImport(true)} data-testid="button-csv-import">
@@ -1680,15 +1715,34 @@ export default function PreFundingReconciliation() {
                             </TableCell>
                             <TableCell className="text-right font-mono">{t.currency} {formatNumber(t.amount, 0)}</TableCell>
                             <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                              {t.receipt_url ? (
-                                <a href={t.receipt_url} target="_blank" rel="noreferrer"
-                                  className="flex items-center justify-center h-6 w-6 mx-auto rounded hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-600 transition-colors"
-                                  title="View receipt"
-                                  data-testid={`link-receipt-${t.id}`}
-                                >
-                                  <Receipt className="h-3.5 w-3.5" />
-                                </a>
-                              ) : (
+                              {t.receipt_url ? (() => {
+                                const batchGroup = receiptGroupMap.get(t.receipt_url);
+                                const isBatch = !!batchGroup;
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <button
+                                          onClick={() => setPreviewReceiptUrl(t.receipt_url)}
+                                          className="flex flex-col items-center justify-center gap-0.5 mx-auto rounded px-1 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-600 transition-colors"
+                                          data-testid={`button-receipt-${t.id}`}
+                                        >
+                                          <Receipt className="h-3.5 w-3.5" />
+                                          {isBatch && (
+                                            <span className="text-[9px] font-bold leading-none bg-amber-500 text-white rounded-full px-1">{batchGroup!.length}×</span>
+                                          )}
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="text-xs max-w-[200px]">
+                                        {isBatch
+                                          ? `Batch receipt — covers ${batchGroup!.length} transactions totalling ${t.currency} ${formatNumber(batchGroup!.reduce((s, x) => s + x.amount, 0), 0)}`
+                                          : 'View receipt'
+                                        }
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })() : (
                                 <span className="text-muted-foreground/30 text-[10px]">—</span>
                               )}
                             </TableCell>
@@ -1917,20 +1971,49 @@ export default function PreFundingReconciliation() {
               {drillTxn.receipt_url && (
                 <>
                   <Separator />
-                  <div>
-                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1 mb-2"><Receipt className="h-3 w-3" />Receipt / Proof of Payment</p>
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1"><Receipt className="h-3 w-3" />Receipt / Proof of Payment</p>
+
+                    {/* Batch receipt banner */}
+                    {receiptGroupMap.has(drillTxn.receipt_url) && (() => {
+                      const group = receiptGroupMap.get(drillTxn.receipt_url)!;
+                      const total = group.reduce((s, t) => s + t.amount, 0);
+                      return (
+                        <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                          <Shuffle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
+                          <div>
+                            <p className="font-semibold">Batch receipt — 1 receipt covers {group.length} transactions</p>
+                            <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+                              Total covered: {drillTxn.currency} {formatNumber(total, 0)}
+                            </p>
+                            <div className="mt-1.5 space-y-0.5">
+                              {group.map((t, i) => (
+                                <div key={t.id} className="flex justify-between gap-4">
+                                  <span className="text-amber-700/80 dark:text-amber-400/80">
+                                    {i + 1}. {t.description ?? t.reference ?? `Txn ${t.id.slice(0, 8)}`}
+                                  </span>
+                                  <span className="font-mono font-medium shrink-0">{t.currency} {formatNumber(t.amount, 0)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {drillTxn.receipt_url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ? (
-                      <a href={drillTxn.receipt_url} target="_blank" rel="noreferrer">
-                        <img src={drillTxn.receipt_url} alt="Receipt" className="max-h-48 rounded-lg border object-contain w-full hover:opacity-90 transition-opacity" />
-                      </a>
+                      <button onClick={() => setPreviewReceiptUrl(drillTxn.receipt_url)} className="w-full text-left">
+                        <img src={drillTxn.receipt_url} alt="Receipt" className="max-h-48 rounded-lg border object-contain w-full hover:opacity-90 transition-opacity cursor-pointer" />
+                      </button>
                     ) : (
-                      <a href={drillTxn.receipt_url} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-lg px-3 py-2 border border-sky-200 dark:border-sky-800"
+                      <button
+                        onClick={() => setPreviewReceiptUrl(drillTxn.receipt_url)}
+                        className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-lg px-3 py-2 border border-sky-200 dark:border-sky-800 w-full"
                       >
                         <Receipt className="h-4 w-4 shrink-0" />
                         View Receipt / Attachment
                         <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </>
@@ -2145,6 +2228,13 @@ export default function PreFundingReconciliation() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FilePreviewDialog
+        open={!!previewReceiptUrl}
+        onOpenChange={(o) => { if (!o) setPreviewReceiptUrl(null); }}
+        url={previewReceiptUrl ?? ''}
+        filename={previewReceiptUrl?.split('/').pop()?.split('?')[0]}
+      />
     </div>
   );
 }
