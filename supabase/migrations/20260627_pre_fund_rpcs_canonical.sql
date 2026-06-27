@@ -213,6 +213,32 @@ BEGIN
     );
   END IF;
 
+  -- ── Allocation eligibility check BEFORE any writes ──────────────────────────
+  -- Checked here — after fund/balance validation but before any INSERT or UPDATE —
+  -- so a policy violation aborts atomically. RAISE EXCEPTION is required (not RETURN)
+  -- because RETURN commits the current transaction state including the FOR UPDATE lock;
+  -- only an exception triggers a full rollback.
+  IF p_user_id IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM pre_fund_allocations
+               WHERE pre_fund_request_id = p_fund_id LIMIT 1) THEN
+      SELECT allocated_amount - spent_amount
+      INTO   v_alloc_remaining
+      FROM   pre_fund_allocations
+      WHERE  pre_fund_request_id = p_fund_id AND user_id = p_user_id
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'User has no allocation for this fund. Allocate budget before linking payments.';
+      END IF;
+
+      IF v_alloc_remaining < p_amount THEN
+        RAISE EXCEPTION 'Insufficient personal allocation (% remaining; % requested).',
+          v_alloc_remaining, p_amount;
+      END IF;
+    END IF;
+  END IF;
+
+  -- ── All pre-condition checks passed — safe to write ─────────────────────────
   v_new_balance := v_cur_balance - p_amount;
 
   INSERT INTO pre_fund_transactions (
@@ -243,38 +269,17 @@ BEGIN
     SET pre_fund_transaction_id = v_txn_id WHERE id = p_source_id;
   END IF;
 
-  -- Allocation guard: when fund has allocations, submitter MUST be allocated
+  -- ── Allocation deduction — row already locked and validated above ─────────
   IF p_user_id IS NOT NULL THEN
     IF EXISTS (SELECT 1 FROM pre_fund_allocations
                WHERE pre_fund_request_id = p_fund_id LIMIT 1) THEN
-      SELECT allocated_amount - spent_amount
-      INTO   v_alloc_remaining
-      FROM   pre_fund_allocations
-      WHERE  pre_fund_request_id = p_fund_id AND user_id = p_user_id
-      FOR UPDATE;
-
-      IF NOT FOUND THEN
-        RETURN jsonb_build_object(
-          'success', false,
-          'error', 'User has no allocation for this fund. Allocate budget before linking payments.'
-        );
-      END IF;
-
-      IF v_alloc_remaining < p_amount THEN
-        RETURN jsonb_build_object(
-          'success', false,
-          'error', 'Insufficient personal allocation (' || v_alloc_remaining::TEXT ||
-                   ' remaining; ' || p_amount::TEXT || ' requested).'
-        );
-      END IF;
-
       UPDATE pre_fund_allocations
       SET spent_amount = spent_amount + p_amount, updated_at = now()
       WHERE pre_fund_request_id = p_fund_id AND user_id = p_user_id;
 
       GET DIAGNOSTICS v_alloc_rows = ROW_COUNT;
       IF v_alloc_rows = 0 THEN
-        RAISE EXCEPTION 'Allocation row vanished between lock and update — rolling back.';
+        RAISE EXCEPTION 'Allocation row vanished between check and deduction — rolling back.';
       END IF;
     END IF;
   END IF;
