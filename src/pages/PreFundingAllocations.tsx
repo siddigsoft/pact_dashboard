@@ -101,6 +101,22 @@ export default function PreFundingAllocations() {
       const userIds  = [...new Set(allocs.map((a: any) => a.user_id).filter(Boolean))];
       const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id).filter(Boolean))];
 
+      // Compute spent dynamically from actual payment transactions
+      // This is the source of truth — the stored spent_amount counter is a cache only
+      const { data: txnData } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .select('pre_fund_request_id,user_id,amount')
+        .in('pre_fund_request_id', fundIds)
+        .eq('transaction_type', 'payment');
+
+      // Build a map: `${fundId}::${userId}` → total spent
+      const spentMap = new Map<string, number>();
+      for (const t of (txnData ?? [])) {
+        if (!t.user_id) continue;
+        const key = `${t.pre_fund_request_id}::${t.user_id}`;
+        spentMap.set(key, (spentMap.get(key) ?? 0) + Number(t.amount));
+      }
+
       const [profilesRes, fundsRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,role').in('id', userIds),
         supabase.from('pre_fund_requests').select('id,name,status').in('id', fundIds),
@@ -112,10 +128,12 @@ export default function PreFundingAllocations() {
       const enriched: AllocRow[] = allocs.map((a: any) => {
         const p = profileMap.get(a.user_id) as any;
         const f = fundMap.get(a.pre_fund_request_id) as any;
+        // Prefer dynamically computed spent; fall back to stored counter
+        const dynamicSpent = spentMap.get(`${a.pre_fund_request_id}::${a.user_id}`);
         return {
           ...a,
           allocated_amount: Number(a.allocated_amount),
-          spent_amount: Number(a.spent_amount ?? 0),
+          spent_amount: dynamicSpent !== undefined ? dynamicSpent : Number(a.spent_amount ?? 0),
           fund_name:   f?.name   ?? 'Unknown Fund',
           fund_status: f?.status ?? 'unknown',
           user_name:   p?.full_name ?? p?.email ?? 'Unknown',
