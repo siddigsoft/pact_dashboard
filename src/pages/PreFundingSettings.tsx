@@ -263,10 +263,14 @@ export default function PreFundingSettings() {
       const savedId = (data as any)?.id ?? settings.id;
       if (savedId) setSettings(p => ({ ...p, id: savedId }));
 
-      // If a new API key or URL was entered, store both encrypted via the security-definer RPC.
-      // Neither the raw key nor the raw URL are ever stored in the settings payload above.
-      if ((bankApiKey.trim() || bankApiUrl.trim()) && savedId) {
-        const rpcPayload: any = { p_settings_id: savedId, p_key: bankApiKey.trim() || 'UNCHANGED_PLACEHOLDER' };
+      // Store bank credentials encrypted via security-definer RPC.
+      // Only called when the user has entered a new key or a new URL.
+      // Never passes a placeholder — only sends what was actually entered.
+      if (savedId && (bankApiKey.trim() || bankApiUrl.trim())) {
+        const rpcPayload: any = { p_settings_id: savedId };
+        // Only update the key when the user explicitly typed a new one
+        if (bankApiKey.trim()) rpcPayload.p_key = bankApiKey.trim();
+        // Only update the URL when the user explicitly typed a new one
         if (bankApiUrl.trim()) rpcPayload.p_url = bankApiUrl.trim();
         const { error: rpcErr } = await supabase.rpc('store_pre_fund_bank_key' as any, rpcPayload);
         if (rpcErr) throw new Error(`Credential encryption failed: ${rpcErr.message} — ensure store_pre_fund_bank_key RPC is deployed`);

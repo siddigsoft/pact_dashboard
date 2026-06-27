@@ -503,8 +503,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION store_pre_fund_bank_key(
   p_settings_id UUID,
-  p_key         TEXT,
-  p_url         TEXT DEFAULT NULL   -- bank API URL; encrypted here, never stored plaintext
+  p_key         TEXT DEFAULT NULL,   -- new API key; NULL/empty = leave existing key untouched
+  p_url         TEXT DEFAULT NULL    -- new bank API URL; NULL/empty = leave existing URL untouched
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -512,6 +512,11 @@ AS $$
 DECLARE
   v_passphrase TEXT;
 BEGIN
+  -- Must provide at least one credential to update
+  IF (p_key IS NULL OR p_key = '') AND (p_url IS NULL OR p_url = '') THEN
+    RAISE EXCEPTION 'At least one of p_key or p_url must be provided';
+  END IF;
+
   -- Caller must be Finance/Admin
   IF NOT EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
@@ -531,9 +536,14 @@ BEGIN
   END IF;
 
   UPDATE pre_fund_settings
-  SET bank_api_key_encrypted = pgp_sym_encrypt(p_key, v_passphrase),
-      bank_api_key_hint      = '...' || RIGHT(p_key, 4),
-      -- Encrypt URL if provided; store domain-only hint for display
+  SET -- Only update key columns when caller explicitly provided a new key
+      bank_api_key_encrypted = CASE WHEN p_key IS NOT NULL AND p_key <> ''
+                                    THEN pgp_sym_encrypt(p_key, v_passphrase)
+                                    ELSE bank_api_key_encrypted END,
+      bank_api_key_hint      = CASE WHEN p_key IS NOT NULL AND p_key <> ''
+                                    THEN '...' || RIGHT(p_key, 4)
+                                    ELSE bank_api_key_hint END,
+      -- Only update URL columns when caller explicitly provided a new URL
       bank_api_url_encrypted = CASE WHEN p_url IS NOT NULL AND p_url <> ''
                                     THEN pgp_sym_encrypt(p_url, v_passphrase)
                                     ELSE bank_api_url_encrypted END,
@@ -549,10 +559,9 @@ BEGIN
 END;
 $$;
 
--- Grant execute to authenticated users (RLS inside the function gates by role)
-GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT, TEXT) TO authenticated;
--- Keep backward-compatible 2-arg signature grant as well
+-- Drop old 2-arg signature and grant execute on the new fully-optional 3-arg version
 DROP FUNCTION IF EXISTS store_pre_fund_bank_key(UUID, TEXT);
+GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT, TEXT) TO authenticated;
 
 -- ─── 12. GL Bridge account code (add to CoA if not exists) ───────────────────
 -- Account 2400 — Pre-Fund Liability (deferred pre-fund liability)
