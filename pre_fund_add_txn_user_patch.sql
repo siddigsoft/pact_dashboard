@@ -35,14 +35,14 @@ WHERE  pft.reference     = dp.id::TEXT
   AND  pft.user_id       IS NULL
   AND  dp.requested_by   IS NOT NULL;
 
--- Enumerator / Transport Fees (stored in mmp_site_entries; data collector = accepted_by OR assigned_to)
+-- Enumerator / Transport Fees (stored in mmp_site_entries; data collector = accepted_by)
 UPDATE pre_fund_transactions pft
-SET    user_id = COALESCE(mse.accepted_by, mse.assigned_to)
+SET    user_id = mse.accepted_by
 FROM   mmp_site_entries mse
-WHERE  pft.reference     = mse.id::TEXT
+WHERE  pft.reference        = mse.id::TEXT
   AND  pft.transaction_type = 'payment'
-  AND  pft.user_id       IS NULL
-  AND  COALESCE(mse.accepted_by, mse.assigned_to) IS NOT NULL;
+  AND  pft.user_id          IS NULL
+  AND  mse.accepted_by      IS NOT NULL;
 
 -- Fallback: if still NULL, default to created_by (whoever recorded the transaction)
 UPDATE pre_fund_transactions
