@@ -217,26 +217,30 @@ export default function PreFundingOverview() {
         // Filter out transactions whose source DP/OCS has been deleted or cancelled
         const dpIds = [...new Set(rawTxns.filter(t => t.source_table === 'down_payment_requests' && t.source_id).map(t => t.source_id as string))];
         const ocsIds = [...new Set(rawTxns.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id).map(t => t.source_id as string))];
-        const [validDpRes, validOcsRes, allLinkedDpsRes] = await Promise.all([
+        // For old txns with NULL source_table, the DP stores back-link via pre_fund_transaction_id
+        const rawTxnIds = rawTxns.map(t => t.id).filter(Boolean);
+        const [validDpRes, validOcsRes, backLinkedDpsRes] = await Promise.all([
           dpIds.length > 0 ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds) : Promise.resolve({ data: [] }),
           ocsIds.length > 0 ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds) : Promise.resolve({ data: [] }),
-          // Fetch ALL DPs linked to any pre-fund — to catch old txns with NULL source_table
-          (supabase as any).from('down_payment_requests').select('amount,pre_fund_request_id,status,metadata').not('pre_fund_request_id', 'is', null),
+          // Fetch DPs whose pre_fund_transaction_id points to one of these txn rows
+          rawTxnIds.length > 0
+            ? (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', rawTxnIds)
+            : Promise.resolve({ data: [] }),
         ]);
         const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
         const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
-        // Key: `${fundId}_${amount}` for deleted/cancelled DPs that were pre-fund linked
-        const deletedDpKeys = new Set<string>(
-          (allLinkedDpsRes.data ?? [])
+        // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
+        const deletedDpTxnIds = new Set<string>(
+          (backLinkedDpsRes.data ?? [])
             .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
-            .map((d: any) => `${d.pre_fund_request_id}_${Number(d.amount)}`)
+            .map((d: any) => d.pre_fund_transaction_id as string)
         );
         const validTxns = rawTxns.filter(t => {
           if (t.source_table === 'down_payment_requests')        return !t.source_id || validDpSet.has(t.source_id);
           if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
-          // Old rows with NULL source_table: match against deleted DPs by fund+amount
+          // Old rows with NULL source_table: excluded if a deleted DP back-links to this txn ID
           if (!t.source_table && ['payment', 'commitment'].includes(t.transaction_type)) {
-            return !deletedDpKeys.has(`${t.pre_fund_request_id}_${Number(t.amount)}`);
+            return !deletedDpTxnIds.has(t.id);
           }
           return true;
         });
