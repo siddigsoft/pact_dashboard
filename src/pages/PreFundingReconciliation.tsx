@@ -645,7 +645,30 @@ export default function PreFundingReconciliation() {
         supabase.from('pre_fund_transactions').select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false }),
         supabase.from('pre_fund_reconciliations').select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false }),
       ]);
-      const txns = (txnRes.data as any) ?? [];
+      const rawTxns: any[] = (txnRes.data as any) ?? [];
+
+      // Filter out transactions whose source DP/OCS has been deleted or cancelled
+      const dpIds = [...new Set(rawTxns.filter(t => t.source_table === 'down_payment_requests' && t.source_id).map(t => t.source_id as string))];
+      const ocsIds = [...new Set(rawTxns.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id).map(t => t.source_id as string))];
+
+      const [validDpRes, validOcsRes] = await Promise.all([
+        dpIds.length > 0
+          ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds)
+          : Promise.resolve({ data: [] }),
+        ocsIds.length > 0
+          ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+      const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
+
+      const txns = rawTxns.filter(t => {
+        if (t.source_table === 'down_payment_requests')      return !t.source_id || validDpSet.has(t.source_id);
+        if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
+        return true;
+      });
+
       setTxns(txns);
       setRecons((reconRes.data as any) ?? []);
 

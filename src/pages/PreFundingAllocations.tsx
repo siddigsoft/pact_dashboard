@@ -117,9 +117,10 @@ export default function PreFundingAllocations() {
         supabase.from('profiles').select('id,full_name,email,role').in('id', userIds),
         (supabase as any).from('pre_fund_requests').select('id,name,status,currency').in('id', fundIds),
         // Aggregate actual payments per user per fund from the transactions table
+        // Include source_table + source_id so we can filter out deleted source records
         (supabase as any)
           .from('pre_fund_transactions')
-          .select('user_id,pre_fund_request_id,amount,transaction_type')
+          .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id')
           .in('pre_fund_request_id', fundIds)
           .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
       ]);
@@ -127,11 +128,55 @@ export default function PreFundingAllocations() {
       const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
       const fundMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, f]));
 
-      // Build per-user per-fund spend map from actual transaction rows
+      // Validate DP-sourced transactions — exclude any whose source DP is deleted/cancelled
+      const rawTxns: any[] = txnRes.data ?? [];
+      const dpSourceIds = [...new Set(
+        rawTxns
+          .filter(t => t.source_table === 'down_payment_requests' && t.source_id)
+          .map(t => t.source_id as string)
+      )];
+      let validDpIds = new Set<string>(dpSourceIds); // default: all valid
+      if (dpSourceIds.length > 0) {
+        const { data: validDps } = await (supabase as any)
+          .from('down_payment_requests')
+          .select('id,status,metadata')
+          .in('id', dpSourceIds);
+        validDpIds = new Set(
+          (validDps ?? [])
+            .filter((dp: any) => dp.status !== 'cancelled' && dp.metadata?.deleted !== true)
+            .map((dp: any) => dp.id as string)
+        );
+      }
+
+      // Do the same for OCS-sourced transactions
+      const ocsSourceIds = [...new Set(
+        rawTxns
+          .filter(t => t.source_table === 'operational_cost_submissions' && t.source_id)
+          .map(t => t.source_id as string)
+      )];
+      let validOcsIds = new Set<string>(ocsSourceIds);
+      if (ocsSourceIds.length > 0) {
+        const { data: validOcs } = await (supabase as any)
+          .from('operational_cost_submissions')
+          .select('id')
+          .in('id', ocsSourceIds);
+        validOcsIds = new Set((validOcs ?? []).map((o: any) => o.id as string));
+      }
+
+      // Filter: only include transactions whose source record still exists and is active
+      const validTxns = rawTxns.filter(t => {
+        if (t.source_table === 'down_payment_requests')
+          return !t.source_id || validDpIds.has(t.source_id);
+        if (t.source_table === 'operational_cost_submissions')
+          return !t.source_id || validOcsIds.has(t.source_id);
+        return true; // manual entries have no source — always include
+      });
+
+      // Build per-user per-fund spend map from valid transaction rows
       // payment + commitment = outgoing; reversal + return = credits back
       const spendKey = (userId: string, fundId: string) => `${userId}::${fundId}`;
       const spendMap = new Map<string, number>();
-      for (const t of (txnRes.data ?? []) as any[]) {
+      for (const t of validTxns) {
         if (!t.user_id || !t.pre_fund_request_id) continue;
         const key = spendKey(t.user_id, t.pre_fund_request_id);
         const prev = spendMap.get(key) ?? 0;
