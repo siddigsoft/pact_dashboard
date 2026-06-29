@@ -199,7 +199,7 @@ export default function PreFundingOverview() {
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
         (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false }),
-        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled').order('transaction_date', { ascending: false }),
+        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false }),
         supabase.from('profiles').select('id,full_name,email'),
       ]);
 
@@ -212,7 +212,24 @@ export default function PreFundingOverview() {
         setBase(s.base_currency ?? 'USD');
       }
       if (!allocsRes.error) setAllocs((allocsRes.data as any) ?? []);
-      if (!txnsRes.error) setTxns((txnsRes.data as any) ?? []);
+      if (!txnsRes.error) {
+        const rawTxns: any[] = (txnsRes.data as any) ?? [];
+        // Filter out transactions whose source DP/OCS has been deleted or cancelled
+        const dpIds = [...new Set(rawTxns.filter(t => t.source_table === 'down_payment_requests' && t.source_id).map(t => t.source_id as string))];
+        const ocsIds = [...new Set(rawTxns.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id).map(t => t.source_id as string))];
+        const [validDpRes, validOcsRes] = await Promise.all([
+          dpIds.length > 0 ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds) : Promise.resolve({ data: [] }),
+          ocsIds.length > 0 ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds) : Promise.resolve({ data: [] }),
+        ]);
+        const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+        const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
+        const validTxns = rawTxns.filter(t => {
+          if (t.source_table === 'down_payment_requests')        return !t.source_id || validDpSet.has(t.source_id);
+          if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
+          return true;
+        });
+        setTxns(validTxns);
+      }
       if (!profRes.error) {
         const m = new Map<string, string>();
         ((profRes.data as any) ?? []).forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
@@ -291,10 +308,24 @@ export default function PreFundingOverview() {
     return m;
   }, [txns]);
 
+  // Effective paid amount per fund, derived from already-filtered txns state.
+  // Overrides the stored paid_amount column so deleted-DP orphans never appear as paid.
+  const effectivePaidByFund = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of txns) {
+      if (!['payment', 'commitment'].includes(t.transaction_type)) continue;
+      m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
+    }
+    return m;
+  }, [txns]);
+
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));
   const totalFunded = activeFunds.reduce((s, f) => s + toBase(f.amount, f.currency), 0);
-  const totalAvail  = activeFunds.reduce((s, f) => s + toBase(f.available_balance, f.currency), 0);
+  const totalAvail  = activeFunds.reduce((s, f) => {
+    const effPaid = effectivePaidByFund.get(f.id) ?? f.paid_amount;
+    return s + toBase(Math.max(0, f.amount - effPaid), f.currency);
+  }, 0);
   const totalCommit = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
   const endingSoon  = activeFunds.filter(f => {
     if (!f.end_date) return false;
@@ -513,14 +544,20 @@ export default function PreFundingOverview() {
       ) : (
         <div className="space-y-4">
           {filtered.map(f => {
-            const pct = usedPct(f.amount, f.available_balance);
+            // Use effective paid/available derived from filtered txns (excludes deleted-DP orphans)
+            const effPaid  = effectivePaidByFund.get(f.id) ?? f.paid_amount;
+            const effAvail = Math.max(0, f.amount - effPaid);
+            // ef is a corrected copy of f — all helper functions that accept f get right values
+            const ef = { ...f, paid_amount: effPaid, available_balance: effAvail };
+
+            const pct = usedPct(ef.amount, ef.available_balance);
             const daysLeft = f.end_date ? differenceInDays(parseISO(f.end_date), new Date()) : null;
             const endingSoonFlag = daysLeft !== null && daysLeft >= 0 && daysLeft <= (f.warning_days ?? 14);
             const isAlert = f.low_balance_alert || endingSoonFlag;
-            const baseAvail  = toBase(f.available_balance, f.currency);
+            const baseAvail  = toBase(ef.available_balance, f.currency);
             const baseAmount = toBase(f.amount, f.currency);
             const baseCommit = toBase(f.committed_amount, f.currency);
-            const burnDays    = calcBurnDaysLeft(f);
+            const burnDays    = calcBurnDaysLeft(ef);
 
             const fundAllocs = allocsByFund.get(f.id) ?? [];
             const fundTxnsByUser = txnsByFundUser.get(f.id) ?? new Map();
@@ -581,7 +618,7 @@ export default function PreFundingOverview() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-end">
                         <span className="text-[11px] text-muted-foreground">Used {pct}%</span>
-                        <span className="text-sm font-bold font-mono">{f.currency} {formatNumber(f.available_balance, 0)}</span>
+                        <span className="text-sm font-bold font-mono">{f.currency} {formatNumber(ef.available_balance, 0)}</span>
                       </div>
                       <Progress
                         value={pct}
@@ -605,7 +642,7 @@ export default function PreFundingOverview() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Available</p>
-                        <p className="font-mono font-semibold text-sm text-emerald-600">{f.currency} {formatNumber(f.available_balance, 0)}</p>
+                        <p className="font-mono font-semibold text-sm text-emerald-600">{f.currency} {formatNumber(ef.available_balance, 0)}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Committed</p>
@@ -613,7 +650,7 @@ export default function PreFundingOverview() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Paid Out</p>
-                        <p className="font-mono font-medium text-rose-600">{f.currency} {formatNumber(f.paid_amount, 0)}</p>
+                        <p className="font-mono font-medium text-rose-600">{f.currency} {formatNumber(ef.paid_amount, 0)}</p>
                       </div>
                       {f.currency !== baseCurrency && (
                         <div className="col-span-2 text-[10px] text-muted-foreground">
