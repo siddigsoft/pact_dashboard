@@ -571,6 +571,20 @@ export default function PreFundingReconciliation() {
   const [matchingFeed, setMatchingFeed] = useState(false);
   const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
 
+  // Effective paid/available derived from the already-filtered transactions state.
+  // This stays correct even when orphan transactions exist in the DB (e.g. from deleted DPs),
+  // because loadTxns filters those out before setting the `transactions` state.
+  const effectivePaidAmount = useMemo(() =>
+    transactions
+      .filter(t => ['payment', 'commitment'].includes(t.transaction_type))
+      .reduce((s, t) => s + Number(t.amount), 0),
+    [transactions]
+  );
+  const effectiveAvailableBalance = useMemo(() =>
+    selectedFund ? selectedFund.amount - effectivePaidAmount : 0,
+    [selectedFund, effectivePaidAmount]
+  );
+
   // Auto-link retry
   const [unlinkedSubs, setUnlinkedSubs]       = useState<{ ocs: any[]; dp: any[]; ef: any[] }>({ ocs: [], dp: [], ef: [] });
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
@@ -1466,7 +1480,7 @@ export default function PreFundingReconciliation() {
           <h2 className="text-xl font-bold flex items-center gap-2"><RotateCcw className="h-5 w-5 text-sky-600" />Reconciliation</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Reconcile transactions, close periods, and export reports</p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadFunds}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
+        <Button variant="outline" size="sm" onClick={() => { loadFunds(); if (selectedFund) { loadTxns(selectedFund.id); loadUnlinkedPayments(selectedFund.id); } }}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
       </div>
 
       {/* ── Fund selector bar ──────────────────────────────────────────────── */}
@@ -1551,9 +1565,9 @@ export default function PreFundingReconciliation() {
                   <div className="grid grid-cols-4 gap-3 text-center">
                     {[
                       { label: 'Total Funded', value: selectedFund.amount, color: 'text-foreground', tip: null },
-                      { label: 'Paid Out',     value: selectedFund.paid_amount,      color: 'text-sky-600',    tip: null },
+                      { label: 'Paid Out',     value: effectivePaidAmount,           color: 'text-sky-600',    tip: null },
                       { label: 'Committed',    value: selectedFund.committed_amount, color: 'text-violet-600', tip: 'Funds reserved for approved plans or pending payments that have not yet been physically disbursed. They reduce your Available balance immediately — like a hold — so the money cannot be double-spent.' },
-                      { label: 'Available',    value: selectedFund.available_balance,color: selectedFund.available_balance < selectedFund.amount * 0.2 ? 'text-rose-600' : 'text-emerald-600', tip: null },
+                      { label: 'Available',    value: effectiveAvailableBalance,     color: effectiveAvailableBalance < selectedFund.amount * 0.2 ? 'text-rose-600' : 'text-emerald-600', tip: null },
                     ].map(s => (
                       <div key={s.label} className="bg-muted/40 rounded-lg p-2">
                         <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
