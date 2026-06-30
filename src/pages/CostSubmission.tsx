@@ -1902,9 +1902,14 @@ const CostSubmission = () => {
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
-        // Auto-link to active pre-fund (non-blocking — payment is already marked paid)
-        import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
-          linkPaymentToPreFund({
+        toast({
+          title: "Payment Sent / تم إرسال الدفعة",
+          description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
+        });
+        // Auto-link to active pre-fund — awaited so linkage outcome is reported before dialog closes
+        try {
+          const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+          const pfResult = await linkPaymentToPreFund({
             amount: oc.amount_cents / 100,
             currency: oc.currency,
             countryId: (oc as any).country_id ?? null,
@@ -1917,26 +1922,21 @@ const CostSubmission = () => {
             paymentDate: now,
             createdBy: currentUser.id,
             userId: oc.submitted_by ?? null,
-          }).then(result => {
-            if (result.linked) {
-              toast({ title: 'Linked to Pre-Fund', description: result.message });
-            } else if (result.needsManualSelection) {
-              toast({
-                title: 'Manual Fund Link Required',
-                description: `${result.message} Candidates: ${(result.candidates ?? []).map(c => c.name).join(', ')}.`,
-                variant: 'destructive',
-              });
-            } else {
-              console.warn('[Pre-Fund] Auto-link skipped:', result.message);
-            }
-          }).catch((err: Error) => {
-            console.warn('[Pre-Fund] Auto-link error:', err?.message);
           });
-        });
-        toast({
-          title: "Payment Sent / تم إرسال الدفعة",
-          description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
-        });
+          if (pfResult.linked) {
+            toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
+          } else if (pfResult.needsManualSelection) {
+            toast({
+              title: 'Manual Fund Link Required',
+              description: `${pfResult.message} Candidates: ${(pfResult.candidates ?? []).map(c => c.name).join(', ')}.`,
+              variant: 'destructive',
+            });
+          } else {
+            console.warn('[Pre-Fund] Auto-link skipped:', pfResult.message);
+          }
+        } catch (pfErr: any) {
+          console.warn('[Pre-Fund] Linkage error (payment still marked paid):', pfErr?.message);
+        }
         // Notify the submitter
         const amount = (oc.amount_cents / 100).toLocaleString();
         dispatchNotification({
@@ -2032,9 +2032,10 @@ const CostSubmission = () => {
         }).eq('id', sub.id);
         if (error) { failCount++; } else {
           successCount++;
-          // Auto-link each paid submission to an active pre-fund (non-blocking)
-          import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
-            linkPaymentToPreFund({
+          // Auto-link each paid submission to an active pre-fund — awaited
+          try {
+            const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+            const r = await linkPaymentToPreFund({
               amount: sub.amount_cents / 100,
               currency: sub.currency,
               countryId: (sub as any).country_id ?? null,
@@ -2047,9 +2048,11 @@ const CostSubmission = () => {
               paymentDate: now,
               createdBy: currentUser.id,
               userId: sub.submitted_by ?? null,
-            }).then(r => { if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message); })
-              .catch((err: Error) => console.warn('[Pre-Fund] Bulk link error:', err?.message));
-          });
+            });
+            if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message);
+          } catch (pfErr: any) {
+            console.warn('[Pre-Fund] Bulk link error:', pfErr?.message);
+          }
         }
       }
 

@@ -117,6 +117,9 @@ export default function AccountingGrants() {
 
   // GL bridge log for expenses — map of expense_id → status
   const [expenseGlLog, setExpenseGlLog] = useState<Record<string, string>>({});
+  // Pre-fund coverage: map of grant_id → total pre-fund transactions amount in grant period
+  const [preFundByGrant, setPreFundByGrant] = useState<Record<string, number>>({});
+  const [preFundPipelineTotal, setPreFundPipelineTotal] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -134,9 +137,35 @@ export default function AccountingGrants() {
       return { ...g, status: computedStatus, spent: 0, remaining: g.award_amount, burnRate: 0, daysLeft };
     });
 
-    const spendRes = await supabase.from('acct_grant_expenses' as any).select('grant_id, amount').limit(50000).catch(() => ({ data: null }));
+    const [spendRes, pfTxnRes, pfFundRes] = await Promise.all([
+      supabase.from('acct_grant_expenses' as any).select('grant_id, amount').limit(50000).catch(() => ({ data: null })),
+      // Pre-fund transactions to calculate per-grant period coverage
+      (supabase as any).from('pre_fund_transactions').select('amount, currency, payment_date').limit(50000).catch(() => ({ data: null })),
+      // Active pre-fund requests for pipeline total
+      (supabase as any).from('pre_fund_requests').select('available_balance, currency').eq('status', 'active').limit(500).catch(() => ({ data: null })),
+    ]);
+
+    // Build spend map per grant
     const spendMap: Record<string, number> = {};
     for (const s of (spendRes.data ?? []) as any[]) spendMap[s.grant_id] = (spendMap[s.grant_id] ?? 0) + Number(s.amount ?? 0);
+
+    // Build pre-fund coverage per grant: sum transactions whose payment_date falls within grant period
+    const pfTxns: Array<{ amount: number; payment_date: string }> = (pfTxnRes?.data ?? []);
+    const pfByGrant: Record<string, number> = {};
+    for (const g of rows) {
+      const start = g.start_date;
+      const end = g.end_date;
+      const covered = pfTxns
+        .filter(t => t.payment_date >= start && t.payment_date <= end)
+        .reduce((s, t) => s + Number(t.amount ?? 0), 0);
+      if (covered > 0) pfByGrant[g.id] = covered;
+    }
+    setPreFundByGrant(pfByGrant);
+
+    // Pipeline total = sum of available_balance across all active pre-fund requests
+    const pipeline = ((pfFundRes?.data ?? []) as any[]).reduce((s: number, r: any) => s + Number(r.available_balance ?? 0), 0);
+    setPreFundPipelineTotal(pipeline);
+
     const enriched = rows.map(g => {
       const spent = spendMap[g.id] ?? 0;
       const burnRate = g.award_amount > 0 ? Math.round((spent / g.award_amount) * 100) : 0;
@@ -420,7 +449,7 @@ export default function AccountingGrants() {
               { label: 'Total Awarded', v: formatNumber(totals.awarded, 0), color: 'text-indigo-700 dark:text-indigo-400' },
               { label: 'Total Spent',   v: formatNumber(totals.spent, 0),   color: 'text-slate-700 dark:text-slate-300' },
               { label: 'Active Grants', v: String(totals.active),            color: 'text-emerald-700 dark:text-emerald-400' },
-              { label: 'Expiring Soon', v: String(totals.expiring),          color: totals.expiring > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500' },
+              { label: 'Pre-Fund Pipeline', v: formatNumber(preFundPipelineTotal, 0), color: preFundPipelineTotal > 0 ? 'text-violet-700 dark:text-violet-400' : 'text-slate-500' },
             ].map(s => (
               <Card key={s.label}><CardContent className="p-3"><div className="text-xs text-muted-foreground">{s.label}</div><div className={cn('text-lg font-bold mt-1', s.color)}>{s.v}</div></CardContent></Card>
             ))}
@@ -459,6 +488,7 @@ export default function AccountingGrants() {
                         <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28">Spent</th>
                         <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28">Remaining</th>
                         <th className="text-right px-4 py-2 font-medium text-muted-foreground w-20">Burn %</th>
+                        <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28 text-violet-700 dark:text-violet-400">Pre-Funded</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">End Date</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground w-28">Status</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground w-20">Details</th>
@@ -483,6 +513,13 @@ export default function AccountingGrants() {
                               <div className="mt-0.5 h-1 w-14 rounded-full bg-muted overflow-hidden inline-block ml-1 align-middle">
                                 <div className={cn('h-full rounded-full', g.burnRate > 100 ? 'bg-rose-500' : g.burnRate >= 80 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(g.burnRate, 100)}%` }} />
                               </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">
+                              {preFundByGrant[g.id] ? (
+                                <span className="text-violet-700 dark:text-violet-400 font-medium">{formatNumber(preFundByGrant[g.id], 0)}</span>
+                              ) : (
+                                <span className="text-muted-foreground text-[10px]">—</span>
+                              )}
                             </td>
                             <td className={cn('px-4 py-2.5', g.daysLeft <= 30 && g.daysLeft >= 0 ? 'text-amber-700 font-medium' : g.daysLeft < 0 ? 'text-rose-700' : '')}>
                               {format(parseISO(g.end_date), 'dd MMM yyyy')}

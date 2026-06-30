@@ -485,9 +485,10 @@ export default function DownPaymentApproval() {
         .update({ status: 'fully_paid', updated_at: now })
         .eq('id', req.id);
       if (error) throw error;
-      // Auto-link to active pre-fund (non-blocking)
-      import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
-        linkPaymentToPreFund({
+      // Auto-link to active pre-fund — awaited so result is shown before UI refreshes
+      try {
+        const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+        const pfResult = await linkPaymentToPreFund({
           amount: req.approvedAmount ?? req.requestedAmount,
           currency: 'SDG',
           countryId: (req as any).country_id ?? null,
@@ -501,20 +502,23 @@ export default function DownPaymentApproval() {
           createdBy: null,
           userId: req.requestedBy ?? null,
           receiptUrl: req.paymentProofUrl ?? null,
-        }).then(r => {
-          if (!r.linked) {
-            toast({
-              title: '⚠️ Pre-Fund Link Failed',
-              description: r.message + ' — Use Reconciliation → Link Now to link manually.',
-              variant: 'destructive',
-            });
-          }
-        }).catch((err: Error) => toast({
+        });
+        if (pfResult.linked) {
+          toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
+        } else if (!pfResult.needsManualSelection) {
+          toast({
+            title: '⚠️ Pre-Fund Link Failed',
+            description: pfResult.message + ' — Use Reconciliation → Link Now to link manually.',
+            variant: 'destructive',
+          });
+        }
+      } catch (pfErr: any) {
+        toast({
           title: '⚠️ Pre-Fund Link Error',
-          description: (err?.message ?? 'Unknown error') + ' — Link manually in Reconciliation.',
+          description: (pfErr?.message ?? 'Unknown error') + ' — Link manually in Reconciliation.',
           variant: 'destructive',
-        }));
-      });
+        });
+      }
       // Notify the advance requester via in-app + WhatsApp (fire-and-forget)
       const requestedBy = (req as any).requestedBy ?? null;
       if (requestedBy) {
