@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS fd_sampling_studies (
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_sampling_studies ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'design';
+
 CREATE INDEX IF NOT EXISTS idx_fdss_status   ON fd_sampling_studies(status);
 CREATE INDEX IF NOT EXISTS idx_fdss_form     ON fd_sampling_studies(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdss_created  ON fd_sampling_studies(created_at DESC);
@@ -100,6 +103,9 @@ CREATE TABLE IF NOT EXISTS fd_sample_draws (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_sample_draws ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
 CREATE INDEX IF NOT EXISTS idx_fdsd_study   ON fd_sample_draws(study_id);
 CREATE INDEX IF NOT EXISTS idx_fdsd_status  ON fd_sample_draws(status);
 
@@ -126,9 +132,14 @@ CREATE TABLE IF NOT EXISTS fd_sample_units (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_fdsu_draw     ON fd_sample_units(draw_id);
-CREATE INDEX IF NOT EXISTS idx_fdsu_study    ON fd_sample_units(study_id);
-CREATE INDEX IF NOT EXISTS idx_fdsu_status   ON fd_sample_units(status);
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_sample_units ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
+-- Note: idx_fdsu_status is already used for field_data_submissions.
+-- Using unique name idx_fdsamu_status for fd_sample_units to avoid duplicate.
+CREATE INDEX IF NOT EXISTS idx_fdsamu_draw   ON fd_sample_units(draw_id);
+CREATE INDEX IF NOT EXISTS idx_fdsamu_study  ON fd_sample_units(study_id);
+CREATE INDEX IF NOT EXISTS idx_fdsamu_status ON fd_sample_units(status);
 CREATE INDEX IF NOT EXISTS idx_fdsu_enum     ON fd_sample_units(enumerator_id);
 CREATE INDEX IF NOT EXISTS idx_fdsu_key      ON fd_sample_units(unit_key);
 

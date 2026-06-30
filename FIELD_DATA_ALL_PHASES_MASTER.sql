@@ -2,7 +2,6 @@
 -- FIELD DATA HUB — MASTER MIGRATION (All 18 Phases)
 -- PACT Command Center — safe to re-run: all statements use IF NOT EXISTS
 -- ============================================================================
--- PHASE MAP
 -- P01  Server connections     field_data_servers
 -- P02  Forms & submissions    field_data_forms, field_data_submissions
 -- P03  Import jobs            field_data_import_jobs
@@ -26,7 +25,7 @@
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 1-6 CORE (field_data_* tables + fd_forms/fd_submissions/fd_form_schema)
+-- PHASE 1-6 CORE (field_data_* + fd_* unified schema)
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — CORE MIGRATION (Phases 1–6)
@@ -64,8 +63,9 @@ CREATE TABLE IF NOT EXISTS field_data_servers (
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Guard: add is_active if the table already existed without it
+-- Guards: add columns if table already existed without them
 ALTER TABLE field_data_servers ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE field_data_servers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'untested';
 
 CREATE INDEX IF NOT EXISTS idx_fds_type     ON field_data_servers(type);
 CREATE INDEX IF NOT EXISTS idx_fds_status   ON field_data_servers(status);
@@ -93,6 +93,9 @@ CREATE TABLE IF NOT EXISTS field_data_forms (
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 
 CREATE INDEX IF NOT EXISTS idx_fdf_status   ON field_data_forms(status);
 CREATE INDEX IF NOT EXISTS idx_fdf_slug     ON field_data_forms(form_id_slug);
@@ -140,6 +143,11 @@ CREATE TABLE IF NOT EXISTS field_data_submissions (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guards: add columns if table already existed without them
+ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS review_status TEXT DEFAULT 'pending';
+ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'sync';
+
 CREATE INDEX IF NOT EXISTS idx_fdsu_form     ON field_data_submissions(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdsu_status   ON field_data_submissions(status);
 CREATE INDEX IF NOT EXISTS idx_fdsu_review   ON field_data_submissions(review_status);
@@ -167,6 +175,9 @@ CREATE TABLE IF NOT EXISTS field_data_import_jobs (
   created_by      UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE field_data_import_jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_fdij_form    ON field_data_import_jobs(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdij_status  ON field_data_import_jobs(status);
@@ -209,6 +220,9 @@ CREATE TABLE IF NOT EXISTS field_data_sync_logs (
   duration_ms       INTEGER
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE field_data_sync_logs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'running';
+
 CREATE INDEX IF NOT EXISTS idx_fdsl_form    ON field_data_sync_logs(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdsl_server  ON field_data_sync_logs(server_id);
 CREATE INDEX IF NOT EXISTS idx_fdsl_status  ON field_data_sync_logs(status);
@@ -249,6 +263,9 @@ CREATE TABLE IF NOT EXISTS field_data_exports (
   completed_at  TIMESTAMPTZ
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE field_data_exports ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
 CREATE INDEX IF NOT EXISTS idx_fde_form    ON field_data_exports(form_id);
 CREATE INDEX IF NOT EXISTS idx_fde_status  ON field_data_exports(status);
 
@@ -277,6 +294,10 @@ CREATE TABLE IF NOT EXISTS fd_forms (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status/version if table already existed without them
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS version TEXT DEFAULT '1';
+
 CREATE INDEX IF NOT EXISTS idx_fdforms_status   ON fd_forms(status);
 CREATE INDEX IF NOT EXISTS idx_fdforms_created  ON fd_forms(created_at DESC);
 
@@ -298,6 +319,11 @@ CREATE TABLE IF NOT EXISTS fd_submissions (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guards: add columns if table already existed without them
+ALTER TABLE fd_submissions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE fd_submissions ADD COLUMN IF NOT EXISTS review_status TEXT DEFAULT 'pending';
+ALTER TABLE fd_submissions ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'sync';
+
 CREATE INDEX IF NOT EXISTS idx_fdsubs_form     ON fd_submissions(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdsubs_status   ON fd_submissions(status);
 CREATE INDEX IF NOT EXISTS idx_fdsubs_review   ON fd_submissions(review_status);
@@ -318,9 +344,11 @@ CREATE TABLE IF NOT EXISTS fd_form_schema (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_fdfs_form    ON fd_form_schema(form_id);
-CREATE INDEX IF NOT EXISTS idx_fdfs_name    ON fd_form_schema(name);
-CREATE INDEX IF NOT EXISTS idx_fdfs_type    ON fd_form_schema(type);
+-- Note: idx_fdfs_form is already used for field_data_form_servers above.
+-- Using unique name idx_fdschema_form for fd_form_schema to avoid duplicate.
+CREATE INDEX IF NOT EXISTS idx_fdschema_form ON fd_form_schema(form_id);
+CREATE INDEX IF NOT EXISTS idx_fdschema_name ON fd_form_schema(name);
+CREATE INDEX IF NOT EXISTS idx_fdschema_type ON fd_form_schema(type);
 
 -- ── RLS ───────────────────────────────────────────────────────────────────────
 ALTER TABLE field_data_servers           ENABLE ROW LEVEL SECURITY;
@@ -607,7 +635,7 @@ CREATE POLICY "fdpc_svc"     ON fd_preload_configs            FOR ALL    TO serv
 -- ============================================================================
 
 -- ============================================================================
--- SAMPLING ENGINE (FieldDataSampling.tsx)
+-- SAMPLING ENGINE
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Sampling Engine (FieldDataSampling.tsx)
@@ -647,6 +675,9 @@ CREATE TABLE IF NOT EXISTS fd_sampling_studies (
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_sampling_studies ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'design';
 
 CREATE INDEX IF NOT EXISTS idx_fdss_status   ON fd_sampling_studies(status);
 CREATE INDEX IF NOT EXISTS idx_fdss_form     ON fd_sampling_studies(form_id);
@@ -711,6 +742,9 @@ CREATE TABLE IF NOT EXISTS fd_sample_draws (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_sample_draws ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
 CREATE INDEX IF NOT EXISTS idx_fdsd_study   ON fd_sample_draws(study_id);
 CREATE INDEX IF NOT EXISTS idx_fdsd_status  ON fd_sample_draws(status);
 
@@ -737,9 +771,14 @@ CREATE TABLE IF NOT EXISTS fd_sample_units (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_fdsu_draw     ON fd_sample_units(draw_id);
-CREATE INDEX IF NOT EXISTS idx_fdsu_study    ON fd_sample_units(study_id);
-CREATE INDEX IF NOT EXISTS idx_fdsu_status   ON fd_sample_units(status);
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_sample_units ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
+-- Note: idx_fdsu_status is already used for field_data_submissions.
+-- Using unique name idx_fdsamu_status for fd_sample_units to avoid duplicate.
+CREATE INDEX IF NOT EXISTS idx_fdsamu_draw   ON fd_sample_units(draw_id);
+CREATE INDEX IF NOT EXISTS idx_fdsamu_study  ON fd_sample_units(study_id);
+CREATE INDEX IF NOT EXISTS idx_fdsamu_status ON fd_sample_units(status);
 CREATE INDEX IF NOT EXISTS idx_fdsu_enum     ON fd_sample_units(enumerator_id);
 CREATE INDEX IF NOT EXISTS idx_fdsu_key      ON fd_sample_units(unit_key);
 
