@@ -3,21 +3,32 @@
 ## Overview
 The Pre-Funding Management System adds a top-level section at `/pre-funding` for Finance and Admin users. It manages incoming pre-funds, approval chains, transaction reconciliation, GL postings, multi-currency balances, and donor PDF statements.
 
-## Step 1 — Apply All SQL Files in Order
+## Step 1 — Apply All SQL Files
 
-> **Canonical migration path:** Run **`pre_funding_ALL_IN_ONE.sql`** for a clean install (new environments). It is always kept in sync with the individual files listed below and is the single authoritative source for the current schema. Run the individual files only when patching an existing deployment incrementally.
+### ✅ Fresh install (recommended — single file)
 
-Run each file in Supabase Dashboard → SQL Editor → New query, **in this exact order**:
+Run **only `pre_funding_ALL_IN_ONE.sql`** in Supabase Dashboard → SQL Editor → New query.
+This file is the canonical, always-up-to-date single source and covers everything: core tables,
+RLS, GL bridge accounts, allocations table, transaction extensions, and all RPCs.
 
-| # | File | Purpose |
+> **Do NOT also run the individual files below on a fresh install.** Running both will cause
+> duplicate-object errors (`already exists`) because `pre_funding_ALL_IN_ONE.sql` already
+> includes their content.
+
+### ⚙️ Existing install (incremental patch)
+
+If you already have the base tables from a previous deployment, run **only the files that
+introduce new objects** you don't have yet, in this order:
+
+| # | File | When to run |
 |---|---|---|
-| 1 | `pre_funding_migration.sql` | Core tables, RLS, GL bridge accounts |
-| 2 | `pre_funding_atomic_rpcs.sql` | 4 SECURITY DEFINER RPCs (activate, link, add txn, close period) |
-| 3 | `pre_funding_rls_fix.sql` | RLS policy corrections (if needed) |
-| 4 | `pre_fund_allocations.sql` | `pre_fund_allocations` table + `deduct_pf_allocation` RPC |
-| 5 | `pre_fund_user_txn_patch.sql` | Adds `user_id` + `receipt_url` to `pre_fund_transactions`, extends `link_payment_atomically_rpc` |
+| 1 | `pre_funding_migration.sql` | First-time base schema only (skip if tables already exist) |
+| 2 | `pre_funding_atomic_rpcs.sql` | Always run — safe `CREATE OR REPLACE` RPCs |
+| 3 | `pre_funding_rls_fix.sql` | Run if you see RLS policy errors |
+| 4 | `pre_fund_allocations.sql` | Run if `pre_fund_allocations` table is missing |
+| 5 | `pre_fund_user_txn_patch.sql` | Run if `pre_fund_transactions.user_id` column is missing |
 
-> Files 3–5 are safe to re-run at any time — all use `IF NOT EXISTS` / `CREATE OR REPLACE` guards.
+> All individual files use `IF NOT EXISTS` / `CREATE OR REPLACE` guards — safe to re-run.
 
 **Key transactional guarantee in `link_payment_atomically_rpc`:** All allocation eligibility checks (`NOT FOUND`, `v_alloc_remaining < p_amount`) are evaluated **before** any INSERT or UPDATE. Failures raise `RAISE EXCEPTION` (not `RETURN`), which rolls back the entire transaction atomically. The `RETURN jsonb_build_object('success', false, ...)` pattern is only used for pure read-phase errors (fund not found, insufficient balance) where no writes have yet occurred.
 

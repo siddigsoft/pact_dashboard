@@ -140,7 +140,8 @@ export default function AccountingGrants() {
     const [spendRes, pfTxnRes, pfFundRes] = await Promise.all([
       supabase.from('acct_grant_expenses' as any).select('grant_id, amount').limit(50000).catch(() => ({ data: null })),
       // Pre-fund transactions to calculate per-grant period coverage
-      (supabase as any).from('pre_fund_transactions').select('amount, currency, payment_date').limit(50000).catch(() => ({ data: null })),
+      // Schema uses transaction_date (not payment_date)
+      (supabase as any).from('pre_fund_transactions').select('amount, currency, transaction_date').limit(50000).catch(() => ({ data: null })),
       // Active pre-fund requests for pipeline total
       (supabase as any).from('pre_fund_requests').select('available_balance, currency').eq('status', 'active').limit(500).catch(() => ({ data: null })),
     ]);
@@ -149,14 +150,14 @@ export default function AccountingGrants() {
     const spendMap: Record<string, number> = {};
     for (const s of (spendRes.data ?? []) as any[]) spendMap[s.grant_id] = (spendMap[s.grant_id] ?? 0) + Number(s.amount ?? 0);
 
-    // Build pre-fund coverage per grant: sum transactions whose payment_date falls within grant period
-    const pfTxns: Array<{ amount: number; payment_date: string }> = (pfTxnRes?.data ?? []);
+    // Build pre-fund coverage per grant: sum transactions whose transaction_date falls within grant period
+    const pfTxns: Array<{ amount: number; transaction_date: string }> = (pfTxnRes?.data ?? []);
     const pfByGrant: Record<string, number> = {};
     for (const g of rows) {
       const start = g.start_date;
       const end = g.end_date;
       const covered = pfTxns
-        .filter(t => t.payment_date >= start && t.payment_date <= end)
+        .filter(t => t.transaction_date >= start && t.transaction_date <= end)
         .reduce((s, t) => s + Number(t.amount ?? 0), 0);
       if (covered > 0) pfByGrant[g.id] = covered;
     }

@@ -62,7 +62,8 @@ export default function AccountingDonorReports() {
       supabase.from('acct_journal_lines').select('fund_id, debit_credit, functional_amount'),
       supabase.from('crm_partners').select('id, name').limit(500).catch(() => ({ data: [] })),
       // Pre-fund requests to show donor-linked pipeline spend
-      (supabase as any).from('pre_fund_requests').select('id, name, currency, total_amount, available_balance, paid_amount, status, start_date, end_date, matching_scope').in('status', ['active', 'approved']).order('start_date', { ascending: false }).limit(200).catch(() => ({ data: [] })),
+      // Canonical statuses: pending_approval, awaiting_receipt, active, low_balance, closed, expired, cancelled
+      (supabase as any).from('pre_fund_requests').select('id, name, currency, amount, available_balance, paid_amount, status, start_date, end_date, matching_scope').in('status', ['active', 'low_balance', 'awaiting_receipt']).order('start_date', { ascending: false }).limit(200).catch(() => ({ data: [] })),
     ]);
     setFunds((fData ?? []) as Fund[]);
     setPartners(((pData as any)?.data ?? pData ?? []) as Partner[]);
@@ -415,7 +416,7 @@ export default function AccountingDonorReports() {
                   {/* Summary row */}
                   <div className="grid grid-cols-3 gap-3 p-4 border-b">
                     {[
-                      { label: 'Total Pre-Funded', value: formatNumber(preFundRequests.reduce((s, r) => s + Number(r.total_amount ?? 0), 0)), color: 'text-indigo-700' },
+                      { label: 'Total Pre-Funded', value: formatNumber(preFundRequests.reduce((s, r) => s + Number(r.amount ?? 0), 0)), color: 'text-indigo-700' },
                       { label: 'Available Balance', value: formatNumber(preFundRequests.reduce((s, r) => s + Number(r.available_balance ?? 0), 0)), color: 'text-emerald-700' },
                       { label: 'Disbursed', value: formatNumber(preFundRequests.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0)), color: 'text-slate-700' },
                     ].map(s => (
@@ -436,7 +437,7 @@ export default function AccountingDonorReports() {
                       </thead>
                       <tbody className="divide-y">
                         {preFundRequests.map(r => {
-                          const total = Number(r.total_amount ?? 0);
+                          const total = Number(r.amount ?? 0);
                           const paid = Number(r.paid_amount ?? 0);
                           const avail = Number(r.available_balance ?? 0);
                           const coveragePct = total > 0 ? Math.round((paid / total) * 100) : 0;

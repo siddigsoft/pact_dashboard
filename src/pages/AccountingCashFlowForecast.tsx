@@ -62,10 +62,13 @@ export default function AccountingCashFlowForecast() {
           .select('available_balance, committed_amount, currency')
           .in('status', ['active', 'low_balance'])
           .limit(500),
-        // Integration toggle + FX rates for base-currency conversion
+        // Integration toggle + multi-currency FX rates (acct_exchange_rates, most-recent rate per pair)
         supabase.from('pre_fund_settings').select('integration_cashflow').limit(1).maybeSingle(),
-        supabase.from('exchange_rates').select('usd_to_sdg').eq('is_active', true)
-          .order('fetched_at', { ascending: false }).limit(1).maybeSingle(),
+        (supabase as any).from('acct_exchange_rates')
+          .select('from_currency, to_currency, rate')
+          .order('effective_date', { ascending: false })
+          .limit(500)
+          .catch(() => ({ data: [] })),
       ]);
 
       if (bankRes.error?.code === '42P01') missing.push('acct_bank_accounts');
@@ -78,20 +81,41 @@ export default function AccountingCashFlowForecast() {
       // Only include pre-fund liquidity when integration_cashflow toggle is enabled (default: true)
       const pfSettings = (preFundSettingsRes as any)?.data;
       const integrationEnabled = pfSettings === null || pfSettings?.integration_cashflow !== false;
-      const usdToSdg = Number((fxRes as any)?.data?.usd_to_sdg ?? 1) || 1;
 
-      const preFunds = (preFundRes.data ?? []) as any[];
-      // Convert all pre-fund balances to USD using FX rates for a unified base-currency total
-      const toUSD = (amount: number, currency: string) => {
-        if (currency === 'USD') return amount;
-        if (currency === 'SDG') return usdToSdg > 0 ? amount / usdToSdg : 0;
-        return amount; // fallback: treat unknown currencies as USD-equivalent
+      // Build FX lookup map from acct_exchange_rates: 'FROM→TO' → rate (most-recent wins due to ORDER BY above)
+      const fxRows: Array<{ from_currency: string; to_currency: string; rate: number }> = ((fxRes as any)?.data ?? []);
+      const fxMap = new Map<string, number>();
+      for (const r of fxRows) {
+        const key = `${r.from_currency}→${r.to_currency}`;
+        if (!fxMap.has(key)) fxMap.set(key, Number(r.rate)); // first row = most recent
+      }
+
+      /**
+       * Convert `amount` in `currency` to USD using acct_exchange_rates.
+       * Returns null if no rate is available (caller should exclude or flag the amount).
+       */
+      const toUSD = (amount: number, currency: string): number | null => {
+        if (!currency || currency === 'USD') return amount;
+        const direct = fxMap.get(`${currency}→USD`);
+        if (direct != null) return amount * direct;
+        // Attempt triangulation via an intermediate USD→currency rate (inverse)
+        const inverse = fxMap.get(`USD→${currency}`);
+        if (inverse != null && inverse > 0) return amount / inverse;
+        // No rate found — return null so callers can handle explicitly
+        console.warn(`[CashFlowForecast] No FX rate for ${currency}→USD; pre-fund balance excluded from forecast`);
+        return null;
       };
       const pfLiquidity = integrationEnabled
-        ? preFunds.reduce((s: number, r: any) => s + toUSD(Number(r.available_balance ?? 0), r.currency ?? 'USD'), 0)
+        ? preFunds.reduce((s: number, r: any) => {
+            const v = toUSD(Number(r.available_balance ?? 0), r.currency ?? 'USD');
+            return v !== null ? s + v : s; // exclude funds with no FX rate rather than mis-stating
+          }, 0)
         : 0;
       const pfCommitted = integrationEnabled
-        ? preFunds.reduce((s: number, r: any) => s + toUSD(Number(r.committed_amount ?? 0), r.currency ?? 'USD'), 0)
+        ? preFunds.reduce((s: number, r: any) => {
+            const v = toUSD(Number(r.committed_amount ?? 0), r.currency ?? 'USD');
+            return v !== null ? s + v : s;
+          }, 0)
         : 0;
       setPreFundLiquidity(pfLiquidity);
       setPreFundCommitted(pfCommitted);
