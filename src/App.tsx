@@ -189,6 +189,7 @@ const FieldDataWorkflow = lazy(() => import('./pages/FieldDataWorkflow'));
 const FieldDataExports   = lazy(() => import('./pages/FieldDataExports'));
 const FieldDataLanguages      = lazy(() => import('./pages/FieldDataLanguages'));
 const FieldDataCollaboration  = lazy(() => import('./pages/FieldDataCollaboration'));
+const FieldDataBackup         = lazy(() => import('./pages/FieldDataBackup'));
 const ProgrammeHub = lazy(() => import('./pages/ProgrammeHub'));
 const CommunicationHub = lazy(() => import('./pages/CommunicationHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
@@ -591,6 +592,7 @@ const AppRoutes = () => {
         <Route path="/field-data/exports" element={<PageWrapper><FieldDataExports /></PageWrapper>} />
         <Route path="/field-data/languages"      element={<PageWrapper><FieldDataLanguages /></PageWrapper>} />
         <Route path="/field-data/collaboration"  element={<PageWrapper><FieldDataCollaboration /></PageWrapper>} />
+        <Route path="/field-data/backup"         element={<PageWrapper><FieldDataBackup /></PageWrapper>} />
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
