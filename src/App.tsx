@@ -179,6 +179,7 @@ const CRMHub = lazy(() => import('./pages/CRMHub'));
 const FieldDataHub = lazy(() => import('./pages/FieldDataHub'));
 const FieldDataFormDetail = lazy(() => import('./pages/FieldDataFormDetail'));
 const FieldDataDatasets = lazy(() => import('./pages/FieldDataDatasets'));
+const FieldDataSampling = lazy(() => import('./pages/FieldDataSampling'));
 const ProgrammeHub = lazy(() => import('./pages/ProgrammeHub'));
 const CommunicationHub = lazy(() => import('./pages/CommunicationHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
@@ -571,6 +572,7 @@ const AppRoutes = () => {
         <Route path="/crm/opportunities" element={<Navigate to="/crm?tab=pipeline" replace />} />
         <Route path="/field-data" element={<PageWrapper><FieldDataHub /></PageWrapper>} />
         <Route path="/field-data/datasets" element={<PageWrapper><FieldDataDatasets /></PageWrapper>} />
+        <Route path="/field-data/sampling" element={<PageWrapper><FieldDataSampling /></PageWrapper>} />
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
