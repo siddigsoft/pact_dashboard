@@ -11,9 +11,9 @@
  *   - Activates pending_grace funds whose grace window has expired
  *   - Fires notification_events for Finance team
  *
- * SECURITY: Must be invoked with x-cron-secret header matching
- * PRE_FUND_CRON_SECRET env var.  On Supabase this is set via the dashboard
- * Secrets manager.  Regular authenticated users cannot call this function.
+ * SECURITY: PRE_FUND_CRON_SECRET MUST be set in Supabase Secrets.
+ * The function FAILS CLOSED (returns 401) if the secret is missing or
+ * the request header does not match.  Never run this without the secret set.
  *
  * Scheduling (choose one):
  *   A. Supabase Scheduled Functions (recommended):
@@ -26,23 +26,20 @@
  *        '0 6 * * *',
  *        $$
  *          SELECT net.http_post(
- *            url      := current_setting('app.supabase_functions_url') || '/pre-fund-scheduler',
+ *            url      := 'https://<project>.supabase.co/functions/v1/pre-fund-scheduler',
  *            headers  := jsonb_build_object(
  *              'Content-Type', 'application/json',
- *              'x-cron-secret', current_setting('app.pre_fund_cron_secret')
+ *              'x-cron-secret', '<YOUR_PRE_FUND_CRON_SECRET>'
  *            ),
  *            body     := '{}'::jsonb
  *          )
  *        $$
  *      );
- *      -- Then set app settings:
- *      ALTER DATABASE postgres SET app.supabase_functions_url = 'https://<project>.supabase.co/functions/v1';
- *      ALTER DATABASE postgres SET app.pre_fund_cron_secret   = '<your-secret>';
  *
  * Environment variables (set in Supabase dashboard → Edge Functions → Secrets):
  *   SUPABASE_URL              — auto-injected
  *   SUPABASE_SERVICE_ROLE_KEY — auto-injected
- *   PRE_FUND_CRON_SECRET      — shared secret for HTTP invocation validation
+ *   PRE_FUND_CRON_SECRET      — REQUIRED: shared secret for HTTP invocation validation
  */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -57,22 +54,27 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    // ── Security: validate cron secret ──────────────────────────────────
-    const cronSecret = Deno.env.get('PRE_FUND_CRON_SECRET')
-    if (cronSecret) {
-      const headerSecret = req.headers.get('x-cron-secret')
-      if (headerSecret !== cronSecret) {
-        console.error('[pre-fund-scheduler] Unauthorized: invalid x-cron-secret')
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-    } else {
-      console.warn('[pre-fund-scheduler] PRE_FUND_CRON_SECRET not set — running unauthenticated (set this in production)')
-    }
+  // ── Security: FAIL CLOSED — secret MUST be configured ───────────────────
+  const cronSecret = Deno.env.get('PRE_FUND_CRON_SECRET')
+  if (!cronSecret) {
+    console.error('[pre-fund-scheduler] FATAL: PRE_FUND_CRON_SECRET is not set. ' +
+      'Set it in Supabase Dashboard → Edge Functions → Secrets before scheduling this function.')
+    return new Response(
+      JSON.stringify({ error: 'Service misconfigured: PRE_FUND_CRON_SECRET is not set.' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
 
+  const headerSecret = req.headers.get('x-cron-secret')
+  if (headerSecret !== cronSecret) {
+    console.error('[pre-fund-scheduler] Unauthorized: invalid or missing x-cron-secret')
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  try {
     // ── Service-role client (bypasses RLS, satisfies function role guard) ─
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -83,7 +85,6 @@ serve(async (req: Request) => {
     console.log('[pre-fund-scheduler] Starting run_pre_fund_renewal_check()')
     const startedAt = new Date().toISOString()
 
-    // ── Run the renewal check SQL function ───────────────────────────────
     const { data, error } = await supabase.rpc('run_pre_fund_renewal_check')
 
     if (error) {
