@@ -131,10 +131,11 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   activated_at          TIMESTAMPTZ,
   notes                 TEXT,
   -- GL account mapping (COA codes resolved per fund; bridge engine uses these at posting time)
-  gl_receipt_account    TEXT NOT NULL DEFAULT '1200',    -- DR on receipt (cash/bank account)
-  gl_liability_account  TEXT NOT NULL DEFAULT '2400',    -- CR on receipt, DR on payment (deferred liability)
-  gl_expense_account    TEXT NOT NULL DEFAULT '5600',    -- CR on payment (programme expense)
-  gl_cf_account         TEXT NOT NULL DEFAULT '2401',    -- CR on carry-forward (next-period liability)
+  gl_receipt_account      TEXT NOT NULL DEFAULT '1200',  -- DR on receipt (cash/bank account)
+  gl_liability_account    TEXT NOT NULL DEFAULT '2400',  -- CR on receipt, DR on payment (deferred liability)
+  gl_expense_account      TEXT NOT NULL DEFAULT '5600',  -- CR on payment (programme expense)
+  gl_cf_account           TEXT NOT NULL DEFAULT '2401',  -- CR on carry-forward (next-period liability)
+  gl_encumbrance_account  TEXT,                          -- CR on commitment (encumbrance reserve); required when commitments are used
   -- Notification recipients (JSONB array of profile UUIDs for renewal/low-balance alerts)
   notification_recipients JSONB NOT NULL DEFAULT '[]',
   created_by            UUID REFERENCES auth.users(id) ON DELETE SET NULL,

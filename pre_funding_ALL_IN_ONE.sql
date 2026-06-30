@@ -166,10 +166,11 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   activated_at          TIMESTAMPTZ,
   notes                 TEXT,
   -- GL account mapping (COA codes resolved per fund; bridge engine uses these at posting time)
-  gl_receipt_account    TEXT NOT NULL DEFAULT '1200',    -- DR on receipt (cash/bank account)
-  gl_liability_account  TEXT NOT NULL DEFAULT '2400',    -- CR on receipt, DR on payment (deferred liability)
-  gl_expense_account    TEXT NOT NULL DEFAULT '5600',    -- CR on payment (programme expense)
-  gl_cf_account         TEXT NOT NULL DEFAULT '2401',    -- CR on carry-forward (next-period liability)
+  gl_receipt_account      TEXT NOT NULL DEFAULT '1200',  -- DR on receipt (cash/bank account)
+  gl_liability_account    TEXT NOT NULL DEFAULT '2400',  -- CR on receipt, DR on payment (deferred liability)
+  gl_expense_account      TEXT NOT NULL DEFAULT '5600',  -- CR on payment (programme expense)
+  gl_cf_account           TEXT NOT NULL DEFAULT '2401',  -- CR on carry-forward (next-period liability)
+  gl_encumbrance_account  TEXT,                          -- CR on commitment (encumbrance reserve); required when commitments are used
   -- Notification recipients (JSONB array of profile UUIDs for renewal/low-balance alerts)
   notification_recipients JSONB NOT NULL DEFAULT '[]',
   created_by            UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -1373,10 +1374,10 @@ CREATE OR REPLACE FUNCTION close_pre_fund_period_rpc(
   p_currency            TEXT    DEFAULT 'USD',
   p_notes               TEXT    DEFAULT NULL,
   p_closed_by           UUID    DEFAULT NULL,
-  p_gl_liability_code   TEXT    DEFAULT '2400',
-  p_gl_receipt_code     TEXT    DEFAULT '1200',
-  p_gl_expense_code     TEXT    DEFAULT '5600',
-  p_gl_cf_code          TEXT    DEFAULT '2401'
+  p_gl_liability_code   TEXT    DEFAULT NULL,   -- must be passed; resolved from fund.gl_liability_account
+  p_gl_receipt_code     TEXT    DEFAULT NULL,   -- must be passed; resolved from fund.gl_receipt_account
+  p_gl_expense_code     TEXT    DEFAULT NULL,   -- must be passed; resolved from fund.gl_expense_account
+  p_gl_cf_code          TEXT    DEFAULT NULL    -- must be passed when carry_forward_amt > 0
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1398,11 +1399,42 @@ BEGIN
 
   v_variance := GREATEST(0, p_surplus - p_return_amt - p_carry_forward_amt);
 
-  -- Resolve GL account IDs (missing accounts skip those journal lines — non-fatal)
+  -- Guard: all required account codes must be explicitly supplied by the caller
+  IF p_gl_liability_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_liability_code is required. Pass the fund''s gl_liability_account value.';
+  END IF;
+  IF p_gl_receipt_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_receipt_code is required. Pass the fund''s gl_receipt_account value.';
+  END IF;
+  IF p_gl_expense_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_expense_code is required. Pass the fund''s gl_expense_account value.';
+  END IF;
+  IF p_carry_forward_amt > 0 AND p_gl_cf_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_cf_code is required when carry_forward_amt > 0. Pass the fund''s gl_cf_account value.';
+  END IF;
+
+  -- Resolve GL account IDs from COA — fail fast if any configured code is missing
   SELECT id INTO v_liab_id FROM acct_accounts WHERE code = p_gl_liability_code LIMIT 1;
-  SELECT id INTO v_bank_id FROM acct_accounts WHERE code = p_gl_receipt_code   LIMIT 1;
-  SELECT id INTO v_exp_id  FROM acct_accounts WHERE code = p_gl_expense_code   LIMIT 1;
-  SELECT id INTO v_cf_id   FROM acct_accounts WHERE code = p_gl_cf_code        LIMIT 1;
+  IF v_liab_id IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (liability) not found in Chart of Accounts. Verify the fund''s gl_liability_account is mapped to an active COA entry.', p_gl_liability_code;
+  END IF;
+
+  SELECT id INTO v_bank_id FROM acct_accounts WHERE code = p_gl_receipt_code LIMIT 1;
+  IF v_bank_id IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (cash/bank) not found in Chart of Accounts. Verify the fund''s gl_receipt_account is mapped to an active COA entry.', p_gl_receipt_code;
+  END IF;
+
+  SELECT id INTO v_exp_id FROM acct_accounts WHERE code = p_gl_expense_code LIMIT 1;
+  IF v_exp_id IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (expense) not found in Chart of Accounts. Verify the fund''s gl_expense_account is mapped to an active COA entry.', p_gl_expense_code;
+  END IF;
+
+  IF p_carry_forward_amt > 0 THEN
+    SELECT id INTO v_cf_id FROM acct_accounts WHERE code = p_gl_cf_code LIMIT 1;
+    IF v_cf_id IS NULL THEN
+      RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (carry-forward) not found in Chart of Accounts. Verify the fund''s gl_cf_account is mapped to an active COA entry.', p_gl_cf_code;
+    END IF;
+  END IF;
 
   -- 1. Reconciliation record
   INSERT INTO pre_fund_reconciliations (
