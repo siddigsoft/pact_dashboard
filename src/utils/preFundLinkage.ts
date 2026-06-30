@@ -7,76 +7,50 @@ export interface UnlinkResult {
 
 /**
  * Reverse a pre-fund transaction that was created by linkPaymentToPreFund.
- * Looks up the pre_fund_transactions row by source_table + source_id, then:
- *   1. Deletes the pre_fund_transactions row
- *   2. Restores available_balance / paid_amount on the fund
- *   3. Clears pre_fund_transaction_id back-link on the source row
- *   4. Restores the submitter's allocation spent_amount
  *
+ * Delegates entirely to `unlink_payment_atomically_rpc` — a SECURITY DEFINER PostgreSQL
+ * function that performs all reversal steps inside a single DB transaction:
+ *   1. Lookup pre_fund_transactions by source_table + source_id
+ *   2. Delete the transaction row
+ *   3. Restore available_balance / paid_amount on the fund
+ *   4. Clear the pre_fund_transaction_id back-link on the source row
+ *   5. Restore the submitter's allocation spent_amount (if allocation exists)
+ *
+ * If any step fails the DB rolls back automatically — no partial-state corruption.
  * Safe to call even if no transaction was ever linked (returns unlinked:false silently).
+ *
+ * Requires: `unlink_payment_atomically_rpc` deployed from pre_funding_atomic_rpcs.sql
  */
 export async function unlinkPaymentFromPreFund(
   sourceTable: 'down_payment_requests' | 'operational_cost_submissions',
   sourceId: string,
 ): Promise<UnlinkResult> {
-  // 1. Find the linked pre_fund_transactions row
-  const { data: txn, error: txnErr } = await (supabase as any)
-    .from('pre_fund_transactions')
-    .select('id, pre_fund_request_id, amount, currency, user_id')
-    .eq('source_table', sourceTable)
-    .eq('source_id', sourceId)
-    .maybeSingle();
+  const { data: result, error } = await (supabase as any).rpc(
+    'unlink_payment_atomically_rpc',
+    { p_source_table: sourceTable, p_source_id: sourceId },
+  );
 
-  if (txnErr) return { unlinked: false, message: `Lookup failed: ${txnErr.message}` };
-  if (!txn) return { unlinked: false, message: 'No pre-fund transaction linked to this record.' };
-
-  const fundId: string = txn.pre_fund_request_id;
-  const amount: number = Number(txn.amount);
-
-  // 2. Delete the pre_fund_transactions row
-  const { error: delErr } = await (supabase as any)
-    .from('pre_fund_transactions')
-    .delete()
-    .eq('id', txn.id);
-  if (delErr) return { unlinked: false, message: `Delete failed: ${delErr.message}` };
-
-  // 3. Restore fund balance
-  const { data: fund, error: fundErr } = await (supabase as any)
-    .from('pre_fund_requests')
-    .select('available_balance, paid_amount')
-    .eq('id', fundId)
-    .maybeSingle();
-  if (!fundErr && fund) {
-    await (supabase as any)
-      .from('pre_fund_requests')
-      .update({
-        available_balance: Number(fund.available_balance) + amount,
-        paid_amount:       Math.max(0, Number(fund.paid_amount) - amount),
-      })
-      .eq('id', fundId);
+  if (error) {
+    // PGRST202 = RPC not found — migration not yet run
+    const isNotDeployed =
+      (error as any).code === 'PGRST202' ||
+      String(error.message).toLowerCase().includes('could not find the function') ||
+      String(error.message).toLowerCase().includes('does not exist');
+    if (isNotDeployed) {
+      return {
+        unlinked: false,
+        message: 'Pre-funding SQL not yet deployed. Run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor.',
+      };
+    }
+    return { unlinked: false, message: `Unlink RPC failed: ${error.message}` };
   }
 
-  // 4. Clear the back-link on the source row (best-effort)
-  await (supabase as any)
-    .from(sourceTable)
-    .update({ pre_fund_transaction_id: null })
-    .eq('id', sourceId);
-
-  // 5. Restore allocation spent_amount for the submitter (best-effort)
-  const userId: string | null = txn.user_id ?? null;
-  if (userId) {
-    const { data: alloc } = await (supabase as any)
-      .from('pre_fund_allocations')
-      .select('id, spent_amount')
-      .eq('pre_fund_request_id', fundId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (alloc) {
-      await (supabase as any)
-        .from('pre_fund_allocations')
-        .update({ spent_amount: Math.max(0, Number(alloc.spent_amount) - amount) })
-        .eq('id', alloc.id);
+  if (result && result.success === false) {
+    // no_link_found is a known non-error case (nothing was linked)
+    if (result.code === 'no_link_found') {
+      return { unlinked: false, message: 'No pre-fund transaction linked to this record.' };
     }
+    return { unlinked: false, message: result.error ?? 'Unlink failed.' };
   }
 
   return { unlinked: true, message: 'Pre-fund transaction reversed and balance restored.' };

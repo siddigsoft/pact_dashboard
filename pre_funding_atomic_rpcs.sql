@@ -655,3 +655,95 @@ $$;
 
 REVOKE ALL ON FUNCTION close_pre_fund_period_rpc(UUID,TEXT,DATE,DATE,NUMERIC,NUMERIC,NUMERIC,NUMERIC,TEXT,NUMERIC,NUMERIC,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,TEXT,TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION close_pre_fund_period_rpc(UUID,TEXT,DATE,DATE,NUMERIC,NUMERIC,NUMERIC,NUMERIC,TEXT,NUMERIC,NUMERIC,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,TEXT,TEXT) TO authenticated;
+
+-- ============================================================================
+-- 5. unlink_payment_atomically_rpc
+-- Reverses a linked payment inside a single DB transaction — no partial-state risk.
+-- Mirrors link_payment_atomically_rpc: all mutations occur atomically (BEGIN/COMMIT).
+-- ============================================================================
+CREATE OR REPLACE FUNCTION unlink_payment_atomically_rpc(
+  p_source_table TEXT,  -- 'down_payment_requests' | 'operational_cost_submissions'
+  p_source_id    UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_role  TEXT;
+  v_txn   RECORD;
+  v_fund  RECORD;
+  v_alloc RECORD;
+BEGIN
+  -- ── Role guard ──────────────────────────────────────────────────────────────
+  SELECT LOWER(role) INTO v_role FROM public.profiles WHERE id = auth.uid();
+  IF v_role IS NULL OR v_role NOT IN (
+    'super_admin','superadmin','admin','financialadmin','financial_admin'
+  ) THEN
+    RAISE EXCEPTION 'unlink_payment_atomically_rpc: caller does not have finance/admin role (uid=%)', auth.uid();
+  END IF;
+
+  -- ── 1. Lookup the linked transaction ────────────────────────────────────────
+  SELECT id, pre_fund_request_id, amount, user_id
+  INTO v_txn
+  FROM pre_fund_transactions
+  WHERE source_table = p_source_table
+    AND source_id    = p_source_id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'code', 'no_link_found',
+      'error', 'No pre-fund transaction linked to this record.');
+  END IF;
+
+  -- ── 2. Delete the transaction row ────────────────────────────────────────────
+  DELETE FROM pre_fund_transactions WHERE id = v_txn.id;
+
+  -- ── 3. Restore fund balances ─────────────────────────────────────────────────
+  SELECT available_balance, paid_amount INTO v_fund
+  FROM pre_fund_requests WHERE id = v_txn.pre_fund_request_id FOR UPDATE;
+
+  IF FOUND THEN
+    UPDATE pre_fund_requests SET
+      available_balance = v_fund.available_balance + v_txn.amount,
+      paid_amount       = GREATEST(0, v_fund.paid_amount - v_txn.amount),
+      updated_at        = now()
+    WHERE id = v_txn.pre_fund_request_id;
+  END IF;
+
+  -- ── 4. Clear back-link on source row ─────────────────────────────────────────
+  IF p_source_table = 'down_payment_requests' THEN
+    UPDATE down_payment_requests
+      SET pre_fund_transaction_id = NULL WHERE id = p_source_id;
+  ELSIF p_source_table = 'operational_cost_submissions' THEN
+    UPDATE operational_cost_submissions
+      SET pre_fund_transaction_id = NULL WHERE id = p_source_id;
+  END IF;
+
+  -- ── 5. Restore allocation spent_amount (if allocation row exists) ─────────────
+  IF v_txn.user_id IS NOT NULL THEN
+    SELECT id, spent_amount INTO v_alloc
+    FROM pre_fund_allocations
+    WHERE pre_fund_request_id = v_txn.pre_fund_request_id
+      AND user_id = v_txn.user_id
+    LIMIT 1;
+
+    IF FOUND THEN
+      UPDATE pre_fund_allocations SET
+        spent_amount = GREATEST(0, v_alloc.spent_amount - v_txn.amount),
+        updated_at   = now()
+      WHERE id = v_alloc.id;
+    END IF;
+  END IF;
+
+  RETURN jsonb_build_object('success', true,
+    'reversed_transaction_id', v_txn.id,
+    'fund_id', v_txn.pre_fund_request_id,
+    'amount_restored', v_txn.amount
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION unlink_payment_atomically_rpc(TEXT, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION unlink_payment_atomically_rpc(TEXT, UUID) TO authenticated;

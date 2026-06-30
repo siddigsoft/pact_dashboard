@@ -105,6 +105,8 @@ export default function AccountingCashFlowForecast() {
         console.warn(`[CashFlowForecast] No FX rate for ${currency}→USD; pre-fund balance excluded from forecast`);
         return null;
       };
+
+      const preFunds = (preFundRes.data ?? []) as any[];
       const pfLiquidity = integrationEnabled
         ? preFunds.reduce((s: number, r: any) => {
             const v = toUSD(Number(r.available_balance ?? 0), r.currency ?? 'USD');
