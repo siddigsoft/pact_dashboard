@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/useAuth';
+import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -388,7 +388,7 @@ function FrameTab({ study, frames, loadingFrames, onRefresh }: { study: Study; f
   const [parsedCols, setParsedCols] = useState<{ name: string; type: string }[]>([]);
   const [fileName, setFileName] = useState('');
   const [showData, setShowData] = useState<SamplingFrame | null>(null);
-  const { user } = useAuth();
+  const { user } = useUser();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -575,7 +575,7 @@ function DrawTab({ study, frames, draws, loadingDraws, onRefresh }: {
   const [samplePerLot, setSamplePerLot] = useState('19');
   const [quotas, setQuotas] = useState<{ label: string; n: number }[]>([{ label: '', n: 30 }]);
 
-  const { user } = useAuth(); const { toast } = useToast(); const qc = useQueryClient();
+  const { user } = useUser(); const { toast } = useToast(); const qc = useQueryClient();
   const currentFrame = frames.find(f => f.is_current);
   const frameData = (currentFrame?.data ?? []) as Record<string, unknown>[];
   const frameCols = currentFrame?.columns ?? [];
@@ -1695,7 +1695,7 @@ function CreateStudyDialog({ open, onClose, onCreated }: { open: boolean; onClos
   const [description, setDescription] = useState('');
   const [method, setMethod] = useState<SamplingMethod>('srs');
   const [saving, setSaving] = useState(false);
-  const { user } = useAuth(); const { toast } = useToast();
+  const { user } = useUser(); const { toast } = useToast();
 
   const handleCreate = async () => {
     if (!name.trim()) return;
