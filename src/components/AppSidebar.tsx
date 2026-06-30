@@ -82,6 +82,7 @@
     Layers,
     FileDown,
     Languages,
+    Webhook,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -403,6 +404,8 @@
       planningItems.push({ id: 'field-data-languages',      title: "Multi-Language Forms",    url: "/field-data/languages",      icon: Languages, priority: 3, isPinned: isPinned('/field-data/languages') });
       planningItems.push({ id: 'field-data-collaboration',  title: "Collaboration & Review",  url: "/field-data/collaboration",  icon: Users,    priority: 3, isPinned: isPinned('/field-data/collaboration') });
       planningItems.push({ id: 'field-data-backup',         title: "Backup & Recovery",       url: "/field-data/backup",         icon: Archive,  priority: 3, isPinned: isPinned('/field-data/backup') });
+      planningItems.push({ id: 'field-data-api',            title: "API & Integrations",       url: "/field-data/api",            icon: Webhook,  priority: 3, isPinned: isPinned('/field-data/api') });
+      planningItems.push({ id: 'field-data-notifications',  title: "Notification Channels",    url: "/field-data/notifications",  icon: Bell,     priority: 3, isPinned: isPinned('/field-data/notifications') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
