@@ -446,8 +446,18 @@ CREATE POLICY "pf_requests_finance" ON pre_fund_requests FOR ALL
       AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
   ));
 
--- Note: non-finance step assignees access fund context via the ApprovalsHub
--- view/RPC only; direct SELECT on pre_fund_requests is Finance/Admin-only.
+-- Step assignees: SELECT only (ApprovalsHub shows fund context to any approver)
+CREATE POLICY "pf_requests_step_assignee" ON pre_fund_requests FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM pre_fund_approval_steps s
+      WHERE s.pre_fund_request_id = pre_fund_requests.id
+        AND (
+          s.assigned_user_id = auth.uid()
+          OR s.assigned_user_ids @> ARRAY[auth.uid()]
+        )
+    )
+  );
 
 -- Approval steps ─────────────────────────────────────────────────────────────
 -- Finance/Admin: full CRUD (manage chains, reorder, delete)
@@ -903,8 +913,7 @@ BEGIN
   -- Accept all known role spellings used across RLS policies and UI
   IF v_role IS NULL OR v_role NOT IN (
     'super_admin', 'superadmin', 'admin',
-    'financialadmin', 'financial_admin', 'financialadmin',
-    'financialAdmin'
+    'financialadmin', 'financial_admin'
   ) THEN
     RAISE EXCEPTION 'Access denied: finance or admin role required (role="%").', v_role;
   END IF;
