@@ -95,6 +95,11 @@ ALTER TABLE pre_fund_settings
 ALTER TABLE pre_fund_settings
   ADD CONSTRAINT pre_fund_settings_singleton UNIQUE (singleton_lock);
 
+-- Backfill for upgrades: ensure new reconciliation_action columns exist
+ALTER TABLE pre_fund_settings
+  ADD COLUMN IF NOT EXISTS reconciliation_action_return_bank    BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS reconciliation_action_return_finance BOOLEAN NOT NULL DEFAULT true;
+
 INSERT INTO pre_fund_settings (singleton_lock) VALUES (TRUE)
 ON CONFLICT (singleton_lock) DO NOTHING;
 

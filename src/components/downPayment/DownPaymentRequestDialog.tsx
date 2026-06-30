@@ -70,9 +70,9 @@ export function DownPaymentRequestDialog({
 
   const handleSubmit = async () => {
     if (!currentUser) return;
-    // Defence-in-depth: reject if gate hasn't resolved or is blocked
-    if (gateStatus !== 'allowed') {
-      toast({ title: 'Payment not allowed / الدفع غير مسموح', description: 'Use the Pre-Funding section to request advances, or contact your administrator.', variant: 'destructive' });
+    // If user has an active pre-fund allocation they must use the Pre-Funding page
+    if (gateStatus === 'prefund_only') {
+      toast({ title: 'Use Pre-Funding page / استخدم صفحة التمويل المسبق', description: 'You are allocated to an active pre-fund. Request advances through the Pre-Funding section to link them to your allocation.', variant: 'destructive' });
       return;
     }
 
@@ -170,24 +170,7 @@ export function DownPaymentRequestDialog({
           </div>
         )}
 
-        {gateStatus === 'no_access' && (
-          <div className="rounded-lg border border-rose-400/50 bg-rose-50 dark:bg-rose-900/15 p-4 space-y-2">
-            <div className="flex items-start gap-3">
-              <ShieldX className="w-5 h-5 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">
-                  Payment access not enabled / صلاحية الدفع غير مفعّلة
-                </p>
-                <p className="text-xs text-rose-700 dark:text-rose-400">
-                  You are not linked to any active pre-fund. Contact your administrator to get allocated to a pre-fund before requesting advances.
-                </p>
-              </div>
-            </div>
-            <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => onOpenChange(false)} data-testid="button-gate-cancel-noaccess">Close</Button>
-          </div>
-        )}
-
-        {/* Loading state — treat as blocked until resolved */}
+        {/* Loading state */}
         {gateStatus === 'loading' && (
           <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
             <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -195,8 +178,8 @@ export function DownPaymentRequestDialog({
           </div>
         )}
 
-        {/* Normal form — only shown when gate explicitly allows */}
-        {gateStatus === 'allowed' && (
+        {/* Normal form — shown when gate is resolved and not prefund_only */}
+        {(gateStatus === 'allowed' || gateStatus === 'no_access') && (
         <div className="space-y-6">
 
           {/* Bank Account Gate */}
@@ -391,13 +374,13 @@ export function DownPaymentRequestDialog({
         </div>
         )}
 
-        {(gateStatus === 'prefund_only' || gateStatus === 'no_access') && (
+        {gateStatus === 'prefund_only' && (
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           </DialogFooter>
         )}
 
-        {gateStatus === 'allowed' && (
+        {(gateStatus === 'allowed' || gateStatus === 'no_access') && (
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
             Cancel
