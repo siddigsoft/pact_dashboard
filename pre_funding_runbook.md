@@ -5,6 +5,8 @@ The Pre-Funding Management System adds a top-level section at `/pre-funding` for
 
 ## Step 1 — Apply All SQL Files in Order
 
+> **Canonical migration path:** Run **`pre_funding_ALL_IN_ONE.sql`** for a clean install (new environments). It is always kept in sync with the individual files listed below and is the single authoritative source for the current schema. Run the individual files only when patching an existing deployment incrementally.
+
 Run each file in Supabase Dashboard → SQL Editor → New query, **in this exact order**:
 
 | # | File | Purpose |
@@ -16,6 +18,8 @@ Run each file in Supabase Dashboard → SQL Editor → New query, **in this exac
 | 5 | `pre_fund_user_txn_patch.sql` | Adds `user_id` + `receipt_url` to `pre_fund_transactions`, extends `link_payment_atomically_rpc` |
 
 > Files 3–5 are safe to re-run at any time — all use `IF NOT EXISTS` / `CREATE OR REPLACE` guards.
+
+**Key transactional guarantee in `link_payment_atomically_rpc`:** All allocation eligibility checks (`NOT FOUND`, `v_alloc_remaining < p_amount`) are evaluated **before** any INSERT or UPDATE. Failures raise `RAISE EXCEPTION` (not `RETURN`), which rolls back the entire transaction atomically. The `RETURN jsonb_build_object('success', false, ...)` pattern is only used for pure read-phase errors (fund not found, insufficient balance) where no writes have yet occurred.
 
 **What the base migration (file 1) creates:**
 | Table | Purpose |
@@ -80,7 +84,7 @@ Note: `countryDirector` is **not** a Pre-Funding finance role and does not grant
 
 1. Log in as a user with `admin` or `financialAdmin` role
 2. Confirm **Pre-Funding** appears in the sidebar under Finance (between Finance Hub and Accounting)
-3. Navigate to `/pre-funding` — you should see the 5-tab hub
+3. Navigate to `/pre-funding` — you should see the Pre-Funding hub (Fund Registry, Approval Flow, Reconciliation, Balance Dashboard, Settings)
 
 ## Step 5 — Configure Settings
 
