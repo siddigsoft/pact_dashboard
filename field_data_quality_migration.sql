@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS fd_quality_flags (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_quality_flags ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';
+
 CREATE INDEX IF NOT EXISTS idx_fd_quality_flags_form       ON fd_quality_flags(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_quality_flags_submission ON fd_quality_flags(submission_id);
 CREATE INDEX IF NOT EXISTS idx_fd_quality_flags_status     ON fd_quality_flags(status);

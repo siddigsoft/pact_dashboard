@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS fd_notification_log (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_notification_log ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'delivered';
+
 CREATE INDEX IF NOT EXISTS idx_fdnl_event   ON fd_notification_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_fdnl_form    ON fd_notification_log(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdnl_created ON fd_notification_log(created_at DESC);

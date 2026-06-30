@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS fd_coverage_zones (
   UNIQUE(form_id, zone_name)
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_coverage_zones ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
 CREATE INDEX IF NOT EXISTS idx_fd_coverage_zones_form   ON fd_coverage_zones(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_coverage_zones_status ON fd_coverage_zones(status);
 

@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS fd_submission_reviews (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_submission_reviews ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
 CREATE INDEX IF NOT EXISTS idx_fd_reviews_form     ON fd_submission_reviews(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_reviews_status   ON fd_submission_reviews(status);
 CREATE INDEX IF NOT EXISTS idx_fd_reviews_reviewer ON fd_submission_reviews(reviewer_id);

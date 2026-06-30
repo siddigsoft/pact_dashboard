@@ -1,47 +1,29 @@
 -- ============================================================================
 -- FIELD DATA HUB — MASTER MIGRATION (All 18 Phases)
--- PACT Command Center
+-- PACT Command Center — safe to re-run: all statements use IF NOT EXISTS
 -- ============================================================================
--- Run this single file to set up the complete Field Data Hub schema.
--- Execution order is critical — each section depends on the previous.
--- Safe to re-run: all statements use IF NOT EXISTS / ADD COLUMN IF NOT EXISTS.
---
 -- PHASE MAP
--- ─────────────────────────────────────────────────────────────────────────────
--- CORE   (Phases 1–6)  field_data_core_migration.sql
---   P01  Server connections     field_data_servers
---   P02  Forms & submissions    field_data_forms, field_data_submissions
---   P03  Import jobs            field_data_import_jobs
---   P04  Form versioning        field_data_form_versions, field_data_form_servers
---   P05  QR codes               (stored on field_data_forms.odk_qr_code)
---   P06  Sync engine            field_data_sync_logs, field_data_sync_schedules
---        fd_* unified schema    fd_forms, fd_submissions, fd_form_schema
--- ─────────────────────────────────────────────────────────────────────────────
---   P07  Smart Export           fd_export_jobs, fd_export_templates
---   P08  Fieldwork Monitoring   fd_enumerator_locations, fd_coverage_zones
---                               fd_enumerator_stats, fd_supervisor_actions
---                               fd_form_targets
---   P09  Case Management        fd_cases, fd_case_visits, fd_case_notes
---   P10  Server Datasets        field_data_server_datasets, fd_server_datasets
---                               field_data_dataset_versions
---                               field_data_dataset_form_links, fd_preload_configs
---   P10  Sampling Engine        fd_sampling_studies, fd_sampling_frames
---                               fd_sample_draws, fd_sample_units
---   P11  Multi-round Studies    fd_studies, fd_study_rounds
---                               fd_study_unit_tracking, fd_study_round_submissions
---   P12  Workflow & Review      fd_submission_reviews, fd_review_actions
---   P13  Quality / Encryption   fd_quality_rules, fd_quality_flags
---                               fd_form_targets (extended)
---   P14  Multi-Language Forms   fd_form_translations, fd_region_lang_defaults
---   P15  Collaboration          fd_submission_comments, fd_submission_flags
---                               fd_form_review_comments
---   P16  Backup & Recovery      fd_backups, fd_backup_schedules
---                               fd_restore_logs, fd_archive_logs
---   P17  API & Integrations     fd_api_keys, fd_api_usage_logs, fd_webhook_secrets
---   P18  Notification Channels  fd_notification_prefs, fd_form_subscriptions
---                               fd_notification_log
+-- P01  Server connections     field_data_servers
+-- P02  Forms & submissions    field_data_forms, field_data_submissions
+-- P03  Import jobs            field_data_import_jobs
+-- P04  Form versioning        field_data_form_versions, field_data_form_servers
+-- P05  QR codes               (stored on field_data_forms.odk_qr_code)
+-- P06  Sync engine            field_data_sync_logs, field_data_sync_schedules
+--      fd_* unified schema    fd_forms, fd_submissions, fd_form_schema
+-- P07  Smart Export           fd_export_jobs, fd_export_templates
+-- P08  Fieldwork Monitoring   fd_enumerator_locations, fd_coverage_zones, fd_form_targets
+-- P09  Case Management        fd_cases, fd_case_visits, fd_case_notes
+-- P10  Server Datasets        field_data_server_datasets, fd_server_datasets, fd_preload_configs
+-- P10  Sampling Engine        fd_sampling_studies, fd_sampling_frames, fd_sample_draws, fd_sample_units
+-- P11  Multi-round Studies    fd_studies, fd_study_rounds, fd_study_unit_tracking
+-- P12  Workflow & Review      fd_submission_reviews, fd_review_actions
+-- P13  Quality / Encryption   fd_quality_rules, fd_quality_flags, fd_enumerator_stats
+-- P14  Multi-Language Forms   fd_form_translations, fd_region_lang_defaults
+-- P15  Collaboration          fd_submission_comments, fd_submission_flags
+-- P16  Backup & Recovery      fd_backups, fd_backup_schedules, fd_restore_logs
+-- P17  API & Integrations     fd_api_keys, fd_api_usage_logs, fd_webhook_secrets
+-- P18  Notification Channels  fd_notification_prefs, fd_form_subscriptions, fd_notification_log
 -- ============================================================================
-
 
 -- ============================================================================
 -- PHASE 1-6 CORE (field_data_* tables + fd_forms/fd_submissions/fd_form_schema)
@@ -457,7 +439,7 @@ GRANT EXECUTE ON FUNCTION fd_is_admin()    TO authenticated;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 10: SERVER DATASETS & DATA PRELOADING
+-- PHASE 10
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 10: Server Datasets & Data Preloading
@@ -819,7 +801,7 @@ GRANT EXECUTE ON FUNCTION fd_sampling_progress(UUID) TO service_role;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 7: SMART EXPORT
+-- PHASE 7
 -- ============================================================================
 -- ============================================================================
 -- Phase 13: Smart Export — fd_export_jobs + fd_export_templates
@@ -859,6 +841,10 @@ CREATE TABLE IF NOT EXISTS fd_export_jobs (
   started_at       TIMESTAMPTZ,
   completed_at     TIMESTAMPTZ
 );
+
+-- Guard: add columns if table already existed without them
+ALTER TABLE fd_export_jobs ADD COLUMN IF NOT EXISTS status fd_export_status DEFAULT 'queued';
+ALTER TABLE fd_export_jobs ADD COLUMN IF NOT EXISTS format fd_export_format DEFAULT 'xlsx';
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_fd_export_jobs_status       ON fd_export_jobs(status);
@@ -1018,7 +1004,7 @@ GRANT EXECUTE ON FUNCTION increment_template_use(UUID) TO authenticated;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 8: FIELDWORK MONITORING DASHBOARD
+-- PHASE 8
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 10: Fieldwork Monitoring
@@ -1060,6 +1046,9 @@ CREATE TABLE IF NOT EXISTS fd_coverage_zones (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(form_id, zone_name)
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_coverage_zones ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_fd_coverage_zones_form   ON fd_coverage_zones(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_coverage_zones_status ON fd_coverage_zones(status);
@@ -1184,7 +1173,7 @@ WHERE cz.form_id = sub.form_id
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 9: CASE MANAGEMENT
+-- PHASE 9
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 11: Case Management
@@ -1212,6 +1201,10 @@ CREATE TABLE IF NOT EXISTS fd_cases (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_cases ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';
+ALTER TABLE fd_cases ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
+
 CREATE INDEX IF NOT EXISTS idx_fd_cases_form     ON fd_cases(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_cases_status   ON fd_cases(status);
 CREATE INDEX IF NOT EXISTS idx_fd_cases_subject  ON fd_cases(subject_id);
@@ -1232,6 +1225,9 @@ CREATE TABLE IF NOT EXISTS fd_case_visits (
   created_by       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_case_visits ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'scheduled';
 
 CREATE INDEX IF NOT EXISTS idx_fd_visits_case   ON fd_case_visits(case_id);
 CREATE INDEX IF NOT EXISTS idx_fd_visits_date   ON fd_case_visits(scheduled_date);
@@ -1325,7 +1321,7 @@ GROUP BY c.id;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 11: MULTI-ROUND STUDIES
+-- PHASE 11
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 8: Multi-Round Study Management
@@ -1500,7 +1496,7 @@ NOTIFY pgrst, 'reload schema';
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 12: WORKFLOW & REVIEW
+-- PHASE 12
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 12: Workflow & Review
@@ -1530,6 +1526,9 @@ CREATE TABLE IF NOT EXISTS fd_submission_reviews (
   created_by       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_submission_reviews ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_fd_reviews_form     ON fd_submission_reviews(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_reviews_status   ON fd_submission_reviews(status);
@@ -1633,7 +1632,7 @@ GROUP BY form_id;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 13: DATA QUALITY & ENCRYPTED FORMS
+-- PHASE 13
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 9: Data Quality, Enumerator Scoring & Target Tracking
@@ -1688,6 +1687,9 @@ CREATE TABLE IF NOT EXISTS fd_quality_flags (
   notes           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_quality_flags ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';
 
 CREATE INDEX IF NOT EXISTS idx_fd_quality_flags_form       ON fd_quality_flags(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_quality_flags_submission ON fd_quality_flags(submission_id);
@@ -1828,7 +1830,7 @@ ON CONFLICT (form_id, enumerator_id) DO UPDATE SET
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 14: MULTI-LANGUAGE FORMS
+-- PHASE 14
 -- ============================================================================
 -- ============================================================================
 -- Phase 14: Multi-Language Form Management
@@ -2032,7 +2034,7 @@ GRANT EXECUTE ON FUNCTION seed_form_translation_keys(UUID, TEXT) TO authenticate
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 15: COLLABORATION & REVIEW
+-- PHASE 15
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 15: Collaboration & Review Tools
@@ -2234,7 +2236,7 @@ GROUP BY form_id;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 16: BACKUP & DISASTER RECOVERY
+-- PHASE 16
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 16: Backup & Disaster Recovery
@@ -2261,6 +2263,10 @@ CREATE TABLE IF NOT EXISTS fd_backups (
   completed_at      TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status/backup_type if table already existed without them
+ALTER TABLE fd_backups ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE fd_backups ADD COLUMN IF NOT EXISTS backup_type TEXT DEFAULT 'auto';
 
 CREATE INDEX IF NOT EXISTS idx_fdb_form        ON fd_backups(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdb_status      ON fd_backups(status);
@@ -2441,7 +2447,7 @@ CREATE OR REPLACE TRIGGER trg_fdbsched_updated
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 17: API & INTEGRATIONS
+-- PHASE 17
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 17: API & Integrations
@@ -2580,7 +2586,7 @@ GRANT EXECUTE ON FUNCTION fd_increment_api_key_usage(TEXT) TO service_role;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 18: NOTIFICATION CHANNELS
+-- PHASE 18
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 18: Notification Channels
@@ -2644,6 +2650,9 @@ CREATE TABLE IF NOT EXISTS fd_notification_log (
   metadata        JSONB,                                     -- arbitrary event payload snapshot
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_notification_log ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'delivered';
 
 CREATE INDEX IF NOT EXISTS idx_fdnl_event   ON fd_notification_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_fdnl_form    ON fd_notification_log(form_id);
@@ -2755,15 +2764,9 @@ END $$;
 
 -- ============================================================================
 -- ALL 18 PHASES COMPLETE
--- ============================================================================
 -- After running this file:
--- 1. Create Supabase Storage bucket:  field-data-datasets  (private, 50 MB max)
---    INSERT INTO storage.buckets (id, name, public)
---    VALUES ('field-data-datasets','field-data-datasets', false) ON CONFLICT DO NOTHING;
--- 2. Deploy Edge Functions:
---      supabase/functions/fd-api/index.ts
---      supabase/functions/create-pact-archive/index.ts
--- 3. Optional pg_cron retention (see Phase 17 comments):
---      api_usage_logs: 90-day rolling delete
---      backups: per-schedule retention
+-- 1. Storage bucket: INSERT INTO storage.buckets (id, name, public)
+--    VALUES ('field-data-datasets','field-data-datasets',false) ON CONFLICT DO NOTHING;
+-- 2. Deploy Edge Functions: fd-api, create-pact-archive
+-- 3. pg_cron retention for fd_api_usage_logs (90 days) — see Phase 17 comments
 -- ============================================================================

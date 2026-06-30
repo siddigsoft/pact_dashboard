@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS fd_export_jobs (
   completed_at     TIMESTAMPTZ
 );
 
+-- Guard: add columns if table already existed without them
+ALTER TABLE fd_export_jobs ADD COLUMN IF NOT EXISTS status fd_export_status DEFAULT 'queued';
+ALTER TABLE fd_export_jobs ADD COLUMN IF NOT EXISTS format fd_export_format DEFAULT 'xlsx';
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_fd_export_jobs_status       ON fd_export_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_fd_export_jobs_created_by   ON fd_export_jobs(created_by);

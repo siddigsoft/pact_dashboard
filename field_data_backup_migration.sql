@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS fd_backups (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status/backup_type if table already existed without them
+ALTER TABLE fd_backups ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE fd_backups ADD COLUMN IF NOT EXISTS backup_type TEXT DEFAULT 'auto';
+
 CREATE INDEX IF NOT EXISTS idx_fdb_form        ON fd_backups(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdb_status      ON fd_backups(status);
 CREATE INDEX IF NOT EXISTS idx_fdb_created     ON fd_backups(created_at DESC);

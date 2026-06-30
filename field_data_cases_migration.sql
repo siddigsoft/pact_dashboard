@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS fd_cases (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_cases ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';
+ALTER TABLE fd_cases ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
+
 CREATE INDEX IF NOT EXISTS idx_fd_cases_form     ON fd_cases(form_id);
 CREATE INDEX IF NOT EXISTS idx_fd_cases_status   ON fd_cases(status);
 CREATE INDEX IF NOT EXISTS idx_fd_cases_subject  ON fd_cases(subject_id);
@@ -44,6 +48,9 @@ CREATE TABLE IF NOT EXISTS fd_case_visits (
   created_by       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add status if table already existed without it
+ALTER TABLE fd_case_visits ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'scheduled';
 
 CREATE INDEX IF NOT EXISTS idx_fd_visits_case   ON fd_case_visits(case_id);
 CREATE INDEX IF NOT EXISTS idx_fd_visits_date   ON fd_case_visits(scheduled_date);
