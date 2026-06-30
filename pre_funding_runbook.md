@@ -9,7 +9,8 @@ The Pre-Funding Management System adds a top-level section at `/pre-funding` for
 
 Run **only `pre_funding_ALL_IN_ONE.sql`** in Supabase Dashboard → SQL Editor → New query.
 This file is the canonical, always-up-to-date single source and covers everything: core tables,
-RLS, GL bridge accounts, allocations table, transaction extensions, and all RPCs.
+RLS, GL bridge accounts, allocations table, transaction extensions, and all RPCs — including
+the `process_pf_step_action` SECURITY DEFINER RPC required by the Approvals Hub.
 
 > **Do NOT also run the individual files below on a fresh install.** Running both will cause
 > duplicate-object errors (`already exists`) because `pre_funding_ALL_IN_ONE.sql` already
@@ -24,9 +25,10 @@ introduce new objects** you don't have yet, in this order:
 |---|---|---|
 | 1 | `pre_funding_migration.sql` | First-time base schema only (skip if tables already exist) |
 | 2 | `pre_funding_atomic_rpcs.sql` | Always run — safe `CREATE OR REPLACE` RPCs |
-| 3 | `pre_funding_rls_fix.sql` | Run if you see RLS policy errors |
-| 4 | `pre_fund_allocations.sql` | Run if `pre_fund_allocations` table is missing |
-| 5 | `pre_fund_user_txn_patch.sql` | Run if `pre_fund_transactions.user_id` column is missing |
+| 3 | `pre_funding_step_action_rpc.sql` | **Always run** — `process_pf_step_action` SECURITY DEFINER RPC for Approvals Hub (required for non-finance approvers to work) |
+| 4 | `pre_funding_rls_fix.sql` | Run if you see RLS policy errors |
+| 5 | `pre_fund_allocations.sql` | Run if `pre_fund_allocations` table is missing |
+| 6 | `pre_fund_user_txn_patch.sql` | Run if `pre_fund_transactions.user_id` column is missing |
 
 > All individual files use `IF NOT EXISTS` / `CREATE OR REPLACE` guards — safe to re-run.
 

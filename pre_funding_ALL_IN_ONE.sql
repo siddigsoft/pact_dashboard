@@ -1869,3 +1869,179 @@ WHERE id NOT IN (
 
 -- Verify — should return exactly 7 rows
 SELECT name, day_count, display_order FROM pre_fund_period_types ORDER BY display_order;
+
+-- ============================================================================
+-- Step-Action RPC — process_pf_step_action
+-- Atomic: vote → step resolve → fund status advancement.
+-- SECURITY DEFINER so non-finance step assignees can update pre_fund_requests.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION process_pf_step_action(
+  p_step_id  UUID,
+  p_action   TEXT,   -- 'approve' | 'reject'
+  p_notes    TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller_id        UUID := auth.uid();
+  v_step             RECORD;
+  v_fund_id          UUID;
+  v_is_admin         BOOLEAN;
+  v_assigned_ids     UUID[];
+  v_is_assignee      BOOLEAN;
+  v_approval_count   INT;
+  v_any_rejected     BOOLEAN;
+  v_quorum_required  INT;
+  v_step_resolved    BOOLEAN := FALSE;
+  v_new_step_status  TEXT;
+  v_remaining_req    INT;
+  v_new_fund_status  TEXT := NULL;
+  v_now              TIMESTAMPTZ := now();
+BEGIN
+
+  -- ── 1. Load step ────────────────────────────────────────────────────────
+  SELECT id, pre_fund_request_id, step_order, is_required,
+         status, assigned_user_id, assigned_user_ids, required_approvals
+  INTO v_step
+  FROM pre_fund_approval_steps
+  WHERE id = p_step_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'step_not_found');
+  END IF;
+
+  v_fund_id := v_step.pre_fund_request_id;
+
+  -- ── 1b. Validate p_action strictly ──────────────────────────────────
+  IF p_action NOT IN ('approve', 'reject') THEN
+    RETURN jsonb_build_object('error', 'invalid_action');
+  END IF;
+
+  -- ── 2. Authorization check ────────────────────────────────────────────
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = v_caller_id
+      AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
+  ) INTO v_is_admin;
+
+  -- Build effective assignee list (multi-user array takes precedence)
+  v_assigned_ids := CASE
+    WHEN array_length(v_step.assigned_user_ids, 1) > 0
+      THEN v_step.assigned_user_ids
+    WHEN v_step.assigned_user_id IS NOT NULL
+      THEN ARRAY[v_step.assigned_user_id]
+    ELSE ARRAY[]::UUID[]
+  END;
+
+  v_is_assignee := (v_caller_id = ANY(v_assigned_ids));
+
+  -- Deny non-admin when:
+  --   a) Step has explicit assignees and caller is not one of them, OR
+  --   b) Step has NO assignees — unassigned steps require admin override to prevent
+  --      arbitrary authenticated users from acting on sensitive approval paths.
+  IF NOT v_is_admin THEN
+    IF array_length(v_assigned_ids, 1) IS NULL OR array_length(v_assigned_ids, 1) = 0 THEN
+      RETURN jsonb_build_object('error', 'unauthorized');
+    ELSIF NOT v_is_assignee THEN
+      RETURN jsonb_build_object('error', 'unauthorized');
+    END IF;
+  END IF;
+
+  -- Guard: step must still be pending
+  IF v_step.status <> 'pending' THEN
+    RETURN jsonb_build_object('error', 'step_already_resolved');
+  END IF;
+
+  -- ── 3. Upsert vote ────────────────────────────────────────────────────
+  INSERT INTO pre_fund_step_approvals (step_id, user_id, action, notes, created_at)
+  VALUES (p_step_id, v_caller_id,
+          CASE WHEN p_action = 'approve' THEN 'approved' ELSE 'rejected' END,
+          p_notes, v_now)
+  ON CONFLICT (step_id, user_id) DO UPDATE
+    SET action     = EXCLUDED.action,
+        notes      = EXCLUDED.notes,
+        created_at = EXCLUDED.created_at;
+
+  -- ── 4. Tally votes (authoritative DB read) ────────────────────────────
+  SELECT
+    COUNT(*) FILTER (WHERE action = 'approved'),
+    BOOL_OR(action = 'rejected')
+  INTO v_approval_count, v_any_rejected
+  FROM pre_fund_step_approvals
+  WHERE step_id = p_step_id;
+
+  v_quorum_required := COALESCE(v_step.required_approvals, 1);
+
+  v_step_resolved := (p_action = 'approve' AND v_approval_count >= v_quorum_required)
+                  OR (p_action = 'reject'  AND v_any_rejected);
+
+  -- ── 5. Mark step resolved (if threshold met) ─────────────────────────
+  IF v_step_resolved THEN
+    v_new_step_status := CASE
+      WHEN p_action = 'approve' AND v_approval_count >= v_quorum_required THEN 'approved'
+      ELSE 'rejected'
+    END;
+
+    UPDATE pre_fund_approval_steps
+    SET status      = v_new_step_status,
+        approved_by = v_caller_id,
+        approved_at = v_now,
+        notes       = p_notes
+    WHERE id = p_step_id;
+  END IF;
+
+  -- ── 6. Compute new fund-level status ──────────────────────────────────
+  IF p_action = 'reject' AND v_step.is_required THEN
+    v_new_fund_status := 'rejected';
+  ELSIF v_step_resolved THEN
+    SELECT COUNT(*)
+    INTO v_remaining_req
+    FROM pre_fund_approval_steps
+    WHERE pre_fund_request_id = v_fund_id
+      AND status = 'pending'
+      AND is_required = TRUE;
+
+    IF v_remaining_req = 0 THEN
+      v_new_fund_status := 'awaiting_receipt';
+    END IF;
+  END IF;
+
+  -- ── 7. Update pre_fund_requests (SECURITY DEFINER bypasses assignee RLS) ─
+  IF p_action = 'approve' THEN
+    UPDATE pre_fund_requests
+    SET approved_by      = v_caller_id,
+        approved_at      = v_now,
+        rejection_reason = NULL,
+        status           = COALESCE(v_new_fund_status, status),
+        updated_at       = v_now
+    WHERE id = v_fund_id;
+  ELSE
+    UPDATE pre_fund_requests
+    SET approved_by      = NULL,
+        approved_at      = NULL,
+        rejection_reason = CASE WHEN v_step.is_required
+                            THEN COALESCE(p_notes, 'Rejected via Approvals Hub')
+                            ELSE rejection_reason END,
+        status           = COALESCE(v_new_fund_status, status),
+        updated_at       = v_now
+    WHERE id = v_fund_id;
+  END IF;
+
+  -- ── 8. Return result for client-side toast logic ───────────────────────
+  RETURN jsonb_build_object(
+    'step_resolved',    v_step_resolved,
+    'new_fund_status',  v_new_fund_status,
+    'is_optional_step', NOT v_step.is_required,
+    'error',            NULL
+  );
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('error', SQLERRM);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION process_pf_step_action(UUID, TEXT, TEXT) TO authenticated;

@@ -61,6 +61,11 @@ BEGIN
 
   v_fund_id := v_step.pre_fund_request_id;
 
+  -- ── 1b. Validate p_action strictly ──────────────────────────────────
+  IF p_action NOT IN ('approve', 'reject') THEN
+    RETURN jsonb_build_object('error', 'invalid_action');
+  END IF;
+
   -- ── 2. Authorization check ────────────────────────────────────────────
   SELECT EXISTS (
     SELECT 1 FROM profiles
@@ -79,11 +84,18 @@ BEGIN
 
   v_is_assignee := (v_caller_id = ANY(v_assigned_ids));
 
-  -- Only assigned users and admins may act
-  IF array_length(v_assigned_ids, 1) > 0
-     AND NOT v_is_assignee
-     AND NOT v_is_admin THEN
-    RETURN jsonb_build_object('error', 'unauthorized');
+  -- Deny non-admin when:
+  --   a) Step has explicit assignees and caller is not one of them, OR
+  --   b) Step has NO assignees — unassigned steps require admin override to prevent
+  --      arbitrary authenticated users from acting on sensitive approval paths.
+  IF NOT v_is_admin THEN
+    IF array_length(v_assigned_ids, 1) IS NULL OR array_length(v_assigned_ids, 1) = 0 THEN
+      -- No assignees configured — only admins may act
+      RETURN jsonb_build_object('error', 'unauthorized');
+    ELSIF NOT v_is_assignee THEN
+      -- Assignees exist but caller is not one of them
+      RETURN jsonb_build_object('error', 'unauthorized');
+    END IF;
   END IF;
 
   -- Guard: step must still be pending
