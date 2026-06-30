@@ -186,7 +186,8 @@ const FieldDataQuality = lazy(() => import('./pages/FieldDataQuality'));
 const FieldDataMonitoring = lazy(() => import('./pages/FieldDataMonitoring'));
 const FieldDataCases = lazy(() => import('./pages/FieldDataCases'));
 const FieldDataWorkflow = lazy(() => import('./pages/FieldDataWorkflow'));
-const FieldDataExports  = lazy(() => import('./pages/FieldDataExports'));
+const FieldDataExports   = lazy(() => import('./pages/FieldDataExports'));
+const FieldDataLanguages = lazy(() => import('./pages/FieldDataLanguages'));
 const ProgrammeHub = lazy(() => import('./pages/ProgrammeHub'));
 const CommunicationHub = lazy(() => import('./pages/CommunicationHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
@@ -587,6 +588,7 @@ const AppRoutes = () => {
         <Route path="/field-data/cases" element={<PageWrapper><FieldDataCases /></PageWrapper>} />
         <Route path="/field-data/workflow" element={<PageWrapper><FieldDataWorkflow /></PageWrapper>} />
         <Route path="/field-data/exports" element={<PageWrapper><FieldDataExports /></PageWrapper>} />
+        <Route path="/field-data/languages" element={<PageWrapper><FieldDataLanguages /></PageWrapper>} />
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
