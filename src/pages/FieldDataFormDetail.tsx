@@ -1,17 +1,17 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, startOfWeek, startOfMonth } from 'date-fns';
 import {
   ArrowLeft, BarChart2, Table2, Upload, Download, Settings,
   Loader2, FileText, Users, Clock, CheckCircle, XCircle,
   ChevronDown, ChevronUp, Search, Filter, MapPin, Eye,
   MoreHorizontal, Trash2, RefreshCw, Plus, Globe,
   AlertCircle, Activity, TrendingUp, Zap, Copy, ExternalLink,
-  Wifi, Info,
+  Wifi, Info, Image, Music, FileArchive, Video, ListChecks,
 } from 'lucide-react';
 import { syncFormFromServer, getWebhookUrl } from '@/services/fieldDataSync';
 import { Button } from '@/components/ui/button';
@@ -31,10 +31,15 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+  ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend,
+} from 'recharts';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import * as XLSX from 'xlsx';
 
-type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync';
+type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync' | 'map' | 'media' | 'charts' | 'activity';
 
 interface SyncLog {
   id: string;
@@ -145,6 +150,8 @@ export default function FieldDataFormDetail() {
   const [exportLoading, setExportLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(false);
+  const [chartBucket, setChartBucket] = useState<'day' | 'week' | 'month'>('day');
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: form, isLoading: loadingForm } = useQuery({
@@ -436,6 +443,132 @@ export default function FieldDataFormDetail() {
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count }));
   })();
 
+  // ── Map tab derived data ──────────────────────────────────────────────────
+  const gpsSubmissions = useMemo(
+    () => submissions.filter(s => s.gps_lat != null && s.gps_lng != null),
+    [submissions],
+  );
+
+  const mapCenter = useMemo((): [number, number] => {
+    if (gpsSubmissions.length === 0) return [15.5, 32.5]; // Khartoum default
+    const avgLat = gpsSubmissions.reduce((s, r) => s + r.gps_lat!, 0) / gpsSubmissions.length;
+    const avgLng = gpsSubmissions.reduce((s, r) => s + r.gps_lng!, 0) / gpsSubmissions.length;
+    return [avgLat, avgLng];
+  }, [gpsSubmissions]);
+
+  // ── Media tab derived data ────────────────────────────────────────────────
+  const IMAGE_KEYS = ['photo', 'image', 'picture', 'photo_url', 'image_url', '_attachments'];
+  const AUDIO_KEYS = ['audio', 'sound', 'voice', 'recording', 'audio_url'];
+  const VIDEO_KEYS = ['video', 'video_url'];
+
+  const mediaItems = useMemo(() => {
+    const items: Array<{ type: 'image' | 'audio' | 'video' | 'file'; url: string; submissionId: string; enumerator: string; submittedAt: string | null; field: string }> = [];
+    submissions.forEach(s => {
+      const data = s.data as Record<string, unknown>;
+      Object.entries(data || {}).forEach(([key, val]) => {
+        if (!val || typeof val !== 'string') return;
+        const lk = key.toLowerCase();
+        const isImage = IMAGE_KEYS.some(k => lk.includes(k)) || /\.(jpg|jpeg|png|gif|webp)$/i.test(val) || val.startsWith('data:image');
+        const isAudio = AUDIO_KEYS.some(k => lk.includes(k)) || /\.(mp3|wav|ogg|m4a)$/i.test(val) || val.startsWith('data:audio');
+        const isVideo = VIDEO_KEYS.some(k => lk.includes(k)) || /\.(mp4|mov|avi|webm)$/i.test(val) || val.startsWith('data:video');
+        if (isImage || isAudio || isVideo) {
+          items.push({
+            type: isImage ? 'image' : isAudio ? 'audio' : 'video',
+            url: val,
+            submissionId: s.id,
+            enumerator: s.enumerator_name || s.submitted_by || 'Unknown',
+            submittedAt: s.submitted_at,
+            field: key,
+          });
+        }
+        // Check _attachments array (ODK Central format)
+        if (key === '_attachments' && Array.isArray(val)) {
+          (val as Array<{ download_url?: string; filename?: string }>).forEach(att => {
+            if (!att.download_url) return;
+            const fn = (att.filename || '').toLowerCase();
+            const t = /\.(jpg|jpeg|png|gif|webp)$/i.test(fn) ? 'image'
+              : /\.(mp3|wav|ogg|m4a)$/i.test(fn) ? 'audio'
+              : /\.(mp4|mov|avi|webm)$/i.test(fn) ? 'video' : 'file';
+            items.push({ type: t, url: att.download_url!, submissionId: s.id, enumerator: s.enumerator_name || 'Unknown', submittedAt: s.submitted_at, field: att.filename || key });
+          });
+        }
+      });
+    });
+    return items;
+  }, [submissions]);
+
+  // ── Charts tab derived data ───────────────────────────────────────────────
+  const reviewPieData = useMemo(() => {
+    const counts = { pending: 0, approved: 0, rejected: 0, on_hold: 0 };
+    submissions.forEach(s => { counts[s.review_status] = (counts[s.review_status] || 0) + 1; });
+    return [
+      { name: 'Pending', value: counts.pending, color: '#f59e0b' },
+      { name: 'Approved', value: counts.approved, color: '#10b981' },
+      { name: 'Rejected', value: counts.rejected, color: '#ef4444' },
+      { name: 'On Hold', value: counts.on_hold, color: '#94a3b8' },
+    ].filter(d => d.value > 0);
+  }, [submissions]);
+
+  const bucketedTimeData = useMemo(() => {
+    const map: Record<string, number> = {};
+    submissions.forEach(s => {
+      if (!s.submitted_at) return;
+      const d = new Date(s.submitted_at);
+      let key: string;
+      if (chartBucket === 'week') key = format(startOfWeek(d), 'dd MMM');
+      else if (chartBucket === 'month') key = format(startOfMonth(d), 'MMM yyyy');
+      else key = format(d, 'dd MMM');
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map).map(([date, count]) => ({ date, count }));
+  }, [submissions, chartBucket]);
+
+  const questionFreqData = useMemo(() => {
+    if (submissions.length === 0) return {};
+    const skip = new Set(['_id', '_uuid', '_submission_time', '_submitted_by', '_version', '_geolocation', '_gps_latitude', '_gps_longitude', 'meta/instanceID', 'start', 'end', 'deviceid', 'simserial', 'phonenumber']);
+    const keySets: Record<string, Map<string, number>> = {};
+    submissions.forEach(s => {
+      Object.entries(s.data || {}).forEach(([k, v]) => {
+        if (skip.has(k) || k.startsWith('_') || !v || typeof v !== 'string' || v.length > 100) return;
+        if (!keySets[k]) keySets[k] = new Map();
+        keySets[k].set(v, (keySets[k].get(v) || 0) + 1);
+      });
+    });
+    const result: Record<string, Array<{ answer: string; count: number }>> = {};
+    Object.entries(keySets).forEach(([k, vMap]) => {
+      if (vMap.size < 2 || vMap.size > 50) return; // skip free-text and IDs
+      result[k] = Array.from(vMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([answer, count]) => ({ answer, count }));
+    });
+    return result;
+  }, [submissions]);
+
+  // ── Activity tab derived data ─────────────────────────────────────────────
+  const activityFeed = useMemo(() => {
+    const events: Array<{ id: string; type: string; label: string; detail: string; ts: string }> = [];
+    syncLogs?.forEach(log => {
+      events.push({
+        id: `sync-${log.id}`,
+        type: log.status === 'success' ? 'sync_ok' : log.status === 'error' ? 'sync_err' : 'sync_run',
+        label: log.status === 'success' ? `Synced — ${log.records_new} new` : log.status === 'error' ? `Sync failed` : 'Sync running',
+        detail: log.error_message || `${log.records_pulled} pulled via ${log.field_data_servers?.name ?? log.sync_type}`,
+        ts: log.started_at,
+      });
+    });
+    exports?.forEach(exp => {
+      events.push({
+        id: `export-${exp.id}`,
+        type: 'export',
+        label: `Exported ${exp.format?.toUpperCase()} — ${exp.row_count ?? '?'} rows`,
+        detail: exp.file_name || '',
+        ts: exp.created_at,
+      });
+    });
+    return events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  }, [syncLogs, exports]);
+
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('desc'); }
@@ -475,6 +608,10 @@ export default function FieldDataFormDetail() {
   const TABS: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
     { id: 'overview', label: 'Overview', icon: BarChart2 },
     { id: 'table', label: `Table (${submissions.length})`, icon: Table2 },
+    { id: 'map', label: `Map (${gpsSubmissions.length})`, icon: MapPin },
+    { id: 'media', label: `Media (${mediaItems.length})`, icon: Image },
+    { id: 'charts', label: 'Charts', icon: TrendingUp },
+    { id: 'activity', label: 'Activity', icon: Activity },
     { id: 'import', label: 'Import', icon: Upload },
     { id: 'exports', label: 'Exports', icon: Download },
     { id: 'sync', label: 'Sync', icon: Zap },
@@ -1021,6 +1158,363 @@ export default function FieldDataFormDetail() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ MAP TAB ═══════════════════════════════════════════ */}
+        {activeTab === 'map' && (
+          <div className="space-y-4">
+            {/* stats bar */}
+            <div className="flex flex-wrap gap-3">
+              {[
+                { label: 'With GPS', value: gpsSubmissions.length, cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                { label: 'Without GPS', value: submissions.length - gpsSubmissions.length, cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+                { label: 'Approved', value: gpsSubmissions.filter(s => s.review_status === 'approved').length, cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+              ].map(s => (
+                <div key={s.label} className={cn('flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium', s.cls)}>
+                  {s.label}: <span className="font-bold">{s.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {gpsSubmissions.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-16 text-center">
+                <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="font-medium text-slate-600 dark:text-slate-300">No GPS data found</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Submissions with <code className="text-xs bg-slate-100 px-1 rounded">_gps_latitude</code> / <code className="text-xs bg-slate-100 px-1 rounded">_gps_longitude</code> fields will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden" style={{ height: 520 }}>
+                <MapContainer center={mapCenter} zoom={8} style={{ height: '100%', width: '100%' }} className="z-0">
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {gpsSubmissions.map(s => {
+                    const color = s.review_status === 'approved' ? '#10b981'
+                      : s.review_status === 'rejected' ? '#ef4444'
+                      : s.review_status === 'on_hold' ? '#94a3b8'
+                      : '#f59e0b';
+                    return (
+                      <CircleMarker
+                        key={s.id}
+                        center={[s.gps_lat!, s.gps_lng!]}
+                        radius={7}
+                        pathOptions={{ color, fillColor: color, fillOpacity: 0.8, weight: 1.5 }}
+                      >
+                        <Popup>
+                          <div className="text-xs space-y-1 min-w-[160px]">
+                            <p className="font-semibold text-slate-800">{s.enumerator_name || s.submitted_by || 'Unknown enumerator'}</p>
+                            <p className="text-slate-500">{s.submitted_at ? format(new Date(s.submitted_at), 'dd MMM yyyy HH:mm') : '—'}</p>
+                            <span className={cn(
+                              'inline-block px-1.5 py-0.5 rounded text-xs font-medium',
+                              s.review_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                              s.review_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-amber-100 text-amber-700',
+                            )}>
+                              {s.review_status}
+                            </span>
+                            <p className="text-slate-400 text-xs">{s.gps_lat?.toFixed(5)}, {s.gps_lng?.toFixed(5)}</p>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    );
+                  })}
+                </MapContainer>
+              </div>
+            )}
+
+            {/* legend */}
+            {gpsSubmissions.length > 0 && (
+              <div className="flex flex-wrap gap-3 text-xs">
+                {[
+                  { color: '#f59e0b', label: 'Pending' },
+                  { color: '#10b981', label: 'Approved' },
+                  { color: '#ef4444', label: 'Rejected' },
+                  { color: '#94a3b8', label: 'On Hold' },
+                ].map(l => (
+                  <div key={l.label} className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full inline-block" style={{ background: l.color }} />
+                    {l.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ MEDIA TAB ═════════════════════════════════════════ */}
+        {activeTab === 'media' && (
+          <div className="space-y-6">
+            {mediaItems.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-16 text-center">
+                <Image className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="font-medium text-slate-600 dark:text-slate-300">No media attachments found</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Submissions with photo, audio, video, or file attachment fields will appear here automatically.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* summary bar */}
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { label: 'Images', count: mediaItems.filter(m => m.type === 'image').length, icon: Image, cls: 'text-blue-600 bg-blue-50 border-blue-200' },
+                    { label: 'Audio', count: mediaItems.filter(m => m.type === 'audio').length, icon: Music, cls: 'text-violet-600 bg-violet-50 border-violet-200' },
+                    { label: 'Video', count: mediaItems.filter(m => m.type === 'video').length, icon: Video, cls: 'text-teal-600 bg-teal-50 border-teal-200' },
+                    { label: 'Files', count: mediaItems.filter(m => m.type === 'file').length, icon: FileArchive, cls: 'text-slate-600 bg-slate-50 border-slate-200' },
+                  ].filter(s => s.count > 0).map(s => (
+                    <div key={s.label} className={cn('flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium', s.cls)}>
+                      <s.icon className="w-3.5 h-3.5" /> {s.label}: <strong>{s.count}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                {/* image grid */}
+                {mediaItems.filter(m => m.type === 'image').length > 0 && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+                    <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                      <Image className="w-4 h-4 text-blue-500" /> Photos
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                      {mediaItems.filter(m => m.type === 'image').map((m, i) => (
+                        <div
+                          key={`${m.submissionId}-${i}`}
+                          className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 cursor-pointer group hover:ring-2 hover:ring-blue-400 transition-all"
+                          onClick={() => setLightboxUrl(m.url)}
+                          data-testid={`img-media-${i}`}
+                        >
+                          <img
+                            src={m.url}
+                            alt={m.field}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <Eye className="w-5 h-5 text-white drop-shadow" />
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                            {m.enumerator}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* audio list */}
+                {mediaItems.filter(m => m.type === 'audio').length > 0 && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+                    <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                      <Music className="w-4 h-4 text-violet-500" /> Audio Recordings
+                    </h3>
+                    <div className="space-y-3">
+                      {mediaItems.filter(m => m.type === 'audio').map((m, i) => (
+                        <div key={`${m.submissionId}-audio-${i}`} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                          <Music className="w-4 h-4 text-violet-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{m.field}</p>
+                            <p className="text-xs text-slate-400">{m.enumerator} · {m.submittedAt ? format(new Date(m.submittedAt), 'dd MMM') : ''}</p>
+                          </div>
+                          <audio controls src={m.url} className="h-8" style={{ minWidth: 180 }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Lightbox */}
+            {lightboxUrl && (
+              <div
+                className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+                onClick={() => setLightboxUrl(null)}
+              >
+                <img src={lightboxUrl} alt="Full size" className="max-w-full max-h-full rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+                <button
+                  className="absolute top-4 right-4 text-white bg-white/20 hover:bg-white/30 rounded-full p-2"
+                  onClick={() => setLightboxUrl(null)}
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ CHARTS TAB ════════════════════════════════════════ */}
+        {activeTab === 'charts' && (
+          <div className="space-y-6">
+            {submissions.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-16 text-center">
+                <TrendingUp className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="font-medium text-slate-600 dark:text-slate-300">No data to chart yet</p>
+              </div>
+            ) : (
+              <>
+                {/* Row 1: Submission pace + Review status donut */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-blue-500" /> Submission Pace
+                      </h3>
+                      <div className="flex gap-1">
+                        {(['day', 'week', 'month'] as const).map(b => (
+                          <button
+                            key={b}
+                            onClick={() => setChartBucket(b)}
+                            className={cn(
+                              'text-xs px-2 py-1 rounded-md font-medium transition-colors',
+                              chartBucket === b ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-100',
+                            )}
+                            data-testid={`button-bucket-${b}`}
+                          >
+                            {b === 'day' ? 'Daily' : b === 'week' ? 'Weekly' : 'Monthly'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <AreaChart data={bucketedTimeData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <RTooltip />
+                        <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#eff6ff" strokeWidth={2} name="Submissions" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+                    <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-violet-500" /> Review Status
+                    </h3>
+                    {reviewPieData.length === 0 ? (
+                      <div className="h-48 flex items-center justify-center text-slate-400 text-sm">No data</div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={reviewPieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={55}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                          >
+                            {reviewPieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Legend />
+                          <RTooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 2: Enumerator breakdown */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+                  <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-teal-500" /> Submissions by Enumerator
+                  </h3>
+                  {enumeratorData.length === 0 ? (
+                    <div className="h-40 flex items-center justify-center text-slate-400 text-sm">No enumerator data</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={enumeratorData} layout="vertical" margin={{ left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={130} />
+                        <RTooltip />
+                        <Bar dataKey="count" fill="#0ea5e9" radius={[0, 4, 4, 0]} name="Submissions" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                {/* Row 3: Question frequency analysis */}
+                {Object.keys(questionFreqData).length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                      <BarChart2 className="w-4 h-4 text-orange-500" /> Answer Frequencies
+                      <span className="text-xs font-normal text-slate-400">(select questions, top 10 values each)</span>
+                    </h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {Object.entries(questionFreqData).slice(0, 8).map(([key, data]) => (
+                        <div key={key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 truncate">{key}</h4>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <BarChart data={data} margin={{ left: 0, right: 8 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                              <XAxis dataKey="answer" tick={{ fontSize: 9 }} interval={0} />
+                              <YAxis tick={{ fontSize: 10 }} />
+                              <RTooltip />
+                              <Bar dataKey="count" fill="#8b5cf6" radius={[3, 3, 0, 0]} name="Count" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ ACTIVITY TAB ══════════════════════════════════════ */}
+        {activeTab === 'activity' && (
+          <div className="space-y-4">
+            {activityFeed.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-16 text-center">
+                <Activity className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="font-medium text-slate-600 dark:text-slate-300">No activity yet</p>
+                <p className="text-sm text-slate-400 mt-1">Sync runs, exports, and review actions will appear here.</p>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-700 dark:text-slate-200">Form Activity Log</h3>
+                  <span className="text-xs text-slate-400">{activityFeed.length} events</span>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {activityFeed.map(ev => {
+                    const icon = ev.type === 'sync_ok' ? CheckCircle
+                      : ev.type === 'sync_err' ? XCircle
+                      : ev.type === 'export' ? Download
+                      : RefreshCw;
+                    const iconCls = ev.type === 'sync_ok' ? 'text-emerald-500 bg-emerald-50'
+                      : ev.type === 'sync_err' ? 'text-red-500 bg-red-50'
+                      : ev.type === 'export' ? 'text-blue-500 bg-blue-50'
+                      : 'text-slate-400 bg-slate-100';
+                    const Icon = icon;
+                    return (
+                      <div key={ev.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" data-testid={`row-activity-${ev.id}`}>
+                        <div className={cn('p-1.5 rounded-lg mt-0.5 shrink-0', iconCls)}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{ev.label}</p>
+                          {ev.detail && <p className="text-xs text-slate-500 mt-0.5 truncate">{ev.detail}</p>}
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0 mt-0.5">
+                          {formatDistanceToNow(new Date(ev.ts), { addSuffix: true })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
