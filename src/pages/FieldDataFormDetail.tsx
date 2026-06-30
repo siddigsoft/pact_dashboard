@@ -10,8 +10,10 @@ import {
   Loader2, FileText, Users, Clock, CheckCircle, XCircle,
   ChevronDown, ChevronUp, Search, Filter, MapPin, Eye,
   MoreHorizontal, Trash2, RefreshCw, Plus, Globe,
-  AlertCircle, Activity, TrendingUp,
+  AlertCircle, Activity, TrendingUp, Zap, Copy, ExternalLink,
+  Wifi, Info,
 } from 'lucide-react';
+import { syncFormFromServer, getWebhookUrl } from '@/services/fieldDataSync';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -32,7 +34,22 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import * as XLSX from 'xlsx';
 
-type Tab = 'overview' | 'table' | 'import' | 'exports';
+type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync';
+
+interface SyncLog {
+  id: string;
+  form_id: string;
+  server_id: string | null;
+  sync_type: string;
+  status: 'running' | 'success' | 'error';
+  records_pulled: number;
+  records_new: number;
+  records_updated: number;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+  field_data_servers?: { name: string; type: string } | null;
+}
 
 interface FieldDataForm {
   id: string;
@@ -126,6 +143,8 @@ export default function FieldDataFormDetail() {
   const [exportDialog, setExportDialog] = useState(false);
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv' | 'json'>('xlsx');
   const [exportLoading, setExportLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [pollingEnabled, setPollingEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: form, isLoading: loadingForm } = useQuery({
@@ -171,6 +190,22 @@ export default function FieldDataFormDetail() {
     enabled: !!id && activeTab === 'exports',
   });
 
+  const { data: syncLogs = [], isLoading: loadingSyncLogs, refetch: refetchSyncLogs } = useQuery({
+    queryKey: ['field-data-sync-logs', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('field_data_sync_logs')
+        .select('*, field_data_servers(name, type)')
+        .eq('form_id', id!)
+        .order('started_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data as SyncLog[];
+    },
+    enabled: !!id && activeTab === 'sync',
+    refetchInterval: pollingEnabled ? 10000 : false,
+  });
+
   const deleteSubmissionsMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       const { error } = await supabase.from('field_data_submissions').delete().in('id', ids);
@@ -200,6 +235,38 @@ export default function FieldDataFormDetail() {
     },
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
+
+  const handleSyncNow = useCallback(async () => {
+    if (!form) return;
+    const linkedServer = form.field_data_form_servers?.[0];
+    if (!linkedServer?.field_data_servers) {
+      toast({ title: 'No server linked', description: 'Link a server to this form first.', variant: 'destructive' });
+      return;
+    }
+    const { data: srvRow } = await supabase
+      .from('field_data_servers')
+      .select('*')
+      .eq('id', linkedServer.server_id)
+      .single();
+    if (!srvRow) { toast({ title: 'Server not found', variant: 'destructive' }); return; }
+
+    setIsSyncing(true);
+    const result = await syncFormFromServer(srvRow, { id: form.id, name: form.name, form_id_slug: null }, user?.id);
+    setIsSyncing(false);
+
+    if (result.success) {
+      qc.invalidateQueries({ queryKey: ['field-data-submissions', id] });
+      qc.invalidateQueries({ queryKey: ['field-data-form', id] });
+      qc.invalidateQueries({ queryKey: ['field-data-sync-logs', id] });
+      toast({
+        title: `Sync complete — ${result.recordsNew} new, ${result.recordsUpdated} updated`,
+        description: `${result.recordsPulled} records in ${(result.durationMs / 1000).toFixed(1)}s`,
+      });
+    } else {
+      qc.invalidateQueries({ queryKey: ['field-data-sync-logs', id] });
+      toast({ title: 'Sync failed', description: result.error, variant: 'destructive' });
+    }
+  }, [form, id, user, qc, toast]);
 
   const handleFileSelect = useCallback((file: File) => {
     setImportFile(file);
@@ -410,6 +477,7 @@ export default function FieldDataFormDetail() {
     { id: 'table', label: `Table (${submissions.length})`, icon: Table2 },
     { id: 'import', label: 'Import', icon: Upload },
     { id: 'exports', label: 'Exports', icon: Download },
+    { id: 'sync', label: 'Sync', icon: Zap },
   ];
 
   return (
@@ -451,6 +519,19 @@ export default function FieldDataFormDetail() {
               ))}
               <Button size="sm" variant="outline" onClick={() => setImportDialog(true)} data-testid="button-import">
                 <Upload className="w-3.5 h-3.5 mr-1.5" /> Import
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSyncNow}
+                disabled={isSyncing}
+                className="border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
+                data-testid="button-sync-now"
+              >
+                {isSyncing
+                  ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  : <Zap className="w-3.5 h-3.5 mr-1.5" />}
+                {isSyncing ? 'Syncing…' : 'Sync Now'}
               </Button>
               <Button size="sm" onClick={() => setExportDialog(true)} data-testid="button-export">
                 <Download className="w-3.5 h-3.5 mr-1.5" /> Export
@@ -944,7 +1025,222 @@ export default function FieldDataFormDetail() {
             )}
           </div>
         )}
-      </div>
+
+        {/* ══════════ SYNC TAB ══════════════════════════════════════════ */}
+        {activeTab === 'sync' && (
+          <div className="space-y-6">
+
+            {/* ── Connected Servers row ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(form.field_data_form_servers || []).length === 0 ? (
+                <div className="col-span-3 bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center">
+                  <Wifi className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-slate-500 font-medium">No servers linked to this form</p>
+                  <p className="text-xs text-slate-400 mt-1">Go back to the Field Data Hub and link a server to enable live sync.</p>
+                </div>
+              ) : (
+                (form.field_data_form_servers || []).map(fs => {
+                  const lastSynced = fs.last_synced_at;
+                  return (
+                    <div key={fs.server_id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={cn(
+                          'text-xs font-medium px-2 py-0.5 rounded-full border',
+                          fs.field_data_servers?.type === 'odk_central' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                          fs.field_data_servers?.type === 'ona' ? 'bg-violet-100 text-violet-700 border-violet-200' :
+                          fs.field_data_servers?.type === 'moda' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                          'bg-slate-100 text-slate-600 border-slate-200',
+                        )}>
+                          {fs.field_data_servers?.type?.replace('_', ' ').toUpperCase() ?? 'Server'}
+                        </span>
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
+                      </div>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{fs.field_data_servers?.name ?? 'Server'}</p>
+                      <div className="mt-2 space-y-1 text-xs text-slate-500">
+                        <div className="flex items-center justify-between">
+                          <span>Submissions pulled</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-200">{(fs.submission_count || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Last synced</span>
+                          <span>{lastSynced ? formatDistanceToNow(new Date(lastSynced), { addSuffix: true }) : '—'}</span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-3 w-full h-7 text-xs"
+                        disabled={isSyncing}
+                        onClick={handleSyncNow}
+                        data-testid={`button-sync-server-${fs.server_id}`}
+                      >
+                        {isSyncing ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1.5" />}
+                        {isSyncing ? 'Syncing…' : 'Sync Now'}
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* ── Webhook config ── */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <ExternalLink className="w-4 h-4 text-violet-500" />
+                <h3 className="font-semibold text-slate-700 dark:text-slate-200">Inbound Webhook</h3>
+                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">Requires Edge Function</Badge>
+              </div>
+              <p className="text-sm text-slate-500 mb-3">
+                Configure your ODK Central / Ona / MoDa server to push submissions here in real-time. Each new submission triggers an immediate sync without any polling delay.
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={getWebhookUrl(form.id)}
+                  className="font-mono text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800"
+                  data-testid="input-webhook-url"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(getWebhookUrl(form.id));
+                    toast({ title: 'Copied', description: 'Webhook URL copied to clipboard.' });
+                  }}
+                  data-testid="button-copy-webhook"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+              <div className="mt-3 flex items-start gap-2 text-xs text-slate-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                <Info className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                <span>
+                  In ODK Central: go to <strong>Form → Submissions → Webhooks</strong> and paste this URL.
+                  In Ona: go to <strong>Form Settings → External Export</strong>.
+                  A HMAC-SHA256 secret will be generated automatically for security.
+                </span>
+              </div>
+            </div>
+
+            {/* ── Sync History table ── */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-violet-500" /> Sync History
+                </h3>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pollingEnabled}
+                      onChange={e => setPollingEnabled(e.target.checked)}
+                      className="rounded"
+                      data-testid="checkbox-polling"
+                    />
+                    Auto-refresh (10s)
+                  </label>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => refetchSyncLogs()} data-testid="button-refresh-logs">
+                    <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {loadingSyncLogs ? (
+                <div className="flex items-center gap-2 py-8 justify-center text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading sync history…
+                </div>
+              ) : syncLogs.length === 0 ? (
+                <div className="py-12 text-center text-slate-400">
+                  <Zap className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm">No sync runs yet — click "Sync Now" to pull submissions from your server.</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm" data-testid="table-sync-logs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">When</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Server</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Pulled</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">New</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {syncLogs.map(log => {
+                      const durMs = log.completed_at && log.started_at
+                        ? new Date(log.completed_at).getTime() - new Date(log.started_at).getTime()
+                        : null;
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50" data-testid={`row-sync-log-${log.id}`}>
+                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                            {formatDistanceToNow(new Date(log.started_at), { addSuffix: true })}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500 hidden sm:table-cell">
+                            {log.field_data_servers?.name ?? '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="outline" className="text-xs bg-slate-50 text-slate-600 border-slate-200 capitalize">
+                              {log.sync_type}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            {log.status === 'success' && (
+                              <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+                                <CheckCircle className="w-2.5 h-2.5" /> Success
+                              </Badge>
+                            )}
+                            {log.status === 'error' && (
+                              <div>
+                                <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200 gap-1">
+                                  <XCircle className="w-2.5 h-2.5" /> Error
+                                </Badge>
+                                {log.error_message && (
+                                  <p className="text-xs text-red-500 mt-0.5 max-w-xs truncate" title={log.error_message}>
+                                    {log.error_message}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {log.status === 'running' && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200 gap-1">
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right text-xs font-medium text-slate-700 dark:text-slate-200 hidden md:table-cell">
+                            {log.records_pulled ?? 0}
+                          </td>
+                          <td className="px-4 py-3 text-right text-xs font-medium text-emerald-600 hidden md:table-cell">
+                            {log.records_new > 0 ? `+${log.records_new}` : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400 hidden lg:table-cell">
+                            {durMs != null ? `${(durMs / 1000).toFixed(1)}s` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* ── Polling note ── */}
+            <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 text-sm text-slate-600 dark:text-slate-300">
+              <Info className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-slate-700 dark:text-slate-200 mb-1">About automatic sync</p>
+                <p className="text-xs text-slate-500">
+                  Automatic background polling runs based on the interval you set when connecting the server (e.g. every 60 minutes).
+                  For real-time sync, configure the inbound webhook above.
+                  Manual "Sync Now" pulls all submissions since the last successful sync.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        )}
 
       {/* ── Import Dialog (quick-access from header) ──────────────────── */}
       <Dialog open={importDialog} onOpenChange={setImportDialog}>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -9,8 +9,10 @@ import {
   Globe, Plus, Server, RefreshCw, Trash2, Edit3, Search,
   CheckCircle, XCircle, AlertTriangle, Clock, Loader2,
   Database, Upload, ChevronRight, Wifi, WifiOff, Settings,
-  FileText, BarChart2, Users, Activity, Layers,
+  FileText, BarChart2, Users, Activity, Layers, Zap,
+  PlayCircle, FlaskConical,
 } from 'lucide-react';
+import { testServerConnection, syncFormFromServer } from '@/services/fieldDataSync';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -103,6 +105,10 @@ export default function FieldDataHub() {
   const [newFormName, setNewFormName] = useState('');
   const [newFormDesc, setNewFormDesc] = useState('');
   const [newFormLanguage, setNewFormLanguage] = useState('English');
+  const [testingServerId, setTestingServerId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [syncingFormId, setSyncingFormId] = useState<string | null>(null);
+  const [syncAllRunning, setSyncAllRunning] = useState(false);
 
   const { data: servers = [], isLoading: loadingServers } = useQuery({
     queryKey: ['field-data-servers'],
@@ -193,6 +199,73 @@ export default function FieldDataHub() {
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
+  const handleTestConnection = useCallback(async (srv: FieldDataServer) => {
+    setTestingServerId(srv.id);
+    try {
+      const result = await testServerConnection(srv);
+      setTestResults(prev => ({ ...prev, [srv.id]: result }));
+      await supabase.from('field_data_servers').update({
+        status: result.ok ? 'connected' : 'error',
+        last_health_check: new Date().toISOString(),
+      }).eq('id', srv.id);
+      qc.invalidateQueries({ queryKey: ['field-data-servers'] });
+      toast({
+        title: result.ok ? 'Connection successful' : 'Connection failed',
+        description: result.message,
+        variant: result.ok ? 'default' : 'destructive',
+      });
+    } finally {
+      setTestingServerId(null);
+    }
+  }, [qc, toast]);
+
+  const handleSyncForm = useCallback(async (form: FieldDataForm) => {
+    const linkedServer = form.field_data_form_servers?.[0];
+    if (!linkedServer) {
+      toast({ title: 'No server linked', description: 'Link a server to this form before syncing.', variant: 'destructive' });
+      return;
+    }
+    const srv = servers.find(s => s.id === linkedServer.server_id);
+    if (!srv) return;
+    setSyncingFormId(form.id);
+    try {
+      const result = await syncFormFromServer(srv, { id: form.id, name: form.name, form_id_slug: form.form_id_slug }, user?.id);
+      if (result.success) {
+        qc.invalidateQueries({ queryKey: ['field-data-forms'] });
+        toast({
+          title: `Synced — ${result.recordsNew} new, ${result.recordsUpdated} updated`,
+          description: `${result.recordsPulled} records pulled in ${(result.durationMs / 1000).toFixed(1)}s`,
+        });
+      } else {
+        toast({ title: 'Sync failed', description: result.error, variant: 'destructive' });
+      }
+    } finally {
+      setSyncingFormId(null);
+    }
+  }, [servers, user, qc, toast]);
+
+  const handleSyncAll = useCallback(async () => {
+    setSyncAllRunning(true);
+    let totalNew = 0;
+    let errors = 0;
+    for (const form of forms.filter(f => f.status === 'active')) {
+      const linkedServer = form.field_data_form_servers?.[0];
+      if (!linkedServer) continue;
+      const srv = servers.find(s => s.id === linkedServer.server_id);
+      if (!srv) continue;
+      const result = await syncFormFromServer(srv, { id: form.id, name: form.name, form_id_slug: form.form_id_slug }, user?.id);
+      if (result.success) totalNew += result.recordsNew;
+      else errors++;
+    }
+    setSyncAllRunning(false);
+    qc.invalidateQueries({ queryKey: ['field-data-forms'] });
+    toast({
+      title: errors === 0 ? `Sync All complete — ${totalNew} new records` : `Sync All — ${errors} error(s)`,
+      description: errors > 0 ? 'Check individual forms for details.' : undefined,
+      variant: errors > 0 ? 'destructive' : 'default',
+    });
+  }, [forms, servers, user, qc, toast]);
+
   function openNewServer() {
     setEditServer(null);
     setFormData({ ...EMPTY_SERVER });
@@ -236,7 +309,19 @@ export default function FieldDataHub() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/10 bg-white/10"
+                onClick={handleSyncAll}
+                disabled={syncAllRunning || forms.length === 0}
+                data-testid="button-sync-all"
+              >
+                {syncAllRunning
+                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  : <Zap className="w-4 h-4 mr-2" />}
+                Sync All
+              </Button>
               <Button
                 variant="outline"
                 className="border-white/30 text-white hover:bg-white/10 bg-white/10"
@@ -331,6 +416,16 @@ export default function FieldDataHub() {
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={e => { e.stopPropagation(); handleTestConnection(srv); }}
+                            disabled={testingServerId === srv.id}
+                            data-testid={`button-test-${srv.id}`}
+                          >
+                            {testingServerId === srv.id
+                              ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                              : <FlaskConical className="w-3.5 h-3.5 mr-2" />}
+                            Test Connection
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openEditServer(srv)}>
                             <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit
                           </DropdownMenuItem>
@@ -349,11 +444,36 @@ export default function FieldDataHub() {
                       </div>
                       <span className="text-xs text-slate-400">{formCount} form{formCount !== 1 ? 's' : ''}</span>
                     </div>
-                    {srv.last_health_check && (
+                    {/* test result pill */}
+                    {testResults[srv.id] && (
+                      <div className={cn(
+                        'mt-2 flex items-center gap-1.5 text-xs rounded-lg px-2 py-1',
+                        testResults[srv.id].ok
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20'
+                          : 'bg-red-50 text-red-700 dark:bg-red-900/20',
+                      )}>
+                        {testResults[srv.id].ok
+                          ? <CheckCircle className="w-3 h-3 shrink-0" />
+                          : <XCircle className="w-3 h-3 shrink-0" />}
+                        <span className="truncate">{testResults[srv.id].message}</span>
+                      </div>
+                    )}
+                    {!testResults[srv.id] && srv.last_health_check && (
                       <p className="text-xs text-slate-400 mt-1.5">
                         Checked {formatDistanceToNow(new Date(srv.last_health_check), { addSuffix: true })}
                       </p>
                     )}
+                    <button
+                      className="mt-2 w-full text-xs text-blue-600 hover:text-blue-800 flex items-center justify-center gap-1 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                      onClick={e => { e.stopPropagation(); handleTestConnection(srv); }}
+                      disabled={testingServerId === srv.id}
+                      data-testid={`button-test-inline-${srv.id}`}
+                    >
+                      {testingServerId === srv.id
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <FlaskConical className="w-3 h-3" />}
+                      {testingServerId === srv.id ? 'Testing…' : 'Test Connection'}
+                    </button>
                   </div>
                 );
               })}
@@ -437,8 +557,9 @@ export default function FieldDataHub() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Form Name</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Servers</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Submissions</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Last Submission</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Last Synced</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden xl:table-cell">Sync</th>
                     <th className="px-4 py-3 w-8" />
                   </tr>
                 </thead>
@@ -488,9 +609,16 @@ export default function FieldDataHub() {
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
                           <span className="text-slate-500 text-xs">
-                            {form.last_submission_at
-                              ? formatDistanceToNow(new Date(form.last_submission_at), { addSuffix: true })
-                              : '—'}
+                            {(() => {
+                              const lastSync = form.field_data_form_servers
+                                ?.map(fs => fs.last_synced_at)
+                                .filter(Boolean)
+                                .sort()
+                                .pop();
+                              return lastSync
+                                ? formatDistanceToNow(new Date(lastSync), { addSuffix: true })
+                                : '—';
+                            })()}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -505,6 +633,25 @@ export default function FieldDataHub() {
                           >
                             {form.status}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3 hidden xl:table-cell" onClick={e => e.stopPropagation()}>
+                          {(form.field_data_form_servers?.length ?? 0) > 0 ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1.5"
+                              disabled={syncingFormId === form.id}
+                              onClick={e => { e.stopPropagation(); handleSyncForm(form); }}
+                              data-testid={`button-sync-form-${form.id}`}
+                            >
+                              {syncingFormId === form.id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <RefreshCw className="w-3 h-3" />}
+                              {syncingFormId === form.id ? 'Syncing…' : 'Sync'}
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-slate-400">No server</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
