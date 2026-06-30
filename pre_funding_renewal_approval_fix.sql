@@ -1,0 +1,65 @@
+-- ============================================================================
+-- Pre-Funding: Renewal Approval Routing Fix
+-- Patches run_pre_fund_renewal_check() so that auto_activate renewals with
+-- bypass=FALSE route through the configured approval chain instead of
+-- auto-activating via a grace window.
+--
+-- BEFORE this patch:
+--   bypass=FALSE → status='pending_grace' → auto-activated when grace expires
+--   (effectively bypassed approvers regardless of the bypass flag — WRONG)
+--
+-- AFTER this patch:
+--   bypass=FALSE → status='pending_approval' + copies parent's pre_fund_approval_steps
+--                → ONLY activates when all required steps approved via process_pf_step_action()
+--   bypass=TRUE  → status='active' immediately + GL JE posted (no change from before)
+--
+-- Safe to re-run: CREATE OR REPLACE function.
+-- Run AFTER pre_funding_ALL_IN_ONE.sql and pre_funding_step_action_rpc.sql.
+-- ============================================================================
+
+-- This file is a DOCUMENTATION patch — the full corrected function is already
+-- embedded in pre_funding_ALL_IN_ONE.sql (which is the canonical source).
+-- Running pre_funding_ALL_IN_ONE.sql again will apply the correct function.
+--
+-- Key behavioral changes (for auditors and reviewers):
+--
+-- 1. NOT EXISTS idempotency guard now includes 'pending_approval' and 'awaiting_receipt'
+--    to prevent duplicate renewals regardless of current step state.
+--
+-- 2. Non-bypass renewal flow:
+--      INSERT pre_fund_requests (status='pending_approval', available_balance=0)
+--      → INSERT pre_fund_approval_steps (copy all steps from parent fund, status='pending')
+--      → If parent has no steps: seed default "Finance Review (Auto-Renewal)" step
+--      → Fund activates ONLY after process_pf_step_action() resolves all required steps
+--
+-- 3. Bypass renewal flow (unchanged):
+--      INSERT pre_fund_requests (status='active', available_balance=amount)
+--      → GL JE posted immediately (idempotency key: 'pf-received-<id>-autorenewal')
+--
+-- 4. grace_expires_at is no longer set for any new auto-activate renewal.
+--    Existing pending_grace rows (from before this patch) continue to be
+--    auto-promoted by Step 2 of the function for backward compatibility.
+--    New renewals never enter pending_grace.
+--
+-- 5. RETURN NEXT emits two distinct action strings:
+--    'auto_activated_bypass'       — bypass=TRUE path
+--    'auto_renewal_pending_approval' — bypass=FALSE path (awaiting approvers)
+--
+-- Verification query (run after scheduler fires):
+--   SELECT id, name, status, auto_renewal_bypass_approvals,
+--          (SELECT count(*) FROM pre_fund_approval_steps WHERE pre_fund_request_id = pfr.id) AS step_count
+--   FROM pre_fund_requests pfr
+--   WHERE notes LIKE '%Auto-activated from fund id:%'
+--   ORDER BY created_at DESC;
+--
+-- Expected results:
+--   bypass=TRUE  rows: status='active',           step_count=0 (or whatever parent had)
+--   bypass=FALSE rows: status='pending_approval',  step_count≥1 (copied from parent)
+-- ============================================================================
+
+-- No SQL to execute — the corrected function is in pre_funding_ALL_IN_ONE.sql.
+-- To apply just this fix on an existing install without re-running the full script,
+-- copy the CREATE OR REPLACE FUNCTION run_pre_fund_renewal_check() block from
+-- pre_funding_ALL_IN_ONE.sql starting at the line marked:
+--   "-- ── Auto-activate renewal for eligible funds"
+-- and run it in the Supabase SQL Editor.

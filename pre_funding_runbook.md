@@ -27,6 +27,7 @@ introduce new objects** you don't have yet, in this order:
 | 2 | `pre_funding_atomic_rpcs.sql` | Always run — safe `CREATE OR REPLACE` RPCs |
 | 3 | `pre_funding_step_action_rpc.sql` | **Always run** — `process_pf_step_action` SECURITY DEFINER RPC for Approvals Hub (required for non-finance approvers to work) |
 | 4 | `pre_funding_bank_credentials_rpc.sql` | **Always run** — `get_pre_fund_bank_credentials` service_role-only decrypt RPC required by `pre-fund-bank-feed` Edge Function |
+| 5 | `pre_funding_renewal_approval_fix.sql` | **Always run** — documents the approval-routing fix; full corrected `run_pre_fund_renewal_check()` is in `pre_funding_ALL_IN_ONE.sql` |
 | 5 | `pre_funding_rls_fix.sql` | Run if you see RLS policy errors |
 | 6 | `pre_fund_allocations.sql` | Run if `pre_fund_allocations` table is missing |
 | 7 | `pre_fund_user_txn_patch.sql` | Run if `pre_fund_transactions.user_id` column is missing |
