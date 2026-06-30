@@ -101,7 +101,7 @@ const EMPTY_FORM = {
   warning_days: '14', auto_renewal_mode: 'off', auto_renewal_days_before: '7',
   auto_renewal_bypass_approvals: false,
   gl_receipt_account: '', gl_liability_account: '',
-  gl_expense_account: '', gl_cf_account: '',
+  gl_expense_account: '', gl_cf_account: '', gl_encumbrance_account: '',
   notes: '',
   notification_recipients: [] as string[],
 };
@@ -342,10 +342,11 @@ export default function PreFundingRegistry() {
       threshold_pct: fa.threshold_pct != null ? String(fa.threshold_pct) : (pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : ''),
       warning_days: f.warning_days != null ? String(f.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
       auto_renewal_mode: f.auto_renewal_mode,
-      gl_receipt_account:   fa.gl_receipt_account   ?? '',
-      gl_liability_account: fa.gl_liability_account ?? '',
-      gl_expense_account:   fa.gl_expense_account   ?? '',
-      gl_cf_account:        fa.gl_cf_account        ?? '',
+      gl_receipt_account:      fa.gl_receipt_account      ?? '',
+      gl_liability_account:    fa.gl_liability_account    ?? '',
+      gl_expense_account:      fa.gl_expense_account      ?? '',
+      gl_cf_account:           fa.gl_cf_account           ?? '',
+      gl_encumbrance_account:  fa.gl_encumbrance_account  ?? '',
       notes: `Top-up request for fund: ${f.name}`,
     });
     setDialogStep(1);
@@ -371,10 +372,11 @@ export default function PreFundingRegistry() {
       warning_days: f.warning_days != null ? String(f.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
       auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: f.auto_renewal_days_before != null ? String(f.auto_renewal_days_before) : '',
       auto_renewal_bypass_approvals: fa.auto_renewal_bypass_approvals ?? false,
-      gl_receipt_account:   fa.gl_receipt_account   ?? '',
-      gl_liability_account: fa.gl_liability_account ?? '',
-      gl_expense_account:   fa.gl_expense_account   ?? '',
-      gl_cf_account:        fa.gl_cf_account        ?? '',
+      gl_receipt_account:     fa.gl_receipt_account     ?? '',
+      gl_liability_account:   fa.gl_liability_account   ?? '',
+      gl_expense_account:     fa.gl_expense_account     ?? '',
+      gl_cf_account:          fa.gl_cf_account          ?? '',
+      gl_encumbrance_account: fa.gl_encumbrance_account ?? '',
       notes: f.notes ?? '',
       notification_recipients: Array.isArray(fa.notification_recipients) ? fa.notification_recipients : [],
     });
@@ -421,10 +423,11 @@ export default function PreFundingRegistry() {
         auto_renewal_mode: form.auto_renewal_mode,
         auto_renewal_days_before: form.auto_renewal_days_before ? parseInt(form.auto_renewal_days_before) : null,
         auto_renewal_bypass_approvals: form.auto_renewal_bypass_approvals ?? false,
-        gl_receipt_account:   form.gl_receipt_account   || null,
-        gl_liability_account: form.gl_liability_account || null,
-        gl_expense_account:   form.gl_expense_account   || null,
-        gl_cf_account:        form.gl_cf_account        || null,
+        gl_receipt_account:     form.gl_receipt_account     || null,
+        gl_liability_account:   form.gl_liability_account   || null,
+        gl_expense_account:     form.gl_expense_account     || null,
+        gl_cf_account:          form.gl_cf_account          || null,
+        gl_encumbrance_account: form.gl_encumbrance_account || null,
         notes: form.notes || null,
         notification_recipients: form.notification_recipients.length > 0 ? form.notification_recipients : [],
       };
@@ -1423,10 +1426,11 @@ export default function PreFundingRegistry() {
                         : acctAccounts;
 
                       return ([
-                        { key: 'gl_receipt_account',  label: 'Receipt / Bank Account',    testId: 'select-gl-receipt',   accounts: bankAccounts,   hint: cur ? `Showing ${cur} accounts` : '' },
-                        { key: 'gl_liability_account', label: 'Donor Liability Account',   testId: 'select-gl-liability', accounts: acctAccounts,   hint: '' },
-                        { key: 'gl_expense_account',   label: 'Expense / Payment Account', testId: 'select-gl-expense',   accounts: acctAccounts,   hint: '' },
-                        { key: 'gl_cf_account',        label: 'Carry-Forward Account',     testId: 'select-gl-cf',        accounts: acctAccounts,   hint: '' },
+                        { key: 'gl_receipt_account',     label: 'Receipt / Bank Account',    testId: 'select-gl-receipt',     accounts: bankAccounts, hint: cur ? `Showing ${cur} accounts` : '' },
+                        { key: 'gl_liability_account',   label: 'Donor Liability Account',   testId: 'select-gl-liability',   accounts: acctAccounts, hint: '' },
+                        { key: 'gl_expense_account',     label: 'Expense / Payment Account', testId: 'select-gl-expense',     accounts: acctAccounts, hint: '' },
+                        { key: 'gl_cf_account',          label: 'Carry-Forward Account',     testId: 'select-gl-cf',          accounts: acctAccounts, hint: '' },
+                        { key: 'gl_encumbrance_account', label: 'Encumbrance Reserve Account (for commitments)', testId: 'select-gl-encumbrance', accounts: acctAccounts, hint: 'Required only if commitment transactions are used' },
                       ] as const).map(({ key, label, testId, accounts, hint }) => (
                         <div key={key}>
                           <Label>{label}</Label>

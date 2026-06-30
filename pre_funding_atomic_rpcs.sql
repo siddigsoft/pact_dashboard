@@ -495,10 +495,10 @@ CREATE OR REPLACE FUNCTION close_pre_fund_period_rpc(
   p_currency            TEXT    DEFAULT 'USD',
   p_notes               TEXT    DEFAULT NULL,
   p_closed_by           UUID    DEFAULT NULL,
-  p_gl_liability_code   TEXT    DEFAULT '2400',
-  p_gl_receipt_code     TEXT    DEFAULT '1200',
-  p_gl_expense_code     TEXT    DEFAULT '5600',
-  p_gl_cf_code          TEXT    DEFAULT '2401'
+  p_gl_liability_code   TEXT    DEFAULT NULL,   -- must be passed; resolved from fund.gl_liability_account
+  p_gl_receipt_code     TEXT    DEFAULT NULL,   -- must be passed; resolved from fund.gl_receipt_account
+  p_gl_expense_code     TEXT    DEFAULT NULL,   -- must be passed; resolved from fund.gl_expense_account
+  p_gl_cf_code          TEXT    DEFAULT NULL    -- must be passed when carry_forward_amt > 0
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -520,11 +520,42 @@ BEGIN
 
   v_variance := GREATEST(0, p_surplus - p_return_amt - p_carry_forward_amt);
 
-  -- Resolve GL account IDs (missing accounts skip those journal lines — non-fatal)
+  -- Guard: all required account codes must be explicitly supplied by the caller
+  IF p_gl_liability_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_liability_code is required. Pass the fund''s gl_liability_account value.';
+  END IF;
+  IF p_gl_receipt_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_receipt_code is required. Pass the fund''s gl_receipt_account value.';
+  END IF;
+  IF p_gl_expense_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_expense_code is required. Pass the fund''s gl_expense_account value.';
+  END IF;
+  IF p_carry_forward_amt > 0 AND p_gl_cf_code IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: p_gl_cf_code is required when carry_forward_amt > 0. Pass the fund''s gl_cf_account value.';
+  END IF;
+
+  -- Resolve GL account IDs from COA — fail fast if any configured code is missing
   SELECT id INTO v_liab_id FROM acct_accounts WHERE code = p_gl_liability_code LIMIT 1;
-  SELECT id INTO v_bank_id FROM acct_accounts WHERE code = p_gl_receipt_code   LIMIT 1;
-  SELECT id INTO v_exp_id  FROM acct_accounts WHERE code = p_gl_expense_code   LIMIT 1;
-  SELECT id INTO v_cf_id   FROM acct_accounts WHERE code = p_gl_cf_code        LIMIT 1;
+  IF v_liab_id IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (liability) not found in Chart of Accounts. Verify the fund''s gl_liability_account is mapped to an active COA entry.', p_gl_liability_code;
+  END IF;
+
+  SELECT id INTO v_bank_id FROM acct_accounts WHERE code = p_gl_receipt_code LIMIT 1;
+  IF v_bank_id IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (cash/bank) not found in Chart of Accounts. Verify the fund''s gl_receipt_account is mapped to an active COA entry.', p_gl_receipt_code;
+  END IF;
+
+  SELECT id INTO v_exp_id FROM acct_accounts WHERE code = p_gl_expense_code LIMIT 1;
+  IF v_exp_id IS NULL THEN
+    RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (expense) not found in Chart of Accounts. Verify the fund''s gl_expense_account is mapped to an active COA entry.', p_gl_expense_code;
+  END IF;
+
+  IF p_carry_forward_amt > 0 THEN
+    SELECT id INTO v_cf_id FROM acct_accounts WHERE code = p_gl_cf_code LIMIT 1;
+    IF v_cf_id IS NULL THEN
+      RAISE EXCEPTION 'Pre-fund close failed: GL account code "%" (carry-forward) not found in Chart of Accounts. Verify the fund''s gl_cf_account is mapped to an active COA entry.', p_gl_cf_code;
+    END IF;
+  END IF;
 
   -- 1. Reconciliation record
   INSERT INTO pre_fund_reconciliations (
@@ -558,8 +589,8 @@ BEGIN
     p_closed_by
   ) RETURNING id INTO v_je_id;
 
-  -- Lines: return portion (Dr liability → Cr bank)
-  IF v_liab_id IS NOT NULL AND v_bank_id IS NOT NULL AND p_return_amt > 0 THEN
+  -- Lines: return portion (Dr liability → Cr bank) — accounts verified non-null above
+  IF p_return_amt > 0 THEN
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, debit_credit,
       original_amount, original_currency, functional_amount, functional_currency,
       description, function)
@@ -570,8 +601,8 @@ BEGIN
        'Donor refund — cash out', 'program');
   END IF;
 
-  -- Lines: variance/expense (Dr liability → Cr expense)
-  IF v_liab_id IS NOT NULL AND v_exp_id IS NOT NULL AND v_variance > 0 THEN
+  -- Lines: variance/expense (Dr liability → Cr expense) — accounts verified non-null above
+  IF v_variance > 0 THEN
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, debit_credit,
       original_amount, original_currency, functional_amount, functional_currency,
       description, function)
@@ -585,9 +616,8 @@ BEGIN
   INSERT INTO acct_gl_bridge_log (source_table, source_id, event_type, status, journal_entry_id)
   VALUES ('pre_fund_reconciliations', v_recon_id, 'pre_fund_closed', 'success', v_je_id);
 
-  -- 4. Carry-forward GL entry — fires whenever carry amount > 0, regardless of
-  --    surplus_action (covers both 'carry_forward' and 'split' with carry portion)
-  IF p_carry_forward_amt > 0 AND v_liab_id IS NOT NULL AND v_cf_id IS NOT NULL THEN
+  -- 4. Carry-forward GL entry — v_cf_id is non-null when carry_forward_amt > 0 (verified above)
+  IF p_carry_forward_amt > 0 THEN
 
     INSERT INTO acct_journal_entries (
       description_en, description_ar, posting_date, status,
