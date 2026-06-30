@@ -80,6 +80,7 @@
     Search,
     GraduationCap,
     Layers,
+    FileDown,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -397,6 +398,7 @@
       planningItems.push({ id: 'field-data-monitoring', title: "Fieldwork Monitor", url: "/field-data/monitoring", icon: Activity, priority: 3, isPinned: isPinned('/field-data/monitoring') });
       planningItems.push({ id: 'field-data-cases', title: "Case Management", url: "/field-data/cases", icon: ClipboardList, priority: 3, isPinned: isPinned('/field-data/cases') });
       planningItems.push({ id: 'field-data-workflow', title: "Workflow & Review", url: "/field-data/workflow", icon: FileSignature, priority: 3, isPinned: isPinned('/field-data/workflow') });
+      planningItems.push({ id: 'field-data-exports',  title: "Smart Export",      url: "/field-data/exports",  icon: FileDown,       priority: 3, isPinned: isPinned('/field-data/exports') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
