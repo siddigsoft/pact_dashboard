@@ -400,7 +400,8 @@
       planningItems.push({ id: 'field-data-cases', title: "Case Management", url: "/field-data/cases", icon: ClipboardList, priority: 3, isPinned: isPinned('/field-data/cases') });
       planningItems.push({ id: 'field-data-workflow', title: "Workflow & Review", url: "/field-data/workflow", icon: FileSignature, priority: 3, isPinned: isPinned('/field-data/workflow') });
       planningItems.push({ id: 'field-data-exports',    title: "Smart Export",       url: "/field-data/exports",    icon: FileDown,    priority: 3, isPinned: isPinned('/field-data/exports') });
-      planningItems.push({ id: 'field-data-languages',  title: "Multi-Language Forms", url: "/field-data/languages", icon: Languages,  priority: 3, isPinned: isPinned('/field-data/languages') });
+      planningItems.push({ id: 'field-data-languages',      title: "Multi-Language Forms",    url: "/field-data/languages",      icon: Languages, priority: 3, isPinned: isPinned('/field-data/languages') });
+      planningItems.push({ id: 'field-data-collaboration',  title: "Collaboration & Review",  url: "/field-data/collaboration",  icon: Users,     priority: 3, isPinned: isPinned('/field-data/collaboration') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
