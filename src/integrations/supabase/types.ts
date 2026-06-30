@@ -819,7 +819,8 @@ export type Database = {
           auto_renewal_grace_hours: number
           bank_match_tolerance_pct: number
           bank_api_enabled: boolean
-          bank_api_url: string | null
+          bank_api_url_hint: string | null
+          bank_api_url_encrypted: string | null
           bank_api_key_hint: string | null
           integration_bank_recon: boolean
           integration_cashflow: boolean
@@ -847,7 +848,8 @@ export type Database = {
           auto_renewal_grace_hours?: number
           bank_match_tolerance_pct?: number
           bank_api_enabled?: boolean
-          bank_api_url?: string | null
+          bank_api_url_hint?: string | null
+          bank_api_url_encrypted?: string | null
           bank_api_key_hint?: string | null
           integration_bank_recon?: boolean
           integration_cashflow?: boolean
@@ -875,7 +877,8 @@ export type Database = {
           auto_renewal_grace_hours?: number
           bank_match_tolerance_pct?: number
           bank_api_enabled?: boolean
-          bank_api_url?: string | null
+          bank_api_url_hint?: string | null
+          bank_api_url_encrypted?: string | null
           bank_api_key_hint?: string | null
           integration_bank_recon?: boolean
           integration_cashflow?: boolean

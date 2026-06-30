@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   auto_renewal_grace_hours    INTEGER NOT NULL DEFAULT 24,
   bank_match_tolerance_pct    NUMERIC(5,2) NOT NULL DEFAULT 2,
   bank_api_enabled            BOOLEAN NOT NULL DEFAULT false,
-  bank_api_url                TEXT,
+  bank_api_url_hint           TEXT,              -- domain hint only (e.g. bank-api.ex…), never full URL
+  bank_api_url_encrypted      BYTEA,             -- pgcrypto-encrypted full URL (server-only)
   bank_api_key_hint           TEXT,              -- only last 4 chars, never the full key
   bank_api_key_encrypted      BYTEA,             -- pgcrypto-encrypted full key (server-only)
   integration_bank_recon      BOOLEAN NOT NULL DEFAULT true,
@@ -94,6 +95,41 @@ ALTER TABLE pre_fund_settings
 
 INSERT INTO pre_fund_settings (singleton_lock) VALUES (TRUE)
 ON CONFLICT (singleton_lock) DO NOTHING;
+
+-- ─── Upgrade guard: migrate any existing plaintext bank_api_url column ────────
+-- If a previous run created bank_api_url as a plaintext TEXT column, drop it and
+-- add the correct encrypted pair. This guard is idempotent.
+DO $$
+BEGIN
+  -- Add encrypted URL columns if they don't already exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'pre_fund_settings' AND column_name = 'bank_api_url_encrypted'
+  ) THEN
+    ALTER TABLE pre_fund_settings ADD COLUMN bank_api_url_encrypted BYTEA;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'pre_fund_settings' AND column_name = 'bank_api_url_hint'
+  ) THEN
+    ALTER TABLE pre_fund_settings ADD COLUMN bank_api_url_hint TEXT;
+  END IF;
+
+  -- Drop plaintext bank_api_url column if it still exists (never store URL in plaintext)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'pre_fund_settings' AND column_name = 'bank_api_url'
+  ) THEN
+    -- Copy hint (domain only) before dropping — full URL is gone; Finance must re-enter it via RPC
+    UPDATE pre_fund_settings
+    SET bank_api_url_hint = COALESCE(bank_api_url_hint, SUBSTRING(regexp_replace(bank_api_url, '^https?://', ''), 1, 20) || '… (re-enter)')
+    WHERE bank_api_url IS NOT NULL AND bank_api_url_hint IS NULL;
+
+    ALTER TABLE pre_fund_settings DROP COLUMN bank_api_url;
+  END IF;
+END;
+$$;
 
 -- ─── 3. Pre-fund requests (main table) ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pre_fund_requests (
@@ -500,21 +536,31 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- IMPORTANT: Replace 'pact_bank_key_passphrase' below with your actual secret,
 --            or set it via: ALTER DATABASE postgres SET app.bank_key_passphrase = '...';
 
+-- Drop the old 2-arg signature if it exists (superseded by the 3-arg canonical version below)
+DROP FUNCTION IF EXISTS store_pre_fund_bank_key(UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION store_pre_fund_bank_key(
   p_settings_id UUID,
-  p_key         TEXT
+  p_key         TEXT DEFAULT NULL,   -- new API key; NULL/empty = leave existing key untouched
+  p_url         TEXT DEFAULT NULL    -- new bank API URL; NULL/empty = leave existing URL untouched
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_passphrase TEXT;
 BEGIN
+  -- Must provide at least one credential to update
+  IF (p_key IS NULL OR p_key = '') AND (p_url IS NULL OR p_url = '') THEN
+    RAISE EXCEPTION 'At least one of p_key or p_url must be provided';
+  END IF;
+
   -- Caller must be Finance/Admin
   IF NOT EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
   ) THEN
-    RAISE EXCEPTION 'Insufficient privileges to store bank API key';
+    RAISE EXCEPTION 'Insufficient privileges to store bank API credentials';
   END IF;
 
   -- Resolve passphrase from DB setting (set once per deploy via ALTER DATABASE).
@@ -529,8 +575,20 @@ BEGIN
   END IF;
 
   UPDATE pre_fund_settings
-  SET bank_api_key_encrypted = pgp_sym_encrypt(p_key, v_passphrase),
-      bank_api_key_hint      = '...' || RIGHT(p_key, 4),
+  SET -- Only update key columns when caller explicitly provided a new key
+      bank_api_key_encrypted = CASE WHEN p_key IS NOT NULL AND p_key <> ''
+                                    THEN pgp_sym_encrypt(p_key, v_passphrase)
+                                    ELSE bank_api_key_encrypted END,
+      bank_api_key_hint      = CASE WHEN p_key IS NOT NULL AND p_key <> ''
+                                    THEN '...' || RIGHT(p_key, 4)
+                                    ELSE bank_api_key_hint END,
+      -- Only update URL columns when caller explicitly provided a new URL
+      bank_api_url_encrypted = CASE WHEN p_url IS NOT NULL AND p_url <> ''
+                                    THEN pgp_sym_encrypt(p_url, v_passphrase)
+                                    ELSE bank_api_url_encrypted END,
+      bank_api_url_hint      = CASE WHEN p_url IS NOT NULL AND p_url <> ''
+                                    THEN SUBSTRING(regexp_replace(p_url, '^https?://', ''), 1, 20) || '…'
+                                    ELSE bank_api_url_hint END,
       updated_at             = now()
   WHERE id = p_settings_id;
 
@@ -540,8 +598,8 @@ BEGIN
 END;
 $$;
 
--- Grant execute to authenticated users (RLS inside the function gates by role)
-GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT) TO authenticated;
+-- Grant execute to authenticated users (role check is inside the function)
+GRANT EXECUTE ON FUNCTION store_pre_fund_bank_key(UUID, TEXT, TEXT) TO authenticated;
 
 -- ─── 12. GL Bridge account code (add to CoA if not exists) ───────────────────
 -- Account 2400 — Pre-Fund Liability (deferred pre-fund liability)
