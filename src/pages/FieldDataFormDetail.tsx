@@ -13,6 +13,7 @@ import {
   AlertCircle, Activity, TrendingUp, Zap, Copy, ExternalLink,
   Wifi, Info, Image, Music, FileArchive, Video, ListChecks,
   Send, QrCode, FileCode2, Hash, RotateCcw, Tag,
+  Database, Link2, CheckCircle2, ChevronRight, History,
 } from 'lucide-react';
 import { syncFormFromServer, getWebhookUrl, publishFormToServer } from '@/services/fieldDataSync';
 import { Button } from '@/components/ui/button';
@@ -40,7 +41,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as XLSX from 'xlsx';
 
-type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync' | 'map' | 'media' | 'charts' | 'activity' | 'publish';
+type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync' | 'map' | 'media' | 'charts' | 'activity' | 'publish' | 'datasets';
 
 interface SyncLog {
   id: string;
@@ -221,6 +222,20 @@ export default function FieldDataFormDetail() {
     },
     enabled: !!id && activeTab === 'sync',
     refetchInterval: pollingEnabled ? 10000 : false,
+  });
+
+  // ── Linked server datasets query (Datasets tab) ───────────────────────────
+  const { data: linkedDatasets = [], isLoading: loadingDatasets, refetch: refetchDatasets } = useQuery({
+    queryKey: ['field-data-linked-datasets', id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('field_data_dataset_form_links')
+        .select('*, field_data_server_datasets(*)')
+        .eq('form_id', id!);
+      if (error) throw error;
+      return (data ?? []).map((r: any) => r.field_data_server_datasets);
+    },
+    enabled: !!id && activeTab === 'datasets',
   });
 
   // ── Form versions query (Publish tab) ────────────────────────────────────
@@ -747,6 +762,7 @@ export default function FieldDataFormDetail() {
     { id: 'import', label: 'Import', icon: Upload },
     { id: 'exports', label: 'Exports', icon: Download },
     { id: 'sync', label: 'Sync', icon: Zap },
+    { id: 'datasets', label: 'Datasets', icon: Database },
   ];
 
   return (
@@ -2171,6 +2187,179 @@ export default function FieldDataFormDetail() {
                 </p>
               </div>
             </div>
+
+          </div>
+        )}
+
+        {/* ══════════ DATASETS TAB ══════════════════════════════════════ */}
+        {activeTab === 'datasets' && (
+          <div className="space-y-6">
+
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-800 dark:text-slate-200">Server Datasets</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Reference datasets linked to this form for <code className="bg-muted px-1 rounded">pulldata()</code> lookups in ODK Collect.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refetchDatasets()}
+                  className="gap-1.5"
+                  data-testid="button-refresh-datasets"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => window.open('/field-data/datasets', '_blank')}
+                  className="gap-1.5"
+                  data-testid="button-manage-datasets"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  Manage Datasets
+                </Button>
+              </div>
+            </div>
+
+            {loadingDatasets ? (
+              <div className="text-center py-12">
+                <Loader2 className="w-7 h-7 mx-auto mb-2 animate-spin text-slate-300" />
+                <p className="text-sm text-slate-400">Loading linked datasets…</p>
+              </div>
+            ) : linkedDatasets.length === 0 ? (
+              <div className="text-center py-14 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                <Database className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 font-medium">No datasets linked to this form</p>
+                <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+                  Go to Server Datasets, upload a reference file (CSV/Excel), then link it to this form.
+                  Linked datasets are pre-loaded on enumerator devices via ODK Collect.
+                </p>
+                <Button
+                  onClick={() => window.open('/field-data/datasets', '_blank')}
+                  className="mt-4"
+                  size="sm"
+                  variant="outline"
+                >
+                  <Database className="w-4 h-4 mr-1.5" /> Open Server Datasets
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {linkedDatasets.map((ds: any) => {
+                  const cols: { name: string; type: string }[] = Array.isArray(ds.columns) ? ds.columns : [];
+                  const keyCol = cols[0]?.name ?? '';
+                  const valCol = cols[1]?.name ?? cols[0]?.name ?? '';
+                  const dsName = ds.name.replace(/\s+/g, '_').toLowerCase();
+                  const snippet = keyCol
+                    ? `pulldata('${dsName}', '${valCol}', '${keyCol}', \${${keyCol}})`
+                    : `pulldata('${dsName}', 'column_name', 'key_column', \${key_question})`;
+
+                  return (
+                    <div key={ds.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+                      {/* Dataset header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                            <Database className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-800 dark:text-slate-100">{ds.name}</div>
+                            {ds.description && <div className="text-xs text-slate-500">{ds.description}</div>}
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-slate-400">{(ds.row_count ?? 0).toLocaleString()} rows</span>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-xs text-slate-400">{cols.length} columns</span>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-xs font-mono text-slate-400">v{ds.version}</span>
+                              {ds.updated_at && (
+                                <>
+                                  <span className="text-slate-300">·</span>
+                                  <span className="text-xs text-slate-400">Updated {format(new Date(ds.updated_at), 'dd MMM yyyy')}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {ds.file_url && (
+                            <a
+                              href={ds.file_url}
+                              download={ds.file_name ?? true}
+                              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
+                              title="Download dataset file"
+                            >
+                              <Download className="w-4 h-4" />
+                            </a>
+                          )}
+                          <a
+                            href="/field-data/datasets"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
+                            title="Open in Server Datasets"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Column chips */}
+                      {cols.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 mb-1.5">Columns</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {cols.map((c, i) => (
+                              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-mono">
+                                {c.name}
+                                <span className="text-slate-400 text-[10px]">{c.type}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* pulldata() snippet */}
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 mb-1.5">
+                          XLSForm <code className="bg-muted px-1 rounded">pulldata()</code> snippet
+                        </p>
+                        <div className="relative group">
+                          <div className="bg-slate-900 dark:bg-slate-800 text-emerald-300 text-xs font-mono rounded-lg px-4 py-3 pr-10 break-all">
+                            {snippet}
+                          </div>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(snippet).then(() => toast({ title: 'Snippet copied!' }))}
+                            className="absolute top-2 right-2 p-1 rounded text-slate-400 hover:text-white transition-colors"
+                            title="Copy snippet"
+                            data-testid={`button-copy-snippet-${ds.id}`}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Use in the <em>calculation</em> column of a <em>calculate</em> row in your XLSForm.
+                          Replace <code className="bg-muted px-0.5 rounded">key_column</code> / <code className="bg-muted px-0.5 rounded">value_column</code> with the columns you need.
+                        </p>
+                      </div>
+
+                      {/* ODK usage note */}
+                      <div className="flex items-start gap-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800 px-3 py-2.5">
+                        <Info className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                          Attach <strong>{ds.file_name ?? `${ds.name}.csv`}</strong> to the media folder of your ODK Collect form, or reference it via <code className="bg-indigo-100 dark:bg-indigo-900/50 px-0.5 rounded">search()</code> in an <code className="bg-indigo-100 dark:bg-indigo-900/50 px-0.5 rounded">external_select</code> row.
+                          When you upload a new version in Server Datasets, re-deploy the form to push the updated file to devices.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
           </div>
         )}
