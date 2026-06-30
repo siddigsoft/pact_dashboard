@@ -20,15 +20,20 @@ import {
   Layers, Loader2, Plus, RefreshCw, Settings2, Shuffle, Target,
   Trash2, TrendingUp, Users, CheckCircle2, XCircle, AlertCircle,
   Clock, MapPin, Calculator, List, Copy, Play, Archive, MoreHorizontal,
+  Globe, Scale, FileText,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SamplingMethod = 'srs' | 'systematic' | 'stratified' | 'cluster' | 'multistage' | 'epi' | 'geographic' | 'lqas' | 'quota' | 'snowball';
 type StudyStatus = 'design' | 'drawing' | 'field' | 'complete' | 'archived';
 type UnitStatus = 'pending' | 'complete' | 'not_found' | 'refused' | 'unavailable' | 'duplicate' | 'replacement_used';
-type DetailTab = 'calculator' | 'frame' | 'draw' | 'tracking';
+type DetailTab = 'calculator' | 'frame' | 'draw' | 'tracking' | 'map' | 'weights' | 'report';
 
 interface Study {
   id: string; name: string; description?: string; form_id?: string;
@@ -1011,7 +1016,10 @@ function StudyDetail({ study, onBack }: { study: Study; onBack: () => void }) {
     { id: 'calculator', label: 'Calculator', icon: Calculator },
     { id: 'frame',      label: `Frame${frames.length ? ` (v${frames.find(f=>f.is_current)?.version ?? 1})` : ''}`, icon: Database },
     { id: 'draw',       label: `Draw${draws.length ? ` (${draws.length})` : ''}`, icon: Shuffle },
-    { id: 'tracking',   label: `Tracking`, icon: Target },
+    { id: 'tracking',   label: 'Tracking', icon: Target },
+    { id: 'map',        label: 'Map', icon: Globe },
+    { id: 'weights',    label: 'Weights', icon: Scale },
+    { id: 'report',     label: 'Report', icon: FileText },
   ];
 
   return (
@@ -1055,6 +1063,627 @@ function StudyDetail({ study, onBack }: { study: Study; onBack: () => void }) {
         {activeTab === 'frame' && <FrameTab study={study} frames={frames} loadingFrames={loadingFrames} onRefresh={refetchFrames} />}
         {activeTab === 'draw' && <DrawTab study={study} frames={frames} draws={draws} loadingDraws={loadingDraws} onRefresh={refetchDraws} />}
         {activeTab === 'tracking' && <TrackingTab study={study} draws={draws} />}
+        {activeTab === 'map' && <MapTab study={study} draws={draws} />}
+        {activeTab === 'weights' && <WeightsTab study={study} draws={draws} frames={frames} />}
+        {activeTab === 'report' && <ReportTab study={study} draws={draws} frames={frames} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── MapTab ───────────────────────────────────────────────────────────────────
+const STATUS_PIN_COLORS: Record<UnitStatus, string> = {
+  pending:          '#f59e0b',
+  complete:         '#22c55e',
+  not_found:        '#ef4444',
+  refused:          '#f97316',
+  unavailable:      '#eab308',
+  duplicate:        '#a855f7',
+  replacement_used: '#3b82f6',
+};
+
+function extractLatLon(unit_data: Record<string, unknown>): [number, number] | null {
+  const get = (k: string) => unit_data[k] !== undefined && unit_data[k] !== '' ? Number(unit_data[k]) : null;
+  const lat = get('latitude') ?? get('lat') ?? get('start_lat') ?? get('Latitude') ?? get('LAT');
+  const lon = get('longitude') ?? get('lon') ?? get('start_lon') ?? get('Longitude') ?? get('LON') ?? get('lng');
+  if (lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) return [lat, lon];
+  return null;
+}
+
+function MapTab({ study, draws }: { study: Study; draws: SampleDraw[] }) {
+  const [activeDraw, setActiveDraw] = useState<string>('');
+  const drawId = activeDraw || draws[0]?.id;
+
+  const { data: units = [], isLoading } = useQuery({
+    queryKey: ['fd-units-map', study.id, drawId],
+    queryFn: async () => {
+      if (!drawId) return [];
+      const { data, error } = await (supabase as any).from('fd_sample_units').select('id,unit_key,unit_data,status,stratum,cluster,sort_order').eq('draw_id', drawId);
+      if (error) throw error; return (data ?? []) as SampleUnit[];
+    },
+    enabled: !!drawId,
+  });
+
+  const mapped = units.map(u => ({ ...u, coords: extractLatLon(u.unit_data as Record<string, unknown>) })).filter(u => u.coords !== null) as (SampleUnit & { coords: [number, number] })[];
+  const unmapped = units.length - mapped.length;
+  const center: [number, number] = mapped.length > 0
+    ? [mapped.reduce((s, u) => s + u.coords[0], 0) / mapped.length, mapped.reduce((s, u) => s + u.coords[1], 0) / mapped.length]
+    : [15.5, 32.5];
+
+  if (draws.length === 0) return (
+    <div className="text-center py-14 border border-dashed rounded-xl border-slate-200 dark:border-slate-700">
+      <Globe className="w-9 h-9 text-slate-300 mx-auto mb-2" />
+      <p className="font-medium text-slate-500">No draws yet — execute a draw first</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Globe className="w-4 h-4 text-indigo-500" />Sample Map</h3>
+          <p className="text-xs text-slate-500 mt-0.5">{mapped.length} of {units.length} units have GPS coordinates.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs">Draw:</Label>
+          <Select value={drawId} onValueChange={setActiveDraw}>
+            <SelectTrigger className="h-7 text-xs w-52"><SelectValue /></SelectTrigger>
+            <SelectContent>{draws.map(d => <SelectItem key={d.id} value={d.id}>{d.label || d.method} — {d.sample_size} units</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 text-xs">
+        {(Object.entries(STATUS_PIN_COLORS) as [UnitStatus, string][]).map(([s, c]) => (
+          <span key={s} className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-full border border-white shadow" style={{ background: c }} />
+            {UNIT_STATUS_ICONS[s].label}
+          </span>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-12 justify-center"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>
+      ) : mapped.length === 0 ? (
+        <div className="text-center py-14 border border-dashed rounded-xl border-slate-200 dark:border-slate-700">
+          <MapPin className="w-9 h-9 text-slate-300 mx-auto mb-2" />
+          <p className="font-medium text-slate-500">No GPS coordinates in this draw</p>
+          <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">GPS map is available for geographic, EPI, or draws from frames that include latitude/longitude columns.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700" style={{ height: 480 }}>
+          <MapContainer center={center} zoom={8} style={{ height: '100%', width: '100%' }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
+            {mapped.map((u, i) => (
+              <CircleMarker
+                key={u.id}
+                center={u.coords}
+                radius={u.cluster ? 7 : 5}
+                pathOptions={{ color: '#fff', fillColor: STATUS_PIN_COLORS[u.status], fillOpacity: 0.9, weight: 1.5 }}
+              >
+                <Popup>
+                  <div className="text-xs space-y-0.5 min-w-[140px]">
+                    {u.cluster && <div className="font-bold text-slate-700">{u.cluster}</div>}
+                    <div><span className="text-slate-500">Unit:</span> {u.unit_key}</div>
+                    <div><span className="text-slate-500">Status:</span> {UNIT_STATUS_ICONS[u.status].label}</div>
+                    {u.stratum && <div><span className="text-slate-500">Stratum:</span> {u.stratum}</div>}
+                    <div><span className="text-slate-500">GPS:</span> {u.coords[0].toFixed(5)}, {u.coords[1].toFixed(5)}</div>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </MapContainer>
+        </div>
+      )}
+
+      {unmapped > 0 && mapped.length > 0 && (
+        <p className="text-xs text-amber-600 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{unmapped} units have no GPS coordinates and are not shown on the map.</p>
+      )}
+    </div>
+  );
+}
+
+// ─── WeightsTab ───────────────────────────────────────────────────────────────
+interface WeightRow { unitKey: string; stratum: string; cluster: string; n_stratum: number; N_stratum: number; weight: number; }
+
+function computeWeights(units: SampleUnit[], study: Study, draw: SampleDraw | undefined, frame: SamplingFrame | undefined): WeightRow[] {
+  if (!draw) return [];
+  const method = draw.method as SamplingMethod;
+  const N = frame?.total_units ?? study.population_size ?? units.length;
+  const n = units.length;
+
+  if (method === 'srs' || method === 'systematic' || method === 'snowball') {
+    const w = N / n;
+    return units.map(u => ({ unitKey: u.unit_key, stratum: u.stratum ?? '', cluster: u.cluster ?? '', n_stratum: n, N_stratum: N, weight: parseFloat(w.toFixed(4)) }));
+  }
+
+  if (method === 'stratified') {
+    const strata = [...new Set(units.map(u => u.stratum ?? ''))];
+    const strataParams = (draw.params?.strata as { name: string; populationSize: number }[] | undefined) ?? [];
+    return units.map(u => {
+      const sp = strataParams.find(s => s.name === u.stratum);
+      const Ni = sp?.populationSize ?? Math.round(N / strata.length);
+      const ni = units.filter(x => x.stratum === u.stratum).length;
+      const w = ni > 0 ? Ni / ni : 1;
+      return { unitKey: u.unit_key, stratum: u.stratum ?? '', cluster: u.cluster ?? '', n_stratum: ni, N_stratum: Ni, weight: parseFloat(w.toFixed(4)) };
+    });
+  }
+
+  if (method === 'cluster' || method === 'multistage' || method === 'epi') {
+    const clusters = [...new Set(units.map(u => u.cluster ?? ''))];
+    const nClusters = clusters.length;
+    const clusterParams = (draw.params?.clusters as { name: string; size: number }[] | undefined) ?? [];
+    const totalPop = clusterParams.reduce((s, c) => s + c.size, 0) || N;
+    return units.map(u => {
+      const cp = clusterParams.find(c => c.name === u.cluster);
+      const Mk = cp?.size ?? Math.round(totalPop / nClusters);
+      const mk = units.filter(x => x.cluster === u.cluster).length;
+      const stagePPS = nClusters > 0 ? totalPop / nClusters : 1;
+      const w = Mk > 0 && mk > 0 ? (stagePPS / Mk) * (Mk / mk) : totalPop / n;
+      return { unitKey: u.unit_key, stratum: u.stratum ?? '', cluster: u.cluster ?? '', n_stratum: mk, N_stratum: Mk, weight: parseFloat(w.toFixed(4)) };
+    });
+  }
+
+  if (method === 'lqas') {
+    const lotParams = (draw.params?.lots as { name: string }[] | undefined) ?? [];
+    return units.map(u => ({ unitKey: u.unit_key, stratum: u.stratum ?? '', cluster: u.cluster ?? '', n_stratum: 1, N_stratum: 1, weight: 1 }));
+  }
+
+  if (method === 'quota') {
+    const quotaParams = (draw.params?.quotas as { label: string; n: number }[] | undefined) ?? [];
+    return units.map(u => {
+      const qp = quotaParams.find(q => q.label === u.stratum);
+      const w = qp ? N / (quotaParams.reduce((s, q) => s + q.n, 0)) : 1;
+      return { unitKey: u.unit_key, stratum: u.stratum ?? '', cluster: u.cluster ?? '', n_stratum: qp?.n ?? 1, N_stratum: N, weight: parseFloat(w.toFixed(4)) };
+    });
+  }
+
+  return units.map(u => ({ unitKey: u.unit_key, stratum: u.stratum ?? '', cluster: u.cluster ?? '', n_stratum: n, N_stratum: N, weight: 1 }));
+}
+
+function WeightsTab({ study, draws, frames }: { study: Study; draws: SampleDraw[]; frames: SamplingFrame[] }) {
+  const [activeDraw, setActiveDraw] = useState<string>('');
+  const drawId = activeDraw || draws[0]?.id;
+  const draw = draws.find(d => d.id === drawId);
+  const frame = frames.find(f => f.is_current);
+  const { toast } = useToast();
+
+  const { data: units = [], isLoading } = useQuery({
+    queryKey: ['fd-units-weights', study.id, drawId],
+    queryFn: async () => {
+      if (!drawId) return [];
+      const { data, error } = await (supabase as any).from('fd_sample_units').select('*').eq('draw_id', drawId).order('sort_order');
+      if (error) throw error; return (data ?? []) as SampleUnit[];
+    },
+    enabled: !!drawId,
+  });
+
+  const weightRows = computeWeights(units, study, draw, frame);
+  const uniqueWeights = [...new Set(weightRows.map(r => r.weight))];
+  const meanW = weightRows.length ? weightRows.reduce((s, r) => s + r.weight, 0) / weightRows.length : 0;
+
+  const exportWithWeights = () => {
+    const rows = weightRows.map(r => ({ unit_key: r.unitKey, stratum: r.stratum, cluster: r.cluster, design_weight: r.weight, n_in_group: r.n_stratum, N_in_group: r.N_stratum }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Weights');
+    XLSX.writeFile(wb, `weights_${study.name.replace(/\s+/g,'_')}.xlsx`);
+  };
+
+  const N = frame?.total_units ?? study.population_size ?? units.length;
+  const stataCmd = draw?.method === 'stratified'
+    ? `svyset [pweight=design_weight], strata(stratum)`
+    : draw?.method === 'cluster' || draw?.method === 'multistage' || draw?.method === 'epi'
+    ? `svyset cluster [pweight=design_weight], fpc(N_in_group)`
+    : `svyset [pweight=design_weight]`;
+  const rCmd = draw?.method === 'stratified'
+    ? `library(survey)\nsvy_design <- svydesign(ids=~1, strata=~stratum, weights=~design_weight, data=sample_data)`
+    : draw?.method === 'cluster' || draw?.method === 'multistage' || draw?.method === 'epi'
+    ? `library(survey)\nsvy_design <- svydesign(ids=~cluster, weights=~design_weight, data=sample_data)`
+    : `library(survey)\nsvy_design <- svydesign(ids=~1, weights=~design_weight, data=sample_data)`;
+
+  if (draws.length === 0) return (
+    <div className="text-center py-14 border border-dashed rounded-xl border-slate-200 dark:border-slate-700">
+      <Scale className="w-9 h-9 text-slate-300 mx-auto mb-2" />
+      <p className="font-medium text-slate-500">No draws yet — execute a draw first</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Scale className="w-4 h-4 text-indigo-500" />Survey Weights</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Design weights (1 / probability of selection). Apply in analysis software to get population-representative estimates.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={drawId} onValueChange={setActiveDraw}>
+            <SelectTrigger className="h-7 text-xs w-52"><SelectValue /></SelectTrigger>
+            <SelectContent>{draws.map(d => <SelectItem key={d.id} value={d.id}>{d.label || d.method} — {d.sample_size} units</SelectItem>)}</SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={exportWithWeights} disabled={!weightRows.length} data-testid="button-export-weights">
+            <Download className="w-3.5 h-3.5 mr-1.5" />Excel
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Units', val: units.length.toLocaleString() },
+          { label: 'Unique weight values', val: uniqueWeights.length },
+          { label: 'Mean weight', val: meanW.toFixed(3) },
+          { label: 'Population (N)', val: N.toLocaleString() },
+        ].map(s => (
+          <div key={s.label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 px-4 py-3">
+            <div className="text-xs text-slate-500">{s.label}</div>
+            <div className="text-lg font-bold text-slate-700 dark:text-slate-300 mt-0.5">{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stratum/cluster weight summary */}
+      {weightRows.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Weight by group</p>
+          <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Group</TableHead>
+                  <TableHead className="text-xs">n (sample)</TableHead>
+                  <TableHead className="text-xs">N (population)</TableHead>
+                  <TableHead className="text-xs">Design weight</TableHead>
+                  <TableHead className="text-xs">P(selection)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...new Map(weightRows.map(r => [r.stratum || r.cluster || 'All', r])).values()].map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="text-xs font-medium">{r.stratum || r.cluster || 'All units'}</TableCell>
+                    <TableCell className="text-xs">{r.n_stratum.toLocaleString()}</TableCell>
+                    <TableCell className="text-xs">{r.N_stratum.toLocaleString()}</TableCell>
+                    <TableCell className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">{r.weight.toFixed(4)}</TableCell>
+                    <TableCell className="text-xs font-mono text-slate-500">{r.N_stratum > 0 ? (r.n_stratum / r.N_stratum).toFixed(4) : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {/* Software commands */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[
+          { label: 'Stata svyset command', code: stataCmd, lang: 'stata' },
+          { label: 'R survey design (svydesign)', code: rCmd, lang: 'r' },
+        ].map(s => (
+          <div key={s.lang}>
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">{s.label}</p>
+            <div className="relative group">
+              <pre className="bg-slate-900 dark:bg-slate-800 text-emerald-300 text-xs font-mono rounded-lg px-4 py-3 pr-10 overflow-auto whitespace-pre-wrap">{s.code}</pre>
+              <button onClick={() => navigator.clipboard.writeText(s.code).then(() => toast({ title: 'Copied' }))}
+                className="absolute top-2 right-2 p-1 rounded text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Copy">
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isLoading && <div className="flex items-center gap-2 py-4 justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>}
+    </div>
+  );
+}
+
+// ─── ReportTab ────────────────────────────────────────────────────────────────
+function ReportTab({ study, draws, frames }: { study: Study; draws: SampleDraw[]; frames: SamplingFrame[] }) {
+  const [activeDraw, setActiveDraw] = useState<string>('');
+  const drawId = activeDraw || draws[0]?.id;
+  const draw = draws.find(d => d.id === drawId);
+  const frame = frames.find(f => f.is_current);
+  const { toast } = useToast();
+
+  const { data: units = [] } = useQuery({
+    queryKey: ['fd-units-report', study.id, drawId],
+    queryFn: async () => {
+      if (!drawId) return [];
+      const { data, error } = await (supabase as any).from('fd_sample_units').select('id,unit_key,status,stratum,cluster').eq('draw_id', drawId);
+      if (error) throw error; return (data ?? []) as Pick<SampleUnit, 'id'|'unit_key'|'status'|'stratum'|'cluster'>[];
+    },
+    enabled: !!drawId,
+  });
+
+  const calcResult = calcSampleSize({
+    populationSize: study.population_size,
+    confidenceLevel: study.confidence_level,
+    marginOfError: study.margin_of_error,
+    expectedProportion: study.expected_proportion,
+    designEffect: study.design_effect,
+    nonresponseRate: study.nonresponse_rate,
+  });
+
+  const statusCounts = units.reduce((acc, u) => { acc[u.status] = (acc[u.status] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+
+  // ── PDF export ────────────────────────────────────────────────────────────
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = 20;
+
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+    doc.text('Sampling Methodology Report', pageW / 2, y, { align: 'center' }); y += 8;
+    doc.setFontSize(11); doc.setFont('helvetica', 'normal');
+    doc.text(study.name, pageW / 2, y, { align: 'center' }); y += 5;
+    doc.setFontSize(9); doc.setTextColor(100);
+    doc.text(`Generated: ${format(new Date(), 'dd MMMM yyyy')}`, pageW / 2, y, { align: 'center' }); y += 12;
+    doc.setTextColor(0);
+
+    const section = (title: string) => {
+      y += 4;
+      doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+      doc.text(title, 14, y); y += 6;
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    };
+
+    section('1. Study Overview');
+    autoTable(doc, {
+      startY: y,
+      head: [['Field', 'Value']],
+      body: [
+        ['Study name', study.name],
+        ['Description', study.description ?? '—'],
+        ['Status', study.status],
+        ['Primary method', METHOD_LABELS[study.method]],
+        ['Created', format(new Date(study.created_at), 'dd MMMM yyyy')],
+      ],
+      styles: { fontSize: 9 }, headStyles: { fillColor: [79, 70, 229] },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    section('2. Sample Size Calculation');
+    autoTable(doc, {
+      startY: y,
+      head: [['Parameter', 'Value']],
+      body: [
+        ['Population size (N)', study.population_size?.toLocaleString() ?? 'Infinite'],
+        ['Confidence level', `${(study.confidence_level * 100).toFixed(0)}%`],
+        ['Margin of error (e)', `±${(study.margin_of_error * 100).toFixed(1)}%`],
+        ['Expected proportion (p)', `${(study.expected_proportion * 100).toFixed(0)}%`],
+        ['Design effect (DEFF)', study.design_effect.toFixed(2)],
+        ['Non-response rate', `${(study.nonresponse_rate * 100).toFixed(0)}%`],
+        ['Base n (Cochran)', calcResult.n0.toString()],
+        ['FPC adjusted n', calcResult.nFpc.toString()],
+        ['DEFF adjusted n', calcResult.nDeff.toString()],
+        ['Final required n', calcResult.nFinal.toString()],
+        ['Calculated n (saved)', study.calculated_n?.toString() ?? '—'],
+      ],
+      styles: { fontSize: 9 }, headStyles: { fillColor: [79, 70, 229] },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    if (draw) {
+      section('3. Sample Draw');
+      autoTable(doc, {
+        startY: y,
+        head: [['Field', 'Value']],
+        body: [
+          ['Draw label', draw.label ?? '—'],
+          ['Method', METHOD_LABELS[draw.method as SamplingMethod] ?? draw.method],
+          ['Drawn on', draw.drawn_at ? format(new Date(draw.drawn_at), 'dd MMMM yyyy HH:mm') : '—'],
+          ['Random seed', draw.seed],
+          ['Sample size drawn', draw.sample_size.toString()],
+          ['Frame', frame ? `${frame.name} (v${frame.version}, ${frame.total_units.toLocaleString()} units)` : '—'],
+        ],
+        styles: { fontSize: 9 }, headStyles: { fillColor: [79, 70, 229] },
+        margin: { left: 14, right: 14 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    if (units.length > 0) {
+      section('4. Field Progress');
+      autoTable(doc, {
+        startY: y,
+        head: [['Status', 'Count', '%']],
+        body: Object.entries(statusCounts).map(([s, c]) => [UNIT_STATUS_ICONS[s as UnitStatus]?.label ?? s, c.toString(), `${Math.round(c / units.length * 100)}%`]),
+        styles: { fontSize: 9 }, headStyles: { fillColor: [79, 70, 229] },
+        margin: { left: 14, right: 14 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    section('5. Reproducibility');
+    if (draw) {
+      doc.setFontSize(9);
+      doc.text(`To reproduce this exact sample, use seed: "${draw.seed}" with the ${METHOD_LABELS[draw.method as SamplingMethod] ?? draw.method} method`, 14, y, { maxWidth: pageW - 28 });
+      y += 8;
+      doc.text('The sample was drawn using the mulberry32 PRNG algorithm. See the attached R/Python script for independent verification.', 14, y, { maxWidth: pageW - 28 });
+    }
+
+    doc.save(`sampling_report_${study.name.replace(/\s+/g, '_')}.pdf`);
+    toast({ title: 'PDF downloaded' });
+  };
+
+  // ── R script ──────────────────────────────────────────────────────────────
+  const rScript = `# Sampling Reproducibility Script — R
+# Study: ${study.name}
+# Generated: ${format(new Date(), 'dd MMMM yyyy')}
+# Seed: ${draw?.seed ?? 'N/A'}
+
+library(dplyr)
+library(readxl)
+
+# Load sampling frame
+frame <- read.csv("sampling_frame.csv")  # replace with your frame file
+N <- nrow(frame)
+n <- ${draw?.sample_size ?? study.calculated_n ?? 'N/A'}
+
+set.seed(${draw ? JSON.stringify(draw.seed) : '"your_seed"'})
+
+${study.method === 'srs' || study.method === 'systematic'
+  ? `# Simple Random Sampling\nselected <- frame[sample(N, n), ]`
+  : study.method === 'stratified'
+  ? `# Stratified Random Sampling\n# Adjust strata column name and target sizes as needed\nselected <- frame %>% group_by(stratum) %>% slice_sample(n = round(n / n_distinct(frame$stratum)))`
+  : study.method === 'cluster' || study.method === 'multistage'
+  ? `# Cluster Sampling (PPS)\n# Adjust cluster column name and parameters\nclusters <- frame %>% count(cluster_col, name="size")\nn_clusters <- ${draw?.params?.nClusters ?? 30}\nsel_clusters <- clusters %>% slice_sample(n = n_clusters, weight_by = size)\nselected <- frame %>% filter(cluster_col %in% sel_clusters$cluster_col) %>%\n  group_by(cluster_col) %>% slice_sample(n = ${draw?.params?.unitsPerCluster ?? 7})`
+  : `# ${METHOD_LABELS[study.method]} — adapt as needed\nselected <- frame[sample(N, n), ]`
+}
+
+cat("Selected sample size:", nrow(selected), "\\n")
+write.csv(selected, "reproduced_sample.csv", row.names = FALSE)
+`;
+
+  // ── Python script ─────────────────────────────────────────────────────────
+  const pythonScript = `# Sampling Reproducibility Script — Python
+# Study: ${study.name}
+# Generated: ${format(new Date(), 'dd MMMM yyyy')}
+# Seed: ${draw?.seed ?? 'N/A'}
+
+import pandas as pd
+import numpy as np
+
+# Load sampling frame
+frame = pd.read_csv("sampling_frame.csv")  # replace with your frame file
+N = len(frame)
+n = ${draw?.sample_size ?? study.calculated_n ?? 'None'}
+
+rng = np.random.default_rng(seed=hash(${draw ? JSON.stringify(draw.seed) : '"your_seed"'}) % (2**32))
+
+${study.method === 'srs' || study.method === 'systematic'
+  ? `# Simple Random Sampling\nindices = rng.choice(N, size=n, replace=False)\nselected = frame.iloc[indices]`
+  : study.method === 'stratified'
+  ? `# Stratified Random Sampling\n# Adjust strata column name and target sizes\nselected = frame.groupby('stratum', group_keys=False).apply(\n    lambda x: x.sample(max(1, round(n / frame['stratum'].nunique())), random_state=42)\n)`
+  : study.method === 'cluster' || study.method === 'multistage'
+  ? `# Cluster Sampling (PPS)\nclusters = frame.groupby('cluster_col').size().reset_index(name='size')\nsel_clusters = clusters.sample(n=${draw?.params?.nClusters ?? 30}, weights='size', replace=False, random_state=42)\nselected = frame[frame['cluster_col'].isin(sel_clusters['cluster_col'])].groupby('cluster_col').apply(\n    lambda x: x.sample(min(len(x), ${draw?.params?.unitsPerCluster ?? 7}), random_state=42)\n)`
+  : `# ${METHOD_LABELS[study.method]} — adapt as needed\nindices = rng.choice(N, size=n, replace=False)\nselected = frame.iloc[indices]`
+}
+
+print(f"Selected sample size: {len(selected)}")
+selected.to_csv("reproduced_sample.csv", index=False)
+`;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-500" />Sampling Audit Report</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Donor-ready methodology report with reproducibility documentation.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={drawId} onValueChange={setActiveDraw}>
+            <SelectTrigger className="h-7 text-xs w-52"><SelectValue placeholder="Select draw" /></SelectTrigger>
+            <SelectContent>{draws.map(d => <SelectItem key={d.id} value={d.id}>{d.label || d.method} — {d.sample_size} units</SelectItem>)}</SelectContent>
+          </Select>
+          <Button size="sm" onClick={exportPDF} data-testid="button-export-pdf">
+            <Download className="w-3.5 h-3.5 mr-1.5" />PDF Report
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Study overview */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Study Overview</p>
+          {[
+            ['Study name', study.name],
+            ['Status', study.status],
+            ['Method', METHOD_LABELS[study.method]],
+            ['Calculated n', study.calculated_n?.toLocaleString() ?? '—'],
+            ['Created', format(new Date(study.created_at), 'dd MMM yyyy')],
+          ].map(([l, v]) => (
+            <div key={l} className="flex justify-between text-sm gap-2">
+              <span className="text-slate-500 shrink-0">{l}</span>
+              <span className="text-slate-800 dark:text-slate-200 font-medium text-right">{v}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Calculator summary */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sample Size Calculation</p>
+          {[
+            ['Confidence', `${(study.confidence_level * 100).toFixed(0)}%`],
+            ['Margin of error', `±${(study.margin_of_error * 100).toFixed(1)}%`],
+            ['Expected proportion', `${(study.expected_proportion * 100).toFixed(0)}%`],
+            ['Design effect', study.design_effect.toFixed(2)],
+            ['Non-response rate', `${(study.nonresponse_rate * 100).toFixed(0)}%`],
+            ['Required n', calcResult.nFinal.toLocaleString()],
+          ].map(([l, v]) => (
+            <div key={l} className="flex justify-between text-sm gap-2">
+              <span className="text-slate-500 shrink-0">{l}</span>
+              <span className="text-slate-800 dark:text-slate-200 font-medium text-right">{v}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Draw details */}
+        {draw && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sample Draw</p>
+            {[
+              ['Method', METHOD_LABELS[draw.method as SamplingMethod] ?? draw.method],
+              ['Sample size', draw.sample_size.toLocaleString()],
+              ['Seed', draw.seed],
+              ['Drawn on', draw.drawn_at ? format(new Date(draw.drawn_at), 'dd MMM yyyy HH:mm') : '—'],
+              ['Frame', frame ? `${frame.name} v${frame.version}` : '—'],
+            ].map(([l, v]) => (
+              <div key={l} className="flex justify-between text-sm gap-2">
+                <span className="text-slate-500 shrink-0">{l}</span>
+                <span className="text-slate-800 dark:text-slate-200 font-medium text-right font-mono text-xs break-all">{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Field progress */}
+        {units.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Field Progress</p>
+            <div className="space-y-2">
+              {Object.entries(statusCounts).map(([s, c]) => {
+                const { icon: Icon, color, label } = UNIT_STATUS_ICONS[s as UnitStatus] ?? { icon: Clock, color: 'text-slate-400', label: s };
+                return (
+                  <div key={s} className="flex items-center justify-between gap-2 text-sm">
+                    <span className={`flex items-center gap-1.5 ${color}`}><Icon className="w-3.5 h-3.5" />{label}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">{c} ({Math.round(c / units.length * 100)}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Reproducibility scripts */}
+      <div className="space-y-4">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Reproducibility Scripts</h4>
+        {[
+          { label: 'R script', code: rScript, filename: `sampling_${study.name.replace(/\s+/g,'_')}.R`, ext: 'R' },
+          { label: 'Python script', code: pythonScript, filename: `sampling_${study.name.replace(/\s+/g,'_')}.py`, ext: 'PY' },
+        ].map(s => (
+          <div key={s.ext}>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{s.label}</p>
+              <div className="flex gap-1.5">
+                <button onClick={() => navigator.clipboard.writeText(s.code).then(() => toast({ title: 'Copied' }))}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 transition-colors" data-testid={`button-copy-${s.ext.toLowerCase()}`}>
+                  <Copy className="w-3 h-3" />Copy
+                </button>
+                <button onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([s.code], { type: 'text/plain' })); a.download = s.filename; a.click(); }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 transition-colors" data-testid={`button-download-${s.ext.toLowerCase()}`}>
+                  <Download className="w-3 h-3" />Download
+                </button>
+              </div>
+            </div>
+            <pre className="bg-slate-900 dark:bg-slate-800 text-emerald-300 text-[11px] font-mono rounded-lg px-4 py-3 overflow-auto max-h-48 whitespace-pre-wrap">{s.code}</pre>
+          </div>
+        ))}
       </div>
     </div>
   );
