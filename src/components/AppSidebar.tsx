@@ -393,6 +393,7 @@
       planningItems.push({ id: 'field-data-datasets', title: "Server Datasets", url: "/field-data/datasets", icon: Database, priority: 3, isPinned: isPinned('/field-data/datasets') });
       planningItems.push({ id: 'field-data-sampling', title: "Sampling Engine", url: "/field-data/sampling", icon: Shuffle, priority: 3, isPinned: isPinned('/field-data/sampling') });
       planningItems.push({ id: 'field-data-studies', title: "Multi-Round Studies", url: "/field-data/studies", icon: BookOpen, priority: 3, isPinned: isPinned('/field-data/studies') });
+      planningItems.push({ id: 'field-data-quality', title: "Data Quality", url: "/field-data/quality", icon: ShieldCheck, priority: 3, isPinned: isPinned('/field-data/quality') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
