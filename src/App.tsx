@@ -183,6 +183,7 @@ const FieldDataSampling = lazy(() => import('./pages/FieldDataSampling'));
 const FieldDataStudies = lazy(() => import('./pages/FieldDataStudies'));
 const FieldDataStudyDetail = lazy(() => import('./pages/FieldDataStudyDetail'));
 const FieldDataQuality = lazy(() => import('./pages/FieldDataQuality'));
+const FieldDataMonitoring = lazy(() => import('./pages/FieldDataMonitoring'));
 const ProgrammeHub = lazy(() => import('./pages/ProgrammeHub'));
 const CommunicationHub = lazy(() => import('./pages/CommunicationHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
@@ -579,6 +580,7 @@ const AppRoutes = () => {
         <Route path="/field-data/studies" element={<PageWrapper><FieldDataStudies /></PageWrapper>} />
         <Route path="/field-data/studies/:id" element={<PageWrapper><FieldDataStudyDetail /></PageWrapper>} />
         <Route path="/field-data/quality" element={<PageWrapper><FieldDataQuality /></PageWrapper>} />
+        <Route path="/field-data/monitoring" element={<PageWrapper><FieldDataMonitoring /></PageWrapper>} />
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
