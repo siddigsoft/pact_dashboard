@@ -128,7 +128,7 @@ export const getWorkflowMenuGroups = (
     financeItems.push({ id: 'approvals-hub', title: 'Approvals Hub', url: '/approvals', icon: Inbox, priority: 2, isPinned: isPinned('/approvals') });
   if (!isHidden('/finance-hub') && (isAdmin || isSuperAdmin || isFinancialAdmin || isAuditor || isFOM || isCountryDirector))
     financeItems.push({ id: 'finance-hub', title: 'Finance Hub', url: '/finance-hub', icon: DollarSign, priority: 3, isPinned: isPinned('/finance-hub') });
-  if (!isHidden('/accounting') && (isAdmin || isSuperAdmin || isFinancialAdmin || isAuditor))
+  if (!isHidden('/accounting') && (isAdmin || isSuperAdmin || isFinancialAdmin))
     financeItems.push({ id: 'accounting-hub', title: 'Accounting', url: '/accounting', icon: BookOpen, priority: 4, isPinned: isPinned('/accounting') });
   // Pre-Funding: restricted to finance/admin roles only (matches PreFundingRoute guard in App.tsx)
   if (!isHidden('/pre-funding') && (isAdmin || isSuperAdmin || isFinancialAdmin))

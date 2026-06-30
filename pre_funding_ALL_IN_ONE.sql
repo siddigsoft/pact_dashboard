@@ -78,9 +78,11 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   default_matching_scope      TEXT NOT NULL DEFAULT 'global'
                               CHECK (default_matching_scope IN ('global','project','country')),
   -- Reconciliation action toggles
-  reconciliation_action_return    BOOLEAN NOT NULL DEFAULT true,
-  reconciliation_action_carry_fwd BOOLEAN NOT NULL DEFAULT true,
-  reconciliation_action_reserve   BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_return         BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_return_bank    BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_return_finance BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_carry_fwd      BOOLEAN NOT NULL DEFAULT true,
+  reconciliation_action_reserve        BOOLEAN NOT NULL DEFAULT true,
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
