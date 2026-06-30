@@ -12,8 +12,9 @@ import {
   MoreHorizontal, Trash2, RefreshCw, Plus, Globe,
   AlertCircle, Activity, TrendingUp, Zap, Copy, ExternalLink,
   Wifi, Info, Image, Music, FileArchive, Video, ListChecks,
+  Send, QrCode, FileCode2, Hash, RotateCcw, Tag,
 } from 'lucide-react';
-import { syncFormFromServer, getWebhookUrl } from '@/services/fieldDataSync';
+import { syncFormFromServer, getWebhookUrl, publishFormToServer } from '@/services/fieldDataSync';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -39,7 +40,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as XLSX from 'xlsx';
 
-type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync' | 'map' | 'media' | 'charts' | 'activity';
+type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync' | 'map' | 'media' | 'charts' | 'activity' | 'publish';
 
 interface SyncLog {
   id: string;
@@ -152,6 +153,15 @@ export default function FieldDataFormDetail() {
   const [pollingEnabled, setPollingEnabled] = useState(false);
   const [chartBucket, setChartBucket] = useState<'day' | 'week' | 'month'>('day');
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Publish tab state
+  const [versionFile, setVersionFile] = useState<File | null>(null);
+  const [versionParsed, setVersionParsed] = useState<{ survey: Record<string, unknown>[]; choices: Record<string, unknown>[]; settings: Record<string, unknown> } | null>(null);
+  const [versionLabel, setVersionLabel] = useState('');
+  const [versionNotes, setVersionNotes] = useState('');
+  const [uploadingVersion, setUploadingVersion] = useState(false);
+  const [publishingServer, setPublishingServer] = useState<string | null>(null);
+  const [publishResults, setPublishResults] = useState<Record<string, { ok: boolean; message: string; formUrl?: string }>>({});
+  const xlsformInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: form, isLoading: loadingForm } = useQuery({
@@ -212,6 +222,127 @@ export default function FieldDataFormDetail() {
     enabled: !!id && activeTab === 'sync',
     refetchInterval: pollingEnabled ? 10000 : false,
   });
+
+  // ── Form versions query (Publish tab) ────────────────────────────────────
+  const { data: formVersions = [], refetch: refetchVersions } = useQuery({
+    queryKey: ['field-data-form-versions', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('field_data_form_versions')
+        .select('*')
+        .eq('form_id', id!)
+        .order('version_number', { ascending: false });
+      if (error) throw error;
+      return data as Array<{
+        id: string; form_id: string; version_number: number; version_label: string | null;
+        xlsform_filename: string | null; xlsform_parsed: Record<string, unknown>;
+        question_count: number; uploaded_by: string | null; uploaded_at: string;
+        is_current: boolean; published_to: Array<{ server_id: string; server_name: string; type: string; status: string; published_at: string; error?: string; formUrl?: string }>;
+        notes: string | null;
+      }>;
+    },
+    enabled: !!id && activeTab === 'publish',
+  });
+
+  const currentVersion = formVersions.find(v => v.is_current);
+
+  // ── Servers for the Publish tab ───────────────────────────────────────────
+  const { data: allServers = [] } = useQuery({
+    queryKey: ['field-data-servers-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('field_data_servers').select('*').eq('is_active', true);
+      if (error) throw error;
+      return data as Array<{ id: string; name: string; type: string; base_url: string; username: string | null; api_token: string | null; project_id: string | null; sync_frequency_minutes: number }>;
+    },
+    enabled: !!id && activeTab === 'publish',
+  });
+
+  // ── XLSForm parse helper (client-side) ───────────────────────────────────
+  function parseXLSForm(wb: XLSX.WorkBook) {
+    const toJson = (name: string) => {
+      const sh = wb.Sheets[name] || wb.Sheets[name.charAt(0).toUpperCase() + name.slice(1)];
+      return sh ? (XLSX.utils.sheet_to_json(sh) as Record<string, unknown>[]) : [];
+    };
+    const survey = toJson('survey');
+    const choices = toJson('choices');
+    const settingsArr = toJson('settings');
+    return { survey, choices, settings: settingsArr[0] || {} };
+  }
+
+  function handleXLSFormFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const data = new Uint8Array(e.target!.result as ArrayBuffer);
+      const wb = XLSX.read(data, { type: 'array' });
+      if (!wb.Sheets['survey'] && !wb.Sheets['Survey']) {
+        toast({ title: 'Not a valid XLSForm', description: 'File must contain a "survey" sheet.', variant: 'destructive' });
+        return;
+      }
+      const parsed = parseXLSForm(wb);
+      setVersionParsed(parsed);
+      setVersionFile(file);
+      if (!versionLabel) setVersionLabel(file.name.replace(/\.(xlsx?|xls)$/i, ''));
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ── Upload new version mutation ───────────────────────────────────────────
+  const uploadVersionMutation = useMutation({
+    mutationFn: async () => {
+      if (!versionParsed || !id) throw new Error('No XLSForm parsed');
+      const qCount = versionParsed.survey.filter(r => {
+        const t = (r as Record<string, string>).type;
+        return t && !['begin_group','end_group','begin_repeat','end_repeat','note','calculate'].includes(t);
+      }).length;
+      const { error } = await supabase.from('field_data_form_versions').insert({
+        form_id: id,
+        version_label: versionLabel || null,
+        xlsform_filename: versionFile?.name || null,
+        xlsform_parsed: versionParsed as unknown,
+        question_count: qCount,
+        uploaded_by: user?.id || null,
+        is_current: formVersions.length === 0, // auto-set current if first version
+        notes: versionNotes || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['field-data-form-versions', id] });
+      setVersionFile(null); setVersionParsed(null); setVersionLabel(''); setVersionNotes('');
+      toast({ title: 'Version saved', description: 'XLSForm version added to history.' });
+      refetchVersions();
+    },
+    onError: (e: Error) => toast({ title: 'Save failed', description: e.message, variant: 'destructive' }),
+  });
+
+  async function handlePublishToServer(server: typeof allServers[0]) {
+    if (!versionFile && !currentVersion) {
+      toast({ title: 'No XLSForm', description: 'Upload an XLSForm version first.', variant: 'destructive' });
+      return;
+    }
+    setPublishingServer(server.id);
+    const fileToUse = versionFile || new File([], currentVersion?.xlsform_filename || 'form.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const result = await publishFormToServer(server as Parameters<typeof publishFormToServer>[0], fileToUse, form?.name || 'Form');
+    setPublishingServer(null);
+    setPublishResults(prev => ({ ...prev, [server.id]: result }));
+    // Update published_to on the current version
+    if (currentVersion) {
+      const existing = currentVersion.published_to || [];
+      const updated = [
+        ...existing.filter(p => p.server_id !== server.id),
+        { server_id: server.id, server_name: server.name, type: server.type, status: result.ok ? 'published' : 'failed', published_at: new Date().toISOString(), error: result.ok ? undefined : result.message, formUrl: result.formUrl },
+      ];
+      await supabase.from('field_data_form_versions').update({ published_to: updated }).eq('id', currentVersion.id);
+      refetchVersions();
+    }
+    toast({ title: result.ok ? 'Published!' : 'Publish failed', description: result.message, variant: result.ok ? 'default' : 'destructive' });
+  }
+
+  async function handleSetCurrentVersion(versionId: string) {
+    await supabase.rpc('set_current_form_version', { p_version_id: versionId, p_form_id: id });
+    refetchVersions();
+    toast({ title: 'Current version updated' });
+  }
 
   const deleteSubmissionsMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -612,6 +743,7 @@ export default function FieldDataFormDetail() {
     { id: 'media', label: `Media (${mediaItems.length})`, icon: Image },
     { id: 'charts', label: 'Charts', icon: TrendingUp },
     { id: 'activity', label: 'Activity', icon: Activity },
+    { id: 'publish', label: 'Publish', icon: Send },
     { id: 'import', label: 'Import', icon: Upload },
     { id: 'exports', label: 'Exports', icon: Download },
     { id: 'sync', label: 'Sync', icon: Zap },
@@ -1517,6 +1649,313 @@ export default function FieldDataFormDetail() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══════════ PUBLISH TAB ═══════════════════════════════════════ */}
+        {activeTab === 'publish' && (
+          <div className="space-y-6">
+
+            {/* ── Upload XLSForm ─────────────────────────────────────────── */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                <FileCode2 className="w-4 h-4 text-blue-500" /> Upload XLSForm
+                <span className="text-xs font-normal text-slate-400">(Excel .xlsx / .xls)</span>
+              </h3>
+
+              {/* Drop zone */}
+              <div
+                className={cn(
+                  'border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer',
+                  versionParsed
+                    ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-blue-50/50',
+                )}
+                onClick={() => xlsformInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); }}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleXLSFormFile(f); }}
+                data-testid="dropzone-xlsform"
+              >
+                <input
+                  ref={xlsformInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleXLSFormFile(f); }}
+                />
+                {versionParsed ? (
+                  <div className="space-y-1">
+                    <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto" />
+                    <p className="font-medium text-emerald-700 dark:text-emerald-400">{versionFile?.name}</p>
+                    <p className="text-sm text-slate-500">
+                      {versionParsed.survey.filter(r => {
+                        const t = (r as Record<string,string>).type;
+                        return t && !['begin_group','end_group','begin_repeat','end_repeat','note','calculate'].includes(t);
+                      }).length} questions · {versionParsed.choices.length} choices
+                      {(versionParsed.settings as Record<string,string>)?.form_title ? ` · "${(versionParsed.settings as Record<string,string>).form_title}"` : ''}
+                    </p>
+                    <button className="text-xs text-blue-500 underline mt-1" onClick={e => { e.stopPropagation(); setVersionFile(null); setVersionParsed(null); setVersionLabel(''); }}>
+                      Clear
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <FileCode2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-medium text-slate-500">Drop XLSForm here or click to browse</p>
+                    <p className="text-xs text-slate-400 mt-1">Must contain a "survey" sheet</p>
+                  </>
+                )}
+              </div>
+
+              {/* Parsed preview */}
+              {versionParsed && (
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-slate-500">Version Label (optional)</Label>
+                      <Input
+                        value={versionLabel}
+                        onChange={e => setVersionLabel(e.target.value)}
+                        placeholder="e.g. v3 — June 2026 Endline"
+                        className="mt-1 text-sm"
+                        data-testid="input-version-label"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-500">Notes (optional)</Label>
+                      <Input
+                        value={versionNotes}
+                        onChange={e => setVersionNotes(e.target.value)}
+                        placeholder="What changed in this version?"
+                        className="mt-1 text-sm"
+                        data-testid="input-version-notes"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Question list preview */}
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Survey Questions</p>
+                    <div className="space-y-1">
+                      {versionParsed.survey.slice(0, 30).map((row, i) => {
+                        const r = row as Record<string, string>;
+                        if (!r.type || ['begin_group','end_group','begin_repeat','end_repeat'].includes(r.type)) return null;
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-400 w-16 shrink-0 font-mono">{r.type}</span>
+                            <span className="text-slate-700 dark:text-slate-300 truncate">{r.name}</span>
+                            {r['label::English(en)'] || r.label ? (
+                              <span className="text-slate-400 truncate">{String(r['label::English(en)'] || r.label).slice(0, 50)}</span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                      {versionParsed.survey.length > 30 && (
+                        <p className="text-xs text-slate-400 italic">…and {versionParsed.survey.length - 30} more rows</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => { setUploadingVersion(true); uploadVersionMutation.mutate(undefined, { onSettled: () => setUploadingVersion(false) }); }}
+                    disabled={uploadingVersion || uploadVersionMutation.isPending}
+                    data-testid="button-save-version"
+                  >
+                    {uploadingVersion ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : <><Plus className="w-4 h-4 mr-2" />Save as New Version</>}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Publish to Servers ────────────────────────────────────── */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
+                <Send className="w-4 h-4 text-violet-500" /> Publish to Servers
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Push the current XLSForm version to your connected ODK Central, Ona, or KoboToolbox servers.
+                {!versionFile && !currentVersion && ' Upload an XLSForm version above first.'}
+              </p>
+
+              {allServers.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  <Globe className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  No active servers connected. Add servers in the Field Data Hub.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {allServers.map(srv => {
+                    const pr = publishResults[srv.id];
+                    const existingPub = currentVersion?.published_to?.find(p => p.server_id === srv.id);
+                    const isPublishing = publishingServer === srv.id;
+                    const typeLabel = { odk_central: 'ODK Central', ona: 'Ona', moda: 'WFP MoDa', kobo: 'KoboToolbox', generic: 'Generic' }[srv.type] || srv.type;
+
+                    return (
+                      <div key={srv.id} className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{srv.name}</p>
+                          <p className="text-xs text-slate-400">{typeLabel} · {srv.base_url}</p>
+                          {pr && (
+                            <p className={cn('text-xs mt-0.5', pr.ok ? 'text-emerald-600' : 'text-red-500')}>
+                              {pr.ok ? '✓ ' : '✗ '}{pr.message}
+                            </p>
+                          )}
+                          {!pr && existingPub && (
+                            <p className={cn('text-xs mt-0.5', existingPub.status === 'published' ? 'text-emerald-600' : 'text-amber-500')}>
+                              Last: {existingPub.status} · {format(new Date(existingPub.published_at), 'dd MMM yyyy')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {pr?.formUrl && (
+                            <a href={pr.formUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline flex items-center gap-0.5">
+                              Open <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isPublishing || (!versionFile && !currentVersion)}
+                            onClick={() => handlePublishToServer(srv)}
+                            data-testid={`button-publish-${srv.id}`}
+                          >
+                            {isPublishing ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Publishing…</> : <><Send className="w-3.5 h-3.5 mr-1.5" />Publish</>}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── QR Code ──────────────────────────────────────────────── */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-teal-500" /> ODK Collect QR Codes
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Enumerators scan a server QR code in ODK Collect ▸ Add Project ▸ QR Code to automatically configure the app to point at that server.
+              </p>
+              {allServers.filter(s => s.type === 'odk_central' || s.type === 'ona' || s.type === 'kobo').length === 0 ? (
+                <p className="text-sm text-slate-400">No ODK-compatible servers connected.</p>
+              ) : (
+                <div className="flex flex-wrap gap-6">
+                  {allServers.filter(s => ['odk_central', 'ona', 'kobo'].includes(s.type)).map(srv => {
+                    const qrPayload = JSON.stringify({
+                      general: { server_url: srv.base_url, username: srv.username || '' },
+                      admin: {},
+                    });
+                    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrPayload)}&size=160x160&ecc=M`;
+                    return (
+                      <div key={srv.id} className="flex flex-col items-center gap-2">
+                        <img
+                          src={qrUrl}
+                          alt={`QR for ${srv.name}`}
+                          className="w-32 h-32 border border-slate-200 rounded-lg"
+                          data-testid={`img-qr-${srv.id}`}
+                        />
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300 text-center max-w-[140px]">{srv.name}</p>
+                        <p className="text-xs text-slate-400 text-center max-w-[140px] truncate">{srv.username || 'No username'}</p>
+                        <a
+                          href={qrUrl}
+                          download={`${srv.name}-qr.png`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" /> Download
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── Version History ───────────────────────────────────────── */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-orange-500" /> Version History
+                </h3>
+                <span className="text-xs text-slate-400">{formVersions.length} version{formVersions.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {formVersions.length === 0 ? (
+                <div className="p-12 text-center text-slate-400">
+                  <RotateCcw className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No XLSForm versions uploaded yet</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                      <th className="text-left px-4 py-2.5 font-medium"><Hash className="w-3 h-3 inline mr-1" />Ver</th>
+                      <th className="text-left px-4 py-2.5 font-medium"><Tag className="w-3 h-3 inline mr-1" />Label</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Filename</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Questions</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Uploaded</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Published to</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Status</th>
+                      <th className="px-4 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {formVersions.map(v => (
+                      <tr key={v.id} className={cn('hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors', v.is_current && 'bg-blue-50/50 dark:bg-blue-950/20')} data-testid={`row-version-${v.id}`}>
+                        <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300">v{v.version_number}</td>
+                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300 max-w-[160px] truncate">{v.version_label || <span className="text-slate-400 italic">—</span>}</td>
+                        <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{v.xlsform_filename || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{v.question_count || '—'}</td>
+                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{format(new Date(v.uploaded_at), 'dd MMM yyyy')}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {(v.published_to || []).map(p => (
+                              <span
+                                key={p.server_id}
+                                className={cn('text-xs px-1.5 py-0.5 rounded font-medium', p.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600')}
+                                title={p.error}
+                              >
+                                {p.server_name}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {v.is_current ? (
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">Current</Badge>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {!v.is_current && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => handleSetCurrentVersion(v.id)}
+                                    data-testid={`button-set-current-${v.id}`}
+                                  >
+                                    Set Current
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Promote this version to "current"</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
           </div>
         )}
 

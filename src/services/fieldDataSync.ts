@@ -425,3 +425,127 @@ export function getWebhookUrl(formId: string): string {
   const base = typeof window !== 'undefined' ? window.location.origin : '';
   return `${base}/api/field-data/webhook/${formId}`;
 }
+
+// ─── Form Publishing ──────────────────────────────────────────────────────────
+
+export interface PublishResult {
+  ok: boolean;
+  message: string;
+  formUrl?: string;
+}
+
+/**
+ * Publish an XLSForm file to a connected server.
+ * - ODK Central: POST /v1/projects/:projectId/forms (multipart/form-data, xlsform+xml or xlsx)
+ * - Ona:         POST /api/v1/forms (multipart/form-data, xls_file field)
+ * - Others:      Returns a soft "not yet supported" so the UI can show a clear message.
+ *
+ * NOTE: Browsers block cross-origin requests unless the target server sends CORS headers.
+ * When CORS is absent the error is caught and reported as a CORS warning (same as sync).
+ */
+export async function publishFormToServer(
+  server: SyncServer,
+  xlsformFile: File,
+  formTitle: string,
+): Promise<PublishResult> {
+  try {
+    const fd = new FormData();
+
+    if (server.type === 'odk_central') {
+      if (!server.project_id) {
+        return { ok: false, message: 'ODK Central requires a Project ID. Add it in the server settings.' };
+      }
+      if (!server.username || !server.api_token) {
+        return { ok: false, message: 'ODK Central requires email + password (stored as API token).' };
+      }
+      const token = await getODKSession(server.base_url, server.username, server.api_token);
+      fd.append('def_file', xlsformFile, xlsformFile.name);
+      const res = await fetch(
+        `${base(server.base_url)}/v1/projects/${server.project_id}/forms?ignoreWarnings=true`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-XlsForm-FormId-Fallback': formTitle,
+          },
+          body: fd,
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return {
+          ok: false,
+          message: body?.message || `ODK Central returned HTTP ${res.status}`,
+        };
+      }
+      const data = await res.json();
+      return {
+        ok: true,
+        message: `Published to ODK Central as "${data.name || formTitle}" (xmlFormId: ${data.xmlFormId || '?'})`,
+        formUrl: `${base(server.base_url)}/#/projects/${server.project_id}/forms/${data.xmlFormId}`,
+      };
+    }
+
+    if (server.type === 'ona') {
+      if (!server.api_token) {
+        return { ok: false, message: 'Ona requires an API token. Add it in the server settings.' };
+      }
+      fd.append('xls_file', xlsformFile, xlsformFile.name);
+      const res = await fetch(`${base(server.base_url)}/api/v1/forms`, {
+        method: 'POST',
+        headers: { Authorization: tokenAuth(server.api_token) },
+        body: fd,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return {
+          ok: false,
+          message: body?.detail || body?.message || `Ona returned HTTP ${res.status}`,
+        };
+      }
+      const data = await res.json();
+      return {
+        ok: true,
+        message: `Published to Ona as "${data.title || formTitle}"`,
+        formUrl: data.url || undefined,
+      };
+    }
+
+    if (server.type === 'kobo') {
+      if (!server.api_token) {
+        return { ok: false, message: 'KoboToolbox requires an API token.' };
+      }
+      fd.append('asset_file', xlsformFile, xlsformFile.name);
+      const res = await fetch(`${base(server.base_url)}/api/v2/assets/?format=json`, {
+        method: 'POST',
+        headers: { Authorization: `Token ${server.api_token}` },
+        body: fd,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return { ok: false, message: body?.detail || `KoboToolbox returned HTTP ${res.status}` };
+      }
+      const data = await res.json();
+      return {
+        ok: true,
+        message: `Published to KoboToolbox (uid: ${data.uid || '?'})`,
+        formUrl: data.url || undefined,
+      };
+    }
+
+    return {
+      ok: false,
+      message: `Direct XLSForm publishing is not yet supported for server type "${server.type}". Export the XLSForm and upload it manually.`,
+    };
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+      return {
+        ok: false,
+        message:
+          'Cannot reach server from browser (CORS). The form was saved locally — upload the XLSForm file manually, or enable CORS on your server.',
+      };
+    }
+    return { ok: false, message: msg };
+  }
+}
