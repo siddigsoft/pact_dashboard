@@ -66,7 +66,87 @@ SELECT column_name FROM information_schema.columns
 SELECT COUNT(*) FROM pre_fund_allocations;   -- Should return 0 (empty, no error)
 ```
 
-## Step 2 — Add GL Bridge Accounts (if not already present)
+## Step 2 — Deploy Edge Functions (Auto-Renewal + Bank Feed)
+
+Two Supabase Edge Functions must be deployed for full automation.  They live in
+`supabase/functions/` and are deployed once via the Supabase CLI.
+
+### Deploy
+
+```bash
+# From project root (requires Supabase CLI installed and linked to your project)
+supabase functions deploy pre-fund-scheduler
+supabase functions deploy pre-fund-bank-feed
+```
+
+### Set Secrets (Supabase Dashboard → Edge Functions → Secrets, or CLI)
+
+```bash
+supabase secrets set PRE_FUND_CRON_SECRET=<generate-a-strong-random-string>
+supabase secrets set PRE_FUND_WEBHOOK_SECRET=<generate-a-second-strong-random-string>
+```
+
+### `pre-fund-scheduler` — Auto-Renewal Engine
+
+Calls `run_pre_fund_renewal_check()` daily.  Wire it to run on a schedule:
+
+**Option A — Supabase Scheduled Functions (recommended):**
+Go to Supabase Dashboard → Edge Functions → `pre-fund-scheduler` → Schedule →
+set cron `0 6 * * *` (daily at 06:00 UTC).
+
+**Option B — pg_cron (requires pg_cron extension):**
+```sql
+SELECT cron.schedule(
+  'pre-fund-scheduler',
+  '0 6 * * *',
+  $$
+    SELECT net.http_post(
+      url     := 'https://<YOUR_PROJECT_REF>.supabase.co/functions/v1/pre-fund-scheduler',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-cron-secret', '<YOUR_PRE_FUND_CRON_SECRET>'
+      ),
+      body    := '{}'::jsonb
+    )
+  $$
+);
+```
+
+What it does each run:
+- Marks funds ending within warning_days as `ending_soon`
+- Marks low-balance funds as `low_balance`
+- Creates `draft` renewal copies for `auto_renewal_mode = 'auto_draft'` funds
+- Creates `active` or `pending_grace` copies for `auto_renewal_mode = 'auto_activate'` funds
+- Posts GL JEs (DR Receipt / CR Liability) for immediately-activated renewals
+- Activates `pending_grace` funds whose grace window has expired (with GL posting)
+- Fires `notification_events` for Finance team
+
+### `pre-fund-bank-feed` — Bank Feed Ingestion
+
+Receives bank transactions (push or poll) and matches them to `awaiting_receipt` funds.
+
+**Push mode** (bank POSTs to this endpoint):
+Configure your bank's webhook to POST to:
+`https://<YOUR_PROJECT_REF>.supabase.co/functions/v1/pre-fund-bank-feed`
+with header `x-webhook-secret: <YOUR_PRE_FUND_WEBHOOK_SECRET>` and body:
+```json
+{ "mode": "push", "reference": "TXN-001", "amount": 50000, "currency": "USD",
+  "transaction_date": "2026-01-15", "description": "Pre-fund receipt" }
+```
+
+**Poll mode** (scheduled, calls bank API):
+Set schedule `0 * * * *` (hourly) pointing at this function with body `{ "mode": "poll" }`.
+Configure bank API credentials in Pre-Funding → Settings → Bank Feed.
+
+Matching logic:
+1. Finds `awaiting_receipt` funds matching currency + amount (within $0.01 tolerance)
+2. Narrows by reference/name match if multiple candidates
+3. **Exact 1 match** → calls `activate_pre_fund_rpc` (GL JE posted + status set to `active`)
+4. **0 or >1 matches** → inserts into `pre_fund_bank_unmatched` for Finance manual review
+
+---
+
+## Step 3 — Add GL Bridge Accounts (if not already present)
 
 The migration includes:
 ```sql
