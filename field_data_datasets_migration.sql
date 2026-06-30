@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS field_data_server_datasets (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE field_data_server_datasets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
 CREATE INDEX IF NOT EXISTS idx_fdsd_active   ON field_data_server_datasets(is_active);
 CREATE INDEX IF NOT EXISTS idx_fdsd_country  ON field_data_server_datasets(country_id);
 CREATE INDEX IF NOT EXISTS idx_fdsd_created  ON field_data_server_datasets(created_at DESC);
@@ -108,6 +111,9 @@ CREATE TABLE IF NOT EXISTS fd_preload_configs (
   created_by     UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_preload_configs ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fdpc_form      ON fd_preload_configs(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdpc_dataset   ON fd_preload_configs(dataset_id);

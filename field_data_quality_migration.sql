@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS fd_quality_rules (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_quality_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
 CREATE INDEX IF NOT EXISTS idx_fd_quality_rules_form ON fd_quality_rules(form_id);
 
 -- ─── 2. Quality Flags ────────────────────────────────────────────────────────

@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS fd_api_keys (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_api_keys ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
 CREATE INDEX IF NOT EXISTS idx_fdak_form      ON fd_api_keys(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdak_active    ON fd_api_keys(is_active);
 CREATE INDEX IF NOT EXISTS idx_fdak_hash      ON fd_api_keys(key_hash);
@@ -63,6 +66,9 @@ CREATE TABLE IF NOT EXISTS fd_webhook_secrets (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   rotated_at    TIMESTAMPTZ
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_webhook_secrets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fdws_form ON fd_webhook_secrets(form_id);
 

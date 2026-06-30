@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS field_data_servers (
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE field_data_servers ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
 CREATE INDEX IF NOT EXISTS idx_fds_type     ON field_data_servers(type);
 CREATE INDEX IF NOT EXISTS idx_fds_status   ON field_data_servers(status);
 CREATE INDEX IF NOT EXISTS idx_fds_active   ON field_data_servers(is_active);

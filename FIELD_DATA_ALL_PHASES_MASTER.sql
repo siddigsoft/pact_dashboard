@@ -4,6 +4,7 @@
 -- ============================================================================
 -- Run this single file to set up the complete Field Data Hub schema.
 -- Execution order is critical — each section depends on the previous.
+-- Safe to re-run: all statements use IF NOT EXISTS / ADD COLUMN IF NOT EXISTS.
 --
 -- PHASE MAP
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -43,13 +44,7 @@
 
 
 -- ============================================================================
--- ██████╗ ██╗  ██╗ █████╗ ███████╗███████╗███████╗  ██╗      ██████╗
--- ██╔══██╗██║  ██║██╔══██╗██╔════╝██╔════╝██╔════╝  ██║      ██╔══██╗
--- ██████╔╝███████║███████║███████╗█████╗  ███████╗  ██║█████╗███████║
--- ██╔═══╝ ██╔══██║██╔══██║╚════██║██╔══╝  ╚════██║  ╚═╝╚════╝██╔══██║
--- ██║     ██║  ██║██║  ██║███████║███████╗███████║  ██║      ██║  ██║
--- ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝  ╚═╝      ╚═╝  ╚═╝
--- CORE TABLES  (Phases 1–6 + fd_* unified schema)
+-- PHASE 1-6 CORE (field_data_* tables + fd_forms/fd_submissions/fd_form_schema)
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — CORE MIGRATION (Phases 1–6)
@@ -86,6 +81,9 @@ CREATE TABLE IF NOT EXISTS field_data_servers (
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE field_data_servers ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fds_type     ON field_data_servers(type);
 CREATE INDEX IF NOT EXISTS idx_fds_status   ON field_data_servers(status);
@@ -459,7 +457,7 @@ GRANT EXECUTE ON FUNCTION fd_is_admin()    TO authenticated;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 10 — SERVER DATASETS & DATA PRELOADING
+-- PHASE 10: SERVER DATASETS & DATA PRELOADING
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 10: Server Datasets & Data Preloading
@@ -492,6 +490,9 @@ CREATE TABLE IF NOT EXISTS field_data_server_datasets (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE field_data_server_datasets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fdsd_active   ON field_data_server_datasets(is_active);
 CREATE INDEX IF NOT EXISTS idx_fdsd_country  ON field_data_server_datasets(country_id);
@@ -572,6 +573,9 @@ CREATE TABLE IF NOT EXISTS fd_preload_configs (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_preload_configs ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
 CREATE INDEX IF NOT EXISTS idx_fdpc_form      ON fd_preload_configs(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdpc_dataset   ON fd_preload_configs(dataset_id);
 
@@ -621,7 +625,7 @@ CREATE POLICY "fdpc_svc"     ON fd_preload_configs            FOR ALL    TO serv
 -- ============================================================================
 
 -- ============================================================================
--- SAMPLING ENGINE  (FieldDataSampling.tsx)
+-- SAMPLING ENGINE (FieldDataSampling.tsx)
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Sampling Engine (FieldDataSampling.tsx)
@@ -815,7 +819,7 @@ GRANT EXECUTE ON FUNCTION fd_sampling_progress(UUID) TO service_role;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 7 — SMART EXPORT
+-- PHASE 7: SMART EXPORT
 -- ============================================================================
 -- ============================================================================
 -- Phase 13: Smart Export — fd_export_jobs + fd_export_templates
@@ -1014,7 +1018,7 @@ GRANT EXECUTE ON FUNCTION increment_template_use(UUID) TO authenticated;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 8 — FIELDWORK MONITORING DASHBOARD
+-- PHASE 8: FIELDWORK MONITORING DASHBOARD
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 10: Fieldwork Monitoring
@@ -1180,7 +1184,7 @@ WHERE cz.form_id = sub.form_id
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 9 — CASE MANAGEMENT
+-- PHASE 9: CASE MANAGEMENT
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 11: Case Management
@@ -1321,7 +1325,7 @@ GROUP BY c.id;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 11 — MULTI-ROUND STUDIES
+-- PHASE 11: MULTI-ROUND STUDIES
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 8: Multi-Round Study Management
@@ -1496,7 +1500,7 @@ NOTIFY pgrst, 'reload schema';
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 12 — WORKFLOW & REVIEW
+-- PHASE 12: WORKFLOW & REVIEW
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 12: Workflow & Review
@@ -1629,7 +1633,7 @@ GROUP BY form_id;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 13 — DATA QUALITY & ENCRYPTED FORMS
+-- PHASE 13: DATA QUALITY & ENCRYPTED FORMS
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 9: Data Quality, Enumerator Scoring & Target Tracking
@@ -1660,6 +1664,9 @@ CREATE TABLE IF NOT EXISTS fd_quality_rules (
   created_by  UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_quality_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fd_quality_rules_form ON fd_quality_rules(form_id);
 
@@ -1821,7 +1828,7 @@ ON CONFLICT (form_id, enumerator_id) DO UPDATE SET
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 14 — MULTI-LANGUAGE FORMS
+-- PHASE 14: MULTI-LANGUAGE FORMS
 -- ============================================================================
 -- ============================================================================
 -- Phase 14: Multi-Language Form Management
@@ -2025,7 +2032,7 @@ GRANT EXECUTE ON FUNCTION seed_form_translation_keys(UUID, TEXT) TO authenticate
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 15 — COLLABORATION & REVIEW
+-- PHASE 15: COLLABORATION & REVIEW
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 15: Collaboration & Review Tools
@@ -2227,7 +2234,7 @@ GROUP BY form_id;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 16 — BACKUP & DISASTER RECOVERY
+-- PHASE 16: BACKUP & DISASTER RECOVERY
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 16: Backup & Disaster Recovery
@@ -2434,7 +2441,7 @@ CREATE OR REPLACE TRIGGER trg_fdbsched_updated
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 17 — API & INTEGRATIONS
+-- PHASE 17: API & INTEGRATIONS
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 17: API & Integrations
@@ -2459,6 +2466,9 @@ CREATE TABLE IF NOT EXISTS fd_api_keys (
   created_by    UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_api_keys ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fdak_form      ON fd_api_keys(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdak_active    ON fd_api_keys(is_active);
@@ -2501,6 +2511,9 @@ CREATE TABLE IF NOT EXISTS fd_webhook_secrets (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   rotated_at    TIMESTAMPTZ
 );
+
+-- Guard: add is_active if the table already existed without it
+ALTER TABLE fd_webhook_secrets ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_fdws_form ON fd_webhook_secrets(form_id);
 
@@ -2567,7 +2580,7 @@ GRANT EXECUTE ON FUNCTION fd_increment_api_key_usage(TEXT) TO service_role;
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 18 — NOTIFICATION CHANNELS
+-- PHASE 18: NOTIFICATION CHANNELS
 -- ============================================================================
 -- ============================================================================
 -- Field Data Hub — Phase 18: Notification Channels
@@ -2741,21 +2754,16 @@ END $$;
 -- ============================================================================
 
 -- ============================================================================
--- ██████╗  ██████╗ ███╗   ██╗███████╗
--- ██╔══██╗██╔═══██╗████╗  ██║██╔════╝
--- ██║  ██║██║   ██║██╔██╗ ██║█████╗
--- ██║  ██║██║   ██║██║╚██╗██║██╔══╝
--- ██████╔╝╚██████╔╝██║ ╚████║███████╗
--- ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 -- ALL 18 PHASES COMPLETE
 -- ============================================================================
--- After running this file, also:
+-- After running this file:
 -- 1. Create Supabase Storage bucket:  field-data-datasets  (private, 50 MB max)
--- 2. Deploy Supabase Edge Functions:
+--    INSERT INTO storage.buckets (id, name, public)
+--    VALUES ('field-data-datasets','field-data-datasets', false) ON CONFLICT DO NOTHING;
+-- 2. Deploy Edge Functions:
 --      supabase/functions/fd-api/index.ts
 --      supabase/functions/create-pact-archive/index.ts
--- 3. Configure pg_cron cleanup jobs (see comments in individual sections):
---      fd_api_usage_logs  — 90-day retention
---      fd_backups         — per-schedule retention
--- 4. Grant EXECUTE on helper functions to roles as needed.
+-- 3. Optional pg_cron retention (see Phase 17 comments):
+--      api_usage_logs: 90-day rolling delete
+--      backups: per-schedule retention
 -- ============================================================================
