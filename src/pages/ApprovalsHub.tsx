@@ -360,93 +360,32 @@ export default function ApprovalsHub() {
           }
         }
 
-        // 3. Record individual vote (quorum model: M-of-N) then update step if threshold met
-        // stepResolved is hoisted so the fund-status block below can reference it safely.
-        let stepResolved = false;
-        if (pendingStep) {
-          // Upsert vote (one vote per user per step)
-          await supabase.from('pre_fund_step_approvals' as any).upsert({
-            step_id: pendingStep.id,
-            user_id: currentUser?.id,
-            action: action === 'approve' ? 'approved' : 'rejected',
-            notes: actionNotes || null,
-            created_at: now,
-          }, { onConflict: 'step_id,user_id' });
-
-          // Count current approvals for this step from DB (authoritative)
-          const { data: voteData } = await supabase
-            .from('pre_fund_step_approvals' as any)
-            .select('action')
-            .eq('step_id', pendingStep.id);
-          const votes = (voteData as any) ?? [];
-          const approvalCount  = votes.filter((v: any) => v.action === 'approved').length;
-          const anyRejected    = votes.some((v: any) => v.action === 'rejected');
-          const quorumRequired = pendingStep.required_approvals ?? 1;
-          const quorumMet      = approvalCount >= quorumRequired;
-
-          // Only mark the step as resolved if quorum is met or a required rejection happened
-          stepResolved = (action === 'approve' && quorumMet) || (action === 'reject' && anyRejected);
-          if (stepResolved) {
-            const { error: stepErr } = await supabase
-              .from('pre_fund_approval_steps')
-              .update({
-                status: (action === 'approve' && quorumMet) ? 'approved' : 'rejected',
-                approved_by: currentUser?.id ?? null,
-                approved_at: now,
-                notes: actionNotes || (action === 'approve' ? 'Approved via Approvals Hub' : 'Rejected via Approvals Hub'),
-              })
-              .eq('id', pendingStep.id);
-            if (stepErr) throw stepErr;
-          }
+        // 3–5. Atomic RPC: vote → step resolve → fund status advancement.
+        //      Uses SECURITY DEFINER so non-finance assignees can update pre_fund_requests.
+        if (!pendingStep) {
+          throw new Error('No pending step found for this fund.');
         }
 
-        // 4. Determine new fund status — only advance when the current step is actually resolved.
-        //    Re-query step states from DB so we never compute against stale in-memory data.
-        let newFundStatus: string | null = null;
-        const isOptionalStep = pendingStep?.is_required === false;
+        const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
+          'process_pf_step_action',
+          { p_step_id: pendingStep.id, p_action: action, p_notes: actionNotes || null },
+        );
+        if (rpcErr) throw rpcErr;
 
-        if (action === 'reject' && !isOptionalStep) {
-          // Required step was rejected → whole fund is rejected regardless of quorum
-          newFundStatus = 'rejected';
-        } else if (stepResolved) {
-          // The current step has just been closed — re-fetch authoritative step states from DB
-          const { data: freshStepsData } = await supabase
-            .from('pre_fund_approval_steps')
-            .select('id, status, is_required')
-            .eq('pre_fund_request_id', fundId);
-          const freshSteps: any[] = (freshStepsData as any) ?? [];
-          const remainingRequired = freshSteps.filter(
-            (s: any) => s.status === 'pending' && s.is_required
-          );
-          if (remainingRequired.length === 0) {
-            // All required steps cleared — advance regardless of optional-step outcomes
-            newFundStatus = 'awaiting_receipt';
-          }
-          // else: more required steps remain → stay pending_approval (newFundStatus stays null)
+        const rpc = rpcResult as { step_resolved: boolean; new_fund_status: string | null; is_optional_step: boolean; error: string | null };
+        if (rpc?.error === 'unauthorized') {
+          throw new Error('You are not assigned to this approval step. Only an assigned approver or admin may act on it.');
         }
-        // If stepResolved = false (quorum not yet met), newFundStatus stays null →
-        // fund status is not mutated; another approver must vote before the step closes.
+        if (rpc?.error === 'step_already_resolved') {
+          throw new Error('This step has already been resolved. Refresh the page to see the latest status.');
+        }
+        if (rpc?.error) {
+          throw new Error(rpc.error);
+        }
 
-        // 5. Update fund-level columns
-        // Only set rejection metadata when the fund itself is being rejected (required step).
-        // Optional-step rejections do not mark the fund as rejected.
-        const fundUpdate: any = {
-          approved_by: action === 'approve' ? currentUser?.id : null,
-          approved_at: action === 'approve' ? now : null,
-          rejection_reason: (action === 'reject' && !isOptionalStep)
-            ? (actionNotes || 'Rejected via Approvals Hub')
-            : null,
-        };
-        if (newFundStatus) fundUpdate.status = newFundStatus;
-
-        const { error: fundErr } = await supabase
-          .from('pre_fund_requests')
-          .update(fundUpdate)
-          .eq('id', fundId);
-        if (fundErr) throw fundErr;
-
-        // Toast messaging: distinguish optional-step rejection from whole-fund rejection
-        const isFundRejected = newFundStatus === 'rejected';
+        const newFundStatus   = rpc?.new_fund_status ?? null;
+        const isOptionalStep  = rpc?.is_optional_step ?? (pendingStep?.is_required === false);
+        const isFundRejected  = newFundStatus === 'rejected';
         const isOptionalReject = action === 'reject' && isOptionalStep;
         toast({
           title: action === 'approve'
