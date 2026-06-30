@@ -258,6 +258,9 @@ CREATE TABLE IF NOT EXISTS pre_fund_transactions (
   -- GL Bridge linkage
   encumbrance_id        UUID,                       -- FK to acct_budget_encumbrances.id (if exists)
   gl_entry_id           UUID,                       -- FK to acct_journal_entries.id (if exists)
+  -- Submitter / receipt (added to base table; patch file also uses ADD COLUMN IF NOT EXISTS as idempotent guard)
+  user_id               UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- field staff who made the payment
+  receipt_url           TEXT,                                                 -- URL of uploaded payment receipt
   created_by            UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );

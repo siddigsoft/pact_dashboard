@@ -19,7 +19,7 @@ import {
   Plus, Pencil, Trash2, Upload, FileText, RefreshCw, Search,
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
-  Users, UserPlus, Wallet, TrendingUp,
+  Users, UserPlus, Wallet, TrendingUp, Bell,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -103,6 +103,7 @@ const EMPTY_FORM = {
   gl_receipt_account: '', gl_liability_account: '',
   gl_expense_account: '', gl_cf_account: '',
   notes: '',
+  notification_recipients: [] as string[],
 };
 
 const THRESHOLD_MODE_OPTIONS = [
@@ -152,6 +153,8 @@ export default function PreFundingRegistry() {
   const [acctAccounts, setAcctAccounts] = useState<{ id: string; code: string; name_en: string; is_active: boolean; is_postable: boolean }[]>([]);
   const [dynamicCurrencies, setDynamicCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
   const [pfSettings, setPfSettings] = useState<{ default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null>(null);
+  const [staffProfiles, setStaffProfiles] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
+  const [notifRecipSearch, setNotifRecipSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -183,6 +186,9 @@ export default function PreFundingRegistry() {
         setDynamicCurrencies([...seen].sort());
       }
       if (!settingsRes.error && settingsRes.data) setPfSettings(settingsRes.data as any);
+      // Load staff profiles for notification recipients picker
+      const profRes = await supabase.from('profiles').select('id,full_name,email,role').order('full_name');
+      if (!profRes.error) setStaffProfiles((profRes.data as any) ?? []);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -314,6 +320,7 @@ export default function PreFundingRegistry() {
     });
     setDialogStep(1);
     setProjectSearch('');
+    setNotifRecipSearch('');
     setShowForm(true);
   };
 
@@ -343,6 +350,7 @@ export default function PreFundingRegistry() {
     });
     setDialogStep(1);
     setProjectSearch('');
+    setNotifRecipSearch('');
     setShowForm(true);
   };
   const openEdit = (f: PreFundRequest) => {
@@ -368,7 +376,9 @@ export default function PreFundingRegistry() {
       gl_expense_account:   fa.gl_expense_account   ?? '',
       gl_cf_account:        fa.gl_cf_account        ?? '',
       notes: f.notes ?? '',
+      notification_recipients: Array.isArray(fa.notification_recipients) ? fa.notification_recipients : [],
     });
+    setNotifRecipSearch('');
     setShowForm(true);
   };
 
@@ -416,6 +426,7 @@ export default function PreFundingRegistry() {
         gl_expense_account:   form.gl_expense_account   || null,
         gl_cf_account:        form.gl_cf_account        || null,
         notes: form.notes || null,
+        notification_recipients: form.notification_recipients.length > 0 ? form.notification_recipients : [],
       };
       if (editing) {
         const { error: e } = await supabase.from('pre_fund_requests').update(payload).eq('id', editing.id);
@@ -1442,6 +1453,86 @@ export default function PreFundingRegistry() {
                 <div className="sm:col-span-2">
                   <Label>Notes</Label>
                   <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
+                </div>
+
+                {/* Notification Recipients picker */}
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <Bell className="h-3.5 w-3.5" />
+                    Alert Recipients
+                    <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(low-balance, ending-soon, renewal alerts)</span>
+                  </p>
+                  {/* Selected recipients chips */}
+                  {form.notification_recipients.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {form.notification_recipients.map(uid => {
+                        const p = staffProfiles.find(s => s.id === uid);
+                        return p ? (
+                          <span key={uid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300 text-xs font-medium border border-sky-200 dark:border-sky-700">
+                            {p.full_name || p.email}
+                            <button
+                              type="button"
+                              className="ml-0.5 hover:text-red-500 transition-colors"
+                              onClick={() => setForm(prev => ({ ...prev, notification_recipients: prev.notification_recipients.filter(id => id !== uid) }))}
+                              data-testid={`button-remove-notif-recip-${uid}`}
+                            >✕</button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                  {/* Search + add */}
+                  <div className="relative mb-1">
+                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      value={notifRecipSearch}
+                      onChange={e => setNotifRecipSearch(e.target.value)}
+                      placeholder="Search staff to add…"
+                      className="pl-8 h-8 text-sm"
+                      data-testid="input-notif-recip-search"
+                    />
+                  </div>
+                  {notifRecipSearch.trim() && (
+                    <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
+                      {staffProfiles
+                        .filter(p =>
+                          !form.notification_recipients.includes(p.id) &&
+                          (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
+                           p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
+                        )
+                        .slice(0, 8)
+                        .map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                            onClick={() => {
+                              setForm(prev => ({ ...prev, notification_recipients: [...prev.notification_recipients, p.id] }));
+                              setNotifRecipSearch('');
+                            }}
+                            data-testid={`button-add-notif-recip-${p.id}`}
+                          >
+                            <div>
+                              <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
+                              <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
+                            </div>
+                            <Plus className="h-4 w-4 text-sky-600 shrink-0" />
+                          </button>
+                        ))}
+                      {staffProfiles.filter(p =>
+                        !form.notification_recipients.includes(p.id) &&
+                        (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
+                         p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
+                      ).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
+                      )}
+                    </div>
+                  )}
+                  {form.notification_recipients.length === 0 && !notifRecipSearch && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      No recipients set — system default recipients (from Settings) will be used for alerts.
+                    </p>
+                  )}
                 </div>
               </div>
 
