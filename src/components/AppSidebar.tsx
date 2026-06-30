@@ -395,6 +395,7 @@
       planningItems.push({ id: 'field-data-studies', title: "Multi-Round Studies", url: "/field-data/studies", icon: BookOpen, priority: 3, isPinned: isPinned('/field-data/studies') });
       planningItems.push({ id: 'field-data-quality', title: "Data Quality", url: "/field-data/quality", icon: ShieldCheck, priority: 3, isPinned: isPinned('/field-data/quality') });
       planningItems.push({ id: 'field-data-monitoring', title: "Fieldwork Monitor", url: "/field-data/monitoring", icon: Activity, priority: 3, isPinned: isPinned('/field-data/monitoring') });
+      planningItems.push({ id: 'field-data-cases', title: "Case Management", url: "/field-data/cases", icon: ClipboardList, priority: 3, isPinned: isPinned('/field-data/cases') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
