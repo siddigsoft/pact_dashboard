@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   country_id            TEXT,
   project_id            UUID,
   grant_id              UUID,
+  cost_category         TEXT,                       -- optional expense-category filter for scope=country_project_category
   matching_scope        TEXT NOT NULL DEFAULT 'country_project'
                         CHECK (matching_scope IN ('country','project','country_project','country_project_category')),
   threshold_pct         NUMERIC(5,2),               -- low-balance alert threshold %
@@ -383,7 +384,8 @@ EXCEPTION WHEN undefined_table THEN NULL; END $$;
 ALTER TABLE pre_fund_requests
   ADD COLUMN IF NOT EXISTS approved_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS approved_at      TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+  ADD COLUMN IF NOT EXISTS rejection_reason TEXT,
+  ADD COLUMN IF NOT EXISTS cost_category    TEXT;  -- expense-category filter for scope=country_project_category
 
 -- Expand status CHECK to include 'rejected' (safe idempotent via DROP IF EXISTS + re-add)
 ALTER TABLE pre_fund_requests
@@ -444,19 +446,8 @@ CREATE POLICY "pf_requests_finance" ON pre_fund_requests FOR ALL
       AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
   ));
 
--- Step assignees: SELECT only — needed so ApprovalsHub can show fund context
--- Matches both legacy single-user (assigned_user_id) and multi-user (assigned_user_ids[])
-CREATE POLICY "pf_requests_step_assignee" ON pre_fund_requests FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM pre_fund_approval_steps s
-      WHERE s.pre_fund_request_id = pre_fund_requests.id
-        AND (
-          s.assigned_user_id = auth.uid()
-          OR s.assigned_user_ids @> ARRAY[auth.uid()]
-        )
-    )
-  );
+-- Note: non-finance step assignees access fund context via the ApprovalsHub
+-- view/RPC only; direct SELECT on pre_fund_requests is Finance/Admin-only.
 
 -- Approval steps ─────────────────────────────────────────────────────────────
 -- Finance/Admin: full CRUD (manage chains, reorder, delete)
@@ -489,19 +480,6 @@ CREATE POLICY "pf_transactions_finance" ON pre_fund_transactions FOR ALL
     WHERE id = auth.uid()
       AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin')
   ));
-
--- Step assignees: SELECT only (e.g. to verify deductions on their approval step)
-CREATE POLICY "pf_transactions_assignee_read" ON pre_fund_transactions FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM pre_fund_approval_steps s
-      WHERE s.pre_fund_request_id = pre_fund_transactions.pre_fund_request_id
-        AND (
-          s.assigned_user_id = auth.uid()
-          OR s.assigned_user_ids @> ARRAY[auth.uid()]
-        )
-    )
-  );
 
 -- Reconciliations: Finance/Admin/Super Admin ONLY
 CREATE POLICY "pf_recons_finance" ON pre_fund_reconciliations FOR ALL
