@@ -178,20 +178,7 @@ const SuperAdminHub = lazy(() => import('./pages/SuperAdminHub'));
 const CRMHub = lazy(() => import('./pages/CRMHub'));
 const FieldDataHub = lazy(() => import('./pages/FieldDataHub'));
 const FieldDataFormDetail = lazy(() => import('./pages/FieldDataFormDetail'));
-const FieldDataDatasets = lazy(() => import('./pages/FieldDataDatasets'));
-const FieldDataSampling = lazy(() => import('./pages/FieldDataSampling'));
-const FieldDataStudies = lazy(() => import('./pages/FieldDataStudies'));
 const FieldDataStudyDetail = lazy(() => import('./pages/FieldDataStudyDetail'));
-const FieldDataQuality = lazy(() => import('./pages/FieldDataQuality'));
-const FieldDataMonitoring = lazy(() => import('./pages/FieldDataMonitoring'));
-const FieldDataCases = lazy(() => import('./pages/FieldDataCases'));
-const FieldDataWorkflow = lazy(() => import('./pages/FieldDataWorkflow'));
-const FieldDataExports   = lazy(() => import('./pages/FieldDataExports'));
-const FieldDataLanguages      = lazy(() => import('./pages/FieldDataLanguages'));
-const FieldDataCollaboration  = lazy(() => import('./pages/FieldDataCollaboration'));
-const FieldDataBackup         = lazy(() => import('./pages/FieldDataBackup'));
-const FieldDataAPI            = lazy(() => import('./pages/FieldDataAPI'));
-const FieldDataNotifications  = lazy(() => import('./pages/FieldDataNotifications'));
 const ProgrammeHub = lazy(() => import('./pages/ProgrammeHub'));
 const CommunicationHub = lazy(() => import('./pages/CommunicationHub'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
@@ -583,20 +570,20 @@ const AppRoutes = () => {
         <Route path="/crm/engagements" element={<Navigate to="/crm?tab=engagements" replace />} />
         <Route path="/crm/opportunities" element={<Navigate to="/crm?tab=pipeline" replace />} />
         <Route path="/field-data" element={<PageWrapper><FieldDataHub /></PageWrapper>} />
-        <Route path="/field-data/datasets" element={<PageWrapper><FieldDataDatasets /></PageWrapper>} />
-        <Route path="/field-data/sampling" element={<PageWrapper><FieldDataSampling /></PageWrapper>} />
-        <Route path="/field-data/studies" element={<PageWrapper><FieldDataStudies /></PageWrapper>} />
         <Route path="/field-data/studies/:id" element={<PageWrapper><FieldDataStudyDetail /></PageWrapper>} />
-        <Route path="/field-data/quality" element={<PageWrapper><FieldDataQuality /></PageWrapper>} />
-        <Route path="/field-data/monitoring" element={<PageWrapper><FieldDataMonitoring /></PageWrapper>} />
-        <Route path="/field-data/cases" element={<PageWrapper><FieldDataCases /></PageWrapper>} />
-        <Route path="/field-data/workflow" element={<PageWrapper><FieldDataWorkflow /></PageWrapper>} />
-        <Route path="/field-data/exports" element={<PageWrapper><FieldDataExports /></PageWrapper>} />
-        <Route path="/field-data/languages"      element={<PageWrapper><FieldDataLanguages /></PageWrapper>} />
-        <Route path="/field-data/collaboration"  element={<PageWrapper><FieldDataCollaboration /></PageWrapper>} />
-        <Route path="/field-data/backup"         element={<PageWrapper><FieldDataBackup /></PageWrapper>} />
-        <Route path="/field-data/api"            element={<PageWrapper><FieldDataAPI /></PageWrapper>} />
-        <Route path="/field-data/notifications"  element={<PageWrapper><FieldDataNotifications /></PageWrapper>} />
+        <Route path="/field-data/datasets" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/sampling" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/studies" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/quality" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/monitoring" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/cases" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/workflow" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/exports" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/languages" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/collaboration" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/backup" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/api" element={<Navigate to="/field-data" replace />} />
+        <Route path="/field-data/notifications" element={<Navigate to="/field-data" replace />} />
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />

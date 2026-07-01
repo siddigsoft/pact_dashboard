@@ -4,13 +4,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Globe, Plus, Server, RefreshCw, Trash2, Edit3, Search,
   CheckCircle, XCircle, AlertTriangle, Clock, Loader2,
-  Database, Upload, ChevronRight, Wifi, WifiOff, Settings,
-  FileText, BarChart2, Users, Activity, Layers, Zap,
-  PlayCircle, FlaskConical,
+  Database, ChevronRight, Wifi, Settings,
+  FileText, BarChart2, Activity, Layers, Zap,
+  FlaskConical, BookOpen, ShieldCheck, FolderOpen,
+  GitBranch, Download, Languages, Users2, HardDrive, Code2, Bell,
+  ScanLine, Users,
 } from 'lucide-react';
 import { testServerConnection, syncFormFromServer } from '@/services/fieldDataSync';
 import { Button } from '@/components/ui/button';
@@ -33,6 +35,20 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+import FieldDataDatasets from './FieldDataDatasets';
+import FieldDataSampling from './FieldDataSampling';
+import FieldDataStudies from './FieldDataStudies';
+import FieldDataQuality from './FieldDataQuality';
+import FieldDataMonitoring from './FieldDataMonitoring';
+import FieldDataCases from './FieldDataCases';
+import FieldDataWorkflow from './FieldDataWorkflow';
+import FieldDataExports from './FieldDataExports';
+import FieldDataLanguages from './FieldDataLanguages';
+import FieldDataCollaboration from './FieldDataCollaboration';
+import FieldDataBackup from './FieldDataBackup';
+import FieldDataAPI from './FieldDataAPI';
+import FieldDataNotifications from './FieldDataNotifications';
 
 interface FieldDataServer {
   id: string;
@@ -88,11 +104,32 @@ const EMPTY_SERVER = {
   username: '', api_token: '', project_id: '', notes: '', sync_frequency_minutes: 60,
 };
 
+const TABS = [
+  { id: 'forms',         label: 'Forms & Servers',    icon: Globe,        desc: 'ODK Central · Ona · WFP MoDa — unified in one place' },
+  { id: 'datasets',      label: 'Datasets',            icon: Database,     desc: 'Browse and filter collected datasets' },
+  { id: 'sampling',      label: 'Sampling',            icon: ScanLine,     desc: 'Design sampling frameworks and frames' },
+  { id: 'studies',       label: 'Multi-Round Studies', icon: BookOpen,     desc: 'Baseline · Midline · Endline · Panel tracking' },
+  { id: 'quality',       label: 'Data Quality',        icon: ShieldCheck,  desc: 'Rules, flags, and cleaning queue' },
+  { id: 'monitoring',    label: 'Fieldwork Monitor',   icon: Activity,     desc: 'Daily progress and enumerator tracking' },
+  { id: 'cases',         label: 'Case Management',     icon: FolderOpen,   desc: 'Escalations, follow-ups, and resolutions' },
+  { id: 'workflow',      label: 'Workflow',             icon: GitBranch,    desc: 'Approval and review pipelines' },
+  { id: 'exports',       label: 'Smart Export',        icon: Download,     desc: 'Export datasets with transformation options' },
+  { id: 'languages',     label: 'Multi-Language',      icon: Languages,    desc: 'Translations and language versions' },
+  { id: 'collaboration', label: 'Collaboration',       icon: Users2,       desc: 'Team access and shared workspaces' },
+  { id: 'backup',        label: 'Backup & Recovery',   icon: HardDrive,    desc: 'Scheduled backups and restore points' },
+  { id: 'api',           label: 'API & Integrations',  icon: Code2,        desc: 'Webhooks, API keys, and connectors' },
+  { id: 'notifications', label: 'Notifications',       icon: Bell,         desc: 'Alerts, reminders, and escalation rules' },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
+
 export default function FieldDataHub() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useUser();
+
+  const [activeTab, setActiveTab] = useState<TabId>('forms');
 
   const [search, setSearch] = useState('');
   const [serverFilter, setServerFilter] = useState('all');
@@ -291,69 +328,71 @@ export default function FieldDataHub() {
   });
 
   const totalSubmissions = forms.reduce((sum, f) => sum + (f.submission_count || 0), 0);
+  const currentTab = TABS.find(t => t.id === activeTab)!;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-violet-700 via-blue-700 to-teal-600 text-white px-6 py-8">
+
+      {/* ── Gradient Header ─────────────────────────────────────────────── */}
+      <div className="bg-gradient-to-r from-violet-700 via-blue-700 to-teal-600 text-white px-6 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-white/20 rounded-xl">
-                <Globe className="w-7 h-7" />
+                <currentTab.icon className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Field Data Hub</h1>
-                <p className="text-blue-100 text-sm mt-0.5">
-                  ODK Central · Ona · WFP MoDa — unified in one place
-                </p>
+                <h1 className="text-xl font-bold tracking-tight">Field Data Hub</h1>
+                <p className="text-blue-100 text-sm mt-0.5">{currentTab.desc}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 bg-white/10"
-                onClick={handleSyncAll}
-                disabled={syncAllRunning || forms.length === 0}
-                data-testid="button-sync-all"
-              >
-                {syncAllRunning
-                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  : <Zap className="w-4 h-4 mr-2" />}
-                Sync All
-              </Button>
-              <Button
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 bg-white/10"
-                onClick={openNewServer}
-                data-testid="button-connect-server"
-              >
-                <Server className="w-4 h-4 mr-2" />
-                Connect Server
-              </Button>
-              <Button
-                className="bg-white text-blue-700 hover:bg-blue-50 font-semibold"
-                onClick={() => setNewFormDialog(true)}
-                data-testid="button-new-form"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                New Form
-              </Button>
-            </div>
+            {activeTab === 'forms' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  className="border-white/30 text-white hover:bg-white/10 bg-white/10"
+                  onClick={handleSyncAll}
+                  disabled={syncAllRunning || forms.length === 0}
+                  data-testid="button-sync-all"
+                >
+                  {syncAllRunning
+                    ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    : <Zap className="w-4 h-4 mr-2" />}
+                  Sync All
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-white/30 text-white hover:bg-white/10 bg-white/10"
+                  onClick={openNewServer}
+                  data-testid="button-connect-server"
+                >
+                  <Server className="w-4 h-4 mr-2" />
+                  Connect Server
+                </Button>
+                <Button
+                  className="bg-white text-blue-700 hover:bg-blue-50 font-semibold"
+                  onClick={() => setNewFormDialog(true)}
+                  data-testid="button-new-form"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Form
+                </Button>
+              </div>
+            )}
           </div>
 
-          {/* KPI bar */}
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {/* KPI bar — always visible */}
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: 'Connected Servers', value: servers.filter(s => s.status === 'connected').length, icon: Wifi },
               { label: 'Total Forms', value: forms.length, icon: FileText },
               { label: 'Total Submissions', value: totalSubmissions.toLocaleString(), icon: BarChart2 },
               { label: 'Active Forms', value: forms.filter(f => f.status === 'active').length, icon: Activity },
             ].map(kpi => (
-              <div key={kpi.label} className="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-3 flex items-center gap-3">
-                <kpi.icon className="w-5 h-5 text-white/70 shrink-0" />
+              <div key={kpi.label} className="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-2.5 flex items-center gap-3">
+                <kpi.icon className="w-4 h-4 text-white/70 shrink-0" />
                 <div>
-                  <div className="text-xl font-bold">{kpi.value}</div>
+                  <div className="text-lg font-bold">{kpi.value}</div>
                   <div className="text-xs text-white/70">{kpi.label}</div>
                 </div>
               </div>
@@ -362,311 +401,350 @@ export default function FieldDataHub() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-
-        {/* ── Server Cards ──────────────────────────────────────────────── */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Servers</h2>
-            {servers.length > 0 && (
-              <button onClick={openNewServer} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                <Plus className="w-3 h-3" /> Add Server
-              </button>
-            )}
-          </div>
-
-          {loadingServers ? (
-            <div className="flex items-center gap-2 text-slate-400 py-4">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading servers…
-            </div>
-          ) : servers.length === 0 ? (
-            <div
-              onClick={openNewServer}
-              className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
-              data-testid="empty-state-servers"
-            >
-              <Server className="w-8 h-8 text-slate-300 group-hover:text-blue-400 mx-auto mb-2 transition-colors" />
-              <p className="text-sm font-medium text-slate-500 group-hover:text-blue-600">Connect your first server</p>
-              <p className="text-xs text-slate-400 mt-1">ODK Central · Ona · WFP MoDa · KoboToolbox</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {servers.map(srv => {
-                const typeCfg = SERVER_TYPE_CFG[srv.type] || SERVER_TYPE_CFG.generic;
-                const statusCfg = STATUS_CFG[srv.status] || STATUS_CFG.untested;
-                const StatusIcon = statusCfg.icon;
-                const formCount = forms.filter(f => f.field_data_form_servers?.some(fs => fs.server_id === srv.id)).length;
-                return (
-                  <div
-                    key={srv.id}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:shadow-md transition-all group"
-                    data-testid={`card-server-${srv.id}`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className={cn('w-2 h-2 rounded-full', typeCfg.dot)} />
-                        <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full border', typeCfg.color)}>
-                          {typeCfg.label}
-                        </span>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
-                            <Settings className="w-3.5 h-3.5 text-slate-400" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={e => { e.stopPropagation(); handleTestConnection(srv); }}
-                            disabled={testingServerId === srv.id}
-                            data-testid={`button-test-${srv.id}`}
-                          >
-                            {testingServerId === srv.id
-                              ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
-                              : <FlaskConical className="w-3.5 h-3.5 mr-2" />}
-                            Test Connection
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEditServer(srv)}>
-                            <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-500" onClick={() => setDeleteServerId(srv.id)}>
-                            <Trash2 className="w-3.5 h-3.5 mr-2" /> Remove
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight">{srv.name}</p>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{srv.base_url}</p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <StatusIcon className={cn('w-3.5 h-3.5', statusCfg.color)} />
-                        <span className={cn('text-xs', statusCfg.color)}>{statusCfg.label}</span>
-                      </div>
-                      <span className="text-xs text-slate-400">{formCount} form{formCount !== 1 ? 's' : ''}</span>
-                    </div>
-                    {/* test result pill */}
-                    {testResults[srv.id] && (
-                      <div className={cn(
-                        'mt-2 flex items-center gap-1.5 text-xs rounded-lg px-2 py-1',
-                        testResults[srv.id].ok
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20'
-                          : 'bg-red-50 text-red-700 dark:bg-red-900/20',
-                      )}>
-                        {testResults[srv.id].ok
-                          ? <CheckCircle className="w-3 h-3 shrink-0" />
-                          : <XCircle className="w-3 h-3 shrink-0" />}
-                        <span className="truncate">{testResults[srv.id].message}</span>
-                      </div>
-                    )}
-                    {!testResults[srv.id] && srv.last_health_check && (
-                      <p className="text-xs text-slate-400 mt-1.5">
-                        Checked {formatDistanceToNow(new Date(srv.last_health_check), { addSuffix: true })}
-                      </p>
-                    )}
-                    <button
-                      className="mt-2 w-full text-xs text-blue-600 hover:text-blue-800 flex items-center justify-center gap-1 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                      onClick={e => { e.stopPropagation(); handleTestConnection(srv); }}
-                      disabled={testingServerId === srv.id}
-                      data-testid={`button-test-inline-${srv.id}`}
-                    >
-                      {testingServerId === srv.id
-                        ? <Loader2 className="w-3 h-3 animate-spin" />
-                        : <FlaskConical className="w-3 h-3" />}
-                      {testingServerId === srv.id ? 'Testing…' : 'Test Connection'}
-                    </button>
-                  </div>
-                );
-              })}
+      {/* ── Tab Bar ─────────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-7xl mx-auto px-2">
+          <div className="flex overflow-x-auto scrollbar-hide">
+            {TABS.map(tab => (
               <button
-                onClick={openNewServer}
-                className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all text-slate-400 hover:text-blue-500"
-                data-testid="button-add-server-card"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                data-testid={`tab-${tab.id}`}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-colors shrink-0',
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50',
+                )}
               >
-                <Plus className="w-5 h-5" />
-                <span className="text-xs font-medium">Add Server</span>
+                <tab.icon className="w-3.5 h-3.5 shrink-0" />
+                {tab.label}
               </button>
-            </div>
-          )}
-        </div>
-
-        {/* ── Forms List ────────────────────────────────────────────────── */}
-        <div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">All Forms</h2>
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-none">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <Input
-                  placeholder="Search forms…"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-8 h-8 text-sm w-full sm:w-52"
-                  data-testid="input-search-forms"
-                />
-              </div>
-              <Select value={serverFilter} onValueChange={setServerFilter}>
-                <SelectTrigger className="h-8 text-xs w-36" data-testid="select-server-filter">
-                  <SelectValue placeholder="All Servers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Servers</SelectItem>
-                  {servers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 text-xs w-28" data-testid="select-status-filter">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="paused">Paused</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            ))}
           </div>
-
-          {loadingForms ? (
-            <div className="flex items-center gap-2 text-slate-400 py-8 justify-center">
-              <Loader2 className="w-5 h-5 animate-spin" /> Loading forms…
-            </div>
-          ) : filteredForms.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-12 text-center">
-              {forms.length === 0 ? (
-                <>
-                  <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="font-medium text-slate-600 dark:text-slate-300">No forms yet</p>
-                  <p className="text-sm text-slate-400 mt-1 mb-4">Create a form or import data via CSV to get started</p>
-                  <Button onClick={() => setNewFormDialog(true)} size="sm" data-testid="button-create-first-form">
-                    <Plus className="w-4 h-4 mr-1.5" /> Create Form
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">No forms match your filters</p>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-              <table className="w-full text-sm" data-testid="table-forms">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Form Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Servers</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Submissions</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Last Synced</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden xl:table-cell">Sync</th>
-                    <th className="px-4 py-3 w-8" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredForms.map(form => {
-                    const linkedServers = form.field_data_form_servers || [];
-                    return (
-                      <tr
-                        key={form.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
-                        onClick={() => navigate(`/field-data/${form.id}`)}
-                        data-testid={`row-form-${form.id}`}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                              <FileText className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-slate-800 dark:text-slate-100 leading-tight">{form.name}</p>
-                              {form.description && <p className="text-xs text-slate-400 truncate max-w-xs">{form.description}</p>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {linkedServers.length === 0 ? (
-                              <span className="text-xs text-slate-400">—</span>
-                            ) : linkedServers.slice(0, 3).map(fs => {
-                              const typeKey = fs.field_data_servers?.type as keyof typeof SERVER_TYPE_CFG || 'generic';
-                              const cfg = SERVER_TYPE_CFG[typeKey] || SERVER_TYPE_CFG.generic;
-                              return (
-                                <span key={fs.server_id} className={cn('text-xs px-1.5 py-0.5 rounded border font-medium', cfg.color)}>
-                                  {fs.field_data_servers?.name || cfg.label}
-                                </span>
-                              );
-                            })}
-                            {linkedServers.length > 3 && (
-                              <span className="text-xs text-slate-400">+{linkedServers.length - 3}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <span className="font-semibold text-slate-700 dark:text-slate-200">
-                            {(form.submission_count || 0).toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 hidden lg:table-cell">
-                          <span className="text-slate-500 text-xs">
-                            {(() => {
-                              const lastSync = form.field_data_form_servers
-                                ?.map(fs => fs.last_synced_at)
-                                .filter(Boolean)
-                                .sort()
-                                .pop();
-                              return lastSync
-                                ? formatDistanceToNow(new Date(lastSync), { addSuffix: true })
-                                : '—';
-                            })()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              'text-xs',
-                              form.status === 'active' && 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                              form.status === 'paused' && 'bg-amber-50 text-amber-700 border-amber-200',
-                              form.status === 'archived' && 'bg-slate-100 text-slate-500 border-slate-200',
-                            )}
-                          >
-                            {form.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 hidden xl:table-cell" onClick={e => e.stopPropagation()}>
-                          {(form.field_data_form_servers?.length ?? 0) > 0 ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs gap-1.5"
-                              disabled={syncingFormId === form.id}
-                              onClick={e => { e.stopPropagation(); handleSyncForm(form); }}
-                              data-testid={`button-sync-form-${form.id}`}
-                            >
-                              {syncingFormId === form.id
-                                ? <Loader2 className="w-3 h-3 animate-spin" />
-                                : <RefreshCw className="w-3 h-3" />}
-                              {syncingFormId === form.id ? 'Syncing…' : 'Sync'}
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-slate-400">No server</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* ── Connect / Edit Server Dialog ────────────────────────────────── */}
+      {/* ── Tab Content ─────────────────────────────────────────────────── */}
+
+      {/* Forms & Servers tab (inline content) */}
+      {activeTab === 'forms' && (
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+          {/* Servers */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Servers</h2>
+              {servers.length > 0 && (
+                <button onClick={openNewServer} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add Server
+                </button>
+              )}
+            </div>
+
+            {loadingServers ? (
+              <div className="flex items-center gap-2 text-slate-400 py-4">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading servers…
+              </div>
+            ) : servers.length === 0 ? (
+              <div
+                onClick={openNewServer}
+                className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
+                data-testid="empty-state-servers"
+              >
+                <Server className="w-8 h-8 text-slate-300 group-hover:text-blue-400 mx-auto mb-2 transition-colors" />
+                <p className="text-sm font-medium text-slate-500 group-hover:text-blue-600">Connect your first server</p>
+                <p className="text-xs text-slate-400 mt-1">ODK Central · Ona · WFP MoDa · KoboToolbox</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {servers.map(srv => {
+                  const typeCfg = SERVER_TYPE_CFG[srv.type] || SERVER_TYPE_CFG.generic;
+                  const statusCfg = STATUS_CFG[srv.status] || STATUS_CFG.untested;
+                  const StatusIcon = statusCfg.icon;
+                  const formCount = forms.filter(f => f.field_data_form_servers?.some(fs => fs.server_id === srv.id)).length;
+                  return (
+                    <div
+                      key={srv.id}
+                      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:shadow-md transition-all group"
+                      data-testid={`card-server-${srv.id}`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className={cn('w-2 h-2 rounded-full', typeCfg.dot)} />
+                          <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full border', typeCfg.color)}>
+                            {typeCfg.label}
+                          </span>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                              <Settings className="w-3.5 h-3.5 text-slate-400" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={e => { e.stopPropagation(); handleTestConnection(srv); }}
+                              disabled={testingServerId === srv.id}
+                              data-testid={`button-test-${srv.id}`}
+                            >
+                              {testingServerId === srv.id
+                                ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                                : <FlaskConical className="w-3.5 h-3.5 mr-2" />}
+                              Test Connection
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEditServer(srv)}>
+                              <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-500" onClick={() => setDeleteServerId(srv.id)}>
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight">{srv.name}</p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{srv.base_url}</p>
+                      <div className="mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <StatusIcon className={cn('w-3.5 h-3.5', statusCfg.color)} />
+                          <span className={cn('text-xs', statusCfg.color)}>{statusCfg.label}</span>
+                        </div>
+                        <span className="text-xs text-slate-400">{formCount} form{formCount !== 1 ? 's' : ''}</span>
+                      </div>
+                      {testResults[srv.id] && (
+                        <div className={cn(
+                          'mt-2 flex items-center gap-1.5 text-xs rounded-lg px-2 py-1',
+                          testResults[srv.id].ok
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20'
+                            : 'bg-red-50 text-red-700 dark:bg-red-900/20',
+                        )}>
+                          {testResults[srv.id].ok
+                            ? <CheckCircle className="w-3 h-3 shrink-0" />
+                            : <XCircle className="w-3 h-3 shrink-0" />}
+                          <span className="truncate">{testResults[srv.id].message}</span>
+                        </div>
+                      )}
+                      {!testResults[srv.id] && srv.last_health_check && (
+                        <p className="text-xs text-slate-400 mt-1.5">
+                          Checked {formatDistanceToNow(new Date(srv.last_health_check), { addSuffix: true })}
+                        </p>
+                      )}
+                      <button
+                        className="mt-2 w-full text-xs text-blue-600 hover:text-blue-800 flex items-center justify-center gap-1 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        onClick={e => { e.stopPropagation(); handleTestConnection(srv); }}
+                        disabled={testingServerId === srv.id}
+                        data-testid={`button-test-inline-${srv.id}`}
+                      >
+                        {testingServerId === srv.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <FlaskConical className="w-3 h-3" />}
+                        {testingServerId === srv.id ? 'Testing…' : 'Test Connection'}
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={openNewServer}
+                  className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all text-slate-400 hover:text-blue-500"
+                  data-testid="button-add-server-card"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="text-xs font-medium">Add Server</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Forms List */}
+          <div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">All Forms</h2>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-none">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input
+                    placeholder="Search forms…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-8 h-8 text-sm w-full sm:w-52"
+                    data-testid="input-search-forms"
+                  />
+                </div>
+                <Select value={serverFilter} onValueChange={setServerFilter}>
+                  <SelectTrigger className="h-8 text-xs w-36" data-testid="select-server-filter">
+                    <SelectValue placeholder="All Servers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Servers</SelectItem>
+                    {servers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-8 text-xs w-28" data-testid="select-status-filter">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {loadingForms ? (
+              <div className="flex items-center gap-2 text-slate-400 py-8 justify-center">
+                <Loader2 className="w-5 h-5 animate-spin" /> Loading forms…
+              </div>
+            ) : filteredForms.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-12 text-center">
+                {forms.length === 0 ? (
+                  <>
+                    <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <p className="font-medium text-slate-600 dark:text-slate-300">No forms yet</p>
+                    <p className="text-sm text-slate-400 mt-1 mb-4">Create a form or import data via CSV to get started</p>
+                    <Button onClick={() => setNewFormDialog(true)} size="sm" data-testid="button-create-first-form">
+                      <Plus className="w-4 h-4 mr-1.5" /> Create Form
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-500">No forms match your filters</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                <table className="w-full text-sm" data-testid="table-forms">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Form Name</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Servers</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Submissions</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Last Synced</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden xl:table-cell">Sync</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredForms.map(form => {
+                      const linkedServers = form.field_data_form_servers ?? [];
+                      return (
+                        <tr
+                          key={form.id}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer group transition-colors"
+                          onClick={() => navigate(`/field-data/${form.id}`)}
+                          data-testid={`row-form-${form.id}`}
+                        >
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                {form.name}
+                              </p>
+                              {form.description && (
+                                <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{form.description}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {linkedServers.slice(0, 3).map(fs => (
+                                <span
+                                  key={fs.server_id}
+                                  className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded"
+                                >
+                                  {fs.field_data_servers?.name ?? '—'}
+                                </span>
+                              ))}
+                              {linkedServers.length > 3 && (
+                                <span className="text-xs text-slate-400">+{linkedServers.length - 3}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">
+                              {(form.submission_count || 0).toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-slate-500 text-xs">
+                              {(() => {
+                                const lastSync = form.field_data_form_servers
+                                  ?.map(fs => fs.last_synced_at)
+                                  .filter(Boolean)
+                                  .sort()
+                                  .pop();
+                                return lastSync
+                                  ? formatDistanceToNow(new Date(lastSync), { addSuffix: true })
+                                  : '—';
+                              })()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'text-xs',
+                                form.status === 'active' && 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                                form.status === 'paused' && 'bg-amber-50 text-amber-700 border-amber-200',
+                                form.status === 'archived' && 'bg-slate-100 text-slate-500 border-slate-200',
+                              )}
+                            >
+                              {form.status}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 hidden xl:table-cell" onClick={e => e.stopPropagation()}>
+                            {(form.field_data_form_servers?.length ?? 0) > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1.5"
+                                disabled={syncingFormId === form.id}
+                                onClick={e => { e.stopPropagation(); handleSyncForm(form); }}
+                                data-testid={`button-sync-form-${form.id}`}
+                              >
+                                {syncingFormId === form.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <RefreshCw className="w-3 h-3" />}
+                                {syncingFormId === form.id ? 'Syncing…' : 'Sync'}
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-slate-400">No server</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* All other tabs — render imported components */}
+      {activeTab === 'datasets'      && <FieldDataDatasets />}
+      {activeTab === 'sampling'      && <FieldDataSampling />}
+      {activeTab === 'studies'       && <FieldDataStudies />}
+      {activeTab === 'quality'       && <FieldDataQuality />}
+      {activeTab === 'monitoring'    && <FieldDataMonitoring />}
+      {activeTab === 'cases'         && <FieldDataCases />}
+      {activeTab === 'workflow'      && <FieldDataWorkflow />}
+      {activeTab === 'exports'       && <FieldDataExports />}
+      {activeTab === 'languages'     && <FieldDataLanguages />}
+      {activeTab === 'collaboration' && <FieldDataCollaboration />}
+      {activeTab === 'backup'        && <FieldDataBackup />}
+      {activeTab === 'api'           && <FieldDataAPI />}
+      {activeTab === 'notifications' && <FieldDataNotifications />}
+
+      {/* ── Connect / Edit Server Dialog ──────────────────────────────── */}
       <Dialog open={serverDialog} onOpenChange={v => { setServerDialog(v); if (!v) setEditServer(null); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -798,7 +876,7 @@ export default function FieldDataHub() {
         </DialogContent>
       </Dialog>
 
-      {/* ── New Form Dialog ──────────────────────────────────────────────── */}
+      {/* ── New Form Dialog ────────────────────────────────────────────── */}
       <Dialog open={newFormDialog} onOpenChange={setNewFormDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -853,7 +931,7 @@ export default function FieldDataHub() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Server Confirm ────────────────────────────────────────── */}
+      {/* ── Delete Server Confirm ──────────────────────────────────────── */}
       <AlertDialog open={!!deleteServerId} onOpenChange={v => !v && setDeleteServerId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

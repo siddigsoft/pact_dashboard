@@ -393,19 +393,6 @@
     const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector;
     if (canSeeFieldDataHub && !isHidden('/field-data')) {
       planningItems.push({ id: 'field-data-hub', title: "Field Data Hub", url: "/field-data", icon: Layers, priority: 3, isPinned: isPinned('/field-data') });
-      planningItems.push({ id: 'field-data-datasets', title: "Server Datasets", url: "/field-data/datasets", icon: Database, priority: 3, isPinned: isPinned('/field-data/datasets') });
-      planningItems.push({ id: 'field-data-sampling', title: "Sampling Engine", url: "/field-data/sampling", icon: Shuffle, priority: 3, isPinned: isPinned('/field-data/sampling') });
-      planningItems.push({ id: 'field-data-studies', title: "Multi-Round Studies", url: "/field-data/studies", icon: BookOpen, priority: 3, isPinned: isPinned('/field-data/studies') });
-      planningItems.push({ id: 'field-data-quality', title: "Data Quality", url: "/field-data/quality", icon: ShieldCheck, priority: 3, isPinned: isPinned('/field-data/quality') });
-      planningItems.push({ id: 'field-data-monitoring', title: "Fieldwork Monitor", url: "/field-data/monitoring", icon: Activity, priority: 3, isPinned: isPinned('/field-data/monitoring') });
-      planningItems.push({ id: 'field-data-cases', title: "Case Management", url: "/field-data/cases", icon: ClipboardList, priority: 3, isPinned: isPinned('/field-data/cases') });
-      planningItems.push({ id: 'field-data-workflow', title: "Workflow & Review", url: "/field-data/workflow", icon: FileSignature, priority: 3, isPinned: isPinned('/field-data/workflow') });
-      planningItems.push({ id: 'field-data-exports',    title: "Smart Export",       url: "/field-data/exports",    icon: FileDown,    priority: 3, isPinned: isPinned('/field-data/exports') });
-      planningItems.push({ id: 'field-data-languages',      title: "Multi-Language Forms",    url: "/field-data/languages",      icon: Languages, priority: 3, isPinned: isPinned('/field-data/languages') });
-      planningItems.push({ id: 'field-data-collaboration',  title: "Collaboration & Review",  url: "/field-data/collaboration",  icon: Users,    priority: 3, isPinned: isPinned('/field-data/collaboration') });
-      planningItems.push({ id: 'field-data-backup',         title: "Backup & Recovery",       url: "/field-data/backup",         icon: Archive,  priority: 3, isPinned: isPinned('/field-data/backup') });
-      planningItems.push({ id: 'field-data-api',            title: "API & Integrations",       url: "/field-data/api",            icon: Webhook,  priority: 3, isPinned: isPinned('/field-data/api') });
-      planningItems.push({ id: 'field-data-notifications',  title: "Notification Channels",    url: "/field-data/notifications",  icon: Bell,     priority: 3, isPinned: isPinned('/field-data/notifications') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
