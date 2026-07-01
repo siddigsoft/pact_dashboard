@@ -2428,6 +2428,5 @@ export default function FieldDataFormDetail() {
         </DialogContent>
       </Dialog>
     </div>
-  </div>
   );
 }

@@ -837,7 +837,6 @@ export default function FieldDataStudyDetail() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  </div>
   );
 }
 

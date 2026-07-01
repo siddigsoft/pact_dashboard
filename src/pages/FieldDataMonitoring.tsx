@@ -778,6 +778,5 @@ export default function FieldDataMonitoring() {
         </DialogContent>
       </Dialog>
     </div>
-  </div>
   );
 }

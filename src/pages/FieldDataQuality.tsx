@@ -841,7 +841,5 @@ export default function FieldDataQuality() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-    </div>
-  </div>
   );
 }
