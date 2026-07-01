@@ -641,12 +641,23 @@ DECLARE
   v_je_id           UUID;
   v_ik              TEXT;
 BEGIN
-  -- Role guard: only service_role (pg_cron / Edge Function scheduler) or postgres
-  -- superuser may call this function.  Blank JWT role and 'authenticated' are
-  -- explicitly rejected — no regular user or unauthenticated caller may invoke it.
-  v_jwt_role := coalesce(current_setting('request.jwt.claims.role', true), '');
-  IF v_jwt_role NOT IN ('service_role', 'postgres') THEN
-    RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (role="%"). Must be service_role or postgres.', v_jwt_role;
+  -- Guard: allow pg_cron (current_user = postgres/supabase_admin/service_role) OR
+  -- Edge Function scheduler (JWT role = service_role).
+  -- PostgREST stores JWT claims as a JSON string in request.jwt.claims — parse it
+  -- with ::json->>'role'. The dotted path request.jwt.claims.role does NOT exist.
+  BEGIN
+    v_jwt_role := coalesce(
+      current_setting('request.jwt.claims', true)::json->>'role',
+      ''
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_jwt_role := coalesce(current_setting('request.jwt.claims.role', true), '');
+  END;
+  IF current_user NOT IN ('postgres', 'supabase_admin', 'supabase_auth_admin', 'service_role')
+     AND v_jwt_role NOT IN ('service_role')
+  THEN
+    RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (db_user="%" jwt_role="%").',
+      current_user, v_jwt_role;
   END IF;
   -- Mark funds ending within warning_days as ending_soon
   UPDATE pre_fund_requests
@@ -2165,7 +2176,11 @@ DECLARE
   v_url              TEXT := NULL;
   v_key              TEXT := NULL;
 BEGIN
-  v_caller_role := COALESCE(current_setting('request.jwt.claims.role', true), '');
+  BEGIN
+    v_caller_role := COALESCE(current_setting('request.jwt.claims', true)::json->>'role', '');
+  EXCEPTION WHEN OTHERS THEN
+    v_caller_role := COALESCE(current_setting('request.jwt.claims.role', true), '');
+  END;
   IF v_caller_role = 'authenticated' THEN
     RETURN jsonb_build_object('error', 'unauthorized');
   END IF;

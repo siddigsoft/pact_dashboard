@@ -592,16 +592,28 @@ DECLARE
   v_je_id           UUID;
   v_ik              TEXT;
 BEGIN
-  -- Access guard: allow pg_cron / supabase scheduler (current_user = postgres/supabase_admin),
-  -- Edge Function callers (JWT role = service_role), or direct superuser access.
-  -- JWT claims are absent in pg_cron context so we check current_user first.
-  IF current_user NOT IN ('postgres', 'supabase_admin', 'supabase_auth_admin')
-     AND coalesce(current_setting('request.jwt.claims.role', true), '') NOT IN ('service_role')
-  THEN
-    RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (db_user="%" jwt_role="%"). Must be postgres, supabase_admin, or service_role.',
-      current_user,
-      coalesce(current_setting('request.jwt.claims.role', true), '');
-  END IF;
+  -- Guard: allow pg_cron (current_user = postgres/supabase_admin/service_role) OR
+  -- Edge Function scheduler (JWT role = service_role).
+  -- PostgREST stores JWT claims as a JSON string in request.jwt.claims — parse it
+  -- with ::json->>'role'. The dotted path request.jwt.claims.role does NOT exist.
+  DECLARE
+    v_jwt_role_guard text := '';
+  BEGIN
+    BEGIN
+      v_jwt_role_guard := coalesce(
+        current_setting('request.jwt.claims', true)::json->>'role',
+        ''
+      );
+    EXCEPTION WHEN OTHERS THEN
+      v_jwt_role_guard := coalesce(current_setting('request.jwt.claims.role', true), '');
+    END;
+    IF current_user NOT IN ('postgres', 'supabase_admin', 'supabase_auth_admin', 'service_role')
+       AND v_jwt_role_guard NOT IN ('service_role')
+    THEN
+      RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (db_user="%" jwt_role="%").',
+        current_user, v_jwt_role_guard;
+    END IF;
+  END;
   -- Mark funds ending within warning_days as ending_soon
   UPDATE pre_fund_requests
   SET ending_soon_alert = true, updated_at = now()

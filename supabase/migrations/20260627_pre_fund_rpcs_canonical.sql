@@ -584,16 +584,28 @@ DECLARE
   v_je_id           UUID;
   v_ik              TEXT;
   r                 RECORD;
+  v_jwt_role        text := '';
 BEGIN
-  -- Guard: allow pg_cron (current_user = postgres/supabase_admin) OR
-  -- Edge Function scheduler (JWT role = service_role). JWT claims are absent
-  -- in pg_cron context, so current_user is checked first.
-  IF current_user NOT IN ('postgres', 'supabase_admin', 'supabase_auth_admin')
-     AND coalesce(current_setting('request.jwt.claims.role', true), '') NOT IN ('service_role')
+  -- Guard: allow pg_cron (current_user = postgres/supabase_admin/service_role) OR
+  -- Edge Function scheduler (JWT role = service_role).
+  -- PostgREST stores JWT claims as a JSON string in request.jwt.claims — parse it
+  -- with ::json->>'role'. The dotted path request.jwt.claims.role does NOT exist.
+  -- In pg_cron context JWT claims are absent entirely, so current_user is checked first.
+  BEGIN
+    v_jwt_role := coalesce(
+      current_setting('request.jwt.claims', true)::json->>'role',
+      ''
+    );
+  EXCEPTION WHEN OTHERS THEN
+    -- Fallback for environments that do set individual claim keys
+    v_jwt_role := coalesce(current_setting('request.jwt.claims.role', true), '');
+  END;
+
+  IF current_user NOT IN ('postgres', 'supabase_admin', 'supabase_auth_admin', 'service_role')
+     AND v_jwt_role NOT IN ('service_role')
   THEN
     RAISE EXCEPTION 'run_pre_fund_renewal_check: unauthorized caller (db_user="%" jwt_role="%").',
-      current_user,
-      coalesce(current_setting('request.jwt.claims.role', true), '');
+      current_user, v_jwt_role;
   END IF;
 
   UPDATE pre_fund_requests
