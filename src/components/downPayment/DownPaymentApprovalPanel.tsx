@@ -3040,6 +3040,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           <div className="text-xl font-bold text-yellow-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-pending-count">{(stats.counts.pendingSupervisor + stats.counts.pendingAdmin).toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Pending</div>
           <div className="text-[11px] font-medium text-yellow-700 dark:text-yellow-400 mt-0.5 whitespace-nowrap tabular-nums" data-testid="text-stats-pending-amount">{stats.amounts.totalPendingAmount.toLocaleString()} SDG</div>
+          {stats.amounts.totalRequested > 0 && (
+            <div className="text-[11px] font-semibold text-yellow-600 dark:text-yellow-400 tabular-nums" data-testid="text-stats-pending-pct">
+              {Math.round(stats.amounts.totalPendingAmount / stats.amounts.totalRequested * 100)}% of requested
+            </div>
+          )}
           {stats.counts.pendingSupervisor > 0 && stats.counts.pendingAdmin > 0 && (
             <div className="text-[11px] text-muted-foreground mt-0.5">
               {stats.counts.pendingSupervisor} sup · {stats.counts.pendingAdmin} admin
@@ -3051,6 +3056,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         <CardContent className="p-3">
           <div className="text-xl font-bold text-emerald-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-approved-amount">{stats.amounts.totalApproved.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Total Approved (SDG)</div>
+          {stats.amounts.totalRequested > 0 && (
+            <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid="text-stats-approved-pct">
+              {Math.round(stats.amounts.totalApproved / stats.amounts.totalRequested * 100)}% of requested
+            </div>
+          )}
           {stats.counts.approved > 0 && (
             <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 mt-0.5 tabular-nums" data-testid="text-stats-approved-count">
               {stats.counts.approved.toLocaleString()} {stats.counts.approved === 1 ? 'request' : 'requests'}
@@ -3062,6 +3072,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         <CardContent className="p-3">
           <div className="text-xl font-bold text-green-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-paid-amount">{stats.amounts.totalPaid.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Total Paid (SDG)</div>
+          {stats.amounts.totalApproved > 0 && (
+            <div className="text-[11px] font-semibold text-green-600 dark:text-green-400 tabular-nums" data-testid="text-stats-paid-pct">
+              {Math.round(stats.amounts.totalPaid / stats.amounts.totalApproved * 100)}% of approved
+            </div>
+          )}
           {(stats.counts.partiallyPaid + stats.counts.fullyPaid) > 0 && (
             <div className="text-[11px] font-medium text-green-700 dark:text-green-400 mt-0.5 tabular-nums" data-testid="text-stats-paid-count">
               {(stats.counts.partiallyPaid + stats.counts.fullyPaid).toLocaleString()} {(stats.counts.partiallyPaid + stats.counts.fullyPaid) === 1 ? 'request' : 'requests'}
@@ -3073,6 +3088,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         <CardContent className="p-3">
           <div className="text-xl font-bold text-orange-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-remaining-amount">{stats.amounts.totalRemaining.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Remaining (SDG)</div>
+          {stats.amounts.totalApproved > 0 && (
+            <div className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 tabular-nums" data-testid="text-stats-remaining-pct">
+              {Math.round(stats.amounts.totalRemaining / stats.amounts.totalApproved * 100)}% of approved
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
