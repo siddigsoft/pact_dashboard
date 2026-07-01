@@ -860,7 +860,7 @@ export default function FieldDataBackup() {
     { id: 'backups', label: 'Automatic Backups', icon: HardDrive,
       desc: 'Daily snapshots to Supabase Storage or external cloud' },
     { id: 'restore', label: 'Point-in-Time Restore', icon: RotateCcw,
-      desc: 'Restore any form's submissions to a previous snapshot' },
+      desc: "Restore any form's submissions to a previous snapshot" },
     { id: 'archive', label: 'PACT Archive', icon: FolderArchive,
       desc: 'Self-contained offline ZIP for study archival' },
   ];
