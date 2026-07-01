@@ -98,6 +98,17 @@ BEGIN
   v_idempotency_key := 'pf-received-' || p_fund_id::TEXT ||
     CASE WHEN p_idempotency_suffix <> '' THEN '-' || p_idempotency_suffix ELSE '' END;
 
+  -- Idempotency: if a JE already exists for this key (e.g. retry / double-click / webhook replay)
+  -- return the existing entry id without re-inserting or re-activating.
+  SELECT id INTO v_je_id
+  FROM acct_journal_entries
+  WHERE idempotency_key = v_idempotency_key
+  LIMIT 1;
+
+  IF v_je_id IS NOT NULL THEN
+    RETURN jsonb_build_object('success', true, 'journal_entry_id', v_je_id, 'idempotent', true);
+  END IF;
+
   INSERT INTO acct_journal_entries (
     description_en, description_ar, posting_date, period_id, status,
     source_type, source_id, idempotency_key, created_by
@@ -584,6 +595,7 @@ DECLARE
   v_je_id           UUID;
   v_ik              TEXT;
   r                 RECORD;
+  v_new_id          UUID;
   v_jwt_role        text := '';
 BEGIN
   -- Guard: allow pg_cron (current_user = postgres/supabase_admin/service_role) OR
@@ -648,8 +660,34 @@ BEGIN
         r.gl_receipt_account, r.gl_liability_account,
         r.auto_renewal_mode, r.grace_period_days,
         r.id
-      );
-      fund_id   := r.id;
+      ) RETURNING id INTO v_new_id;
+
+      -- Clone approval steps from the parent so the renewal enters the same chain.
+      -- Cloned steps reset to 'pending'; approved_at / approved_by / notes are cleared.
+      INSERT INTO pre_fund_approval_steps (
+        pre_fund_request_id, step_order, step_label,
+        assigned_user_id, assigned_user_ids, is_required, required_approvals, status
+      )
+      SELECT
+        v_new_id, step_order, step_label,
+        assigned_user_id, assigned_user_ids, is_required,
+        COALESCE(required_approvals, 1), 'pending'
+      FROM pre_fund_approval_steps
+      WHERE pre_fund_request_id = r.id
+      ORDER BY step_order;
+
+      -- If parent had no steps, seed a default Finance Review so the draft is not stranded.
+      IF NOT FOUND THEN
+        INSERT INTO pre_fund_approval_steps (
+          pre_fund_request_id, step_order, step_label,
+          assigned_user_ids, is_required, required_approvals, status
+        ) VALUES (
+          v_new_id, 1, 'Finance Review (Auto-Renewal)',
+          '{}', true, 1, 'pending'
+        );
+      END IF;
+
+      fund_id   := v_new_id;
       fund_name := r.name;
       action    := 'auto_drafted_renewal';
       RETURN NEXT;

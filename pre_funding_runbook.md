@@ -136,11 +136,21 @@ SELECT cron.schedule(
 What it does each run:
 - Marks funds ending within warning_days as `ending_soon`
 - Marks low-balance funds as `low_balance`
-- Creates `draft` renewal copies for `auto_renewal_mode = 'auto_draft'` funds
-- Creates `active` or `pending_grace` copies for `auto_renewal_mode = 'auto_activate'` funds
-- Posts GL JEs (DR Receipt / CR Liability) for immediately-activated renewals
+- **`auto_draft` renewals** — creates a `draft` copy of the expiring fund **and clones all
+  `pre_fund_approval_steps` from the parent** (status reset to `pending`). If the parent had
+  no steps, a default "Finance Review (Auto-Renewal)" step is seeded so the draft is never
+  stranded. The draft must proceed through the same approval chain before it can be activated.
+- **`auto_activate` renewals** — two paths depending on `auto_renewal_bypass_approvals`:
+  - `bypass=true` → creates fund directly as `active` and posts GL JE (DR Receipt / CR Liability)
+  - `bypass=false` → creates fund as `pending_approval` and **clones approval steps from parent**
+    (same fallback default step as auto_draft). Activates only after `process_pf_step_action()`
+    resolves all required steps — the scheduler never auto-promotes a `pending_approval` fund.
 - Activates `pending_grace` funds whose grace window has expired (with GL posting)
 - Fires `notification_events` for Finance team
+
+> **Approval chain contract:** Neither `auto_draft` nor `auto_activate` (bypass=false) skips
+> the approval chain. The scheduler creates the renewal and seeds the steps, but a Finance
+> approver must still act via the Approvals Hub before the fund becomes `active`.
 
 ### `pre-fund-bank-feed` — Bank Feed Ingestion
 
@@ -163,6 +173,10 @@ Matching logic:
 1. Finds `awaiting_receipt` funds matching currency + amount (within $0.01 tolerance)
 2. Narrows by reference/name match if multiple candidates
 3. **Exact 1 match** → calls `activate_pre_fund_rpc` (GL JE posted + status set to `active`)
+   - `activate_pre_fund_rpc` is **idempotent**: if a JE for the same idempotency key already
+     exists (webhook retry, double-click, bank poll overlap) it returns the existing
+     `journal_entry_id` with `"idempotent": true` and does not duplicate the JE or
+     re-update the fund. Safe to call multiple times.
 4. **0 or >1 matches** → inserts into `pre_fund_bank_unmatched` for Finance manual review
 
 ---

@@ -675,38 +675,79 @@ BEGIN
     AND amount > 0
     AND (available_balance / amount * 100) <= threshold_pct;
 
-  -- Auto-draft renewal for eligible funds (auto_renewal_mode = 'auto_draft')
-  -- Creates a new draft fund request copying key fields from the expiring fund
-  INSERT INTO pre_fund_requests (
-    name, source, amount, currency, period_type_id, period_type_name,
-    country_id, project_id, grant_id, matching_scope,
-    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
-    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-    notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
-    start_date, end_date
-  )
-  SELECT
-    name || ' (Renewal)', source, amount, currency, period_type_id, period_type_name,
-    country_id, project_id, grant_id, matching_scope,
-    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
-    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-    notification_recipients,
-    'Auto-renewed from fund id: ' || id::text,
-    'draft', 0, 0, 0,
-    end_date + 1,
-    end_date + 1 + COALESCE(
-      (SELECT day_count FROM pre_fund_period_types WHERE id = period_type_id), 30
+  -- ── Auto-draft renewal for eligible funds (auto_renewal_mode = 'auto_draft') ─────────────
+  -- Creates a new 'draft' fund copying key fields from the expiring parent, then clones
+  -- its approval steps so the renewal enters the same approval chain automatically.
+  -- Uses a FOR LOOP (not bulk INSERT SELECT) so each new fund id can be captured for step cloning.
+  FOR r IN
+    SELECT
+      id, name, source, amount, currency, period_type_id, period_type_name,
+      country_id, project_id, grant_id, matching_scope,
+      threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+      gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+      notification_recipients, end_date
+    FROM pre_fund_requests
+    WHERE status IN ('active','low_balance')
+      AND auto_renewal_mode = 'auto_draft'
+      AND end_date IS NOT NULL
+      AND end_date <= (CURRENT_DATE + COALESCE(auto_renewal_days_before, 7))
+      AND NOT EXISTS (
+        SELECT 1 FROM pre_fund_requests r2
+        WHERE r2.notes LIKE '%Auto-renewed from fund id: ' || pre_fund_requests.id::text || '%'
+          AND r2.status = 'draft'
+      )
+  LOOP
+    INSERT INTO pre_fund_requests (
+      name, source, amount, currency, period_type_id, period_type_name,
+      country_id, project_id, grant_id, matching_scope,
+      threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+      gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+      notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
+      start_date, end_date
+    ) VALUES (
+      r.name || ' (Renewal)', r.source, r.amount, r.currency, r.period_type_id, r.period_type_name,
+      r.country_id, r.project_id, r.grant_id, r.matching_scope,
+      r.threshold_pct, r.threshold_amount, r.warning_days, r.auto_renewal_mode, r.auto_renewal_days_before,
+      r.gl_receipt_account, r.gl_liability_account, r.gl_expense_account, r.gl_cf_account,
+      r.notification_recipients,
+      'Auto-renewed from fund id: ' || r.id::text,
+      'draft', 0, 0, 0,
+      r.end_date + 1,
+      r.end_date + 1 + COALESCE(
+        (SELECT day_count FROM pre_fund_period_types WHERE id = r.period_type_id), 30
+      )
+    ) RETURNING id INTO v_new_id;
+
+    -- Clone approval steps from the parent so the renewal enters the same approval chain.
+    -- Steps are reset to 'pending'; previous votes/notes are not carried over.
+    INSERT INTO pre_fund_approval_steps (
+      pre_fund_request_id, step_order, step_label,
+      assigned_user_id, assigned_user_ids, is_required, required_approvals, status
     )
-  FROM pre_fund_requests
-  WHERE status IN ('active','low_balance')
-    AND auto_renewal_mode = 'auto_draft'
-    AND end_date IS NOT NULL
-    AND end_date <= (CURRENT_DATE + COALESCE(auto_renewal_days_before, 7))
-    AND NOT EXISTS (
-      SELECT 1 FROM pre_fund_requests r2
-      WHERE r2.notes LIKE '%Auto-renewed from fund id: ' || pre_fund_requests.id::text || '%'
-        AND r2.status = 'draft'
-    );
+    SELECT
+      v_new_id, step_order, step_label,
+      assigned_user_id, assigned_user_ids, is_required,
+      COALESCE(required_approvals, 1), 'pending'
+    FROM pre_fund_approval_steps
+    WHERE pre_fund_request_id = r.id
+    ORDER BY step_order;
+
+    -- If parent had no steps, seed a default Finance Review so the draft is not stranded.
+    IF NOT FOUND THEN
+      INSERT INTO pre_fund_approval_steps (
+        pre_fund_request_id, step_order, step_label,
+        assigned_user_ids, is_required, required_approvals, status
+      ) VALUES (
+        v_new_id, 1, 'Finance Review (Auto-Renewal)',
+        '{}', true, 1, 'pending'
+      );
+    END IF;
+
+    fund_id   := v_new_id;
+    fund_name := r.name;
+    action    := 'auto_drafted_renewal';
+    RETURN NEXT;
+  END LOOP;
 
   -- ── Auto-activate renewal for eligible funds (auto_renewal_mode = 'auto_activate') ──
   --
@@ -1096,7 +1137,17 @@ BEGIN
   v_idempotency_key := 'pf-received-' || p_fund_id::TEXT ||
     CASE WHEN p_idempotency_suffix <> '' THEN '-' || p_idempotency_suffix ELSE '' END;
 
-  -- All writes in one atomic block
+  -- Idempotency: if a JE already exists for this key (retry / double-click / webhook replay)
+  -- return the existing entry id immediately without re-inserting or re-activating.
+  SELECT id INTO v_je_id
+  FROM acct_journal_entries
+  WHERE idempotency_key = v_idempotency_key
+  LIMIT 1;
+
+  IF v_je_id IS NOT NULL THEN
+    RETURN jsonb_build_object('success', true, 'journal_entry_id', v_je_id, 'idempotent', true);
+  END IF;
+
   INSERT INTO acct_journal_entries (
     description_en, description_ar, posting_date, period_id, status,
     source_type, source_id, idempotency_key, created_by
