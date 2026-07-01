@@ -25,6 +25,58 @@
 -- ============================================================================
 
 -- ============================================================================
+-- SAFETY PREAMBLE — Create FK-target tables first
+-- These two tables are referenced by FK in 8+ later migration files.
+-- Creating them here guarantees they exist even if execution stops midway
+-- through the core migration for any reason.
+-- Both definitions are identical to what the core migration creates;
+-- CREATE TABLE IF NOT EXISTS makes them a no-op if already present.
+-- ============================================================================
+
+-- field_data_forms must exist before fd_forms (fd_forms has FK → field_data_forms)
+CREATE TABLE IF NOT EXISTS field_data_forms (
+  id                       UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                     TEXT        NOT NULL,
+  description              TEXT,
+  form_id_slug             TEXT,
+  xls_form_url             TEXT,
+  status                   TEXT        NOT NULL DEFAULT 'active'
+                           CHECK (status IN ('active','paused','archived')),
+  default_language         TEXT        NOT NULL DEFAULT 'English',
+  submission_count         INTEGER     NOT NULL DEFAULT 0,
+  last_submission_at       TIMESTAMPTZ,
+  odk_qr_code              TEXT,
+  qr_generated_at          TIMESTAMPTZ,
+  encryption_enabled       BOOLEAN     NOT NULL DEFAULT false,
+  public_key               TEXT,
+  created_by               UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- fd_forms — referenced by FK in all fd_* tables (Phases 7–18)
+CREATE TABLE IF NOT EXISTS fd_forms (
+  id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name               TEXT        NOT NULL,
+  description        TEXT,
+  version            TEXT        NOT NULL DEFAULT '1',
+  status             TEXT        NOT NULL DEFAULT 'active'
+                     CHECK (status IN ('active','paused','archived','draft')),
+  default_language   TEXT        NOT NULL DEFAULT 'en',
+  submission_count   INTEGER     NOT NULL DEFAULT 0,
+  last_submission_at TIMESTAMPTZ,
+  legacy_form_id     UUID        REFERENCES field_data_forms(id) ON DELETE SET NULL,
+  created_by         UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================================
+-- END SAFETY PREAMBLE — full migrations follow
+-- ============================================================================
+
+
+-- ============================================================================
 -- PHASE 1-6 CORE (field_data_* + fd_* unified schema)
 -- ============================================================================
 -- ============================================================================
