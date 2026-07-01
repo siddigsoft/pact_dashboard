@@ -599,6 +599,7 @@ export default function PreFundingReconciliation() {
   // Unlink / remove a linked transaction
   const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
   const [unlinkingId, setUnlinkingId]           = useState<string | null>(null);
+  const [reconcilingAll, setReconcilingAll]     = useState(false);
 
   // Transaction drill-down
   const [drillTxn, setDrillTxn]     = useState<PreFundTransaction | null>(null);
@@ -1117,6 +1118,25 @@ export default function PreFundingReconciliation() {
   const handleReconcileTxn = async (txnId: string, reconciled: boolean) => {
     await supabase.from('pre_fund_transactions').update({ reconciled, reconciled_at: reconciled ? new Date().toISOString() : null }).eq('id', txnId);
     if (selectedFund) await loadTxns(selectedFund.id);
+  };
+
+  const handleReconcileAll = async (reconcile: boolean) => {
+    if (!selectedFund || reconcilingAll) return;
+    const targets = transactions.filter(t => t.reconciled !== reconcile);
+    if (targets.length === 0) return;
+    setReconcilingAll(true);
+    try {
+      const ids = targets.map(t => t.id);
+      await supabase.from('pre_fund_transactions')
+        .update({ reconciled: reconcile, reconciled_at: reconcile ? new Date().toISOString() : null })
+        .in('id', ids);
+      await loadTxns(selectedFund.id);
+      toast({ title: reconcile ? `${ids.length} transactions reconciled` : `${ids.length} transactions unreconciled` });
+    } catch (err: any) {
+      toast({ title: 'Bulk reconcile failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setReconcilingAll(false);
+    }
   };
 
   const handleClosePeriod = async () => {
@@ -1783,7 +1803,34 @@ export default function PreFundingReconciliation() {
                           <TableHead><span className="flex items-center gap-1"><Clock className="h-3 w-3" />Recorded</span></TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                           <TableHead className="text-center w-8"><Receipt className="h-3 w-3 mx-auto" /></TableHead>
-                          <TableHead className="text-center">Recon</TableHead>
+                          <TableHead className="text-center" onClick={e => e.stopPropagation()}>
+                            {(() => {
+                              const total = transactions.length;
+                              const reconciled = transactions.filter(t => t.reconciled).length;
+                              const allDone = total > 0 && reconciled === total;
+                              const someDone = reconciled > 0 && reconciled < total;
+                              return (
+                                <button
+                                  title={allDone ? 'Unreconcile all' : 'Reconcile all'}
+                                  disabled={reconcilingAll || total === 0}
+                                  onClick={() => handleReconcileAll(!allDone)}
+                                  className={cn(
+                                    'h-5 w-5 rounded border-2 transition-colors mx-auto flex items-center justify-center',
+                                    allDone
+                                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                                      : someDone
+                                      ? 'bg-emerald-200 border-emerald-400 dark:bg-emerald-900/40 dark:border-emerald-600'
+                                      : 'border-muted-foreground hover:border-emerald-500',
+                                    reconcilingAll && 'opacity-50 cursor-wait'
+                                  )}
+                                  data-testid="button-reconcile-all"
+                                >
+                                  {allDone && <CheckCircle2 className="h-3 w-3" />}
+                                  {someDone && !allDone && <span className="block h-1.5 w-1.5 rounded-sm bg-emerald-500" />}
+                                </button>
+                              );
+                            })()}
+                          </TableHead>
                           <TableHead className="text-center w-8"></TableHead>
                         </TableRow>
                       </TableHeader>
