@@ -149,23 +149,25 @@ export async function linkPaymentToPreFund(params: {
     let userAllocation: any = null;
 
     if (fundAllocs.length > 0) {
-      // Fund has explicit allocations — submitter MUST be in the list
-      if (!submitterId) return { fund: f, score: -1, userAllocation: null };
-      const myAlloc = fundAllocs.find((a: any) => a.user_id === submitterId);
-      if (!myAlloc) return { fund: f, score: -1, userAllocation: null };
-
-      const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
-      if (remaining < amount) return { fund: f, score: -1, userAllocation: null };
-
-      userAllocation = myAlloc;
-
-      // Score 5: submitter has a valid personal allocation — highest priority.
-      // Finance deliberately assigned this user to this fund so we always prefer it,
-      // regardless of country / project / category scope.
-      return { fund: f, score: 5, userAllocation };
+      if (submitterId) {
+        const myAlloc = fundAllocs.find((a: any) => a.user_id === submitterId);
+        if (myAlloc) {
+          const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
+          // Submitter is allocated but over their personal cap → exclude this fund
+          if (remaining < amount) return { fund: f, score: -1, userAllocation: null };
+          userAllocation = myAlloc;
+          // Score 5: submitter has a valid personal allocation — highest priority.
+          // Finance deliberately assigned this user to this fund so we always prefer it.
+          return { fund: f, score: 5, userAllocation };
+        }
+        // Submitter is NOT in the allocation list → fall through to scope scoring.
+        // The fund balance is still deducted; personal allocation is NOT tracked
+        // (no allocation row exists for this person).
+      }
+      // No submitterId or submitter not allocated → fall through to scope scoring
     }
 
-    // Fund has no allocations → open pool; score by scope match
+    // Fund has no allocations (or submitter not in allocation list) → score by scope
     const scope: string = f.matching_scope ?? 'country';
     let score = 0;
 
@@ -205,13 +207,14 @@ export async function linkPaymentToPreFund(params: {
   if (scored.length === 0) {
     // ── Single-fund fallback ───────────────────────────────────────────────
     // If scope matching found nothing (e.g. down-payment requests carry no
-    // country/project) but there is exactly ONE open-pool active fund with
-    // sufficient balance, use it automatically rather than blocking the payment.
-    const openPoolWithBalance = (activeFunds as any[]).filter(
-      f => (f.available_balance ?? 0) >= amount && (allocsByFund[f.id] ?? []).length === 0
+    // country/project), fall back to any active fund with sufficient balance.
+    // Include allocation-gated funds here too — p_user_id is passed as NULL so
+    // the RPC skips the allocation eligibility check (balance-only deduction).
+    const fundsWithBalance = (activeFunds as any[]).filter(
+      f => (f.available_balance ?? 0) >= amount
     );
-    if (openPoolWithBalance.length === 1) {
-      const fallbackFund = openPoolWithBalance[0];
+    if (fundsWithBalance.length === 1) {
+      const fallbackFund = fundsWithBalance[0];
       const { data: rpcFallback, error: rpcFallbackErr } = await (supabase as any).rpc(
         'link_payment_atomically_rpc', {
           p_fund_id:      fallbackFund.id,
@@ -223,7 +226,7 @@ export async function linkPaymentToPreFund(params: {
           p_description:  description ?? null,
           p_payment_date: today,
           p_created_by:   createdBy ?? null,
-          p_user_id:      submitterId,
+          p_user_id:      null,
           p_receipt_url:  receiptUrl ?? null,
         }
       );
@@ -248,13 +251,13 @@ export async function linkPaymentToPreFund(params: {
         message: `Auto-linked to "${fallbackFund.name}" (only active fund)`,
       };
     }
-    // Multiple unmatched funds — require manual selection
-    if (openPoolWithBalance.length > 1) {
+    // Multiple funds — require manual selection
+    if (fundsWithBalance.length > 1) {
       return {
         linked: false,
         needsManualSelection: true,
-        candidates: openPoolWithBalance.map((f: any) => ({ id: f.id, name: f.name })),
-        message: `${openPoolWithBalance.length} active pre-funds available — please link manually in Pre-Funding → Reconciliation.`,
+        candidates: fundsWithBalance.map((f: any) => ({ id: f.id, name: f.name })),
+        message: `${fundsWithBalance.length} active pre-funds available — please link manually in Pre-Funding → Reconciliation.`,
       };
     }
     return {
@@ -281,6 +284,10 @@ export async function linkPaymentToPreFund(params: {
   const best = scored[0];
   const bestFund = best.fund;
 
+  // Only pass p_user_id when the submitter has an actual allocation row — the RPC
+  // will RAISE EXCEPTION if p_user_id is non-null but has no allocation in this fund.
+  const rpcUserId = best.userAllocation ? submitterId : null;
+
   // ── Atomic write via RPC ─────────────────────────────────────────────────
   const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
     'link_payment_atomically_rpc', {
@@ -293,7 +300,7 @@ export async function linkPaymentToPreFund(params: {
       p_description:  description ?? null,
       p_payment_date: today,
       p_created_by:   createdBy ?? null,
-      p_user_id:      submitterId,
+      p_user_id:      rpcUserId,
       p_receipt_url:  receiptUrl ?? null,
     }
   );

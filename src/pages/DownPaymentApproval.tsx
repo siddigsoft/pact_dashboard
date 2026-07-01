@@ -618,12 +618,21 @@ export default function DownPaymentApproval() {
           receiptUrl: receiptUrlPartial,
         });
         if (pfResult.linked) {
-          toast({ title: 'Pre-Fund Deducted', description: pfResult.message });
-        } else if (!pfResult.needsManualSelection) {
-          toast({ title: '⚠ Pre-Fund Link Skipped', description: pfResult.message + ' — Link manually in Pre-Funding → Reconciliation.', variant: 'destructive' });
+          toast({ title: 'Pre-Fund Deducted ✓', description: pfResult.message });
+        } else {
+          toast({
+            title: '⚠ Pre-Fund Balance NOT Deducted',
+            description: pfResult.message + ' — Go to Pre-Funding → Reconciliation to link manually.',
+            variant: 'destructive',
+          });
         }
       } catch (pfErr: any) {
         console.warn('[PartialPay] Pre-fund link error:', pfErr?.message);
+        toast({
+          title: '⚠ Pre-Fund Balance NOT Deducted',
+          description: (pfErr?.message ?? 'Unknown error') + ' — Go to Pre-Funding → Reconciliation to link manually.',
+          variant: 'destructive',
+        });
       }
 
       setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false });
