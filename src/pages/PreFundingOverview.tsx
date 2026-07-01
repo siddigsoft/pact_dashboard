@@ -329,7 +329,7 @@ export default function PreFundingOverview() {
   const effectivePaidByFund = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of txns) {
-      if (!['payment', 'commitment'].includes(t.transaction_type)) continue;
+      if (t.transaction_type !== 'payment') continue;
       m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
     }
     return m;
