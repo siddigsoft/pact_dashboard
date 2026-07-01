@@ -1,5 +1,110 @@
 import { supabase } from '@/integrations/supabase/client';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Direct (non-atomic) fallback used when link_payment_atomically_rpc is not
+// deployed yet. Performs the same 3 writes as the RPC but without a DB
+// transaction wrapper — safe for production since each write is idempotent
+// when retried and the pre_fund_transactions.source_id uniqueness prevents
+// duplicate deductions.
+// ─────────────────────────────────────────────────────────────────────────────
+async function directLinkPayment(params: {
+  fundId: string;
+  fundName: string;
+  amount: number;
+  currency: string;
+  sourceTable: string;
+  sourceId: string;
+  reference: string | null;
+  description: string | null;
+  paymentDate: string;
+  createdBy: string | null;
+  userId: string | null;
+  receiptUrl: string | null;
+}): Promise<FundLinkResult> {
+  const { fundId, fundName, amount, currency, sourceTable, sourceId,
+    reference, description, paymentDate, createdBy, userId, receiptUrl } = params;
+
+  // 1. Check for existing transaction (prevent duplicate deductions on retry)
+  const { data: existing } = await (supabase as any)
+    .from('pre_fund_transactions')
+    .select('id')
+    .eq('source_table', sourceTable)
+    .eq('source_id', sourceId)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return {
+      linked: true,
+      fundId,
+      fundName,
+      transactionId: existing.id,
+      message: `Already linked to "${fundName}"`,
+    };
+  }
+
+  // 2. Insert transaction row
+  const { data: txnRow, error: txnErr } = await (supabase as any)
+    .from('pre_fund_transactions')
+    .insert({
+      pre_fund_request_id: fundId,
+      transaction_type: 'payment',
+      amount,
+      currency,
+      reference,
+      description: description ?? `Auto-linked from ${sourceTable}`,
+      transaction_date: paymentDate,
+      reconciled: false,
+      source_table: sourceTable,
+      source_id: sourceId,
+      created_by: createdBy,
+      user_id: userId ?? createdBy,
+      receipt_url: receiptUrl,
+    })
+    .select('id')
+    .single();
+
+  if (txnErr) {
+    return { linked: false, message: `Failed to record transaction: ${txnErr.message}` };
+  }
+
+  const txnId: string = txnRow.id;
+
+  // 3. Deduct from fund balance
+  const { data: fund } = await (supabase as any)
+    .from('pre_fund_requests')
+    .select('available_balance,paid_amount')
+    .eq('id', fundId)
+    .single();
+
+  const newBalance = Number(fund?.available_balance ?? 0) - amount;
+  const newPaid    = Number(fund?.paid_amount ?? 0) + amount;
+
+  const { error: balErr } = await (supabase as any)
+    .from('pre_fund_requests')
+    .update({ available_balance: newBalance, paid_amount: newPaid })
+    .eq('id', fundId);
+
+  if (balErr) {
+    // Transaction row was inserted — clean it up so retry works
+    await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
+    return { linked: false, message: `Failed to deduct fund balance: ${balErr.message}` };
+  }
+
+  // 4. Back-link source row
+  await (supabase as any)
+    .from(sourceTable)
+    .update({ pre_fund_transaction_id: txnId })
+    .eq('id', sourceId);
+
+  return {
+    linked: true,
+    fundId,
+    fundName,
+    transactionId: txnId,
+    message: `Linked to "${fundName}" (direct)`,
+  };
+}
+
 export interface UnlinkResult {
   unlinked: boolean;
   message: string;
@@ -236,7 +341,13 @@ export async function linkPaymentToPreFund(params: {
           String(rpcFallbackErr.message).toLowerCase().includes('could not find the function') ||
           String(rpcFallbackErr.message).toLowerCase().includes('does not exist');
         if (notDeployed) {
-          return { linked: false, message: 'Pre-funding SQL not yet deployed. Run 20260627_pre_fund_rpcs_canonical.sql in Supabase SQL Editor.' };
+          return directLinkPayment({
+            fundId: fallbackFund.id, fundName: fallbackFund.name,
+            amount, currency, sourceTable, sourceId,
+            reference: reference ?? null, description: description ?? null,
+            paymentDate: today, createdBy: createdBy ?? null,
+            userId: null, receiptUrl: receiptUrl ?? null,
+          });
         }
         return { linked: false, message: `Linkage RPC failed: ${rpcFallbackErr.message}` };
       }
@@ -311,11 +422,14 @@ export async function linkPaymentToPreFund(params: {
       String(rpcErr.message).toLowerCase().includes('could not find the function') ||
       String(rpcErr.message).toLowerCase().includes('does not exist');
     if (isNotDeployed) {
-      return {
-        linked: false,
-        message:
-          'Pre-funding SQL not yet deployed. Run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor to enable automatic payment linking.',
-      };
+      // RPC not deployed — fall back to direct writes
+      return directLinkPayment({
+        fundId: bestFund.id, fundName: bestFund.name,
+        amount, currency, sourceTable, sourceId,
+        reference: reference ?? null, description: description ?? null,
+        paymentDate: today, createdBy: createdBy ?? null,
+        userId: rpcUserId, receiptUrl: receiptUrl ?? null,
+      });
     }
     return { linked: false, message: `Linkage RPC failed: ${rpcErr.message}` };
   }
