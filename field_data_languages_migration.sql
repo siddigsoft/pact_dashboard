@@ -1,4 +1,27 @@
 -- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
+-- ============================================================================
 -- Phase 14: Multi-Language Form Management
 -- fd_form_translations + fd_region_lang_defaults
 -- Run in Supabase SQL Editor (safe to re-run: IF NOT EXISTS / OR REPLACE guards)

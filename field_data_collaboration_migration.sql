@@ -1,4 +1,27 @@
 -- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
+-- ============================================================================
 -- Field Data Hub — Phase 15: Collaboration & Review Tools
 -- Tables: fd_submission_comments, fd_submission_flags, fd_form_review_comments
 -- ============================================================================

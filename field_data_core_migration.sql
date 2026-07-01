@@ -65,8 +65,20 @@ CREATE TABLE IF NOT EXISTS field_data_forms (
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Guard: add status if table already existed without it
-ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+-- Guards: add all columns if table was created by the minimal prerequisite stub
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS description       TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS form_id_slug      TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS xls_form_url      TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS status            TEXT DEFAULT 'active';
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS default_language  TEXT DEFAULT 'English';
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS submission_count  INTEGER DEFAULT 0;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS last_submission_at TIMESTAMPTZ;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS odk_qr_code       TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS qr_generated_at   TIMESTAMPTZ;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS encryption_enabled BOOLEAN DEFAULT false;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS public_key         TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS created_by         UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_fdf_status   ON field_data_forms(status);
 CREATE INDEX IF NOT EXISTS idx_fdf_slug     ON field_data_forms(form_id_slug);
@@ -266,9 +278,16 @@ CREATE TABLE IF NOT EXISTS fd_forms (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Guard: add status/version if table already existed without them
-ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
-ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS version TEXT DEFAULT '1';
+-- Guards: add all columns if table was created by the minimal prerequisite stub
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS description        TEXT;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS version            TEXT DEFAULT '1';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS status             TEXT DEFAULT 'active';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS default_language   TEXT DEFAULT 'en';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS submission_count   INTEGER DEFAULT 0;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS last_submission_at TIMESTAMPTZ;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS legacy_form_id     UUID REFERENCES field_data_forms(id) ON DELETE SET NULL;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS created_by         UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_fdforms_status   ON fd_forms(status);
 CREATE INDEX IF NOT EXISTS idx_fdforms_created  ON fd_forms(created_at DESC);

@@ -25,15 +25,12 @@
 -- ============================================================================
 
 -- ============================================================================
--- SAFETY PREAMBLE — Create FK-target tables first
--- These two tables are referenced by FK in 8+ later migration files.
--- Creating them here guarantees they exist even if execution stops midway
--- through the core migration for any reason.
--- Both definitions are identical to what the core migration creates;
--- CREATE TABLE IF NOT EXISTS makes them a no-op if already present.
+-- SAFETY PREAMBLE — Create FK-target tables first (full definitions)
+-- These are referenced by FK in 8+ later migration files.
+-- CREATE TABLE IF NOT EXISTS = silent no-op if already present.
 -- ============================================================================
 
--- field_data_forms must exist before fd_forms (fd_forms has FK → field_data_forms)
+-- Step 1: field_data_forms (no cross-deps besides auth.users)
 CREATE TABLE IF NOT EXISTS field_data_forms (
   id                       UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name                     TEXT        NOT NULL,
@@ -54,7 +51,7 @@ CREATE TABLE IF NOT EXISTS field_data_forms (
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- fd_forms — referenced by FK in all fd_* tables (Phases 7–18)
+-- Step 2: fd_forms (FK → field_data_forms, safe because step 1 ran first)
 CREATE TABLE IF NOT EXISTS fd_forms (
   id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name               TEXT        NOT NULL,
@@ -72,7 +69,7 @@ CREATE TABLE IF NOT EXISTS fd_forms (
 );
 
 -- ============================================================================
--- END SAFETY PREAMBLE — full migrations follow
+-- END SAFETY PREAMBLE
 -- ============================================================================
 
 
@@ -146,8 +143,20 @@ CREATE TABLE IF NOT EXISTS field_data_forms (
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Guard: add status if table already existed without it
-ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+-- Guards: add all columns if table was created by the minimal prerequisite stub
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS description       TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS form_id_slug      TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS xls_form_url      TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS status            TEXT DEFAULT 'active';
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS default_language  TEXT DEFAULT 'English';
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS submission_count  INTEGER DEFAULT 0;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS last_submission_at TIMESTAMPTZ;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS odk_qr_code       TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS qr_generated_at   TIMESTAMPTZ;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS encryption_enabled BOOLEAN DEFAULT false;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS public_key         TEXT;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS created_by         UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE field_data_forms ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_fdf_status   ON field_data_forms(status);
 CREATE INDEX IF NOT EXISTS idx_fdf_slug     ON field_data_forms(form_id_slug);
@@ -347,9 +356,16 @@ CREATE TABLE IF NOT EXISTS fd_forms (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Guard: add status/version if table already existed without them
-ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
-ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS version TEXT DEFAULT '1';
+-- Guards: add all columns if table was created by the minimal prerequisite stub
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS description        TEXT;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS version            TEXT DEFAULT '1';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS status             TEXT DEFAULT 'active';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS default_language   TEXT DEFAULT 'en';
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS submission_count   INTEGER DEFAULT 0;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS last_submission_at TIMESTAMPTZ;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS legacy_form_id     UUID REFERENCES field_data_forms(id) ON DELETE SET NULL;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS created_by         UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE fd_forms ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_fdforms_status   ON fd_forms(status);
 CREATE INDEX IF NOT EXISTS idx_fdforms_created  ON fd_forms(created_at DESC);
@@ -559,6 +575,29 @@ GRANT EXECUTE ON FUNCTION fd_is_admin()    TO authenticated;
 -- PHASE 10
 -- ============================================================================
 -- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
+-- ============================================================================
 -- Field Data Hub — Phase 10: Server Datasets & Data Preloading
 -- Requires: field_data_core_migration.sql (field_data_servers, field_data_forms)
 --
@@ -741,6 +780,29 @@ CREATE POLICY "fdpc_svc"     ON fd_preload_configs            FOR ALL    TO serv
 -- ============================================================================
 -- SAMPLING ENGINE
 -- ============================================================================
+-- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
 -- ============================================================================
 -- Field Data Hub — Sampling Engine (FieldDataSampling.tsx)
 -- Requires: field_data_core_migration.sql (fd_forms)
@@ -958,6 +1020,29 @@ GRANT EXECUTE ON FUNCTION fd_sampling_progress(UUID) TO service_role;
 -- ============================================================================
 -- PHASE 7
 -- ============================================================================
+-- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
 -- ============================================================================
 -- Phase 13: Smart Export — fd_export_jobs + fd_export_templates
 -- Run in Supabase SQL Editor (safe to re-run: IF NOT EXISTS guards)
@@ -2004,6 +2089,29 @@ ON CONFLICT (form_id, enumerator_id) DO UPDATE SET
 -- PHASE 14
 -- ============================================================================
 -- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
+-- ============================================================================
 -- Phase 14: Multi-Language Form Management
 -- fd_form_translations + fd_region_lang_defaults
 -- Run in Supabase SQL Editor (safe to re-run: IF NOT EXISTS / OR REPLACE guards)
@@ -2207,6 +2315,29 @@ GRANT EXECUTE ON FUNCTION seed_form_translation_keys(UUID, TEXT) TO authenticate
 -- ============================================================================
 -- PHASE 15
 -- ============================================================================
+-- ============================================================================
+-- PREREQUISITE STUB — ensures fd_forms exists even when running this file alone
+-- Safe no-op if core migration already ran (CREATE TABLE IF NOT EXISTS).
+-- ============================================================================
+DO $fd_prereq$ BEGIN
+  CREATE TABLE IF NOT EXISTS field_data_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq$;
+
+DO $fd_prereq2$ BEGIN
+  CREATE TABLE IF NOT EXISTS fd_forms (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
+-- ============================================================================
+
 -- ============================================================================
 -- Field Data Hub — Phase 15: Collaboration & Review Tools
 -- Tables: fd_submission_comments, fd_submission_flags, fd_form_review_comments
