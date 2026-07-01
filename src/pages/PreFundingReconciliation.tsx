@@ -686,7 +686,11 @@ export default function PreFundingReconciliation() {
           : Promise.resolve({ data: [] }),
       ]);
 
+      // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
       const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+      // DPs in a terminal paid state — payment txns only count if DP reached this state
+      const DP_PAID_STATUSES = new Set(['partially_paid', 'fully_paid', 'completed', 'closed']);
+      const paidDpSet   = new Set((validDpRes.data ?? []).filter((d: any) => DP_PAID_STATUSES.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
       const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
 
       // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
@@ -695,12 +699,27 @@ export default function PreFundingReconciliation() {
           .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
           .map((d: any) => d.pre_fund_transaction_id as string)
       );
+      // pre_fund_transactions IDs back-linked from old-style DPs that are in a paid terminal state
+      const paidBackLinkedTxnIds = new Set<string>(
+        (backLinkedDpsRes.data ?? [])
+          .filter((d: any) => DP_PAID_STATUSES.has(d.status) && d.metadata?.deleted !== true)
+          .map((d: any) => d.pre_fund_transaction_id as string)
+      );
 
       const txns = rawTxns.filter(t => {
-        if (t.source_table === 'down_payment_requests')        return !t.source_id || validDpSet.has(t.source_id);
+        if (t.source_table === 'down_payment_requests') {
+          if (!t.source_id) return true;
+          // payment txns only count if the DP is in a terminal paid state
+          if (t.transaction_type === 'payment') return paidDpSet.has(t.source_id);
+          // commitment/other txns count if DP is not cancelled/deleted
+          return validDpSet.has(t.source_id);
+        }
         if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
-        // Old rows with NULL source_table: excluded if a deleted DP back-links to this txn ID
-        if (!t.source_table && ['payment', 'commitment'].includes(t.transaction_type)) {
+        // Old rows with NULL source_table: use back-link sets
+        if (!t.source_table && t.transaction_type === 'payment') {
+          return paidBackLinkedTxnIds.has(t.id);
+        }
+        if (!t.source_table && t.transaction_type === 'commitment') {
           return !deletedDpTxnIds.has(t.id);
         }
         return true;

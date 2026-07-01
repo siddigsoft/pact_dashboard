@@ -227,7 +227,11 @@ export default function PreFundingOverview() {
             ? (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', rawTxnIds)
             : Promise.resolve({ data: [] }),
         ]);
+        // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
         const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+        // DPs in a terminal paid state — payment txns only count if DP reached this state
+        const DP_PAID_STATUSES = new Set(['partially_paid', 'fully_paid', 'completed', 'closed']);
+        const paidDpSet   = new Set((validDpRes.data ?? []).filter((d: any) => DP_PAID_STATUSES.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
         const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
         // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
         const deletedDpTxnIds = new Set<string>(
@@ -235,11 +239,27 @@ export default function PreFundingOverview() {
             .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
+        // pre_fund_transactions IDs back-linked from old-style DPs that are in a paid terminal state
+        const paidBackLinkedTxnIds = new Set<string>(
+          (backLinkedDpsRes.data ?? [])
+            .filter((d: any) => DP_PAID_STATUSES.has(d.status) && d.metadata?.deleted !== true)
+            .map((d: any) => d.pre_fund_transaction_id as string)
+        );
         const validTxns = rawTxns.filter(t => {
-          if (t.source_table === 'down_payment_requests')        return !t.source_id || validDpSet.has(t.source_id);
+          if (t.source_table === 'down_payment_requests') {
+            if (!t.source_id) return true;
+            // payment txns only count if the DP is in a terminal paid state
+            if (t.transaction_type === 'payment') return paidDpSet.has(t.source_id);
+            // commitment/other txns count if DP is not cancelled/deleted
+            return validDpSet.has(t.source_id);
+          }
           if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
-          // Old rows with NULL source_table: excluded if a deleted DP back-links to this txn ID
-          if (!t.source_table && ['payment', 'commitment'].includes(t.transaction_type)) {
+          // Old rows with NULL source_table: use back-link sets
+          if (!t.source_table && t.transaction_type === 'payment') {
+            // Only count if a DP in paid state back-links to this txn
+            return paidBackLinkedTxnIds.has(t.id);
+          }
+          if (!t.source_table && t.transaction_type === 'commitment') {
             return !deletedDpTxnIds.has(t.id);
           }
           return true;
@@ -325,21 +345,24 @@ export default function PreFundingOverview() {
   }, [txns]);
 
   // Effective paid amount per fund, derived from already-filtered txns state.
-  // Overrides the stored paid_amount column so deleted-DP orphans never appear as paid.
+  // Pre-seeded with 0 for every known fund so the stale DB paid_amount column
+  // is never used as a fallback — if all payment txns were filtered out (e.g.
+  // the DP was reverted/cancelled), the fund correctly shows 0 paid out.
   const effectivePaidByFund = useMemo(() => {
     const m = new Map<string, number>();
+    for (const f of funds) m.set(f.id, 0);
     for (const t of txns) {
       if (t.transaction_type !== 'payment') continue;
       m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
     }
     return m;
-  }, [txns]);
+  }, [funds, txns]);
 
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));
   const totalFunded = activeFunds.reduce((s, f) => s + toBase(f.amount, f.currency), 0);
   const totalAvail  = activeFunds.reduce((s, f) => {
-    const effPaid = effectivePaidByFund.get(f.id) ?? f.paid_amount;
+    const effPaid = effectivePaidByFund.get(f.id) ?? 0;
     return s + toBase(Math.max(0, f.amount - effPaid), f.currency);
   }, 0);
   const totalCommit = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
@@ -560,8 +583,8 @@ export default function PreFundingOverview() {
       ) : (
         <div className="space-y-4">
           {filtered.map(f => {
-            // Use effective paid/available derived from filtered txns (excludes deleted-DP orphans)
-            const effPaid  = effectivePaidByFund.get(f.id) ?? f.paid_amount;
+            // Use effective paid/available derived from filtered txns (excludes reverted/deleted-DP orphans)
+            const effPaid  = effectivePaidByFund.get(f.id) ?? 0;
             const effAvail = Math.max(0, f.amount - effPaid);
             // ef is a corrected copy of f — all helper functions that accept f get right values
             const ef = { ...f, paid_amount: effPaid, available_balance: effAvail };
