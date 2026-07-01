@@ -1791,13 +1791,32 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     const { data: pfData } = await supabase
       .from('pre_fund_requests' as any)
       .select('id, name, currency, available_balance')
-      .in('status', ['active', 'low_balance'])   // 'approved' excluded — only spendable funds
-      .eq('currency', 'SDG')                      // enforce currency match with down-payment amounts
+      .in('status', ['active', 'low_balance'])
+      .eq('currency', 'SDG')
       .order('name');
     const preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
       id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
     }));
-    setBatchPayDialog({ open: true, requests: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds });
+
+    // Auto-detect the best pre-fund for these submitters so Finance doesn't
+    // have to manually pick one when there is a clear allocation match.
+    let autoFundId: string | null = null;
+    if (preFunds.length > 0) {
+      try {
+        const { detectBestPreFundForSubmitters } = await import('@/utils/preFundLinkage');
+        const totalAmt = eligible.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount || 0), 0);
+        const result = await detectBestPreFundForSubmitters({
+          submitterIds: [...new Set(eligible.map(r => r.requestedBy).filter(Boolean))] as string[],
+          currency: 'SDG',
+          totalAmount: totalAmt,
+          countryIds: eligible.map(r => (r as any).country_id ?? null),
+          projectIds: eligible.map(r => (r as any).project_id ?? null),
+        });
+        if (result.fundId) autoFundId = result.fundId;
+      } catch (_) {}
+    }
+
+    setBatchPayDialog({ open: true, requests: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: autoFundId, preFunds });
   };
 
   const handleBatchPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -5365,12 +5384,15 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 )}
               </div>
 
-              {/* Pre-Fund selector — links payment to a specific fund and updates its balance */}
+              {/* Pre-Fund selector — auto-detected or manually chosen */}
               {batchPayDialog.preFunds.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
                     Charge to Pre-Fund / خصم من التمويل المسبق
-                    <span className="text-muted-foreground font-normal ml-1">(optional — updates fund balance)</span>
+                    {batchPayDialog.preFundId
+                      ? <span className="text-emerald-600 font-normal ml-1 text-xs">✓ Auto-detected</span>
+                      : <span className="text-muted-foreground font-normal ml-1">(select to deduct from fund)</span>
+                    }
                   </Label>
                   <Select
                     value={batchPayDialog.preFundId ?? 'none'}
@@ -5378,7 +5400,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     disabled={batchPayDialog.uploading}
                   >
                     <SelectTrigger className="h-9 text-sm" data-testid="select-batch-pre-fund">
-                      <SelectValue placeholder="Select a pre-fund (optional)" />
+                      <SelectValue placeholder="Select a pre-fund" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— No pre-fund —</SelectItem>
@@ -5398,7 +5420,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     return (
                       <p className={`text-xs ${afterBalance < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
                         After payment: {f?.currency} {afterBalance.toLocaleString()} remaining
-                        {afterBalance < 0 && ' ⚠ Exceeds available balance'}
+                        {afterBalance < 0 && ' ⚠ Exceeds available balance — reduce amount or choose a different fund'}
                       </p>
                     );
                   })()}

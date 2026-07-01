@@ -69,6 +69,20 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   updated_at               timestamptz NOT NULL DEFAULT now()
 );
 
+-- Ensure idempotency_key column exists on pre_fund_transactions
+-- (needed when the table was created before this column was added)
+ALTER TABLE pre_fund_transactions ADD COLUMN IF NOT EXISTS idempotency_key text;
+DO $idem$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'pre_fund_transactions_idempotency_key_key'
+      AND conrelid = 'pre_fund_transactions'::regclass
+  ) THEN
+    ALTER TABLE pre_fund_transactions
+      ADD CONSTRAINT pre_fund_transactions_idempotency_key_key UNIQUE (idempotency_key);
+  END IF;
+END $idem$;
+
 -- Add back-link column to source tables (harmless if already exists)
 ALTER TABLE down_payment_requests
   ADD COLUMN IF NOT EXISTS pre_fund_transaction_id uuid;

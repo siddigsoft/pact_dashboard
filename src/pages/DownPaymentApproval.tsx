@@ -16,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 import {
   DollarSign, Shield, AlertTriangle, Info, Users, UserCheck,
   TrendingUp, Receipt, Wallet, MapPin, FolderKanban, ClipboardList,
@@ -426,6 +427,7 @@ export default function DownPaymentApproval() {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading } = useDownPayment();
+  const { toast } = useToast();
 
   const userRole = currentUser?.role?.toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
@@ -455,6 +457,14 @@ export default function DownPaymentApproval() {
   const [disbGroupBy, setDisbGroupBy] = useState('none');
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
+
+  // ── Partial payment dialog (Disbursement Tracker) ─────────────────────────
+  const [partialPayDialog, setPartialPayDialog] = useState<{
+    open: boolean;
+    req: DownPaymentRequest | null;
+    partialAmount: string;
+    saving: boolean;
+  }>({ open: false, req: null, partialAmount: '', saving: false });
 
   // Fetch GL bridge log for fully_paid down_payment_requests
   useEffect(() => {
@@ -547,6 +557,74 @@ export default function DownPaymentApproval() {
       setMarkingPaidId(null);
     }
   }, []);
+
+  // ── Partial payment: deduct only what was actually paid now ───────────────
+  const handleConfirmPartialPay = useCallback(async () => {
+    const { req } = partialPayDialog;
+    if (!req || !currentUser?.id) return;
+    const partialAmt = parseFloat(partialPayDialog.partialAmount);
+    const maxAmt = req.approvedAmount ?? req.requestedAmount;
+    if (isNaN(partialAmt) || partialAmt <= 0) {
+      toast({ title: 'Invalid amount', description: 'Please enter a positive number.', variant: 'destructive' });
+      return;
+    }
+    if (partialAmt > maxAmt) {
+      toast({ title: 'Amount too large', description: `Cannot exceed the approved amount (${maxAmt.toLocaleString()} SDG).`, variant: 'destructive' });
+      return;
+    }
+    setPartialPayDialog(p => ({ ...p, saving: true }));
+    try {
+      const now = new Date().toISOString();
+      const isFullyPaid = partialAmt >= maxAmt;
+      const newStatus = isFullyPaid ? 'fully_paid' : 'partially_paid';
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({
+          status: newStatus,
+          total_paid_amount: partialAmt,
+          remaining_amount: Math.max(0, maxAmt - partialAmt),
+          updated_at: now,
+        })
+        .eq('id', req.id);
+      if (error) throw error;
+
+      toast({ title: isFullyPaid ? 'Marked as Fully Paid' : 'Partial Payment Recorded', description: `${partialAmt.toLocaleString()} SDG saved.` });
+
+      // Auto-link the partial amount to an active pre-fund
+      try {
+        const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+        const pfResult = await linkPaymentToPreFund({
+          amount: partialAmt,
+          currency: 'SDG',
+          countryId: (req as any).country_id ?? null,
+          projectId: (req as any).project_id ?? null,
+          costCategory: null,
+          sourceTable: 'down_payment_requests',
+          sourceId: req.id,
+          reference: null,
+          description: `${isFullyPaid ? 'Full' : 'Partial'} payment: ${req.siteName ?? req.id}`,
+          paymentDate: now,
+          createdBy: currentUser.id,
+          userId: req.requestedBy ?? null,
+          receiptUrl: req.paymentProofUrl ?? null,
+        });
+        if (pfResult.linked) {
+          toast({ title: 'Pre-Fund Deducted', description: pfResult.message });
+        } else if (!pfResult.needsManualSelection) {
+          toast({ title: '⚠ Pre-Fund Link Skipped', description: pfResult.message + ' — Link manually in Pre-Funding → Reconciliation.', variant: 'destructive' });
+        }
+      } catch (pfErr: any) {
+        console.warn('[PartialPay] Pre-fund link error:', pfErr?.message);
+      }
+
+      setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false });
+      window.location.reload();
+    } catch (err: any) {
+      toast({ title: 'Failed', description: err.message || 'Could not save partial payment.', variant: 'destructive' });
+    } finally {
+      setPartialPayDialog(p => ({ ...p, saving: false }));
+    }
+  }, [partialPayDialog, currentUser, toast]);
 
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1172,15 +1250,39 @@ export default function DownPaymentApproval() {
                   </TableCell>
                   <TableCell>
                     {req.status === 'approved' && isAdmin && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 whitespace-nowrap"
+                          disabled={markingPaidId === req.id || partialPayDialog.saving}
+                          onClick={() => handleMarkFullyPaid(req)}
+                          data-testid={`button-mark-paid-${req.id}`}
+                        >
+                          {markingPaidId === req.id ? '...' : '✓ Full'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px] px-2 border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950 whitespace-nowrap"
+                          disabled={markingPaidId === req.id || partialPayDialog.saving}
+                          onClick={() => setPartialPayDialog({ open: true, req, partialAmount: '', saving: false })}
+                          data-testid={`button-mark-partial-${req.id}`}
+                        >
+                          ½ Partial
+                        </Button>
+                      </div>
+                    )}
+                    {req.status === 'partially_paid' && isAdmin && (
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 whitespace-nowrap"
                         disabled={markingPaidId === req.id}
                         onClick={() => handleMarkFullyPaid(req)}
-                        data-testid={`button-mark-paid-${req.id}`}
+                        data-testid={`button-complete-paid-${req.id}`}
                       >
-                        {markingPaidId === req.id ? '...' : '✓ Mark Paid'}
+                        ✓ Complete
                       </Button>
                     )}
                   </TableCell>
@@ -1566,6 +1668,70 @@ export default function DownPaymentApproval() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Partial Payment Dialog ──────────────────────────────────────── */}
+      <Dialog open={partialPayDialog.open} onOpenChange={open => { if (!open && !partialPayDialog.saving) setPartialPayDialog(p => ({ ...p, open: false })); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Record Partial Payment / تسجيل دفعة جزئية</DialogTitle>
+          </DialogHeader>
+          {partialPayDialog.req && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <p className="font-medium">{partialPayDialog.req.requestedByName || 'Requester'}</p>
+                <p className="text-muted-foreground">{partialPayDialog.req.siteName}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Approved: <span className="font-mono font-medium">{(partialPayDialog.req.approvedAmount ?? partialPayDialog.req.requestedAmount).toLocaleString()} SDG</span>
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="partial-amount">Amount Paid Now (SDG) / المبلغ المدفوع الآن</Label>
+                <Input
+                  id="partial-amount"
+                  type="number"
+                  min={1}
+                  max={partialPayDialog.req.approvedAmount ?? partialPayDialog.req.requestedAmount}
+                  step={1}
+                  value={partialPayDialog.partialAmount}
+                  onChange={e => setPartialPayDialog(p => ({ ...p, partialAmount: e.target.value }))}
+                  placeholder="e.g. 500"
+                  disabled={partialPayDialog.saving}
+                  data-testid="input-partial-amount"
+                  autoFocus
+                />
+                {partialPayDialog.partialAmount && (() => {
+                  const max = partialPayDialog.req!.approvedAmount ?? partialPayDialog.req!.requestedAmount;
+                  const val = parseFloat(partialPayDialog.partialAmount);
+                  if (!isNaN(val) && val > 0 && val < max) {
+                    return (
+                      <p className="text-xs text-amber-600">
+                        Remaining after this payment: {(max - val).toLocaleString()} SDG — will be saved as <strong>Partially Paid</strong> and deducted from pre-fund.
+                      </p>
+                    );
+                  }
+                  if (!isNaN(val) && val >= max) {
+                    return <p className="text-xs text-emerald-600">Full amount — will be saved as <strong>Fully Paid</strong>.</p>;
+                  }
+                  return null;
+                })()}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false })} disabled={partialPayDialog.saving}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirmPartialPay}
+              disabled={partialPayDialog.saving || !partialPayDialog.partialAmount}
+              data-testid="button-confirm-partial-pay"
+            >
+              {partialPayDialog.saving ? 'Saving…' : 'Confirm & Deduct from Fund'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1769,3 +1935,4 @@ function DPCoverageTree({ entries }: { entries: DPCovEntry[] }) {
     </div>
   );
 }
+

@@ -31,7 +31,6 @@ export async function unlinkPaymentFromPreFund(
   );
 
   if (error) {
-    // PGRST202 = RPC not found — migration not yet run
     const isNotDeployed =
       (error as any).code === 'PGRST202' ||
       String(error.message).toLowerCase().includes('could not find the function') ||
@@ -46,7 +45,6 @@ export async function unlinkPaymentFromPreFund(
   }
 
   if (result && result.success === false) {
-    // no_link_found is a known non-error case (nothing was linked)
     if (result.code === 'no_link_found') {
       return { unlinked: false, message: 'No pre-fund transaction linked to this record.' };
     }
@@ -69,46 +67,38 @@ export interface FundLinkResult {
 
 /**
  * Match a payment to the best active pre-fund and atomically:
- *   - create a pre_fund_transactions record (user_id = submitter, created_by = finance actor)
+ *   - create a pre_fund_transactions record
  *   - deduct from available_balance (and increment paid_amount)
  *   - back-link the source row
  *   - deduct from the submitter's pre_fund_allocations.spent_amount (if allocated)
  *
- * Allocation guard: if a fund has ANY allocations, the SUBMITTER (userId) must be
- * one of them with sufficient remaining balance. Falls back to createdBy only when
- * userId is not provided.
- *
- * Matching priority (highest score wins):
+ * MATCHING PRIORITY (highest score wins):
+ *  5 — submitter has an explicit allocation in this fund with sufficient remaining balance
+ *      (allocation is the most authoritative link — Finance deliberately assigned this user)
  *  4 — country + project + cost_category match  (scope = country_project_category)
- *  3 — country + project match  (scope = country_project OR scope = country_project_category without category)
+ *  3 — country + project match  (scope = country_project OR country_project_category without category)
  *  2 — project-only match       (scope = project)
  *  1 — country-only match       (scope = country)
- *  0.5 — any active fund in same currency with sufficient balance
  *
- * When scope is country_project_category, a fund with a non-null cost_category that does NOT
- * match costCategory is excluded (score stays at 3 only if country+project match and cost_category
- * is null/unset; score is -1 if cost_category is set but mismatches).
+ * If the fund has allocations AND the submitter is NOT in the list, that fund is excluded.
+ * If the fund has NO allocations, it is an open pool (scores 1–4 apply normally).
+ *
+ * For partial payments: pass the ACTUAL amount being paid now (not the full approved amount).
+ * The balance/allocation guards check against this amount so partial deductions work correctly.
  */
 export async function linkPaymentToPreFund(params: {
   amount: number;
   currency: string;
   countryId?: string | null;
   projectId?: string | null;
-  /**
-   * Expense / cost category from the source record (e.g. OCS expense_category).
-   * Required to get a score-4 match on funds scoped to country_project_category.
-   */
   costCategory?: string | null;
   sourceTable: 'operational_cost_submissions' | 'down_payment_requests';
   sourceId: string;
   reference?: string | null;
   description?: string | null;
   paymentDate: string;
-  /** Finance admin who approved/triggered the payment (for GL audit trail) */
   createdBy?: string | null;
-  /** The field staff member who submitted/made the payment — used for allocation checks */
   userId?: string | null;
-  /** URL of the payment receipt / attachment to store on the transaction */
   receiptUrl?: string | null;
 }): Promise<FundLinkResult> {
   const {
@@ -117,17 +107,14 @@ export async function linkPaymentToPreFund(params: {
     paymentDate, createdBy, userId, receiptUrl,
   } = params;
 
-  // The submitter is userId when provided; otherwise fall back to createdBy.
-  // This is the identity used for allocation eligibility + deduction.
   const submitterId: string | null = userId ?? createdBy ?? null;
-
   const today = paymentDate.split('T')[0];
 
-  // ── Read-only: load and score candidates ────────────────────────────────
+  // ── Load all active funds for this currency and period ───────────────────
   const { data: activeFunds, error: fetchErr } = await (supabase as any)
     .from('pre_fund_requests')
     .select('id,name,matching_scope,country_id,project_id,cost_category,available_balance,currency')
-    .eq('status', 'active')
+    .in('status', ['active', 'low_balance'])
     .eq('currency', currency)
     .lte('start_date', today)
     .gte('end_date', today);
@@ -137,10 +124,9 @@ export async function linkPaymentToPreFund(params: {
     return { linked: false, message: 'No active pre-fund for this currency and period.' };
   }
 
-  // ── Check user allocations for each candidate fund ───────────────────────
-  // If a fund has allocations defined, the submitter (submitterId) must be one of them
-  // AND have sufficient remaining balance.
   const fundIds = (activeFunds as any[]).map(f => f.id);
+
+  // ── Load allocations for all candidates ─────────────────────────────────
   const { data: allAllocations } = await (supabase as any)
     .from('pre_fund_allocations')
     .select('pre_fund_request_id,user_id,allocated_amount,spent_amount')
@@ -152,7 +138,34 @@ export async function linkPaymentToPreFund(params: {
     allocsByFund[a.pre_fund_request_id].push(a);
   }
 
+  // ── Score each fund ──────────────────────────────────────────────────────
   const scored = (activeFunds as any[]).map(f => {
+    // Insufficient balance → always exclude
+    if ((f.available_balance ?? 0) < amount) {
+      return { fund: f, score: -1, userAllocation: null };
+    }
+
+    const fundAllocs = allocsByFund[f.id] ?? [];
+    let userAllocation: any = null;
+
+    if (fundAllocs.length > 0) {
+      // Fund has explicit allocations — submitter MUST be in the list
+      if (!submitterId) return { fund: f, score: -1, userAllocation: null };
+      const myAlloc = fundAllocs.find((a: any) => a.user_id === submitterId);
+      if (!myAlloc) return { fund: f, score: -1, userAllocation: null };
+
+      const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
+      if (remaining < amount) return { fund: f, score: -1, userAllocation: null };
+
+      userAllocation = myAlloc;
+
+      // Score 5: submitter has a valid personal allocation — highest priority.
+      // Finance deliberately assigned this user to this fund so we always prefer it,
+      // regardless of country / project / category scope.
+      return { fund: f, score: 5, userAllocation };
+    }
+
+    // Fund has no allocations → open pool; score by scope match
     const scope: string = f.matching_scope ?? 'country';
     let score = 0;
 
@@ -163,15 +176,12 @@ export async function linkPaymentToPreFund(params: {
       if (countryProjectMatch) {
         const fundCategory: string | null = f.cost_category ?? null;
         if (fundCategory) {
-          // Fund has a specific category — only match if the payment's category matches exactly
           if (costCategory && costCategory === fundCategory) {
-            score = 4; // perfect triple-match: country + project + category
+            score = 4;
           } else {
-            // Category mismatch — this fund is ineligible for this payment
             return { fund: f, score: -1, userAllocation: null };
           }
         } else {
-          // Fund has no category restriction — treat as a country+project match
           score = 3;
         }
       }
@@ -182,58 +192,37 @@ export async function linkPaymentToPreFund(params: {
     } else if (scope === 'country' && countryId && f.country_id === countryId) {
       score = 1;
     }
-    // NOTE: No generic same-currency fallback — if no scope matches, score stays 0
-    // and the fund is excluded. Finance must link manually in that case.
-
-    // Allocation guard: when a fund has ANY allocations defined, the submitter
-    // MUST be in the list with sufficient remaining personal balance.
-    // There is no bypass: an unallocated submitter on an allocated fund is blocked.
-    const fundAllocs = allocsByFund[f.id] ?? [];
-    let userAllocation: any = null;
-    if (fundAllocs.length > 0) {
-      if (!submitterId) {
-        // Fund has allocations but no submitter identity — cannot enforce, block
-        return { fund: f, score: -1, userAllocation: null };
-      }
-      const myAlloc = fundAllocs.find(a => a.user_id === submitterId);
-      if (!myAlloc) {
-        // Submitter has NO allocation row — blocked (allocation controls must be respected)
-        return { fund: f, score: -1, userAllocation: null };
-      }
-      const remaining = Number(myAlloc.allocated_amount) - Number(myAlloc.spent_amount);
-      if (remaining < amount) {
-        // Submitter IS allocated but their personal budget is exhausted — hard block
-        return { fund: f, score: -1, userAllocation: null };
-      }
-      userAllocation = myAlloc;
-    }
 
     return { fund: f, score, userAllocation };
-  }).filter(x => x.score > 0 && (x.fund.available_balance ?? 0) >= amount)
+  }).filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
     return {
       linked: false,
-      message: 'No active pre-fund matches this payment (check user allocation or fund balance). Finance must link manually in the Pre-Funding Registry.',
+      message: 'No active pre-fund matches this payment (check user allocation, fund balance, and date range). Finance can link manually in Pre-Funding → Reconciliation.',
     };
   }
 
   const topScore = scored[0].score;
   const topCandidates = scored.filter(x => x.score === topScore);
+
+  // If there are multiple funds at the SAME score AND they are all open-pool (score < 5),
+  // require manual selection. A score-5 tie (two allocated funds for same user) is
+  // extremely rare but we still require manual selection to avoid ambiguity.
   if (topCandidates.length > 1) {
     return {
       linked: false,
       needsManualSelection: true,
       candidates: topCandidates.map(x => ({ id: x.fund.id, name: x.fund.name })),
-      message: `${topCandidates.length} pre-funds match equally — please link manually in the Pre-Funding Registry.`,
+      message: `${topCandidates.length} pre-funds match equally — please link manually in Pre-Funding → Reconciliation.`,
     };
   }
 
   const best = scored[0];
   const bestFund = best.fund;
 
-  // ── Atomic write via RPC (includes balance deduction, allocation deduction, GL posting) ──
+  // ── Atomic write via RPC ─────────────────────────────────────────────────
   const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
     'link_payment_atomically_rpc', {
       p_fund_id:      bestFund.id,
@@ -251,7 +240,6 @@ export async function linkPaymentToPreFund(params: {
   );
 
   if (rpcErr) {
-    // PGRST202 = PostgREST "function not found" — SQL migration not yet run
     const isNotDeployed =
       (rpcErr as any).code === 'PGRST202' ||
       String(rpcErr.message).toLowerCase().includes('could not find the function') ||
@@ -276,4 +264,98 @@ export async function linkPaymentToPreFund(params: {
     transactionId: rpcResult?.transaction_id,
     message: `Linked to "${bestFund.name}"`,
   };
+}
+
+/**
+ * Find the best matching active pre-fund for a list of submitter IDs.
+ * Returns the fund to pre-select in the batch pay dialog.
+ * Priority: fund with most submitters covered by allocations → scope match → any active fund.
+ */
+export async function detectBestPreFundForSubmitters(params: {
+  submitterIds: string[];
+  currency: string;
+  totalAmount: number;
+  countryIds?: (string | null)[];
+  projectIds?: (string | null)[];
+}): Promise<{ fundId: string | null; fundName: string | null; matchReason: string }> {
+  const { submitterIds, currency, totalAmount, countryIds = [], projectIds = [] } = params;
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: activeFunds, error } = await (supabase as any)
+    .from('pre_fund_requests')
+    .select('id,name,matching_scope,country_id,project_id,available_balance,currency')
+    .in('status', ['active', 'low_balance'])
+    .eq('currency', currency)
+    .lte('start_date', today)
+    .gte('end_date', today);
+
+  if (error || !activeFunds || (activeFunds as any[]).length === 0) {
+    return { fundId: null, fundName: null, matchReason: 'No active pre-fund found' };
+  }
+
+  const fundIds = (activeFunds as any[]).map((f: any) => f.id);
+
+  // Load allocations for all submitters across all candidate funds
+  const { data: allAllocations } = await (supabase as any)
+    .from('pre_fund_allocations')
+    .select('pre_fund_request_id,user_id,allocated_amount,spent_amount')
+    .in('pre_fund_request_id', fundIds)
+    .in('user_id', submitterIds.filter(Boolean));
+
+  const allocsByFund: Record<string, any[]> = {};
+  for (const a of (allAllocations ?? [])) {
+    if (!allocsByFund[a.pre_fund_request_id]) allocsByFund[a.pre_fund_request_id] = [];
+    allocsByFund[a.pre_fund_request_id].push(a);
+  }
+
+  let bestFund: any = null;
+  let bestScore = -1;
+  let bestReason = '';
+
+  for (const f of activeFunds as any[]) {
+    if ((f.available_balance ?? 0) < totalAmount) continue;
+
+    const fundAllocs = allocsByFund[f.id] ?? [];
+    let score = 0;
+    let reason = '';
+
+    if (fundAllocs.length > 0) {
+      const coveredCount = submitterIds.filter(uid =>
+        fundAllocs.some((a: any) => a.user_id === uid)
+      ).length;
+      if (coveredCount > 0) {
+        // Score by coverage: 10 + fraction of submitters covered
+        score = 10 + (coveredCount / submitterIds.length);
+        reason = `${coveredCount} of ${submitterIds.length} submitter(s) allocated to this fund`;
+      }
+    } else {
+      // Open pool — score by scope match
+      const uniqueCountries = [...new Set(countryIds.filter(Boolean))];
+      const uniqueProjects  = [...new Set(projectIds.filter(Boolean))];
+      const scope = f.matching_scope ?? 'country';
+
+      const countryMatch = uniqueCountries.length === 1 && f.country_id === uniqueCountries[0];
+      const projectMatch = uniqueProjects.length  === 1 && f.project_id === uniqueProjects[0];
+
+      if (scope === 'country_project' && countryMatch && projectMatch) {
+        score = 3; reason = 'Matched country + project';
+      } else if (scope === 'project' && projectMatch) {
+        score = 2; reason = 'Matched project';
+      } else if (scope === 'country' && countryMatch) {
+        score = 1; reason = 'Matched country';
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestFund = f;
+      bestReason = reason;
+    }
+  }
+
+  if (!bestFund) {
+    return { fundId: null, fundName: null, matchReason: 'No matching fund with sufficient balance' };
+  }
+
+  return { fundId: bestFund.id, fundName: bestFund.name, matchReason: bestReason };
 }
