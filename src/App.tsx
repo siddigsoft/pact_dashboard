@@ -300,7 +300,14 @@ const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
 // Approvers from other roles participate via the Approvals Hub, not this full module.
 const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  // Finance/Admin → all tabs; Coordinator/Supervisor/FOM → overview+approvals+allocations;
+  // Field staff (data_collector, dataTeam, employee) → overview+allocations.
+  // Tab-level restrictions are enforced inside PreFundingHub itself.
+  const allowed = hasAnyRole([
+    'super_admin', 'admin', 'financialAdmin',
+    'coordinator', 'supervisor', 'fom',
+    'data_collector', 'dataTeam', 'employee',
+  ]);
   if (!allowed) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };

@@ -1022,16 +1022,18 @@ export const POSTING_TEMPLATES: PostingTemplate[] = [
 //
 // Account codes in pre-funding lines use dynamic COA placeholders resolved
 // at posting time from the fund's own GL account mapping fields:
-//   {gl_receipt_account}   → pre_fund_requests.gl_receipt_account  (default 1200)
-//   {gl_liability_account} → pre_fund_requests.gl_liability_account (default 2400)
-//   {gl_expense_account}   → pre_fund_requests.gl_expense_account   (default 5600)
-//   {gl_cf_account}        → pre_fund_requests.gl_cf_account        (default 2401)
-//   {gl_fx_account}        → system setting or COA code 8200
+//   {gl_receipt_account}   → pre_fund_requests.gl_receipt_account   (REQUIRED — no fallback)
+//   {gl_liability_account} → pre_fund_requests.gl_liability_account  (REQUIRED — no fallback)
+//   {gl_expense_account}   → pre_fund_requests.gl_expense_account    (REQUIRED — no fallback)
+//   {gl_cf_account}        → pre_fund_requests.gl_cf_account         (REQUIRED for carry-forward events — no fallback)
+//   {gl_fx_account}        → pre_fund_settings.gl_fx_account         (REQUIRED for FX events — no fallback)
 //
 // The DB bridge function (pre_fund_gl_bridge_engine) resolves these
-// placeholders using the live COA before posting. Never hard-code an account
-// code in these lines — different projects and donors may map to different
-// COA codes.
+// placeholders using the live COA before posting. If any required field is
+// NULL or not found in the COA the bridge MUST raise an explicit error and
+// abort the posting — it must never silently fall back to a hardcoded code.
+// Different projects and donors map to different COA codes; defaults would
+// silently mis-post to the wrong account.
 
 const PRE_FUNDING_TEMPLATES: PostingTemplate[] = [
   {
