@@ -1555,54 +1555,89 @@ export default function PreFundingRegistry() {
       </Dialog>
 
       {/* Receipt Upload Dialog */}
-      <Dialog open={receiptDialog.open} onOpenChange={o => !o && setReceiptDialog({ open: false, fundId: '', fundName: '' })}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Upload Bank Receipt</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Upload bank receipt(s) for <strong>{receiptDialog.fundName}</strong>. This will activate the fund.
-            </p>
-            <div className="space-y-2">
-              <Label>Receipt Files</Label>
-              <Input
-                type="file"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-                multiple
-                onChange={e => setReceiptFiles(Array.from(e.target.files ?? []))}
-                data-testid="input-receipt-file"
-              />
-              <p className="text-xs text-muted-foreground">Images, PDF, Word, Excel — select multiple files if needed.</p>
-            </div>
-            {receiptFiles.length > 0 && (
-              <div className="rounded-md border border-border bg-muted/40 divide-y divide-border">
-                {receiptFiles.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                    <span className="truncate max-w-[280px] text-foreground">{f.name}</span>
-                    <div className="flex items-center gap-2 ml-2 shrink-0">
-                      <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                        onClick={() => setReceiptFiles(prev => prev.filter((_, j) => j !== i))}
-                      >
-                        ✕
-                      </button>
-                    </div>
+      {(() => {
+        const receiptFund = funds.find(f => f.id === receiptDialog.fundId);
+        const glReceipt   = (receiptFund as any)?.gl_receipt_account  ?? null;
+        const glLiability = (receiptFund as any)?.gl_liability_account ?? null;
+        const missingGL   = receiptDialog.open && (!glReceipt || !glLiability);
+        const missing     = [!glReceipt && 'Receipt / Bank Account', !glLiability && 'Donor Liability Account'].filter(Boolean).join(' and ');
+        return (
+          <Dialog open={receiptDialog.open} onOpenChange={o => !o && setReceiptDialog({ open: false, fundId: '', fundName: '' })}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Upload Bank Receipt</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <p className="text-sm text-muted-foreground">
+                  Upload bank receipt(s) for <strong>{receiptDialog.fundName}</strong>. This will activate the fund.
+                </p>
+
+                {/* GL warning — shown immediately if accounts are missing */}
+                {missingGL && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 space-y-2">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                      <span>⚠</span> GL Accounts Required
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      This fund is missing the <strong>{missing}</strong>. Configure both GL accounts in Edit Fund before uploading.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs border-amber-400 text-amber-800 dark:text-amber-300 hover:bg-amber-100"
+                      onClick={() => {
+                        setReceiptDialog({ open: false, fundId: '', fundName: '' });
+                        setReceiptFiles([]);
+                        if (receiptFund) { setEditing(receiptFund as any); setDialogStep(2); setShowForm(true); }
+                      }}
+                    >
+                      Open Edit Fund →
+                    </Button>
                   </div>
-                ))}
+                )}
+
+                <div className="space-y-2">
+                  <Label>Receipt Files</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    multiple
+                    disabled={missingGL}
+                    onChange={e => setReceiptFiles(Array.from(e.target.files ?? []))}
+                    data-testid="input-receipt-file"
+                  />
+                  <p className="text-xs text-muted-foreground">Images, PDF, Word, Excel — select multiple files if needed.</p>
+                </div>
+                {receiptFiles.length > 0 && (
+                  <div className="rounded-md border border-border bg-muted/40 divide-y divide-border">
+                    {receiptFiles.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                        <span className="truncate max-w-[280px] text-foreground">{f.name}</span>
+                        <div className="flex items-center gap-2 ml-2 shrink-0">
+                          <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                            onClick={() => setReceiptFiles(prev => prev.filter((_, j) => j !== i))}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setReceiptDialog({ open: false, fundId: '', fundName: '' }); setReceiptFiles([]); }}>Cancel</Button>
-            <Button onClick={handleReceiptUpload} disabled={uploading || receiptFiles.length === 0} data-testid="button-upload-receipt">
-              {uploading ? 'Uploading…' : receiptFiles.length > 1 ? `Upload ${receiptFiles.length} Files & Activate` : 'Upload & Activate'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setReceiptDialog({ open: false, fundId: '', fundName: '' }); setReceiptFiles([]); }}>Cancel</Button>
+                <Button onClick={handleReceiptUpload} disabled={uploading || receiptFiles.length === 0 || missingGL} data-testid="button-upload-receipt">
+                  {uploading ? 'Uploading…' : receiptFiles.length > 1 ? `Upload ${receiptFiles.length} Files & Activate` : 'Upload & Activate'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* ── Delete Fund Dialog (Super Admin only) ──────────────────────────── */}
       <Dialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
