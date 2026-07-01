@@ -2364,6 +2364,8 @@ export default function FieldDataFormDetail() {
           </div>
         )}
 
+      </div>
+
       {/* ── Import Dialog (quick-access from header) ──────────────────── */}
       <Dialog open={importDialog} onOpenChange={setImportDialog}>
         <DialogContent className="max-w-md">
