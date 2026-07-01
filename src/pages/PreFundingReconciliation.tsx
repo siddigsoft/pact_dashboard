@@ -574,9 +574,10 @@ export default function PreFundingReconciliation() {
   // Effective paid/available derived from the already-filtered transactions state.
   // This stays correct even when orphan transactions exist in the DB (e.g. from deleted DPs),
   // because loadTxns filters those out before setting the `transactions` state.
+  // Only 'payment' type counts as Paid Out — 'commitment' is shown separately in the Committed card.
   const effectivePaidAmount = useMemo(() =>
     transactions
-      .filter(t => ['payment', 'commitment'].includes(t.transaction_type))
+      .filter(t => t.transaction_type === 'payment')
       .reduce((s, t) => s + Number(t.amount), 0),
     [transactions]
   );
@@ -699,10 +700,11 @@ export default function PreFundingReconciliation() {
           .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
           .map((d: any) => d.pre_fund_transaction_id as string)
       );
-      // pre_fund_transactions IDs back-linked from old-style DPs that are in a paid terminal state
-      const paidBackLinkedTxnIds = new Set<string>(
+      // Old-style txns (NULL source_table): txn IDs back-linked from a DP that is NOT in a paid state
+      // (reverted, cancelled, deleted) — those should be excluded from payment totals.
+      const nonPaidBackLinkedTxnIds = new Set<string>(
         (backLinkedDpsRes.data ?? [])
-          .filter((d: any) => DP_PAID_STATUSES.has(d.status) && d.metadata?.deleted !== true)
+          .filter((d: any) => !DP_PAID_STATUSES.has(d.status) || d.metadata?.deleted === true)
           .map((d: any) => d.pre_fund_transaction_id as string)
       );
 
@@ -715,9 +717,11 @@ export default function PreFundingReconciliation() {
           return validDpSet.has(t.source_id);
         }
         if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
-        // Old rows with NULL source_table: use back-link sets
+        // Old rows with NULL source_table — check back-links:
+        // Exclude if a non-paid/reverted DP back-links to this txn.
+        // Manual payments (no DP back-link at all) are always included.
         if (!t.source_table && t.transaction_type === 'payment') {
-          return paidBackLinkedTxnIds.has(t.id);
+          return !nonPaidBackLinkedTxnIds.has(t.id);
         }
         if (!t.source_table && t.transaction_type === 'commitment') {
           return !deletedDpTxnIds.has(t.id);
