@@ -86,7 +86,7 @@ DROP POLICY IF EXISTS "fd_translations_delete"  ON fd_form_translations;
 CREATE POLICY "fd_translations_select" ON fd_form_translations
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM user_profiles
+      SELECT 1 FROM profiles
       WHERE id = auth.uid()
         AND role IN ('super_admin', 'admin', 'ict', 'data_team', 'fom', 'project_manager', 'country_director')
     )
@@ -95,7 +95,7 @@ CREATE POLICY "fd_translations_select" ON fd_form_translations
 CREATE POLICY "fd_translations_insert" ON fd_form_translations
   FOR INSERT WITH CHECK (
     EXISTS (
-      SELECT 1 FROM user_profiles WHERE id = auth.uid()
+      SELECT 1 FROM profiles WHERE id = auth.uid()
         AND role IN ('super_admin', 'admin', 'ict', 'data_team', 'fom')
     )
   );
@@ -103,7 +103,7 @@ CREATE POLICY "fd_translations_insert" ON fd_form_translations
 CREATE POLICY "fd_translations_update" ON fd_form_translations
   FOR UPDATE USING (
     EXISTS (
-      SELECT 1 FROM user_profiles WHERE id = auth.uid()
+      SELECT 1 FROM profiles WHERE id = auth.uid()
         AND role IN ('super_admin', 'admin', 'ict', 'data_team', 'fom')
     )
   );
@@ -111,7 +111,7 @@ CREATE POLICY "fd_translations_update" ON fd_form_translations
 CREATE POLICY "fd_translations_delete" ON fd_form_translations
   FOR DELETE USING (
     EXISTS (
-      SELECT 1 FROM user_profiles WHERE id = auth.uid()
+      SELECT 1 FROM profiles WHERE id = auth.uid()
         AND role IN ('super_admin', 'admin', 'ict')
     )
   );
@@ -126,7 +126,7 @@ CREATE POLICY "fd_region_select" ON fd_region_lang_defaults
 CREATE POLICY "fd_region_write" ON fd_region_lang_defaults
   FOR ALL USING (
     EXISTS (
-      SELECT 1 FROM user_profiles WHERE id = auth.uid()
+      SELECT 1 FROM profiles WHERE id = auth.uid()
         AND role IN ('super_admin', 'admin', 'ict', 'data_team', 'fom')
     )
   );
