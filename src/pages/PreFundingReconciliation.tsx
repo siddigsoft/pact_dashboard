@@ -1127,9 +1127,10 @@ export default function PreFundingReconciliation() {
     setReconcilingAll(true);
     try {
       const ids = targets.map(t => t.id);
-      await supabase.from('pre_fund_transactions')
+      const { error } = await supabase.from('pre_fund_transactions')
         .update({ reconciled: reconcile, reconciled_at: reconcile ? new Date().toISOString() : null })
         .in('id', ids);
+      if (error) throw new Error(error.message);
       await loadTxns(selectedFund.id);
       toast({ title: reconcile ? `${ids.length} transactions reconciled` : `${ids.length} transactions unreconciled` });
     } catch (err: any) {
