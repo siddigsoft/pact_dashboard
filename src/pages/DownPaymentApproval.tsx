@@ -498,6 +498,11 @@ export default function DownPaymentApproval() {
       // Auto-link to active pre-fund — awaited so result is shown before UI refreshes
       try {
         const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+        // payment_proof_url may be stored as a JSON array string e.g. ["url"] — extract first URL
+        let receiptUrl: string | null = req.paymentProofUrl ?? null;
+        if (receiptUrl) {
+          try { const p = JSON.parse(receiptUrl); receiptUrl = Array.isArray(p) ? (p[0] ?? null) : receiptUrl; } catch { /* keep raw */ }
+        }
         const pfResult = await linkPaymentToPreFund({
           amount: req.approvedAmount ?? req.requestedAmount,
           currency: 'SDG',
@@ -511,7 +516,7 @@ export default function DownPaymentApproval() {
           paymentDate: (req as any).fully_paid_at ?? now,
           createdBy: null,
           userId: req.requestedBy ?? null,
-          receiptUrl: req.paymentProofUrl ?? null,
+          receiptUrl,
         });
         if (pfResult.linked) {
           toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
@@ -593,6 +598,10 @@ export default function DownPaymentApproval() {
       // Auto-link the partial amount to an active pre-fund
       try {
         const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+        let receiptUrlPartial: string | null = req.paymentProofUrl ?? null;
+        if (receiptUrlPartial) {
+          try { const p = JSON.parse(receiptUrlPartial); receiptUrlPartial = Array.isArray(p) ? (p[0] ?? null) : receiptUrlPartial; } catch { /* keep raw */ }
+        }
         const pfResult = await linkPaymentToPreFund({
           amount: partialAmt,
           currency: 'SDG',
@@ -606,7 +615,7 @@ export default function DownPaymentApproval() {
           paymentDate: now,
           createdBy: currentUser.id,
           userId: req.requestedBy ?? null,
-          receiptUrl: req.paymentProofUrl ?? null,
+          receiptUrl: receiptUrlPartial,
         });
         if (pfResult.linked) {
           toast({ title: 'Pre-Fund Deducted', description: pfResult.message });

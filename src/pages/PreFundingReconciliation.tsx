@@ -617,6 +617,11 @@ export default function PreFundingReconciliation() {
 
   // Inline receipt preview
   const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
+  // Normalize receipt_url — may be stored as a JSON array string e.g. ["url"] due to legacy bug
+  const normalizeReceiptUrl = (raw: string | null | undefined): string | null => {
+    if (!raw) return null;
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? (p[0] ?? null) : raw; } catch { return raw; }
+  };
 
   // Super-admin allocation deduction — user picker for manual payments
   const isSuperAdmin = hasAnyRole(['super_admin']);
@@ -1827,6 +1832,7 @@ export default function PreFundingReconciliation() {
                             <TableCell className="text-right font-mono">{t.currency} {formatNumber(t.amount, 0)}</TableCell>
                             <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                               {t.receipt_url ? (() => {
+                                const cleanTxnUrl = normalizeReceiptUrl(t.receipt_url);
                                 const batchGroup = receiptGroupMap.get(t.receipt_url);
                                 const isBatch = !!batchGroup;
                                 return (
@@ -1834,7 +1840,7 @@ export default function PreFundingReconciliation() {
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <button
-                                          onClick={() => setPreviewReceiptUrl(t.receipt_url)}
+                                          onClick={() => setPreviewReceiptUrl(cleanTxnUrl)}
                                           className="flex flex-col items-center justify-center gap-0.5 mx-auto rounded px-1 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-600 transition-colors"
                                           data-testid={`button-receipt-${t.id}`}
                                         >
@@ -2162,20 +2168,24 @@ export default function PreFundingReconciliation() {
                       );
                     })()}
 
-                    {drillTxn.receipt_url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ? (
-                      <button onClick={() => setPreviewReceiptUrl(drillTxn.receipt_url)} className="w-full text-left">
-                        <img src={drillTxn.receipt_url} alt="Receipt" className="max-h-48 rounded-lg border object-contain w-full hover:opacity-90 transition-opacity cursor-pointer" />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setPreviewReceiptUrl(drillTxn.receipt_url)}
-                        className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-lg px-3 py-2 border border-sky-200 dark:border-sky-800 w-full"
-                      >
-                        <Receipt className="h-4 w-4 shrink-0" />
-                        View Receipt / Attachment
-                        <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
-                      </button>
-                    )}
+                    {(() => {
+                      const cleanUrl = normalizeReceiptUrl(drillTxn.receipt_url);
+                      if (!cleanUrl) return null;
+                      return cleanUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ? (
+                        <button onClick={() => setPreviewReceiptUrl(cleanUrl)} className="w-full text-left">
+                          <img src={cleanUrl} alt="Receipt" className="max-h-48 rounded-lg border object-contain w-full hover:opacity-90 transition-opacity cursor-pointer" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setPreviewReceiptUrl(cleanUrl)}
+                          className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-lg px-3 py-2 border border-sky-200 dark:border-sky-800 w-full"
+                        >
+                          <Receipt className="h-4 w-4 shrink-0" />
+                          View Receipt / Attachment
+                          <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
+                        </button>
+                      );
+                    })()}
                   </div>
                 </>
               )}
@@ -2415,8 +2425,8 @@ export default function PreFundingReconciliation() {
       <FilePreviewDialog
         open={!!previewReceiptUrl}
         onOpenChange={(o) => { if (!o) setPreviewReceiptUrl(null); }}
-        url={previewReceiptUrl ?? ''}
-        filename={previewReceiptUrl?.split('/').pop()?.split('?')[0]}
+        url={normalizeReceiptUrl(previewReceiptUrl) ?? ''}
+        filename={normalizeReceiptUrl(previewReceiptUrl)?.split('/').pop()?.split('?')[0]}
       />
     </div>
   );
