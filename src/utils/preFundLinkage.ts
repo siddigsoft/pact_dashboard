@@ -169,6 +169,11 @@ export async function linkPaymentToPreFund(params: {
     const scope: string = f.matching_scope ?? 'country';
     let score = 0;
 
+    // 'global' scope: fund covers all payments regardless of country/project
+    if (scope === 'global') {
+      return { fund: f, score: 1, userAllocation: null };
+    }
+
     const countryProjectMatch = countryId && projectId
       && f.country_id === countryId && f.project_id === projectId;
 
@@ -198,9 +203,63 @@ export async function linkPaymentToPreFund(params: {
     .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
+    // ── Single-fund fallback ───────────────────────────────────────────────
+    // If scope matching found nothing (e.g. down-payment requests carry no
+    // country/project) but there is exactly ONE open-pool active fund with
+    // sufficient balance, use it automatically rather than blocking the payment.
+    const openPoolWithBalance = (activeFunds as any[]).filter(
+      f => (f.available_balance ?? 0) >= amount && (allocsByFund[f.id] ?? []).length === 0
+    );
+    if (openPoolWithBalance.length === 1) {
+      const fallbackFund = openPoolWithBalance[0];
+      const { data: rpcFallback, error: rpcFallbackErr } = await (supabase as any).rpc(
+        'link_payment_atomically_rpc', {
+          p_fund_id:      fallbackFund.id,
+          p_amount:       amount,
+          p_currency:     currency,
+          p_source_table: sourceTable,
+          p_source_id:    sourceId,
+          p_reference:    reference ?? null,
+          p_description:  description ?? null,
+          p_payment_date: today,
+          p_created_by:   createdBy ?? null,
+          p_user_id:      submitterId,
+          p_receipt_url:  receiptUrl ?? null,
+        }
+      );
+      if (rpcFallbackErr) {
+        const notDeployed =
+          (rpcFallbackErr as any).code === 'PGRST202' ||
+          String(rpcFallbackErr.message).toLowerCase().includes('could not find the function') ||
+          String(rpcFallbackErr.message).toLowerCase().includes('does not exist');
+        if (notDeployed) {
+          return { linked: false, message: 'Pre-funding SQL not yet deployed. Run 20260627_pre_fund_rpcs_canonical.sql in Supabase SQL Editor.' };
+        }
+        return { linked: false, message: `Linkage RPC failed: ${rpcFallbackErr.message}` };
+      }
+      if (rpcFallback && rpcFallback.success === false) {
+        return { linked: false, message: rpcFallback.error ?? 'Linkage failed.' };
+      }
+      return {
+        linked: true,
+        fundId: fallbackFund.id,
+        fundName: fallbackFund.name,
+        transactionId: rpcFallback?.transaction_id,
+        message: `Auto-linked to "${fallbackFund.name}" (only active fund)`,
+      };
+    }
+    // Multiple unmatched funds — require manual selection
+    if (openPoolWithBalance.length > 1) {
+      return {
+        linked: false,
+        needsManualSelection: true,
+        candidates: openPoolWithBalance.map((f: any) => ({ id: f.id, name: f.name })),
+        message: `${openPoolWithBalance.length} active pre-funds available — please link manually in Pre-Funding → Reconciliation.`,
+      };
+    }
     return {
       linked: false,
-      message: 'No active pre-fund matches this payment (check user allocation, fund balance, and date range). Finance can link manually in Pre-Funding → Reconciliation.',
+      message: 'No active pre-fund matches this payment (check fund balance, date range, or set the fund scope to "global"). Finance can link manually in Pre-Funding → Reconciliation.',
     };
   }
 
