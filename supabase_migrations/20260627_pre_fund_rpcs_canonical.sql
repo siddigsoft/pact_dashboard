@@ -577,6 +577,8 @@ $$;
 -- Stores (or clears) a bank API key against a pre_fund_settings row.
 -- Key is stored as-is (plaintext); production should use pgcrypto if available.
 
+DROP FUNCTION IF EXISTS store_pre_fund_bank_key(uuid, text, text);
+
 CREATE OR REPLACE FUNCTION store_pre_fund_bank_key(
   p_settings_id uuid,
   p_key         text DEFAULT NULL,
