@@ -587,6 +587,7 @@ AS $$
 DECLARE
   v_jwt_role        TEXT;
   r                 RECORD;
+  v_new_id          UUID;
   v_receipt_acct_id UUID;
   v_liab_acct_id    UUID;
   v_je_id           UUID;
@@ -630,38 +631,72 @@ BEGIN
     AND amount > 0
     AND (available_balance / amount * 100) <= threshold_pct;
 
-  -- Auto-draft renewal for eligible funds (auto_renewal_mode = 'auto_draft')
-  -- Creates a new draft fund request copying key fields from the expiring fund
-  INSERT INTO pre_fund_requests (
-    name, source, amount, currency, period_type_id, period_type_name,
-    country_id, project_id, grant_id, matching_scope,
-    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
-    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-    notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
-    start_date, end_date
-  )
-  SELECT
-    name || ' (Renewal)', source, amount, currency, period_type_id, period_type_name,
-    country_id, project_id, grant_id, matching_scope,
-    threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
-    gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-    notification_recipients,
-    'Auto-renewed from fund id: ' || id::text,
-    'draft', 0, 0, 0,
-    end_date + 1,
-    end_date + 1 + COALESCE(
-      (SELECT day_count FROM pre_fund_period_types WHERE id = period_type_id), 30
+  -- ── Auto-draft renewal for eligible funds (auto_renewal_mode = 'auto_draft') ─────────────
+  -- Creates a 'draft' copy and clones parent's approval steps so the renewal enters
+  -- the same approval chain. Uses FOR LOOP to capture each new fund id.
+  FOR r IN
+    SELECT
+      id, name, source, amount, currency, period_type_id, period_type_name,
+      country_id, project_id, grant_id, matching_scope,
+      threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+      gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+      notification_recipients, end_date
+    FROM pre_fund_requests
+    WHERE status IN ('active','low_balance')
+      AND auto_renewal_mode = 'auto_draft'
+      AND end_date IS NOT NULL
+      AND end_date <= (CURRENT_DATE + COALESCE(auto_renewal_days_before, 7))
+      AND NOT EXISTS (
+        SELECT 1 FROM pre_fund_requests r2
+        WHERE r2.notes LIKE '%Auto-renewed from fund id: ' || pre_fund_requests.id::text || '%'
+          AND r2.status = 'draft'
+      )
+  LOOP
+    INSERT INTO pre_fund_requests (
+      name, source, amount, currency, period_type_id, period_type_name,
+      country_id, project_id, grant_id, matching_scope,
+      threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
+      gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+      notification_recipients, notes, status, available_balance, committed_amount, paid_amount,
+      start_date, end_date
+    ) VALUES (
+      r.name || ' (Renewal)', r.source, r.amount, r.currency, r.period_type_id, r.period_type_name,
+      r.country_id, r.project_id, r.grant_id, r.matching_scope,
+      r.threshold_pct, r.threshold_amount, r.warning_days, r.auto_renewal_mode, r.auto_renewal_days_before,
+      r.gl_receipt_account, r.gl_liability_account, r.gl_expense_account, r.gl_cf_account,
+      r.notification_recipients,
+      'Auto-renewed from fund id: ' || r.id::text,
+      'draft', 0, 0, 0,
+      r.end_date + 1,
+      r.end_date + 1 + COALESCE(
+        (SELECT day_count FROM pre_fund_period_types WHERE id = r.period_type_id), 30
+      )
+    ) RETURNING id INTO v_new_id;
+
+    -- Clone approval steps so the draft enters the same approval chain as the parent.
+    INSERT INTO pre_fund_approval_steps (
+      pre_fund_request_id, step_order, step_label,
+      assigned_user_id, assigned_user_ids, is_required, required_approvals, status
     )
-  FROM pre_fund_requests
-  WHERE status IN ('active','low_balance')
-    AND auto_renewal_mode = 'auto_draft'
-    AND end_date IS NOT NULL
-    AND end_date <= (CURRENT_DATE + COALESCE(auto_renewal_days_before, 7))
-    AND NOT EXISTS (
-      SELECT 1 FROM pre_fund_requests r2
-      WHERE r2.notes LIKE '%Auto-renewed from fund id: ' || pre_fund_requests.id::text || '%'
-        AND r2.status = 'draft'
-    );
+    SELECT
+      v_new_id, step_order, step_label,
+      assigned_user_id, assigned_user_ids, is_required,
+      COALESCE(required_approvals, 1), 'pending'
+    FROM pre_fund_approval_steps
+    WHERE pre_fund_request_id = r.id
+    ORDER BY step_order;
+
+    -- If parent had no steps, seed a default Finance Review to prevent the draft being stranded.
+    IF NOT FOUND THEN
+      INSERT INTO pre_fund_approval_steps (
+        pre_fund_request_id, step_order, step_label,
+        assigned_user_ids, is_required, required_approvals, status
+      ) VALUES (
+        v_new_id, 1, 'Finance Review (Auto-Renewal)',
+        '{}', true, 1, 'pending'
+      );
+    END IF;
+  END LOOP;
 
   -- ── Auto-activate renewal for eligible funds (auto_renewal_mode = 'auto_activate') ──
   -- When auto_renewal_bypass_approvals = TRUE  → create directly as 'active' (no grace window).

@@ -515,7 +515,7 @@ export default function DownPaymentApproval() {
           description: req.justification ?? `Down-payment: ${req.siteName ?? req.id}`,
           paymentDate: (req as any).fully_paid_at ?? now,
           createdBy: currentUser?.id ?? null,
-          userId: currentUser?.id ?? null,
+          userId: (req as any).requestedBy ?? null,
           receiptUrl,
         });
         if (pfResult.linked) {
@@ -614,7 +614,7 @@ export default function DownPaymentApproval() {
           description: `${isFullyPaid ? 'Full' : 'Partial'} payment: ${req.siteName ?? req.id}`,
           paymentDate: now,
           createdBy: currentUser.id,
-          userId: currentUser.id,
+          userId: (req as any).requestedBy ?? currentUser.id,
           receiptUrl: receiptUrlPartial,
         });
         if (pfResult.linked) {
