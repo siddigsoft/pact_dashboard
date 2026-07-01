@@ -445,7 +445,7 @@ export async function linkPaymentToPreFund(params: {
             amount, currency, sourceTable, sourceId,
             reference: reference ?? null, description: description ?? null,
             paymentDate: today, createdBy: createdBy ?? null,
-            userId: null, receiptUrl: receiptUrl ?? null,
+            userId: submitterId, receiptUrl: receiptUrl ?? null,
           });
         }
         return { linked: false, message: `Linkage RPC failed: ${rpcFallbackErr.message}` };
@@ -521,13 +521,16 @@ export async function linkPaymentToPreFund(params: {
       String(rpcErr.message).toLowerCase().includes('could not find the function') ||
       String(rpcErr.message).toLowerCase().includes('does not exist');
     if (isNotDeployed) {
-      // RPC not deployed — fall back to direct writes
+      // RPC not deployed — fall back to direct writes.
+      // Pass submitterId (not rpcUserId) because directLinkPayment step 3b uses
+      // maybeSingle() and safely no-ops when no allocation row exists — safe to
+      // always pass the real userId so allocations ARE updated when they do exist.
       return directLinkPayment({
         fundId: bestFund.id, fundName: bestFund.name,
         amount, currency, sourceTable, sourceId,
         reference: reference ?? null, description: description ?? null,
         paymentDate: today, createdBy: createdBy ?? null,
-        userId: rpcUserId, receiptUrl: receiptUrl ?? null,
+        userId: submitterId, receiptUrl: receiptUrl ?? null,
       });
     }
     return { linked: false, message: `Linkage RPC failed: ${rpcErr.message}` };
