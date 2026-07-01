@@ -313,78 +313,51 @@ export default function PreFundingApprovalFlow() {
     const { step, action } = actionDialog;
     setProcessing(step.id);
     try {
-      const now = new Date().toISOString();
+      // Use the SECURITY DEFINER RPC — same path as ApprovalsHub.
+      // This is the only correct way to approve/reject: it handles vote recording,
+      // quorum checking, step status, and fund status atomically, and works for
+      // any assigned user regardless of their finance/admin role.
+      const { data: rpcResult, error: rpcErr } = await (supabase as any).rpc(
+        'process_pf_step_action',
+        { p_step_id: step.id, p_action: action, p_notes: actionNotes || null },
+      );
+      if (rpcErr) throw rpcErr;
 
-      // Record the individual vote (upsert — one vote per user per step)
-      const { error: vErr } = await supabase.from('pre_fund_step_approvals' as any).upsert({
-        step_id: step.id,
-        user_id: currentUser?.id,
-        action: action === 'approve' ? 'approved' : 'rejected',
-        notes: actionNotes || null,
-        created_at: now,
-      }, { onConflict: 'step_id,user_id' });
-      if (vErr && !vErr.message.includes('does not exist')) throw vErr;
-
-      // Count how many approvals now exist for this step
-      const { data: voteData } = await supabase
-        .from('pre_fund_step_approvals' as any)
-        .select('action')
-        .eq('step_id', step.id);
-      const votes = (voteData as any) ?? [];
-      const approvalCount   = votes.filter((v: any) => v.action === 'approved').length;
-      const anyRejected     = votes.some((v: any) => v.action === 'rejected');
-      const quorumMet       = approvalCount >= (step.required_approvals ?? 1);
-
-      // Determine new step status
-      let newStepStatus: string | null = null;
-      if (anyRejected && step.is_required) {
-        newStepStatus = 'rejected';
-      } else if (quorumMet) {
-        newStepStatus = 'approved';
+      const rpc = rpcResult as {
+        step_resolved: boolean;
+        new_fund_status: string | null;
+        is_optional_step: boolean;
+        error: string | null;
+      };
+      if (rpc?.error === 'unauthorized') {
+        throw new Error('You are not assigned to this approval step. Only an assigned approver or admin may act on it.');
       }
-      // else: still pending (more approvals needed)
-
-      if (newStepStatus) {
-        const { error: sErr } = await supabase.from('pre_fund_approval_steps').update({
-          status: newStepStatus,
-          approved_at: now,
-          approved_by: currentUser?.id,
-          notes: actionNotes || null,
-        }).eq('id', step.id);
-        if (sErr) throw sErr;
+      if (rpc?.error === 'step_already_resolved') {
+        throw new Error('This step has already been resolved. Refresh the page to see the latest status.');
+      }
+      if (rpc?.error) {
+        throw new Error(rpc.error);
       }
 
-      // If step is now resolved, check if fund status should change
-      if (newStepStatus) {
-        const { data: allStepsData } = await supabase.from('pre_fund_approval_steps')
-          .select('id,status,is_required').eq('pre_fund_request_id', selectedFund.id);
-        const allSteps = (allStepsData as any) ?? [];
-        const withUpdate = allSteps.map((s: any) =>
-          s.id === step.id ? { ...s, status: newStepStatus } : s
-        );
-        const anyRequiredRejected = withUpdate.some((s: any) => s.status === 'rejected' && s.is_required);
-        const allDone = withUpdate.every((s: any) => s.status === 'approved' || !s.is_required);
-
-        if (anyRequiredRejected) {
-          await supabase.from('pre_fund_requests').update({
-            status: 'rejected',
-            rejection_reason: actionNotes || 'Step rejected in Approval Flow',
-          }).eq('id', selectedFund.id);
-          toast({ title: 'Step rejected — Fund is now Rejected' });
-        } else if (allDone) {
-          await supabase.from('pre_fund_requests').update({
-            status: 'awaiting_receipt',
-            approved_by: currentUser?.id ?? null,
-            approved_at: now,
-          }).eq('id', selectedFund.id);
-          toast({ title: 'All steps approved — fund is now Awaiting Receipt' });
-        } else {
-          toast({ title: newStepStatus === 'approved' ? 'Step approved ✓' : 'Step rejected' });
-        }
-      } else {
-        const needed = (step.required_approvals ?? 1) - approvalCount;
-        toast({ title: `Vote recorded`, description: `${approvalCount} of ${step.required_approvals ?? 1} approvals — ${needed} more needed.` });
-      }
+      const newFundStatus  = rpc?.new_fund_status ?? null;
+      const isOptionalStep = rpc?.is_optional_step ?? (step.is_required === false);
+      const isFundRejected = newFundStatus === 'rejected';
+      toast({
+        title: action === 'approve'
+          ? 'Step Approved'
+          : isFundRejected ? 'Pre-Fund Rejected' : 'Step Skipped',
+        description: action === 'approve'
+          ? newFundStatus === 'awaiting_receipt'
+            ? 'All required steps cleared — fund is awaiting receipt confirmation.'
+            : rpc?.step_resolved
+              ? 'Step approved. Further approval steps are pending.'
+              : `Vote recorded — quorum not yet reached.`
+          : isFundRejected
+            ? 'Required step rejected — pre-fund request has been rejected.'
+            : isOptionalStep
+              ? 'Optional step skipped — remaining required steps still apply.'
+              : 'Step rejected.',
+      });
 
       setActionDialog(null);
       setActionNotes('');
