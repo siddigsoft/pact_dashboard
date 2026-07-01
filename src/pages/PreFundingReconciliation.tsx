@@ -576,11 +576,15 @@ export default function PreFundingReconciliation() {
   //   Priority 2 — selectedFund.paid_amount DB column (updated by directLinkPayment balance
   //                UPDATE even when the pre_fund_transactions INSERT is blocked by RLS).
   const effectivePaidAmount = useMemo(() => {
-    const fromTxns = transactions
-      .filter(t => t.transaction_type === 'payment')
-      .reduce((s, t) => s + Number(t.amount), 0);
-    // Fall back to DB column only when no transaction rows exist for this fund
-    return fromTxns > 0 ? fromTxns : Number(selectedFund?.paid_amount ?? 0);
+    const paymentTxns = transactions.filter(t => t.transaction_type === 'payment');
+    // Use row-count check (not sum > 0) so that zero/negative transaction amounts
+    // don't accidentally fall through to the DB column fallback
+    if (paymentTxns.length > 0) {
+      return paymentTxns.reduce((s, t) => s + Number(t.amount), 0);
+    }
+    // Fallback: use the DB's paid_amount column — reliably updated by directLinkPayment
+    // even when the pre_fund_transactions INSERT is blocked by RLS
+    return Number(selectedFund?.paid_amount ?? 0);
   }, [transactions, selectedFund]);
   const effectiveAvailableBalance = useMemo(() =>
     selectedFund ? selectedFund.amount - effectivePaidAmount : 0,

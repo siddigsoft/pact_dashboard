@@ -25,7 +25,7 @@ async function directLinkPayment(params: {
   const { fundId, fundName, amount, currency, sourceTable, sourceId,
     reference, description, paymentDate, createdBy, userId, receiptUrl } = params;
 
-  // 1. Check for existing transaction (prevent duplicate deductions on retry)
+  // 1a. Check for existing transaction row (primary idempotency guard)
   const { data: existing } = await (supabase as any)
     .from('pre_fund_transactions')
     .select('id')
@@ -40,6 +40,24 @@ async function directLinkPayment(params: {
       fundName,
       transactionId: existing.id,
       message: `Already linked to "${fundName}"`,
+    };
+  }
+
+  // 1b. Fetch source row metadata — needed for the secondary idempotency check below.
+  //     When the pre_fund_transactions INSERT is blocked by RLS, we store a
+  //     pre_fund_deducted marker in source metadata so retries don't double-deduct.
+  const { data: srcRow } = await (supabase as any)
+    .from(sourceTable)
+    .select('metadata')
+    .eq('id', sourceId)
+    .maybeSingle();
+
+  if (srcRow?.metadata?.pre_fund_deducted === true) {
+    return {
+      linked: true,
+      fundId,
+      fundName,
+      message: `Balance already deducted from "${fundName}"`,
     };
   }
 
@@ -64,12 +82,9 @@ async function directLinkPayment(params: {
     .select('id')
     .single();
 
-  // NOTE: we continue even if the transaction INSERT failed (e.g. RLS not yet deployed).
-  // The fund balance UPDATE below uses a different table (pre_fund_requests) that typically
-  // has broader permissions, so the balance can still be deducted correctly.
   const txnId: string | null = txnErr ? null : (txnRow?.id ?? null);
 
-  // 3. Deduct from fund balance — runs regardless of whether step 2 succeeded
+  // 3. Deduct from fund balance
   const { data: fund } = await (supabase as any)
     .from('pre_fund_requests')
     .select('available_balance,paid_amount')
@@ -85,16 +100,28 @@ async function directLinkPayment(params: {
     .eq('id', fundId);
 
   if (balErr) {
-    // Balance update also failed — clean up txn row if one was created
+    // Balance update failed — clean up txn row if one was created, then fail
     if (txnId) await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
     return { linked: false, message: `Failed to deduct fund balance: ${balErr.message}` };
   }
 
-  // 4. Back-link source row (only possible when we have a txnId)
+  // 4. Write idempotency marker / back-link on source row
   if (txnId) {
+    // Full link: set pre_fund_transaction_id back-link
     await (supabase as any)
       .from(sourceTable)
       .update({ pre_fund_transaction_id: txnId })
+      .eq('id', sourceId);
+  } else {
+    // INSERT was blocked by RLS — no txn row created.
+    // Store a metadata marker to prevent double-deduction on any retry.
+    // Note: there is still a narrow SELECT→UPDATE race window under concurrent calls;
+    // a DB unique constraint on pre_fund_transactions(source_table,source_id) would
+    // fully close it — deploy the SQL migration when possible.
+    const updatedMeta = { ...(srcRow?.metadata ?? {}), pre_fund_deducted: true, pre_fund_id: fundId };
+    await (supabase as any)
+      .from(sourceTable)
+      .update({ metadata: updatedMeta })
       .eq('id', sourceId);
   }
 
