@@ -359,61 +359,97 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
 $$;
 
 -- Servers: read by hub users; write by admins only
+DROP POLICY IF EXISTS "fdserv_read" ON field_data_servers;
 CREATE POLICY "fdserv_read"  ON field_data_servers FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdserv_write" ON field_data_servers;
 CREATE POLICY "fdserv_write" ON field_data_servers FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdserv_svc" ON field_data_servers;
 CREATE POLICY "fdserv_svc"   ON field_data_servers FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Forms: read by hub users; write by admins
+DROP POLICY IF EXISTS "fdf_read" ON field_data_forms;
 CREATE POLICY "fdf_read"   ON field_data_forms FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdf_write" ON field_data_forms;
 CREATE POLICY "fdf_write"  ON field_data_forms FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdf_svc" ON field_data_forms;
 CREATE POLICY "fdf_svc"    ON field_data_forms FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Form-server junction
+DROP POLICY IF EXISTS "fdfs_read" ON field_data_form_servers;
 CREATE POLICY "fdfs_read"  ON field_data_form_servers FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdfs_write" ON field_data_form_servers;
 CREATE POLICY "fdfs_write" ON field_data_form_servers FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdfs_svc" ON field_data_form_servers;
 CREATE POLICY "fdfs_svc"   ON field_data_form_servers FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Submissions: read by hub users; write by data_team/admins and service_role
+DROP POLICY IF EXISTS "fdsub_read" ON field_data_submissions;
 CREATE POLICY "fdsub_read"  ON field_data_submissions FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsub_write" ON field_data_submissions;
 CREATE POLICY "fdsub_write" ON field_data_submissions FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsub_svc" ON field_data_submissions;
 CREATE POLICY "fdsub_svc"   ON field_data_submissions FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Import jobs
+DROP POLICY IF EXISTS "fdij_read" ON field_data_import_jobs;
 CREATE POLICY "fdij_read"   ON field_data_import_jobs FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdij_write" ON field_data_import_jobs;
 CREATE POLICY "fdij_write"  ON field_data_import_jobs FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdij_svc" ON field_data_import_jobs;
 CREATE POLICY "fdij_svc"    ON field_data_import_jobs FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Form versions
+DROP POLICY IF EXISTS "fdfv_read" ON field_data_form_versions;
 CREATE POLICY "fdfv_read"   ON field_data_form_versions FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdfv_write" ON field_data_form_versions;
 CREATE POLICY "fdfv_write"  ON field_data_form_versions FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdfv_svc" ON field_data_form_versions;
 CREATE POLICY "fdfv_svc"    ON field_data_form_versions FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Sync logs
+DROP POLICY IF EXISTS "fdsl_read" ON field_data_sync_logs;
 CREATE POLICY "fdsl_read"   ON field_data_sync_logs FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsl_write" ON field_data_sync_logs;
 CREATE POLICY "fdsl_write"  ON field_data_sync_logs FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsl_svc" ON field_data_sync_logs;
 CREATE POLICY "fdsl_svc"    ON field_data_sync_logs FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Sync schedules
+DROP POLICY IF EXISTS "fdss_read" ON field_data_sync_schedules;
 CREATE POLICY "fdss_read"   ON field_data_sync_schedules FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdss_write" ON field_data_sync_schedules;
 CREATE POLICY "fdss_write"  ON field_data_sync_schedules FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdss_svc" ON field_data_sync_schedules;
 CREATE POLICY "fdss_svc"    ON field_data_sync_schedules FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Exports (legacy)
+DROP POLICY IF EXISTS "fde_read" ON field_data_exports;
 CREATE POLICY "fde_read"    ON field_data_exports FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fde_write" ON field_data_exports;
 CREATE POLICY "fde_write"   ON field_data_exports FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fde_svc" ON field_data_exports;
 CREATE POLICY "fde_svc"     ON field_data_exports FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- fd_forms / fd_submissions / fd_form_schema
+DROP POLICY IF EXISTS "fdforms_read" ON fd_forms;
 CREATE POLICY "fdforms_read"  ON fd_forms      FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdforms_write" ON fd_forms;
 CREATE POLICY "fdforms_write" ON fd_forms      FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdforms_svc" ON fd_forms;
 CREATE POLICY "fdforms_svc"   ON fd_forms      FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsubs_read" ON fd_submissions;
 CREATE POLICY "fdsubs_read"   ON fd_submissions FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsubs_write" ON fd_submissions;
 CREATE POLICY "fdsubs_write"  ON fd_submissions FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsubs_svc" ON fd_submissions;
 CREATE POLICY "fdsubs_svc"    ON fd_submissions FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdschema_read" ON fd_form_schema;
 CREATE POLICY "fdschema_read" ON fd_form_schema FOR SELECT TO authenticated USING (fd_is_hub_user());
-CREATE POLICY "fdschema_write"ON fd_form_schema FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdschema_write" ON fd_form_schema;
+CREATE POLICY "fdschema_write" ON fd_form_schema FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdschema_svc" ON fd_form_schema;
 CREATE POLICY "fdschema_svc"  ON fd_form_schema FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- ── Helper: increment submission counter ─────────────────────────────────────

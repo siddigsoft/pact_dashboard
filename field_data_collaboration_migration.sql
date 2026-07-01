@@ -76,6 +76,7 @@ ALTER TABLE fd_form_review_comments ENABLE ROW LEVEL SECURITY;
 
 -- Roles with FDH access
 -- (mirrors fd_forms / fd_submissions RLS pattern)
+DROP POLICY IF EXISTS "fdsc_read" ON fd_submission_comments;
 CREATE POLICY "fdsc_read"  ON fd_submission_comments FOR SELECT TO authenticated
   USING (
     EXISTS (
@@ -85,6 +86,7 @@ CREATE POLICY "fdsc_read"  ON fd_submission_comments FOR SELECT TO authenticated
     )
   );
 
+DROP POLICY IF EXISTS "fdsc_insert" ON fd_submission_comments;
 CREATE POLICY "fdsc_insert" ON fd_submission_comments FOR INSERT TO authenticated
   WITH CHECK (
     EXISTS (
@@ -94,6 +96,7 @@ CREATE POLICY "fdsc_insert" ON fd_submission_comments FOR INSERT TO authenticate
     )
   );
 
+DROP POLICY IF EXISTS "fdsc_update" ON fd_submission_comments;
 CREATE POLICY "fdsc_update" ON fd_submission_comments FOR UPDATE TO authenticated
   USING (author_id = auth.uid() OR
     EXISTS (
@@ -104,6 +107,7 @@ CREATE POLICY "fdsc_update" ON fd_submission_comments FOR UPDATE TO authenticate
   );
 
 -- Flags
+DROP POLICY IF EXISTS "fdsf_read" ON fd_submission_flags;
 CREATE POLICY "fdsf_read"  ON fd_submission_flags FOR SELECT TO authenticated
   USING (
     EXISTS (
@@ -113,6 +117,7 @@ CREATE POLICY "fdsf_read"  ON fd_submission_flags FOR SELECT TO authenticated
     )
   );
 
+DROP POLICY IF EXISTS "fdsf_insert" ON fd_submission_flags;
 CREATE POLICY "fdsf_insert" ON fd_submission_flags FOR INSERT TO authenticated
   WITH CHECK (
     EXISTS (
@@ -122,6 +127,7 @@ CREATE POLICY "fdsf_insert" ON fd_submission_flags FOR INSERT TO authenticated
     )
   );
 
+DROP POLICY IF EXISTS "fdsf_delete" ON fd_submission_flags;
 CREATE POLICY "fdsf_delete" ON fd_submission_flags FOR DELETE TO authenticated
   USING (
     flagged_by = auth.uid() OR
@@ -133,6 +139,7 @@ CREATE POLICY "fdsf_delete" ON fd_submission_flags FOR DELETE TO authenticated
   );
 
 -- Form review comments
+DROP POLICY IF EXISTS "fdfrc_read" ON fd_form_review_comments;
 CREATE POLICY "fdfrc_read"  ON fd_form_review_comments FOR SELECT TO authenticated
   USING (
     EXISTS (
@@ -142,6 +149,7 @@ CREATE POLICY "fdfrc_read"  ON fd_form_review_comments FOR SELECT TO authenticat
     )
   );
 
+DROP POLICY IF EXISTS "fdfrc_insert" ON fd_form_review_comments;
 CREATE POLICY "fdfrc_insert" ON fd_form_review_comments FOR INSERT TO authenticated
   WITH CHECK (
     EXISTS (
@@ -151,6 +159,7 @@ CREATE POLICY "fdfrc_insert" ON fd_form_review_comments FOR INSERT TO authentica
     )
   );
 
+DROP POLICY IF EXISTS "fdfrc_update" ON fd_form_review_comments;
 CREATE POLICY "fdfrc_update" ON fd_form_review_comments FOR UPDATE TO authenticated
   USING (
     reviewer_id = auth.uid() OR

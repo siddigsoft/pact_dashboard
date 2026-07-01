@@ -90,16 +90,19 @@ DO $$ BEGIN
   DROP POLICY IF EXISTS "fd_sup_actions_access"    ON fd_supervisor_actions;
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
+DROP POLICY IF EXISTS "fd_enum_locs_access" ON fd_enumerator_locations;
 CREATE POLICY "fd_enum_locs_access" ON fd_enumerator_locations FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_coverage_zones_access" ON fd_coverage_zones;
 CREATE POLICY "fd_coverage_zones_access" ON fd_coverage_zones FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_sup_actions_access" ON fd_supervisor_actions;
 CREATE POLICY "fd_sup_actions_access" ON fd_supervisor_actions FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',

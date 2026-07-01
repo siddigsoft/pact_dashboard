@@ -78,11 +78,8 @@ ALTER TABLE fd_form_translations    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_region_lang_defaults ENABLE ROW LEVEL SECURITY;
 
 -- Translations: readable by all field-data users; editable by data team / admin
-DROP POLICY IF EXISTS "fd_translations_select"  ON fd_form_translations;
-DROP POLICY IF EXISTS "fd_translations_insert"  ON fd_form_translations;
-DROP POLICY IF EXISTS "fd_translations_update"  ON fd_form_translations;
-DROP POLICY IF EXISTS "fd_translations_delete"  ON fd_form_translations;
 
+DROP POLICY IF EXISTS "fd_translations_select" ON fd_form_translations;
 CREATE POLICY "fd_translations_select" ON fd_form_translations
   FOR SELECT USING (
     EXISTS (
@@ -92,6 +89,7 @@ CREATE POLICY "fd_translations_select" ON fd_form_translations
     )
   );
 
+DROP POLICY IF EXISTS "fd_translations_insert" ON fd_form_translations;
 CREATE POLICY "fd_translations_insert" ON fd_form_translations
   FOR INSERT WITH CHECK (
     EXISTS (
@@ -100,6 +98,7 @@ CREATE POLICY "fd_translations_insert" ON fd_form_translations
     )
   );
 
+DROP POLICY IF EXISTS "fd_translations_update" ON fd_form_translations;
 CREATE POLICY "fd_translations_update" ON fd_form_translations
   FOR UPDATE USING (
     EXISTS (
@@ -108,6 +107,7 @@ CREATE POLICY "fd_translations_update" ON fd_form_translations
     )
   );
 
+DROP POLICY IF EXISTS "fd_translations_delete" ON fd_form_translations;
 CREATE POLICY "fd_translations_delete" ON fd_form_translations
   FOR DELETE USING (
     EXISTS (
@@ -117,12 +117,12 @@ CREATE POLICY "fd_translations_delete" ON fd_form_translations
   );
 
 -- Region defaults: readable by all; writable by admin
-DROP POLICY IF EXISTS "fd_region_select"  ON fd_region_lang_defaults;
-DROP POLICY IF EXISTS "fd_region_write"   ON fd_region_lang_defaults;
 
+DROP POLICY IF EXISTS "fd_region_select" ON fd_region_lang_defaults;
 CREATE POLICY "fd_region_select" ON fd_region_lang_defaults
   FOR SELECT USING (auth.uid() IS NOT NULL);
 
+DROP POLICY IF EXISTS "fd_region_write" ON fd_region_lang_defaults;
 CREATE POLICY "fd_region_write" ON fd_region_lang_defaults
   FOR ALL USING (
     EXISTS (

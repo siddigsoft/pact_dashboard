@@ -70,11 +70,8 @@ ALTER TABLE fd_export_jobs       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_export_templates  ENABLE ROW LEVEL SECURITY;
 
 -- Jobs: users see their own; admins/data team/FOM see all
-DROP POLICY IF EXISTS "fd_export_jobs_select"  ON fd_export_jobs;
-DROP POLICY IF EXISTS "fd_export_jobs_insert"  ON fd_export_jobs;
-DROP POLICY IF EXISTS "fd_export_jobs_delete"  ON fd_export_jobs;
-DROP POLICY IF EXISTS "fd_export_jobs_update"  ON fd_export_jobs;
 
+DROP POLICY IF EXISTS "fd_export_jobs_select" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_select" ON fd_export_jobs
   FOR SELECT USING (
     created_by = auth.uid()
@@ -85,6 +82,7 @@ CREATE POLICY "fd_export_jobs_select" ON fd_export_jobs
     )
   );
 
+DROP POLICY IF EXISTS "fd_export_jobs_insert" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_insert" ON fd_export_jobs
   FOR INSERT WITH CHECK (
     auth.uid() IS NOT NULL
@@ -95,21 +93,20 @@ CREATE POLICY "fd_export_jobs_insert" ON fd_export_jobs
     )
   );
 
+DROP POLICY IF EXISTS "fd_export_jobs_delete" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_delete" ON fd_export_jobs
   FOR DELETE USING (created_by = auth.uid() OR EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin', 'ict')
   ));
 
 -- Service role can update status / file_url
+DROP POLICY IF EXISTS "fd_export_jobs_update" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_update" ON fd_export_jobs
   FOR UPDATE USING (true);
 
 -- Templates: users manage their own
-DROP POLICY IF EXISTS "fd_export_templates_select"  ON fd_export_templates;
-DROP POLICY IF EXISTS "fd_export_templates_insert"  ON fd_export_templates;
-DROP POLICY IF EXISTS "fd_export_templates_delete"  ON fd_export_templates;
-DROP POLICY IF EXISTS "fd_export_templates_update"  ON fd_export_templates;
 
+DROP POLICY IF EXISTS "fd_export_templates_select" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_select" ON fd_export_templates
   FOR SELECT USING (
     created_by = auth.uid()
@@ -118,14 +115,17 @@ CREATE POLICY "fd_export_templates_select" ON fd_export_templates
     )
   );
 
+DROP POLICY IF EXISTS "fd_export_templates_insert" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_insert" ON fd_export_templates
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
+DROP POLICY IF EXISTS "fd_export_templates_delete" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_delete" ON fd_export_templates
   FOR DELETE USING (created_by = auth.uid() OR EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin', 'ict')
   ));
 
+DROP POLICY IF EXISTS "fd_export_templates_update" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_update" ON fd_export_templates
   FOR UPDATE USING (created_by = auth.uid() OR EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin', 'ict')

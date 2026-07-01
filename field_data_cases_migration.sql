@@ -80,16 +80,19 @@ DO $$ BEGIN
   DROP POLICY IF EXISTS "fd_case_notes_access"  ON fd_case_notes;
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
+DROP POLICY IF EXISTS "fd_cases_access" ON fd_cases;
 CREATE POLICY "fd_cases_access" ON fd_cases FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_case_visits_access" ON fd_case_visits;
 CREATE POLICY "fd_case_visits_access" ON fd_case_visits FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_case_notes_access" ON fd_case_notes;
 CREATE POLICY "fd_case_notes_access" ON fd_case_notes FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',

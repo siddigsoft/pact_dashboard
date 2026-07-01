@@ -65,6 +65,7 @@ DO $$ BEGIN
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
 -- Reviewers and finance/admin/data team can see and act on reviews
+DROP POLICY IF EXISTS "fd_reviews_access" ON fd_submission_reviews;
 CREATE POLICY "fd_reviews_access" ON fd_submission_reviews FOR ALL
   USING (
     reviewer_id = auth.uid()
@@ -79,6 +80,7 @@ CREATE POLICY "fd_reviews_access" ON fd_submission_reviews FOR ALL
   );
 
 -- Action audit log: reviewer + admins can read; only reviewer/admin can insert
+DROP POLICY IF EXISTS "fd_review_actions_access" ON fd_review_actions;
 CREATE POLICY "fd_review_actions_access" ON fd_review_actions FOR ALL
   USING (
     actor_id = auth.uid()

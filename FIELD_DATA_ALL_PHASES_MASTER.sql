@@ -388,61 +388,97 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
 $$;
 
 -- Servers: read by hub users; write by admins only
+DROP POLICY IF EXISTS "fdserv_read" ON field_data_servers;
 CREATE POLICY "fdserv_read"  ON field_data_servers FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdserv_write" ON field_data_servers;
 CREATE POLICY "fdserv_write" ON field_data_servers FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdserv_svc" ON field_data_servers;
 CREATE POLICY "fdserv_svc"   ON field_data_servers FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Forms: read by hub users; write by admins
+DROP POLICY IF EXISTS "fdf_read" ON field_data_forms;
 CREATE POLICY "fdf_read"   ON field_data_forms FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdf_write" ON field_data_forms;
 CREATE POLICY "fdf_write"  ON field_data_forms FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdf_svc" ON field_data_forms;
 CREATE POLICY "fdf_svc"    ON field_data_forms FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Form-server junction
+DROP POLICY IF EXISTS "fdfs_read" ON field_data_form_servers;
 CREATE POLICY "fdfs_read"  ON field_data_form_servers FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdfs_write" ON field_data_form_servers;
 CREATE POLICY "fdfs_write" ON field_data_form_servers FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdfs_svc" ON field_data_form_servers;
 CREATE POLICY "fdfs_svc"   ON field_data_form_servers FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Submissions: read by hub users; write by data_team/admins and service_role
+DROP POLICY IF EXISTS "fdsub_read" ON field_data_submissions;
 CREATE POLICY "fdsub_read"  ON field_data_submissions FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsub_write" ON field_data_submissions;
 CREATE POLICY "fdsub_write" ON field_data_submissions FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsub_svc" ON field_data_submissions;
 CREATE POLICY "fdsub_svc"   ON field_data_submissions FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Import jobs
+DROP POLICY IF EXISTS "fdij_read" ON field_data_import_jobs;
 CREATE POLICY "fdij_read"   ON field_data_import_jobs FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdij_write" ON field_data_import_jobs;
 CREATE POLICY "fdij_write"  ON field_data_import_jobs FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdij_svc" ON field_data_import_jobs;
 CREATE POLICY "fdij_svc"    ON field_data_import_jobs FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Form versions
+DROP POLICY IF EXISTS "fdfv_read" ON field_data_form_versions;
 CREATE POLICY "fdfv_read"   ON field_data_form_versions FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdfv_write" ON field_data_form_versions;
 CREATE POLICY "fdfv_write"  ON field_data_form_versions FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdfv_svc" ON field_data_form_versions;
 CREATE POLICY "fdfv_svc"    ON field_data_form_versions FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Sync logs
+DROP POLICY IF EXISTS "fdsl_read" ON field_data_sync_logs;
 CREATE POLICY "fdsl_read"   ON field_data_sync_logs FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsl_write" ON field_data_sync_logs;
 CREATE POLICY "fdsl_write"  ON field_data_sync_logs FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsl_svc" ON field_data_sync_logs;
 CREATE POLICY "fdsl_svc"    ON field_data_sync_logs FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Sync schedules
+DROP POLICY IF EXISTS "fdss_read" ON field_data_sync_schedules;
 CREATE POLICY "fdss_read"   ON field_data_sync_schedules FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdss_write" ON field_data_sync_schedules;
 CREATE POLICY "fdss_write"  ON field_data_sync_schedules FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdss_svc" ON field_data_sync_schedules;
 CREATE POLICY "fdss_svc"    ON field_data_sync_schedules FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- Exports (legacy)
+DROP POLICY IF EXISTS "fde_read" ON field_data_exports;
 CREATE POLICY "fde_read"    ON field_data_exports FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fde_write" ON field_data_exports;
 CREATE POLICY "fde_write"   ON field_data_exports FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fde_svc" ON field_data_exports;
 CREATE POLICY "fde_svc"     ON field_data_exports FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- fd_forms / fd_submissions / fd_form_schema
+DROP POLICY IF EXISTS "fdforms_read" ON fd_forms;
 CREATE POLICY "fdforms_read"  ON fd_forms      FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdforms_write" ON fd_forms;
 CREATE POLICY "fdforms_write" ON fd_forms      FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdforms_svc" ON fd_forms;
 CREATE POLICY "fdforms_svc"   ON fd_forms      FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsubs_read" ON fd_submissions;
 CREATE POLICY "fdsubs_read"   ON fd_submissions FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsubs_write" ON fd_submissions;
 CREATE POLICY "fdsubs_write"  ON fd_submissions FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsubs_svc" ON fd_submissions;
 CREATE POLICY "fdsubs_svc"    ON fd_submissions FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdschema_read" ON fd_form_schema;
 CREATE POLICY "fdschema_read" ON fd_form_schema FOR SELECT TO authenticated USING (fd_is_hub_user());
-CREATE POLICY "fdschema_write"ON fd_form_schema FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdschema_write" ON fd_form_schema;
+CREATE POLICY "fdschema_write" ON fd_form_schema FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdschema_svc" ON fd_form_schema;
 CREATE POLICY "fdschema_svc"  ON fd_form_schema FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- ── Helper: increment submission counter ─────────────────────────────────────
@@ -598,24 +634,39 @@ ALTER TABLE fd_server_datasets            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_preload_configs            ENABLE ROW LEVEL SECURITY;
 
 -- Uses fd_is_hub_user() / fd_is_admin() from core migration
+DROP POLICY IF EXISTS "fdsd_read" ON field_data_server_datasets;
 CREATE POLICY "fdsd_read"    ON field_data_server_datasets    FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsd_write" ON field_data_server_datasets;
 CREATE POLICY "fdsd_write"   ON field_data_server_datasets    FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsd_svc" ON field_data_server_datasets;
 CREATE POLICY "fdsd_svc"     ON field_data_server_datasets    FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fddv_read" ON field_data_dataset_versions;
 CREATE POLICY "fddv_read"    ON field_data_dataset_versions   FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fddv_write" ON field_data_dataset_versions;
 CREATE POLICY "fddv_write"   ON field_data_dataset_versions   FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fddv_svc" ON field_data_dataset_versions;
 CREATE POLICY "fddv_svc"     ON field_data_dataset_versions   FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fddfl_read" ON field_data_dataset_form_links;
 CREATE POLICY "fddfl_read"   ON field_data_dataset_form_links FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fddfl_write" ON field_data_dataset_form_links;
 CREATE POLICY "fddfl_write"  ON field_data_dataset_form_links FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fddfl_svc" ON field_data_dataset_form_links;
 CREATE POLICY "fddfl_svc"    ON field_data_dataset_form_links FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsds_read" ON fd_server_datasets;
 CREATE POLICY "fdsds_read"   ON fd_server_datasets            FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsds_write" ON fd_server_datasets;
 CREATE POLICY "fdsds_write"  ON fd_server_datasets            FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsds_svc" ON fd_server_datasets;
 CREATE POLICY "fdsds_svc"    ON fd_server_datasets            FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdpc_read" ON fd_preload_configs;
 CREATE POLICY "fdpc_read"    ON fd_preload_configs            FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdpc_write" ON fd_preload_configs;
 CREATE POLICY "fdpc_write"   ON fd_preload_configs            FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdpc_svc" ON fd_preload_configs;
 CREATE POLICY "fdpc_svc"     ON fd_preload_configs            FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- ── 7. Storage bucket hint ────────────────────────────────────────────────────
@@ -790,20 +841,32 @@ ALTER TABLE fd_sample_draws      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_sample_units      ENABLE ROW LEVEL SECURITY;
 
 -- Uses fd_is_hub_user() / fd_is_admin() from core migration
+DROP POLICY IF EXISTS "fdsamst_read" ON fd_sampling_studies;
 CREATE POLICY "fdsamst_read"  ON fd_sampling_studies FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamst_write" ON fd_sampling_studies;
 CREATE POLICY "fdsamst_write" ON fd_sampling_studies FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamst_svc" ON fd_sampling_studies;
 CREATE POLICY "fdsamst_svc"   ON fd_sampling_studies FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsamfr_read" ON fd_sampling_frames;
 CREATE POLICY "fdsamfr_read"  ON fd_sampling_frames  FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamfr_write" ON fd_sampling_frames;
 CREATE POLICY "fdsamfr_write" ON fd_sampling_frames  FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamfr_svc" ON fd_sampling_frames;
 CREATE POLICY "fdsamfr_svc"   ON fd_sampling_frames  FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsadr_read" ON fd_sample_draws;
 CREATE POLICY "fdsadr_read"   ON fd_sample_draws     FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsadr_write" ON fd_sample_draws;
 CREATE POLICY "fdsadr_write"  ON fd_sample_draws     FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsadr_svc" ON fd_sample_draws;
 CREATE POLICY "fdsadr_svc"    ON fd_sample_draws     FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsaun_read" ON fd_sample_units;
 CREATE POLICY "fdsaun_read"   ON fd_sample_units     FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsaun_write" ON fd_sample_units;
 CREATE POLICY "fdsaun_write"  ON fd_sample_units     FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsaun_svc" ON fd_sample_units;
 CREATE POLICY "fdsaun_svc"    ON fd_sample_units     FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- ── 6. Helpful RPC: sampling progress ─────────────────────────────────────────
@@ -915,11 +978,8 @@ ALTER TABLE fd_export_jobs       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_export_templates  ENABLE ROW LEVEL SECURITY;
 
 -- Jobs: users see their own; admins/data team/FOM see all
-DROP POLICY IF EXISTS "fd_export_jobs_select"  ON fd_export_jobs;
-DROP POLICY IF EXISTS "fd_export_jobs_insert"  ON fd_export_jobs;
-DROP POLICY IF EXISTS "fd_export_jobs_delete"  ON fd_export_jobs;
-DROP POLICY IF EXISTS "fd_export_jobs_update"  ON fd_export_jobs;
 
+DROP POLICY IF EXISTS "fd_export_jobs_select" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_select" ON fd_export_jobs
   FOR SELECT USING (
     created_by = auth.uid()
@@ -930,6 +990,7 @@ CREATE POLICY "fd_export_jobs_select" ON fd_export_jobs
     )
   );
 
+DROP POLICY IF EXISTS "fd_export_jobs_insert" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_insert" ON fd_export_jobs
   FOR INSERT WITH CHECK (
     auth.uid() IS NOT NULL
@@ -940,21 +1001,20 @@ CREATE POLICY "fd_export_jobs_insert" ON fd_export_jobs
     )
   );
 
+DROP POLICY IF EXISTS "fd_export_jobs_delete" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_delete" ON fd_export_jobs
   FOR DELETE USING (created_by = auth.uid() OR EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin', 'ict')
   ));
 
 -- Service role can update status / file_url
+DROP POLICY IF EXISTS "fd_export_jobs_update" ON fd_export_jobs;
 CREATE POLICY "fd_export_jobs_update" ON fd_export_jobs
   FOR UPDATE USING (true);
 
 -- Templates: users manage their own
-DROP POLICY IF EXISTS "fd_export_templates_select"  ON fd_export_templates;
-DROP POLICY IF EXISTS "fd_export_templates_insert"  ON fd_export_templates;
-DROP POLICY IF EXISTS "fd_export_templates_delete"  ON fd_export_templates;
-DROP POLICY IF EXISTS "fd_export_templates_update"  ON fd_export_templates;
 
+DROP POLICY IF EXISTS "fd_export_templates_select" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_select" ON fd_export_templates
   FOR SELECT USING (
     created_by = auth.uid()
@@ -963,14 +1023,17 @@ CREATE POLICY "fd_export_templates_select" ON fd_export_templates
     )
   );
 
+DROP POLICY IF EXISTS "fd_export_templates_insert" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_insert" ON fd_export_templates
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
+DROP POLICY IF EXISTS "fd_export_templates_delete" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_delete" ON fd_export_templates
   FOR DELETE USING (created_by = auth.uid() OR EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin', 'ict')
   ));
 
+DROP POLICY IF EXISTS "fd_export_templates_update" ON fd_export_templates;
 CREATE POLICY "fd_export_templates_update" ON fd_export_templates
   FOR UPDATE USING (created_by = auth.uid() OR EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin', 'ict')
@@ -1138,16 +1201,19 @@ DO $$ BEGIN
   DROP POLICY IF EXISTS "fd_sup_actions_access"    ON fd_supervisor_actions;
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
+DROP POLICY IF EXISTS "fd_enum_locs_access" ON fd_enumerator_locations;
 CREATE POLICY "fd_enum_locs_access" ON fd_enumerator_locations FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_coverage_zones_access" ON fd_coverage_zones;
 CREATE POLICY "fd_coverage_zones_access" ON fd_coverage_zones FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_sup_actions_access" ON fd_supervisor_actions;
 CREATE POLICY "fd_sup_actions_access" ON fd_supervisor_actions FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
@@ -1297,16 +1363,19 @@ DO $$ BEGIN
   DROP POLICY IF EXISTS "fd_case_notes_access"  ON fd_case_notes;
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
+DROP POLICY IF EXISTS "fd_cases_access" ON fd_cases;
 CREATE POLICY "fd_cases_access" ON fd_cases FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_case_visits_access" ON fd_case_visits;
 CREATE POLICY "fd_case_visits_access" ON fd_case_visits FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_case_notes_access" ON fd_case_notes;
 CREATE POLICY "fd_case_notes_access" ON fd_case_notes FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
@@ -1486,6 +1555,7 @@ DO $$ BEGIN
   DROP POLICY IF EXISTS "fd_round_subs_access"     ON fd_study_round_submissions;
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
+DROP POLICY IF EXISTS "fd_studies_access" ON fd_studies;
 CREATE POLICY "fd_studies_access" ON fd_studies FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -1497,6 +1567,7 @@ CREATE POLICY "fd_studies_access" ON fd_studies FOR ALL
       )
   ));
 
+DROP POLICY IF EXISTS "fd_rounds_access" ON fd_study_rounds;
 CREATE POLICY "fd_rounds_access" ON fd_study_rounds FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -1508,6 +1579,7 @@ CREATE POLICY "fd_rounds_access" ON fd_study_rounds FOR ALL
       )
   ));
 
+DROP POLICY IF EXISTS "fd_units_access" ON fd_study_unit_tracking;
 CREATE POLICY "fd_units_access" ON fd_study_unit_tracking FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -1519,6 +1591,7 @@ CREATE POLICY "fd_units_access" ON fd_study_unit_tracking FOR ALL
       )
   ));
 
+DROP POLICY IF EXISTS "fd_round_subs_access" ON fd_study_round_submissions;
 CREATE POLICY "fd_round_subs_access" ON fd_study_round_submissions FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -1605,6 +1678,7 @@ DO $$ BEGIN
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
 -- Reviewers and finance/admin/data team can see and act on reviews
+DROP POLICY IF EXISTS "fd_reviews_access" ON fd_submission_reviews;
 CREATE POLICY "fd_reviews_access" ON fd_submission_reviews FOR ALL
   USING (
     reviewer_id = auth.uid()
@@ -1619,6 +1693,7 @@ CREATE POLICY "fd_reviews_access" ON fd_submission_reviews FOR ALL
   );
 
 -- Action audit log: reviewer + admins can read; only reviewer/admin can insert
+DROP POLICY IF EXISTS "fd_review_actions_access" ON fd_review_actions;
 CREATE POLICY "fd_review_actions_access" ON fd_review_actions FOR ALL
   USING (
     actor_id = auth.uid()
@@ -1809,21 +1884,25 @@ DO $$ BEGIN
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
 -- Same access model as the rest of Field Data Hub
+DROP POLICY IF EXISTS "fd_quality_rules_access" ON fd_quality_rules;
 CREATE POLICY "fd_quality_rules_access" ON fd_quality_rules FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_quality_flags_access" ON fd_quality_flags;
 CREATE POLICY "fd_quality_flags_access" ON fd_quality_flags FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_enum_stats_access" ON fd_enumerator_stats;
 CREATE POLICY "fd_enum_stats_access" ON fd_enumerator_stats FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_form_targets_access" ON fd_form_targets;
 CREATE POLICY "fd_form_targets_access" ON fd_form_targets FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
@@ -1952,11 +2031,8 @@ ALTER TABLE fd_form_translations    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_region_lang_defaults ENABLE ROW LEVEL SECURITY;
 
 -- Translations: readable by all field-data users; editable by data team / admin
-DROP POLICY IF EXISTS "fd_translations_select"  ON fd_form_translations;
-DROP POLICY IF EXISTS "fd_translations_insert"  ON fd_form_translations;
-DROP POLICY IF EXISTS "fd_translations_update"  ON fd_form_translations;
-DROP POLICY IF EXISTS "fd_translations_delete"  ON fd_form_translations;
 
+DROP POLICY IF EXISTS "fd_translations_select" ON fd_form_translations;
 CREATE POLICY "fd_translations_select" ON fd_form_translations
   FOR SELECT USING (
     EXISTS (
@@ -1966,6 +2042,7 @@ CREATE POLICY "fd_translations_select" ON fd_form_translations
     )
   );
 
+DROP POLICY IF EXISTS "fd_translations_insert" ON fd_form_translations;
 CREATE POLICY "fd_translations_insert" ON fd_form_translations
   FOR INSERT WITH CHECK (
     EXISTS (
@@ -1974,6 +2051,7 @@ CREATE POLICY "fd_translations_insert" ON fd_form_translations
     )
   );
 
+DROP POLICY IF EXISTS "fd_translations_update" ON fd_form_translations;
 CREATE POLICY "fd_translations_update" ON fd_form_translations
   FOR UPDATE USING (
     EXISTS (
@@ -1982,6 +2060,7 @@ CREATE POLICY "fd_translations_update" ON fd_form_translations
     )
   );
 
+DROP POLICY IF EXISTS "fd_translations_delete" ON fd_form_translations;
 CREATE POLICY "fd_translations_delete" ON fd_form_translations
   FOR DELETE USING (
     EXISTS (
@@ -1991,12 +2070,12 @@ CREATE POLICY "fd_translations_delete" ON fd_form_translations
   );
 
 -- Region defaults: readable by all; writable by admin
-DROP POLICY IF EXISTS "fd_region_select"  ON fd_region_lang_defaults;
-DROP POLICY IF EXISTS "fd_region_write"   ON fd_region_lang_defaults;
 
+DROP POLICY IF EXISTS "fd_region_select" ON fd_region_lang_defaults;
 CREATE POLICY "fd_region_select" ON fd_region_lang_defaults
   FOR SELECT USING (auth.uid() IS NOT NULL);
 
+DROP POLICY IF EXISTS "fd_region_write" ON fd_region_lang_defaults;
 CREATE POLICY "fd_region_write" ON fd_region_lang_defaults
   FOR ALL USING (
     EXISTS (
@@ -2154,6 +2233,7 @@ ALTER TABLE fd_form_review_comments ENABLE ROW LEVEL SECURITY;
 
 -- Roles with FDH access
 -- (mirrors fd_forms / fd_submissions RLS pattern)
+DROP POLICY IF EXISTS "fdsc_read" ON fd_submission_comments;
 CREATE POLICY "fdsc_read"  ON fd_submission_comments FOR SELECT TO authenticated
   USING (
     EXISTS (
@@ -2163,6 +2243,7 @@ CREATE POLICY "fdsc_read"  ON fd_submission_comments FOR SELECT TO authenticated
     )
   );
 
+DROP POLICY IF EXISTS "fdsc_insert" ON fd_submission_comments;
 CREATE POLICY "fdsc_insert" ON fd_submission_comments FOR INSERT TO authenticated
   WITH CHECK (
     EXISTS (
@@ -2172,6 +2253,7 @@ CREATE POLICY "fdsc_insert" ON fd_submission_comments FOR INSERT TO authenticate
     )
   );
 
+DROP POLICY IF EXISTS "fdsc_update" ON fd_submission_comments;
 CREATE POLICY "fdsc_update" ON fd_submission_comments FOR UPDATE TO authenticated
   USING (author_id = auth.uid() OR
     EXISTS (
@@ -2182,6 +2264,7 @@ CREATE POLICY "fdsc_update" ON fd_submission_comments FOR UPDATE TO authenticate
   );
 
 -- Flags
+DROP POLICY IF EXISTS "fdsf_read" ON fd_submission_flags;
 CREATE POLICY "fdsf_read"  ON fd_submission_flags FOR SELECT TO authenticated
   USING (
     EXISTS (
@@ -2191,6 +2274,7 @@ CREATE POLICY "fdsf_read"  ON fd_submission_flags FOR SELECT TO authenticated
     )
   );
 
+DROP POLICY IF EXISTS "fdsf_insert" ON fd_submission_flags;
 CREATE POLICY "fdsf_insert" ON fd_submission_flags FOR INSERT TO authenticated
   WITH CHECK (
     EXISTS (
@@ -2200,6 +2284,7 @@ CREATE POLICY "fdsf_insert" ON fd_submission_flags FOR INSERT TO authenticated
     )
   );
 
+DROP POLICY IF EXISTS "fdsf_delete" ON fd_submission_flags;
 CREATE POLICY "fdsf_delete" ON fd_submission_flags FOR DELETE TO authenticated
   USING (
     flagged_by = auth.uid() OR
@@ -2211,6 +2296,7 @@ CREATE POLICY "fdsf_delete" ON fd_submission_flags FOR DELETE TO authenticated
   );
 
 -- Form review comments
+DROP POLICY IF EXISTS "fdfrc_read" ON fd_form_review_comments;
 CREATE POLICY "fdfrc_read"  ON fd_form_review_comments FOR SELECT TO authenticated
   USING (
     EXISTS (
@@ -2220,6 +2306,7 @@ CREATE POLICY "fdfrc_read"  ON fd_form_review_comments FOR SELECT TO authenticat
     )
   );
 
+DROP POLICY IF EXISTS "fdfrc_insert" ON fd_form_review_comments;
 CREATE POLICY "fdfrc_insert" ON fd_form_review_comments FOR INSERT TO authenticated
   WITH CHECK (
     EXISTS (
@@ -2229,6 +2316,7 @@ CREATE POLICY "fdfrc_insert" ON fd_form_review_comments FOR INSERT TO authentica
     )
   );
 
+DROP POLICY IF EXISTS "fdfrc_update" ON fd_form_review_comments;
 CREATE POLICY "fdfrc_update" ON fd_form_review_comments FOR UPDATE TO authenticated
   USING (
     reviewer_id = auth.uid() OR
@@ -2381,16 +2469,19 @@ ALTER TABLE fd_archive_logs     ENABLE ROW LEVEL SECURITY;
 
 -- FDH roles: super_admin, admin, ict, fom, data_team, project_manager, country_director
 -- Backups: all FDH roles can read; only admins/data_team/ict can write
+DROP POLICY IF EXISTS "fdb_read" ON fd_backups;
 CREATE POLICY "fdb_read" ON fd_backups FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdb_insert" ON fd_backups;
 CREATE POLICY "fdb_insert" ON fd_backups FOR INSERT TO authenticated
   WITH CHECK (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team')
   ));
+DROP POLICY IF EXISTS "fdb_update" ON fd_backups;
 CREATE POLICY "fdb_update" ON fd_backups FOR UPDATE TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -2398,11 +2489,13 @@ CREATE POLICY "fdb_update" ON fd_backups FOR UPDATE TO authenticated
   ));
 
 -- Schedules
+DROP POLICY IF EXISTS "fdbs_read" ON fd_backup_schedules;
 CREATE POLICY "fdbs_read" ON fd_backup_schedules FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdbs_write" ON fd_backup_schedules;
 CREATE POLICY "fdbs_write" ON fd_backup_schedules FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -2410,11 +2503,13 @@ CREATE POLICY "fdbs_write" ON fd_backup_schedules FOR ALL TO authenticated
   ));
 
 -- Restore logs
+DROP POLICY IF EXISTS "fdrl_read" ON fd_restore_logs;
 CREATE POLICY "fdrl_read" ON fd_restore_logs FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdrl_insert" ON fd_restore_logs;
 CREATE POLICY "fdrl_insert" ON fd_restore_logs FOR INSERT TO authenticated
   WITH CHECK (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -2422,11 +2517,13 @@ CREATE POLICY "fdrl_insert" ON fd_restore_logs FOR INSERT TO authenticated
   ));
 
 -- Archive logs
+DROP POLICY IF EXISTS "fdal_read" ON fd_archive_logs;
 CREATE POLICY "fdal_read" ON fd_archive_logs FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdal_write" ON fd_archive_logs;
 CREATE POLICY "fdal_write" ON fd_archive_logs FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -2434,9 +2531,13 @@ CREATE POLICY "fdal_write" ON fd_archive_logs FOR ALL TO authenticated
   ));
 
 -- ── 6. Service role policies (for Edge Functions / pg_cron) ──────────────────
+DROP POLICY IF EXISTS "fdb_service" ON fd_backups;
 CREATE POLICY "fdb_service"  ON fd_backups          FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdbs_service" ON fd_backup_schedules;
 CREATE POLICY "fdbs_service" ON fd_backup_schedules FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdrl_service" ON fd_restore_logs;
 CREATE POLICY "fdrl_service" ON fd_restore_logs     FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdal_service" ON fd_archive_logs;
 CREATE POLICY "fdal_service" ON fd_archive_logs     FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ── 7. Updated_at triggers ────────────────────────────────────────────────────
@@ -2569,11 +2670,13 @@ ALTER TABLE fd_api_usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_webhook_secrets ENABLE ROW LEVEL SECURITY;
 
 -- API Keys: admin/ict/data_team can manage; FDH roles can read
+DROP POLICY IF EXISTS "fdak_read" ON fd_api_keys;
 CREATE POLICY "fdak_read" ON fd_api_keys FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdak_write" ON fd_api_keys;
 CREATE POLICY "fdak_write" ON fd_api_keys FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -2581,25 +2684,31 @@ CREATE POLICY "fdak_write" ON fd_api_keys FOR ALL TO authenticated
   ));
 
 -- Usage logs: admin/ict/data_team can read; service_role writes
+DROP POLICY IF EXISTS "fdul_read" ON fd_api_usage_logs;
 CREATE POLICY "fdul_read" ON fd_api_usage_logs FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdul_service" ON fd_api_usage_logs;
 CREATE POLICY "fdul_service" ON fd_api_usage_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- Webhook secrets: admin/ict only
+DROP POLICY IF EXISTS "fdws_read" ON fd_webhook_secrets;
 CREATE POLICY "fdws_read" ON fd_webhook_secrets FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','data_team')
   ));
+DROP POLICY IF EXISTS "fdws_write" ON fd_webhook_secrets;
 CREATE POLICY "fdws_write" ON fd_webhook_secrets FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict')
   ));
+DROP POLICY IF EXISTS "fdak_service" ON fd_api_keys;
 CREATE POLICY "fdak_service"  ON fd_api_keys        FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdws_service" ON fd_webhook_secrets;
 CREATE POLICY "fdws_service"  ON fd_webhook_secrets FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ── 5. Key usage counter RPC ──────────────────────────────────────────────────
@@ -2705,28 +2814,35 @@ ALTER TABLE fd_form_subscriptions    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_notification_log      ENABLE ROW LEVEL SECURITY;
 
 -- notification_prefs: users manage their own; service_role unrestricted
+DROP POLICY IF EXISTS "fdnp_own" ON fd_notification_prefs;
 CREATE POLICY "fdnp_own" ON fd_notification_prefs FOR ALL TO authenticated
   USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "fdnp_service" ON fd_notification_prefs;
 CREATE POLICY "fdnp_service" ON fd_notification_prefs FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
 -- form_subscriptions: users manage their own; admins read all
+DROP POLICY IF EXISTS "fdfss_own" ON fd_form_subscriptions;
 CREATE POLICY "fdfss_own" ON fd_form_subscriptions FOR ALL TO authenticated
   USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "fdfss_admin_read" ON fd_form_subscriptions;
 CREATE POLICY "fdfss_admin_read" ON fd_form_subscriptions FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','data_team','fom')
   ));
+DROP POLICY IF EXISTS "fdfss_service" ON fd_form_subscriptions;
 CREATE POLICY "fdfss_service" ON fd_form_subscriptions FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
 -- notification_log: any authenticated FDH role can read; service_role writes
+DROP POLICY IF EXISTS "fdnl_read" ON fd_notification_log;
 CREATE POLICY "fdnl_read" ON fd_notification_log FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','data_team','fom','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdnl_service" ON fd_notification_log;
 CREATE POLICY "fdnl_service" ON fd_notification_log FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 

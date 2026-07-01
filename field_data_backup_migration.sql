@@ -101,16 +101,19 @@ ALTER TABLE fd_archive_logs     ENABLE ROW LEVEL SECURITY;
 
 -- FDH roles: super_admin, admin, ict, fom, data_team, project_manager, country_director
 -- Backups: all FDH roles can read; only admins/data_team/ict can write
+DROP POLICY IF EXISTS "fdb_read" ON fd_backups;
 CREATE POLICY "fdb_read" ON fd_backups FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdb_insert" ON fd_backups;
 CREATE POLICY "fdb_insert" ON fd_backups FOR INSERT TO authenticated
   WITH CHECK (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team')
   ));
+DROP POLICY IF EXISTS "fdb_update" ON fd_backups;
 CREATE POLICY "fdb_update" ON fd_backups FOR UPDATE TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -118,11 +121,13 @@ CREATE POLICY "fdb_update" ON fd_backups FOR UPDATE TO authenticated
   ));
 
 -- Schedules
+DROP POLICY IF EXISTS "fdbs_read" ON fd_backup_schedules;
 CREATE POLICY "fdbs_read" ON fd_backup_schedules FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdbs_write" ON fd_backup_schedules;
 CREATE POLICY "fdbs_write" ON fd_backup_schedules FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -130,11 +135,13 @@ CREATE POLICY "fdbs_write" ON fd_backup_schedules FOR ALL TO authenticated
   ));
 
 -- Restore logs
+DROP POLICY IF EXISTS "fdrl_read" ON fd_restore_logs;
 CREATE POLICY "fdrl_read" ON fd_restore_logs FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdrl_insert" ON fd_restore_logs;
 CREATE POLICY "fdrl_insert" ON fd_restore_logs FOR INSERT TO authenticated
   WITH CHECK (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -142,11 +149,13 @@ CREATE POLICY "fdrl_insert" ON fd_restore_logs FOR INSERT TO authenticated
   ));
 
 -- Archive logs
+DROP POLICY IF EXISTS "fdal_read" ON fd_archive_logs;
 CREATE POLICY "fdal_read" ON fd_archive_logs FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','fom','data_team','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdal_write" ON fd_archive_logs;
 CREATE POLICY "fdal_write" ON fd_archive_logs FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
@@ -154,9 +163,13 @@ CREATE POLICY "fdal_write" ON fd_archive_logs FOR ALL TO authenticated
   ));
 
 -- ── 6. Service role policies (for Edge Functions / pg_cron) ──────────────────
+DROP POLICY IF EXISTS "fdb_service" ON fd_backups;
 CREATE POLICY "fdb_service"  ON fd_backups          FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdbs_service" ON fd_backup_schedules;
 CREATE POLICY "fdbs_service" ON fd_backup_schedules FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdrl_service" ON fd_restore_logs;
 CREATE POLICY "fdrl_service" ON fd_restore_logs     FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "fdal_service" ON fd_archive_logs;
 CREATE POLICY "fdal_service" ON fd_archive_logs     FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ── 7. Updated_at triggers ────────────────────────────────────────────────────

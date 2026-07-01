@@ -126,24 +126,39 @@ ALTER TABLE fd_server_datasets            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_preload_configs            ENABLE ROW LEVEL SECURITY;
 
 -- Uses fd_is_hub_user() / fd_is_admin() from core migration
+DROP POLICY IF EXISTS "fdsd_read" ON field_data_server_datasets;
 CREATE POLICY "fdsd_read"    ON field_data_server_datasets    FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsd_write" ON field_data_server_datasets;
 CREATE POLICY "fdsd_write"   ON field_data_server_datasets    FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsd_svc" ON field_data_server_datasets;
 CREATE POLICY "fdsd_svc"     ON field_data_server_datasets    FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fddv_read" ON field_data_dataset_versions;
 CREATE POLICY "fddv_read"    ON field_data_dataset_versions   FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fddv_write" ON field_data_dataset_versions;
 CREATE POLICY "fddv_write"   ON field_data_dataset_versions   FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fddv_svc" ON field_data_dataset_versions;
 CREATE POLICY "fddv_svc"     ON field_data_dataset_versions   FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fddfl_read" ON field_data_dataset_form_links;
 CREATE POLICY "fddfl_read"   ON field_data_dataset_form_links FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fddfl_write" ON field_data_dataset_form_links;
 CREATE POLICY "fddfl_write"  ON field_data_dataset_form_links FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fddfl_svc" ON field_data_dataset_form_links;
 CREATE POLICY "fddfl_svc"    ON field_data_dataset_form_links FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsds_read" ON fd_server_datasets;
 CREATE POLICY "fdsds_read"   ON fd_server_datasets            FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsds_write" ON fd_server_datasets;
 CREATE POLICY "fdsds_write"  ON fd_server_datasets            FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdsds_svc" ON fd_server_datasets;
 CREATE POLICY "fdsds_svc"    ON fd_server_datasets            FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdpc_read" ON fd_preload_configs;
 CREATE POLICY "fdpc_read"    ON fd_preload_configs            FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdpc_write" ON fd_preload_configs;
 CREATE POLICY "fdpc_write"   ON fd_preload_configs            FOR ALL    TO authenticated USING (fd_is_admin()) WITH CHECK (fd_is_admin());
+DROP POLICY IF EXISTS "fdpc_svc" ON fd_preload_configs;
 CREATE POLICY "fdpc_svc"     ON fd_preload_configs            FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- ── 7. Storage bucket hint ────────────────────────────────────────────────────

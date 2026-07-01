@@ -133,21 +133,25 @@ DO $$ BEGIN
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
 -- Same access model as the rest of Field Data Hub
+DROP POLICY IF EXISTS "fd_quality_rules_access" ON fd_quality_rules;
 CREATE POLICY "fd_quality_rules_access" ON fd_quality_rules FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_quality_flags_access" ON fd_quality_flags;
 CREATE POLICY "fd_quality_flags_access" ON fd_quality_flags FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_enum_stats_access" ON fd_enumerator_stats;
 CREATE POLICY "fd_enum_stats_access" ON fd_enumerator_stats FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',
       'ict','fom','data_team','projectmanager','project_manager','countrydirector','country_director')));
 
+DROP POLICY IF EXISTS "fd_form_targets_access" ON fd_form_targets;
 CREATE POLICY "fd_form_targets_access" ON fd_form_targets FOR ALL
   USING ( EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
     AND LOWER(role) IN ('super_admin','superadmin','admin','financialadmin','financial_admin',

@@ -121,6 +121,7 @@ DO $$ BEGIN
   DROP POLICY IF EXISTS "fd_round_subs_access"     ON fd_study_round_submissions;
 EXCEPTION WHEN undefined_object THEN NULL; END $$;
 
+DROP POLICY IF EXISTS "fd_studies_access" ON fd_studies;
 CREATE POLICY "fd_studies_access" ON fd_studies FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -132,6 +133,7 @@ CREATE POLICY "fd_studies_access" ON fd_studies FOR ALL
       )
   ));
 
+DROP POLICY IF EXISTS "fd_rounds_access" ON fd_study_rounds;
 CREATE POLICY "fd_rounds_access" ON fd_study_rounds FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -143,6 +145,7 @@ CREATE POLICY "fd_rounds_access" ON fd_study_rounds FOR ALL
       )
   ));
 
+DROP POLICY IF EXISTS "fd_units_access" ON fd_study_unit_tracking;
 CREATE POLICY "fd_units_access" ON fd_study_unit_tracking FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles
@@ -154,6 +157,7 @@ CREATE POLICY "fd_units_access" ON fd_study_unit_tracking FOR ALL
       )
   ));
 
+DROP POLICY IF EXISTS "fd_round_subs_access" ON fd_study_round_submissions;
 CREATE POLICY "fd_round_subs_access" ON fd_study_round_submissions FOR ALL
   USING ( EXISTS (
     SELECT 1 FROM profiles

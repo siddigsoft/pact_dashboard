@@ -150,20 +150,32 @@ ALTER TABLE fd_sample_draws      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_sample_units      ENABLE ROW LEVEL SECURITY;
 
 -- Uses fd_is_hub_user() / fd_is_admin() from core migration
+DROP POLICY IF EXISTS "fdsamst_read" ON fd_sampling_studies;
 CREATE POLICY "fdsamst_read"  ON fd_sampling_studies FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamst_write" ON fd_sampling_studies;
 CREATE POLICY "fdsamst_write" ON fd_sampling_studies FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamst_svc" ON fd_sampling_studies;
 CREATE POLICY "fdsamst_svc"   ON fd_sampling_studies FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsamfr_read" ON fd_sampling_frames;
 CREATE POLICY "fdsamfr_read"  ON fd_sampling_frames  FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamfr_write" ON fd_sampling_frames;
 CREATE POLICY "fdsamfr_write" ON fd_sampling_frames  FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsamfr_svc" ON fd_sampling_frames;
 CREATE POLICY "fdsamfr_svc"   ON fd_sampling_frames  FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsadr_read" ON fd_sample_draws;
 CREATE POLICY "fdsadr_read"   ON fd_sample_draws     FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsadr_write" ON fd_sample_draws;
 CREATE POLICY "fdsadr_write"  ON fd_sample_draws     FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsadr_svc" ON fd_sample_draws;
 CREATE POLICY "fdsadr_svc"    ON fd_sample_draws     FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "fdsaun_read" ON fd_sample_units;
 CREATE POLICY "fdsaun_read"   ON fd_sample_units     FOR SELECT TO authenticated USING (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsaun_write" ON fd_sample_units;
 CREATE POLICY "fdsaun_write"  ON fd_sample_units     FOR ALL    TO authenticated USING (fd_is_hub_user()) WITH CHECK (fd_is_hub_user());
+DROP POLICY IF EXISTS "fdsaun_svc" ON fd_sample_units;
 CREATE POLICY "fdsaun_svc"    ON fd_sample_units     FOR ALL    TO service_role  USING (true) WITH CHECK (true);
 
 -- ── 6. Helpful RPC: sampling progress ─────────────────────────────────────────

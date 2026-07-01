@@ -75,28 +75,35 @@ ALTER TABLE fd_form_subscriptions    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fd_notification_log      ENABLE ROW LEVEL SECURITY;
 
 -- notification_prefs: users manage their own; service_role unrestricted
+DROP POLICY IF EXISTS "fdnp_own" ON fd_notification_prefs;
 CREATE POLICY "fdnp_own" ON fd_notification_prefs FOR ALL TO authenticated
   USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "fdnp_service" ON fd_notification_prefs;
 CREATE POLICY "fdnp_service" ON fd_notification_prefs FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
 -- form_subscriptions: users manage their own; admins read all
+DROP POLICY IF EXISTS "fdfss_own" ON fd_form_subscriptions;
 CREATE POLICY "fdfss_own" ON fd_form_subscriptions FOR ALL TO authenticated
   USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "fdfss_admin_read" ON fd_form_subscriptions;
 CREATE POLICY "fdfss_admin_read" ON fd_form_subscriptions FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','data_team','fom')
   ));
+DROP POLICY IF EXISTS "fdfss_service" ON fd_form_subscriptions;
 CREATE POLICY "fdfss_service" ON fd_form_subscriptions FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
 -- notification_log: any authenticated FDH role can read; service_role writes
+DROP POLICY IF EXISTS "fdnl_read" ON fd_notification_log;
 CREATE POLICY "fdnl_read" ON fd_notification_log FOR SELECT TO authenticated
   USING (EXISTS (
     SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
       AND ur.role IN ('super_admin','admin','ict','data_team','fom','project_manager','country_director')
   ));
+DROP POLICY IF EXISTS "fdnl_service" ON fd_notification_log;
 CREATE POLICY "fdnl_service" ON fd_notification_log FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
