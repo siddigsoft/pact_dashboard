@@ -189,12 +189,10 @@ export default function PreFundingOverview() {
   const [statusFilter, setStatus] = useState<string>('active');
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded]   = useState<Set<string>>(new Set());
-  // Unlinked paid DPs: paid but never linked to a pre_fund_transaction (RPC not yet deployed)
-  const [unlinkedPaidDps, setUnlinkedPaidDps] = useState<any[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const [fundsRes, ratesRes, settingsRes, allocsRes, txnsRes, profRes, unlinkedDpRes] = await Promise.all([
+      const [fundsRes, ratesRes, settingsRes, allocsRes, txnsRes, profRes] = await Promise.all([
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
@@ -203,11 +201,6 @@ export default function PreFundingOverview() {
         (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false }),
         (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false }),
         supabase.from('profiles').select('id,full_name,email'),
-        // Unlinked paid DPs — fallback when pre_fund_transactions rows don't exist (RPC not deployed)
-        (supabase as any).from('down_payment_requests')
-          .select('id,total_paid_amount,status,metadata,country_id,pre_fund_transaction_id')
-          .is('pre_fund_transaction_id', null)
-          .gt('total_paid_amount', 0),
       ]);
 
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
@@ -285,15 +278,6 @@ export default function PreFundingOverview() {
         ((profRes.data as any) ?? []).forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
         setProfiles(m);
       }
-      // Store unlinked paid DPs (no RLS error = columns exist; silently ignore if table/col missing)
-      if (!unlinkedDpRes.error) {
-        const DP_NO_DISBURSE_SET = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
-        setUnlinkedPaidDps(
-          ((unlinkedDpRes.data as any) ?? []).filter((d: any) =>
-            !DP_NO_DISBURSE_SET.has(d.status) && d.metadata?.deleted !== true
-          )
-        );
-      }
     } catch (e: any) {
       setError(e.message ?? 'Failed to load');
     } finally {
@@ -367,34 +351,30 @@ export default function PreFundingOverview() {
     return m;
   }, [txns]);
 
-  // Effective paid amount per fund, derived from already-filtered txns state.
-  // Pre-seeded with 0 for every known fund so the stale DB paid_amount column
-  // is never used as a fallback — if all payment txns were filtered out (e.g.
-  // the DP was reverted/cancelled), the fund correctly shows 0 paid out.
-  // FALLBACK: when no pre_fund_transactions rows exist (RPC not deployed /
-  // directLinkPayment blocked by RLS), attribute unlinked paid DPs directly.
-  // Attribution is only applied when there is exactly ONE active fund to avoid
-  // the risk of misassigning amounts across multiple funds with ambiguous linkage.
+  // Effective paid amount per fund:
+  //   Priority 1 — sum of 'payment' transactions from pre_fund_transactions (most accurate;
+  //                available once link_payment_atomically_rpc is deployed).
+  //   Priority 2 — fund.paid_amount DB column (updated by directLinkPayment even when the
+  //                pre_fund_transactions INSERT is blocked by RLS, as long as the UPDATE on
+  //                pre_fund_requests succeeds).
+  // We deliberately do NOT fall back to summing unlinked DPs from down_payment_requests
+  // because those include all historical DPs across the system that predate pre-fund linkage.
   const effectivePaidByFund = useMemo(() => {
     const m = new Map<string, number>();
-    for (const f of funds) m.set(f.id, 0);
-    // 1. Sum from linked transactions (authoritative when RPC is deployed)
+    // Seed with DB paid_amount (reliable fallback when no txn rows exist yet)
+    for (const f of funds) m.set(f.id, Number(f.paid_amount ?? 0));
+    // Override with computed-from-transactions for any fund that has payment txns
+    const hasTxnByFund = new Set<string>();
     for (const t of txns) {
       if (t.transaction_type !== 'payment') continue;
+      if (!hasTxnByFund.has(t.pre_fund_request_id)) {
+        m.set(t.pre_fund_request_id, 0); // reset before accumulating
+        hasTxnByFund.add(t.pre_fund_request_id);
+      }
       m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
     }
-    // 2. Add unlinked paid DPs as fallback — only when exactly 1 active fund exists
-    // so there is no ambiguity about which fund to deduct from.
-    if (unlinkedPaidDps.length > 0) {
-      const activeFundsList = funds.filter(f => ['active', 'low_balance'].includes(f.status));
-      if (activeFundsList.length === 1) {
-        const targetId = activeFundsList[0].id;
-        const unlinkedTotal = unlinkedPaidDps.reduce((s, dp) => s + Number(dp.total_paid_amount ?? 0), 0);
-        m.set(targetId, (m.get(targetId) ?? 0) + unlinkedTotal);
-      }
-    }
     return m;
-  }, [funds, txns, unlinkedPaidDps]);
+  }, [funds, txns]);
 
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));

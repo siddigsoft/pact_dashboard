@@ -43,7 +43,7 @@ async function directLinkPayment(params: {
     };
   }
 
-  // 2. Insert transaction row
+  // 2. Insert transaction row (best-effort — may be blocked by RLS until SQL deployed)
   const { data: txnRow, error: txnErr } = await (supabase as any)
     .from('pre_fund_transactions')
     .insert({
@@ -64,13 +64,12 @@ async function directLinkPayment(params: {
     .select('id')
     .single();
 
-  if (txnErr) {
-    return { linked: false, message: `Failed to record transaction: ${txnErr.message}` };
-  }
+  // NOTE: we continue even if the transaction INSERT failed (e.g. RLS not yet deployed).
+  // The fund balance UPDATE below uses a different table (pre_fund_requests) that typically
+  // has broader permissions, so the balance can still be deducted correctly.
+  const txnId: string | null = txnErr ? null : (txnRow?.id ?? null);
 
-  const txnId: string = txnRow.id;
-
-  // 3. Deduct from fund balance
+  // 3. Deduct from fund balance — runs regardless of whether step 2 succeeded
   const { data: fund } = await (supabase as any)
     .from('pre_fund_requests')
     .select('available_balance,paid_amount')
@@ -86,23 +85,27 @@ async function directLinkPayment(params: {
     .eq('id', fundId);
 
   if (balErr) {
-    // Transaction row was inserted — clean it up so retry works
-    await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
+    // Balance update also failed — clean up txn row if one was created
+    if (txnId) await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
     return { linked: false, message: `Failed to deduct fund balance: ${balErr.message}` };
   }
 
-  // 4. Back-link source row
-  await (supabase as any)
-    .from(sourceTable)
-    .update({ pre_fund_transaction_id: txnId })
-    .eq('id', sourceId);
+  // 4. Back-link source row (only possible when we have a txnId)
+  if (txnId) {
+    await (supabase as any)
+      .from(sourceTable)
+      .update({ pre_fund_transaction_id: txnId })
+      .eq('id', sourceId);
+  }
 
   return {
     linked: true,
     fundId,
     fundName,
-    transactionId: txnId,
-    message: `Linked to "${fundName}" (direct)`,
+    transactionId: txnId ?? undefined,
+    message: txnId
+      ? `Linked to "${fundName}" (direct)`
+      : `Balance deducted from "${fundName}" (transaction log pending SQL deployment)`,
   };
 }
 

@@ -571,21 +571,17 @@ export default function PreFundingReconciliation() {
   const [matchingFeed, setMatchingFeed] = useState(false);
   const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
 
-  // Unlinked paid DPs for the selected fund (fallback when RPC not deployed)
-  const [unlinkedDpPaid, setUnlinkedDpPaid] = useState<number>(0);
-
-  // Effective paid/available derived from the already-filtered transactions state.
-  // FALLBACK: when no pre_fund_transactions rows exist (RPC not deployed /
-  // directLinkPayment blocked by RLS), we also sum total_paid_amount from DPs
-  // that were paid but never linked (pre_fund_transaction_id IS NULL).
+  // Effective paid/available:
+  //   Priority 1 — sum of 'payment' txns from pre_fund_transactions (when RPC deployed).
+  //   Priority 2 — selectedFund.paid_amount DB column (updated by directLinkPayment balance
+  //                UPDATE even when the pre_fund_transactions INSERT is blocked by RLS).
   const effectivePaidAmount = useMemo(() => {
     const fromTxns = transactions
       .filter(t => t.transaction_type === 'payment')
       .reduce((s, t) => s + Number(t.amount), 0);
-    // Only add the unlinked DP fallback when there are no linked transactions
-    // (to avoid double-counting once the RPC is deployed and txns are created)
-    return fromTxns > 0 ? fromTxns : unlinkedDpPaid;
-  }, [transactions, unlinkedDpPaid]);
+    // Fall back to DB column only when no transaction rows exist for this fund
+    return fromTxns > 0 ? fromTxns : Number(selectedFund?.paid_amount ?? 0);
+  }, [transactions, selectedFund]);
   const effectiveAvailableBalance = useMemo(() =>
     selectedFund ? selectedFund.amount - effectivePaidAmount : 0,
     [selectedFund, effectivePaidAmount]
@@ -741,37 +737,6 @@ export default function PreFundingReconciliation() {
 
       setTxns(txns);
       setRecons((reconRes.data as any) ?? []);
-
-      // Fallback: when no payment txns exist, sum total_paid_amount from unlinked DPs
-      // scoped to this fund's country_id / project_id to avoid cross-fund inflation.
-      // Only activated when there are zero linked payment transactions (i.e. RPC not
-      // yet deployed), so it automatically disables once the RPC creates real txn rows.
-      const hasTxnPayments = txns.some((t: any) => t.transaction_type === 'payment');
-      if (!hasTxnPayments) {
-        // Fetch the fund's scope fields so we can constrain the DP query
-        const { data: fundRow } = await (supabase as any)
-          .from('pre_fund_requests')
-          .select('country_id,project_id')
-          .eq('id', fundId)
-          .maybeSingle();
-        const DP_NO_DISBURSE_SET = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
-        let dpQuery = (supabase as any)
-          .from('down_payment_requests')
-          .select('total_paid_amount,status,metadata,pre_fund_transaction_id,country_id,project_id')
-          .is('pre_fund_transaction_id', null)
-          .gt('total_paid_amount', 0);
-        // Scope by country_id when available (narrows to DPs from the same country)
-        if (fundRow?.country_id) dpQuery = dpQuery.eq('country_id', fundRow.country_id);
-        // Additionally scope by project_id when the fund is project-specific
-        if (fundRow?.project_id) dpQuery = dpQuery.eq('project_id', fundRow.project_id);
-        const { data: unlinkedDps } = await dpQuery;
-        const unlinkedSum = ((unlinkedDps ?? []) as any[])
-          .filter((d: any) => !DP_NO_DISBURSE_SET.has(d.status) && d.metadata?.deleted !== true)
-          .reduce((s: number, d: any) => s + Number(d.total_paid_amount ?? 0), 0);
-        setUnlinkedDpPaid(unlinkedSum);
-      } else {
-        setUnlinkedDpPaid(0);
-      }
 
       // Load profiles for user_id + created_by in transactions
       const userIds = new Set<string>();
