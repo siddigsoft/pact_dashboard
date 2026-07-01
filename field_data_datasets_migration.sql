@@ -21,6 +21,23 @@ DO $fd_prereq2$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
 -- ============================================================================
 
+-- Function stubs (defined in core migration; re-created here for standalone runs)
+CREATE OR REPLACE FUNCTION fd_is_hub_user() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team','fom',
+                      'coordinator','field_officer','project_manager','country_director')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION fd_is_admin() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team')
+  );
+$$;
 -- ============================================================================
 -- Field Data Hub — Phase 10: Server Datasets & Data Preloading
 -- Requires: field_data_core_migration.sql (field_data_servers, field_data_forms)

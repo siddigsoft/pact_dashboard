@@ -25,12 +25,9 @@
 -- ============================================================================
 
 -- ============================================================================
--- SAFETY PREAMBLE — Create FK-target tables first (full definitions)
--- These are referenced by FK in 8+ later migration files.
--- CREATE TABLE IF NOT EXISTS = silent no-op if already present.
+-- SAFETY PREAMBLE — Create FK-target tables + helper functions first
+-- CREATE TABLE IF NOT EXISTS / CREATE OR REPLACE = safe no-op if already present
 -- ============================================================================
-
--- Step 1: field_data_forms (no cross-deps besides auth.users)
 CREATE TABLE IF NOT EXISTS field_data_forms (
   id                       UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name                     TEXT        NOT NULL,
@@ -51,7 +48,6 @@ CREATE TABLE IF NOT EXISTS field_data_forms (
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Step 2: fd_forms (FK → field_data_forms, safe because step 1 ran first)
 CREATE TABLE IF NOT EXISTS fd_forms (
   id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name               TEXT        NOT NULL,
@@ -68,6 +64,22 @@ CREATE TABLE IF NOT EXISTS fd_forms (
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE OR REPLACE FUNCTION fd_is_hub_user() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team','fom',
+                      'coordinator','field_officer','project_manager','country_director')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION fd_is_admin() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team')
+  );
+$$;
 -- ============================================================================
 -- END SAFETY PREAMBLE
 -- ============================================================================
@@ -597,6 +609,23 @@ DO $fd_prereq2$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
 -- ============================================================================
 
+-- Function stubs (defined in core migration; re-created here for standalone runs)
+CREATE OR REPLACE FUNCTION fd_is_hub_user() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team','fom',
+                      'coordinator','field_officer','project_manager','country_director')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION fd_is_admin() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team')
+  );
+$$;
 -- ============================================================================
 -- Field Data Hub — Phase 10: Server Datasets & Data Preloading
 -- Requires: field_data_core_migration.sql (field_data_servers, field_data_forms)
@@ -803,6 +832,23 @@ DO $fd_prereq2$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL; END $fd_prereq2$;
 -- ============================================================================
 
+-- Function stubs (defined in core migration; re-created here for standalone runs)
+CREATE OR REPLACE FUNCTION fd_is_hub_user() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team','fom',
+                      'coordinator','field_officer','project_manager','country_director')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION fd_is_admin() RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()
+      AND ur.role IN ('super_admin','admin','ict','data_team')
+  );
+$$;
 -- ============================================================================
 -- Field Data Hub — Sampling Engine (FieldDataSampling.tsx)
 -- Requires: field_data_core_migration.sql (fd_forms)
@@ -3107,5 +3153,4 @@ END $$;
 -- 1. Storage bucket: INSERT INTO storage.buckets (id, name, public)
 --    VALUES ('field-data-datasets','field-data-datasets',false) ON CONFLICT DO NOTHING;
 -- 2. Deploy Edge Functions: fd-api, create-pact-archive
--- 3. pg_cron retention for fd_api_usage_logs (90 days) — see Phase 17 comments
 -- ============================================================================
