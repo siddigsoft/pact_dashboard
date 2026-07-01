@@ -229,9 +229,15 @@ export default function PreFundingOverview() {
         ]);
         // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
         const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
-        // DPs in a terminal paid state — payment txns only count if DP reached this state
-        const DP_PAID_STATUSES = new Set(['partially_paid', 'fully_paid', 'completed', 'closed']);
-        const paidDpSet   = new Set((validDpRes.data ?? []).filter((d: any) => DP_PAID_STATUSES.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+        // DPs whose money has NOT yet moved (pre-disbursement / reverted / deleted).
+        // Payment txns linked to these DPs are excluded from Paid Out totals.
+        // 'approved' and all terminal paid states are intentionally NOT in this set.
+        const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
+        const paidDpSet = new Set(
+          (validDpRes.data ?? [])
+            .filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true)
+            .map((d: any) => d.id as string)
+        );
         const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
         // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
         const deletedDpTxnIds = new Set<string>(
@@ -239,24 +245,23 @@ export default function PreFundingOverview() {
             .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
-        // Old-style txns (NULL source_table): txn IDs back-linked from a DP that is NOT in a paid state
-        // (reverted, cancelled, deleted) — those should be excluded from payment totals.
+        // Old-style txns (NULL source_table): IDs back-linked from a DP that has NOT disbursed
         const nonPaidBackLinkedTxnIds = new Set<string>(
           (backLinkedDpsRes.data ?? [])
-            .filter((d: any) => !DP_PAID_STATUSES.has(d.status) || d.metadata?.deleted === true)
+            .filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
         const validTxns = rawTxns.filter(t => {
           if (t.source_table === 'down_payment_requests') {
             if (!t.source_id) return true;
-            // payment txns only count if the DP is in a terminal paid state
+            // payment txns excluded only if DP is in a pre-disbursement / reverted state
             if (t.transaction_type === 'payment') return paidDpSet.has(t.source_id);
             // commitment/other txns count if DP is not cancelled/deleted
             return validDpSet.has(t.source_id);
           }
           if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
           // Old rows with NULL source_table — check back-links:
-          // Exclude if a non-paid/reverted DP back-links to this txn.
+          // Exclude only if a pre-disbursement/reverted DP back-links here.
           // Manual payments (no DP back-link at all) are always included.
           if (!t.source_table && t.transaction_type === 'payment') {
             return !nonPaidBackLinkedTxnIds.has(t.id);
