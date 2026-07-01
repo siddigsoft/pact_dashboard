@@ -25,6 +25,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { linkPaymentToKnownFund } from '@/utils/preFundLinkage';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -809,12 +810,14 @@ export default function PreFundingReconciliation() {
           .eq('status', 'paid')
           .not('id', 'in', excludeClause(linkedIds))
           .order('submitted_at', { ascending: false }),
-        supabase
+        (supabase as any)
           .from('down_payment_requests')
-          .select('id,justification,requested_amount,approved_amount,status,created_at,requested_by,fully_paid_at')
-          .eq('status', 'fully_paid')
+          .select('id,justification,requested_amount,approved_amount,total_paid_amount,status,metadata,created_at,requested_by,fully_paid_at,pre_fund_transaction_id')
+          .not('status', 'in', '(pending,pending_supervisor,pending_admin,draft,rejected,cancelled)')
+          .gt('total_paid_amount', 0)
+          .is('pre_fund_transaction_id', null)
           .not('id', 'in', excludeClause(linkedIds))
-          .order('fully_paid_at', { ascending: false }),
+          .order('created_at', { ascending: false }),
         // Enumerator / transport fees from MMP site entries
         (supabase as any)
           .from('mmp_site_entries')
@@ -834,16 +837,21 @@ export default function PreFundingReconciliation() {
         title: r.title ?? r.description ?? `Submission ${r.id.slice(0, 8)}`,
         userId: r.submitted_by ?? null,
       }));
-      const dp = (dpRes.data ?? []).map((r: any) => ({
-        ...r,
-        _source: 'down_payment_requests',
-        _category: 'dp',
-        _date: r.fully_paid_at ?? r.created_at,
-        amount: r.approved_amount ?? r.requested_amount ?? 0,
-        currency: 'SDG',
-        title: r.justification ?? `Down-payment ${r.id.slice(0, 8)}`,
-        userId: r.requested_by ?? null,
-      }));
+      const dp = (dpRes.data ?? [])
+        // Exclude DPs whose balance was already deducted via the metadata marker
+        // (directLinkPayment sets pre_fund_deducted:true when the INSERT is RLS-blocked)
+        .filter((r: any) => r.metadata?.pre_fund_deducted !== true)
+        .map((r: any) => ({
+          ...r,
+          _source: 'down_payment_requests',
+          _category: 'dp',
+          _date: r.fully_paid_at ?? r.created_at,
+          // Use total_paid_amount (actual disbursed), not approved_amount (full requested)
+          amount: Number(r.total_paid_amount ?? r.approved_amount ?? r.requested_amount ?? 0),
+          currency: 'SDG',
+          title: r.justification ?? `Down-payment ${r.id.slice(0, 8)}`,
+          userId: r.requested_by ?? null,
+        }));
       // Enumerator fees: sum transport_fee + enumerator_fee per entry
       const ef = (efRes.data ?? []).map((r: any) => ({
         ...r,
@@ -893,12 +901,31 @@ export default function PreFundingReconciliation() {
           (rpcErr as any).code === 'PGRST202' ||
           String(rpcErr.message).toLowerCase().includes('could not find the function') ||
           String(rpcErr.message).toLowerCase().includes('does not exist');
-        if (isNotDeployed) setRpcMissing(true);
-        throw new Error(
-          isNotDeployed
-            ? 'SQL migration required — run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor.'
-            : rpcErr.message
-        );
+        if (isNotDeployed) {
+          // RPC not deployed yet — fall back to directLinkPayment which updates fund balance
+          // even when pre_fund_transactions INSERT is blocked by RLS
+          setRpcMissing(true);
+          const fallback = await linkPaymentToKnownFund({
+            fundId:      selectedFund.id,
+            fundName:    selectedFund.name,
+            amount:      sub.amount,
+            currency:    sub.currency ?? selectedFund.currency,
+            sourceTable: sub._source,
+            sourceId:    sub.id,
+            reference:   sub.id,
+            description: sub.title ?? 'Linked payment',
+            paymentDate: txnDate,
+            createdBy:   currentUser?.id ?? null,
+            userId:      sub.userId ?? null,
+          });
+          if (!fallback.linked) throw new Error(fallback.message ?? 'Link failed');
+          toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}` });
+          await loadFunds();
+          loadTxns(selectedFund.id);
+          loadUnlinkedPayments(selectedFund.id);
+          return;
+        }
+        throw new Error(rpcErr.message);
       }
       if (result && result.success === false) throw new Error(result.error ?? 'Link RPC failed.');
 
@@ -908,6 +935,7 @@ export default function PreFundingReconciliation() {
       }
 
       toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${result?.gl_posted ? ' — GL entry posted.' : ''}` });
+      await loadFunds();
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
     } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }

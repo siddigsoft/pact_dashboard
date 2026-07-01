@@ -570,3 +570,25 @@ export async function detectBestPreFundForSubmitters(params: {
 
   return { fundId: bestFund.id, fundName: bestFund.name, matchReason: bestReason };
 }
+
+/**
+ * Link a payment to a KNOWN fund (fund already selected by the caller).
+ * Used by the Reconciliation page retry panel when add_pre_fund_transaction_rpc
+ * is not yet deployed — falls straight through to directLinkPayment.
+ */
+export async function linkPaymentToKnownFund(params: {
+  fundId: string;
+  fundName: string;
+  amount: number;
+  currency: string;
+  sourceTable: string;
+  sourceId: string;
+  reference?: string | null;
+  description?: string | null;
+  paymentDate: string;
+  createdBy?: string | null;
+  userId?: string | null;
+  receiptUrl?: string | null;
+}): Promise<FundLinkResult> {
+  return directLinkPayment(params);
+}
