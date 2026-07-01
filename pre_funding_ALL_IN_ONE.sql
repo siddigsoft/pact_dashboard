@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS pre_fund_reconciliations (
   total_committed          NUMERIC(20,4) NOT NULL DEFAULT 0,
   variance                 NUMERIC(20,4) NOT NULL DEFAULT 0,   -- available surplus at close
   surplus_action           TEXT NOT NULL DEFAULT 'carry_forward'
-                           CHECK (surplus_action IN ('carry_forward','return','split','reserve')),
+                           CHECK (surplus_action IN ('carry_forward','return','return_bank','return_finance','split','reserve')),
   carry_forward_amount     NUMERIC(20,4) NOT NULL DEFAULT 0,
   return_amount            NUMERIC(20,4) NOT NULL DEFAULT 0,
   reserve_amount           NUMERIC(20,4) NOT NULL DEFAULT 0,
@@ -402,6 +402,15 @@ ALTER TABLE pre_fund_requests          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_approval_steps    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_transactions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_reconciliations   ENABLE ROW LEVEL SECURITY;
+
+-- Guard: update surplus_action CHECK for existing deployments that have the narrower constraint.
+DO $$ BEGIN
+  ALTER TABLE pre_fund_reconciliations
+    DROP CONSTRAINT IF EXISTS pre_fund_reconciliations_surplus_action_check;
+  ALTER TABLE pre_fund_reconciliations
+    ADD CONSTRAINT pre_fund_reconciliations_surplus_action_check
+      CHECK (surplus_action IN ('carry_forward','return','return_bank','return_finance','split','reserve'));
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 ALTER TABLE pre_fund_bank_unmatched    ENABLE ROW LEVEL SECURITY;
 
 -- ── DROP before CREATE so the migration is safely re-runnable ──────────────
@@ -1342,6 +1351,11 @@ GRANT EXECUTE ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUI
 -- RPC 3: add_pre_fund_transaction_rpc
 -- Wraps: txn insert + optional GL JE + lines + bridge log
 -- ────────────────────────────────────────────────────────────────────────────
+-- Drop any existing overload (11-arg legacy + 12-arg) before canonical CREATE OR REPLACE.
+DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text);
+DROP FUNCTION IF EXISTS add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text);
+DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text,uuid);
+DROP FUNCTION IF EXISTS add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text,uuid);
 CREATE OR REPLACE FUNCTION add_pre_fund_transaction_rpc(
   p_fund_id          UUID,
   p_fund_name        TEXT,
@@ -1353,7 +1367,8 @@ CREATE OR REPLACE FUNCTION add_pre_fund_transaction_rpc(
   p_transaction_date DATE    DEFAULT CURRENT_DATE,
   p_created_by       UUID    DEFAULT NULL,
   p_gl_debit_code    TEXT    DEFAULT NULL,
-  p_gl_credit_code   TEXT    DEFAULT NULL
+  p_gl_credit_code   TEXT    DEFAULT NULL,
+  p_user_id          UUID    DEFAULT NULL   -- optional: deducts from per-user allocation when set
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1386,7 +1401,8 @@ BEGIN
     reference, description, transaction_date, reconciled, created_by
   ) VALUES (
     p_fund_id, p_transaction_type, p_amount, p_currency,
-    p_reference, p_description, p_transaction_date, false, p_created_by
+    p_reference, p_description, p_transaction_date, false,
+    COALESCE(p_user_id, p_created_by)
   ) RETURNING id INTO v_txn_id;
 
   IF v_post_gl THEN
@@ -1430,8 +1446,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT,UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT,UUID) TO authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- RPC 4: close_pre_fund_period_rpc

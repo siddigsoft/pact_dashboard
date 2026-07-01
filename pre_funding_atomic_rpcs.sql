@@ -384,6 +384,8 @@ GRANT EXECUTE ON FUNCTION link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUI
 -- Drop any existing overload so CREATE OR REPLACE can change defaults safely.
 DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text);
 DROP FUNCTION IF EXISTS add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text);
+DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text,uuid);
+DROP FUNCTION IF EXISTS add_pre_fund_transaction_rpc(uuid,text,text,numeric,text,text,text,date,uuid,text,text,uuid);
 CREATE OR REPLACE FUNCTION add_pre_fund_transaction_rpc(
   p_fund_id          UUID,
   p_fund_name        TEXT,
@@ -395,7 +397,8 @@ CREATE OR REPLACE FUNCTION add_pre_fund_transaction_rpc(
   p_transaction_date DATE    DEFAULT CURRENT_DATE,
   p_created_by       UUID    DEFAULT NULL,
   p_gl_debit_code    TEXT    DEFAULT NULL,
-  p_gl_credit_code   TEXT    DEFAULT NULL
+  p_gl_credit_code   TEXT    DEFAULT NULL,
+  p_user_id          UUID    DEFAULT NULL   -- optional: deducts from per-user allocation when set
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -472,8 +475,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT,UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT,UUID) TO authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- RPC 4: close_pre_fund_period_rpc

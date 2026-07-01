@@ -61,12 +61,31 @@ introduce new objects** you don't have yet, in this order:
 
 **Verify after all files:**
 ```sql
+-- Core tables
 SELECT COUNT(*) FROM pre_fund_period_types;  -- Should return 7
+SELECT COUNT(*) FROM pre_fund_allocations;   -- Should return 0 (empty, no error)
+
+-- Transaction columns
 SELECT column_name FROM information_schema.columns
   WHERE table_name = 'pre_fund_transactions'
     AND column_name IN ('user_id', 'receipt_url');  -- Should return 2 rows
-SELECT COUNT(*) FROM pre_fund_allocations;   -- Should return 0 (empty, no error)
+
+-- RPC canonical signature — must show 12 parameters (including p_user_id)
+SELECT pg_get_function_identity_arguments(oid) AS args
+  FROM pg_proc WHERE proname = 'add_pre_fund_transaction_rpc';
+-- Expected: uuid, text, text, numeric, text, text, text, date, uuid, text, text, uuid
+
+-- surplus_action CHECK constraint — must include return_bank and return_finance
+SELECT pg_get_constraintdef(oid)
+  FROM pg_constraint
+  WHERE conname LIKE '%surplus_action%';
+-- Expected: CHECK ((surplus_action = ANY (ARRAY[...'return_bank'...'return_finance'...])))
 ```
+
+> **⚠ Patch files superseded**: `pre_fund_add_txn_user_patch.sql` is no longer required.
+> The canonical 12-arg `add_pre_fund_transaction_rpc` (with `p_user_id`) is now built into
+> both `pre_funding_atomic_rpcs.sql` and `pre_funding_ALL_IN_ONE.sql`. Running the patch
+> file on top is safe (it drops both overloads and recreates the same function) but unnecessary.
 
 ## Step 2 — Deploy Edge Functions (Auto-Renewal + Bank Feed)
 

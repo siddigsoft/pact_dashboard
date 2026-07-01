@@ -289,7 +289,7 @@ CREATE TABLE IF NOT EXISTS pre_fund_reconciliations (
   total_committed          NUMERIC(20,4) NOT NULL DEFAULT 0,
   variance                 NUMERIC(20,4) NOT NULL DEFAULT 0,   -- available surplus at close
   surplus_action           TEXT NOT NULL DEFAULT 'carry_forward'
-                           CHECK (surplus_action IN ('carry_forward','return','split','reserve')),
+                           CHECK (surplus_action IN ('carry_forward','return','return_bank','return_finance','split','reserve')),
   carry_forward_amount     NUMERIC(20,4) NOT NULL DEFAULT 0,
   return_amount            NUMERIC(20,4) NOT NULL DEFAULT 0,
   reserve_amount           NUMERIC(20,4) NOT NULL DEFAULT 0,
@@ -367,6 +367,16 @@ ALTER TABLE pre_fund_requests          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_approval_steps    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_transactions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pre_fund_reconciliations   ENABLE ROW LEVEL SECURITY;
+
+-- Guard: update surplus_action CHECK for existing deployments that have the narrower constraint.
+-- DROP + ADD is the only portable way to rename/extend a CHECK in Postgres.
+DO $$ BEGIN
+  ALTER TABLE pre_fund_reconciliations
+    DROP CONSTRAINT IF EXISTS pre_fund_reconciliations_surplus_action_check;
+  ALTER TABLE pre_fund_reconciliations
+    ADD CONSTRAINT pre_fund_reconciliations_surplus_action_check
+      CHECK (surplus_action IN ('carry_forward','return','return_bank','return_finance','split','reserve'));
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 ALTER TABLE pre_fund_bank_unmatched    ENABLE ROW LEVEL SECURITY;
 
 -- ── DROP before CREATE so the migration is safely re-runnable ──────────────
