@@ -514,8 +514,8 @@ export default function DownPaymentApproval() {
           reference: null,
           description: req.justification ?? `Down-payment: ${req.siteName ?? req.id}`,
           paymentDate: (req as any).fully_paid_at ?? now,
-          createdBy: null,
-          userId: req.requestedBy ?? null,
+          createdBy: currentUser?.id ?? null,
+          userId: currentUser?.id ?? null,
           receiptUrl,
         });
         if (pfResult.linked) {
@@ -561,7 +561,7 @@ export default function DownPaymentApproval() {
     } finally {
       setMarkingPaidId(null);
     }
-  }, []);
+  }, [currentUser, toast]);
 
   // ── Partial payment: deduct only what was actually paid now ───────────────
   const handleConfirmPartialPay = useCallback(async () => {
@@ -614,7 +614,7 @@ export default function DownPaymentApproval() {
           description: `${isFullyPaid ? 'Full' : 'Partial'} payment: ${req.siteName ?? req.id}`,
           paymentDate: now,
           createdBy: currentUser.id,
-          userId: req.requestedBy ?? null,
+          userId: currentUser.id,
           receiptUrl: receiptUrlPartial,
         });
         if (pfResult.linked) {
