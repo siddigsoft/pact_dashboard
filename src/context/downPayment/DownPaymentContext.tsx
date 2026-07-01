@@ -24,7 +24,7 @@ import {
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { EmailNotificationService } from '@/services/email-notification.service';
-import { unlinkPaymentFromPreFund } from '@/utils/preFundLinkage';
+import { unlinkPaymentFromPreFund, reverseDirectDeduction } from '@/utils/preFundLinkage';
 
 interface RevertToPendingData {
   requestId: string;
@@ -1107,6 +1107,29 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const cancelRequest = async (requestId: string): Promise<boolean> => {
     try {
+      // Fetch before updating so we can reverse any pre-fund deduction
+      const { data: dp } = await supabase
+        .from('down_payment_requests')
+        .select('total_paid_amount, pre_fund_transaction_id, metadata')
+        .eq('id', requestId)
+        .single();
+
+      if (dp) {
+        const meta = (dp.metadata ?? {}) as any;
+        if (dp.pre_fund_transaction_id) {
+          // Linked via a real txn row — use the full unlink path
+          await unlinkPaymentFromPreFund('down_payment_requests', requestId);
+        } else if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dp.total_paid_amount) > 0) {
+          // Deducted via directLinkPayment balance UPDATE (no txn row) — reverse directly
+          await reverseDirectDeduction(meta.pre_fund_id, Number(dp.total_paid_amount));
+          // Clear the marker so it isn't double-reversed if cancelled again
+          await supabase
+            .from('down_payment_requests')
+            .update({ metadata: { ...meta, pre_fund_deducted: false } } as any)
+            .eq('id', requestId);
+        }
+      }
+
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -1139,8 +1162,24 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     try {
       const now = new Date().toISOString();
 
+      // Fetch before wiping so we can fall back to reverseDirectDeduction
+      const { data: dpPre } = await supabase
+        .from('down_payment_requests')
+        .select('total_paid_amount, pre_fund_transaction_id, metadata')
+        .eq('id', requestId)
+        .single();
+
       // Reverse any pre-fund linkage first (restores fund balance + allocation)
-      await unlinkPaymentFromPreFund('down_payment_requests', requestId);
+      const unlinkResult = await unlinkPaymentFromPreFund('down_payment_requests', requestId);
+
+      // If the unlink RPC is not deployed AND the deduction was made via the
+      // directLinkPayment balance-UPDATE path, fall back to reverseDirectDeduction
+      if (!unlinkResult.unlinked && dpPre) {
+        const meta = (dpPre.metadata ?? {}) as any;
+        if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dpPre.total_paid_amount) > 0) {
+          await reverseDirectDeduction(meta.pre_fund_id, Number(dpPre.total_paid_amount));
+        }
+      }
 
       const { data: updated, error } = await supabase
         .from('down_payment_requests')

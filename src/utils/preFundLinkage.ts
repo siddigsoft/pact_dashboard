@@ -136,6 +136,38 @@ async function directLinkPayment(params: {
   };
 }
 
+/**
+ * Reverse a direct balance deduction on a pre-fund request.
+ * Used when unlink_payment_atomically_rpc is not yet deployed — the
+ * source row was deducted via directLinkPayment's balance UPDATE but no
+ * pre_fund_transactions row was created, so there's nothing to unlink via RPC.
+ *
+ * Safe to call even if the fund has already been partially adjusted:
+ * uses GREATEST(0, ...) so paid_amount never goes negative.
+ */
+export async function reverseDirectDeduction(
+  fundId: string,
+  amount: number,
+): Promise<{ reversed: boolean; message: string }> {
+  const { data: fund, error: fErr } = await supabase
+    .from('pre_fund_requests')
+    .select('paid_amount, available_balance')
+    .eq('id', fundId)
+    .single();
+  if (fErr || !fund) return { reversed: false, message: fErr?.message ?? 'Fund not found' };
+
+  const newPaid      = Math.max(0, Number(fund.paid_amount) - amount);
+  const newAvailable = Number(fund.available_balance) + amount;
+
+  const { error: uErr } = await supabase
+    .from('pre_fund_requests')
+    .update({ paid_amount: newPaid, available_balance: newAvailable })
+    .eq('id', fundId);
+
+  if (uErr) return { reversed: false, message: uErr.message };
+  return { reversed: true, message: `Reversed ${amount} from fund — balance restored.` };
+}
+
 export interface UnlinkResult {
   unlinked: boolean;
   message: string;

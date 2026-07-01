@@ -592,6 +592,31 @@ export default function PreFundingReconciliation() {
     [selectedFund, effectivePaidAmount]
   );
 
+  // True when paid_amount DB column is stale (no txn rows back it up)
+  const isStaleBalance = useMemo(() => {
+    if (!selectedFund) return false;
+    const paymentTxns = transactions.filter(t => t.transaction_type === 'payment');
+    return paymentTxns.length === 0 && Number(selectedFund.paid_amount) > 0;
+  }, [selectedFund, transactions]);
+
+  const handleResetBalance = async () => {
+    if (!selectedFund) return;
+    setResettingBalance(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('pre_fund_requests')
+        .update({ paid_amount: 0, available_balance: selectedFund.amount })
+        .eq('id', selectedFund.id);
+      if (error) throw error;
+      toast({ title: 'Balance reset', description: 'Paid Out cleared — fund is now fully available.' });
+      await loadFunds();
+    } catch (e: any) {
+      toast({ title: 'Reset failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setResettingBalance(false);
+    }
+  };
+
   // Auto-link retry
   const [unlinkedSubs, setUnlinkedSubs]       = useState<{ ocs: any[]; dp: any[]; ef: any[] }>({ ocs: [], dp: [], ef: [] });
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
@@ -601,6 +626,8 @@ export default function PreFundingReconciliation() {
   const [unlinkedTo, setUnlinkedTo]           = useState('');
   /** True when the link RPC is missing from the DB — prompts Finance to run the SQL migration */
   const [rpcMissing, setRpcMissing]           = useState(false);
+  /** True while a stale-balance reset is in progress */
+  const [resettingBalance, setResettingBalance] = useState(false);
   const [openCategories, setOpenCategories]   = useState<Record<string, boolean>>({ ocs: true, dp: true, ef: true });
 
   // Unlink / remove a linked transaction
@@ -1693,6 +1720,32 @@ export default function PreFundingReconciliation() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* ── Stale Balance Warning ───────────────────────────────────────── */}
+              {isStaleBalance && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Stale Paid-Out balance detected</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      The database shows <span className="font-mono font-semibold">{selectedFund.currency} {formatNumber(Number(selectedFund.paid_amount), 0)}</span> paid
+                      out but there are no transaction records to support it — the payments were likely cancelled or removed
+                      after the balance was deducted. Click <strong>Reset</strong> to clear the Paid-Out figure and restore
+                      the full fund to Available.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-600 dark:hover:bg-amber-900/40"
+                    disabled={resettingBalance}
+                    onClick={handleResetBalance}
+                  >
+                    {resettingBalance ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+                    Reset Balance
+                  </Button>
+                </div>
+              )}
 
               {/* ── Auto-Link Retry Panel ──────────────────────────────────────── */}
               {(() => {
