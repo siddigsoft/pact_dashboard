@@ -608,6 +608,9 @@ export default function PreFundingReconciliation() {
         .update({ paid_amount: 0, available_balance: selectedFund.amount })
         .eq('id', selectedFund.id);
       if (error) throw error;
+      // Immediately patch selectedFund so the stale banner disappears without
+      // waiting for loadFunds to propagate through setFunds → selectedFund
+      setSelected(prev => prev ? { ...prev, paid_amount: 0, available_balance: prev.amount } : prev);
       toast({ title: 'Balance reset', description: 'Paid Out cleared — fund is now fully available.' });
       await loadFunds();
     } catch (e: any) {
@@ -790,6 +793,14 @@ export default function PreFundingReconciliation() {
   }, [toast]);
 
   useEffect(() => { loadFunds(); }, [loadFunds]);
+  // Keep selectedFund fresh whenever the funds list is refreshed (loadFunds,
+  // handleResetBalance, handleRetryLink, etc.) — without this, selectedFund
+  // holds a stale object and computed values like effectivePaidAmount lag behind
+  useEffect(() => {
+    if (!selectedFund) return;
+    const fresh = funds.find(f => f.id === selectedFund.id);
+    if (fresh) setSelected(fresh);
+  }, [funds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (selectedFund) {
       setTxnForm(p => ({ ...p, currency: selectedFund.currency }));
