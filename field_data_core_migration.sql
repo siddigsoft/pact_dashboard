@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS field_data_submissions (
 ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
 ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS review_status TEXT DEFAULT 'pending';
 ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'sync';
+ALTER TABLE field_data_submissions ADD COLUMN IF NOT EXISTS uuid TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_fdsu_form     ON field_data_submissions(form_id);
 CREATE INDEX IF NOT EXISTS idx_fdsu_status   ON field_data_submissions(status);
