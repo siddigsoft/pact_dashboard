@@ -1121,7 +1121,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           await unlinkPaymentFromPreFund('down_payment_requests', requestId);
         } else if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dp.total_paid_amount) > 0) {
           // Deducted via directLinkPayment balance UPDATE (no txn row) — reverse directly
-          await reverseDirectDeduction(meta.pre_fund_id, Number(dp.total_paid_amount));
+          // Pass requested_by so the allocation spent_amount is also restored
+          const requestedBy = (dp as any).requested_by ?? null;
+          await reverseDirectDeduction(meta.pre_fund_id, Number(dp.total_paid_amount), requestedBy);
           // Clear the marker so it isn't double-reversed if cancelled again
           await supabase
             .from('down_payment_requests')
@@ -1165,7 +1167,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       // Fetch before wiping so we can fall back to reverseDirectDeduction
       const { data: dpPre } = await supabase
         .from('down_payment_requests')
-        .select('total_paid_amount, pre_fund_transaction_id, metadata')
+        .select('total_paid_amount, pre_fund_transaction_id, metadata, requested_by')
         .eq('id', requestId)
         .single();
 
@@ -1177,7 +1179,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (!unlinkResult.unlinked && dpPre) {
         const meta = (dpPre.metadata ?? {}) as any;
         if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dpPre.total_paid_amount) > 0) {
-          await reverseDirectDeduction(meta.pre_fund_id, Number(dpPre.total_paid_amount));
+          await reverseDirectDeduction(
+            meta.pre_fund_id,
+            Number(dpPre.total_paid_amount),
+            (dpPre as any).requested_by ?? null,
+          );
         }
       }
 

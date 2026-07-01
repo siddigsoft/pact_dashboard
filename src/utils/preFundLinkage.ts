@@ -105,6 +105,24 @@ async function directLinkPayment(params: {
     return { linked: false, message: `Failed to deduct fund balance: ${balErr.message}` };
   }
 
+  // 3b. Deduct from the submitter's personal allocation (if one exists for this fund).
+  //     Mirrors what link_payment_atomically_rpc does atomically — keeps the
+  //     Allocation Dashboard in sync even when the RPC is not yet deployed.
+  if (userId) {
+    const { data: alloc } = await (supabase as any)
+      .from('pre_fund_allocations')
+      .select('id,spent_amount,allocated_amount')
+      .eq('pre_fund_request_id', fundId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (alloc) {
+      await (supabase as any)
+        .from('pre_fund_allocations')
+        .update({ spent_amount: Number(alloc.spent_amount) + amount })
+        .eq('id', alloc.id);
+    }
+  }
+
   // 4. Write idempotency marker / back-link on source row
   if (txnId) {
     // Full link: set pre_fund_transaction_id back-link
@@ -148,6 +166,7 @@ async function directLinkPayment(params: {
 export async function reverseDirectDeduction(
   fundId: string,
   amount: number,
+  userId?: string | null,
 ): Promise<{ reversed: boolean; message: string }> {
   const { data: fund, error: fErr } = await supabase
     .from('pre_fund_requests')
@@ -165,6 +184,23 @@ export async function reverseDirectDeduction(
     .eq('id', fundId);
 
   if (uErr) return { reversed: false, message: uErr.message };
+
+  // Also restore the submitter's allocation spent_amount (mirrors directLinkPayment step 3b)
+  if (userId) {
+    const { data: alloc } = await (supabase as any)
+      .from('pre_fund_allocations')
+      .select('id,spent_amount')
+      .eq('pre_fund_request_id', fundId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (alloc) {
+      await (supabase as any)
+        .from('pre_fund_allocations')
+        .update({ spent_amount: Math.max(0, Number(alloc.spent_amount) - amount) })
+        .eq('id', alloc.id);
+    }
+  }
+
   return { reversed: true, message: `Reversed ${amount} from fund — balance restored.` };
 }
 
