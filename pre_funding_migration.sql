@@ -500,6 +500,10 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- IMPORTANT: Replace 'pact_bank_key_passphrase' below with your actual secret,
 --            or set it via: ALTER DATABASE postgres SET app.bank_key_passphrase = '...';
 
+-- Drop both old signatures before recreating (CREATE OR REPLACE cannot change return type)
+DROP FUNCTION IF EXISTS store_pre_fund_bank_key(UUID, TEXT);
+DROP FUNCTION IF EXISTS store_pre_fund_bank_key(UUID, TEXT, TEXT);
+
 CREATE OR REPLACE FUNCTION store_pre_fund_bank_key(
   p_settings_id UUID,
   p_key         TEXT DEFAULT NULL,   -- new API key; NULL/empty = leave existing key untouched
