@@ -2054,32 +2054,61 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 }
               );
 
+              if (!rpcErr && rpcResult?.success !== false) {
+                // ── RPC succeeded ────────────────────────────────────────────
+                pfLinked++;
+                pfTotal += paidAmt;
+                if (rpcResult?.transaction_id) {
+                  (supabase as any)
+                    .from('down_payment_requests')
+                    .update({ pre_fund_transaction_id: rpcResult.transaction_id })
+                    .eq('id', req.id)
+                    .then(({ error: blErr }: { error: any }) => {
+                      if (blErr) console.warn('[BatchPay] Back-link update failed for', req.id, blErr.message);
+                    });
+                }
+                continue;
+              }
+
+              // ── RPC failed or rejected — fall back to directLinkPayment ──
               if (rpcErr) {
                 const notDeployed =
                   (rpcErr as any).code === 'PGRST202' ||
                   String(rpcErr.message).toLowerCase().includes('could not find the function') ||
                   String(rpcErr.message).toLowerCase().includes('does not exist');
-                if (notDeployed) { rpcNotDeployed = true; break; }
-                console.warn(`[BatchPay] Pre-fund atomic link failed for ${req.id}:`, rpcErr.message);
-                continue;
-              }
-              if (rpcResult?.success === false) {
-                console.warn(`[BatchPay] Pre-fund link rejected for ${req.id}:`, rpcResult.error);
-                continue;
+                // Mark flag but do NOT break — we still fall through to the
+                // directLinkPayment fallback for this DP and all remaining ones
+                if (notDeployed) rpcNotDeployed = true;
+                else console.warn(`[BatchPay] RPC error for ${req.id}:`, rpcErr.message);
+              } else {
+                console.warn(`[BatchPay] RPC rejected for ${req.id}:`, rpcResult?.error);
               }
 
-              pfLinked++;
-              pfTotal += paidAmt;
-
-              // Best-effort back-link (non-critical — transaction + balance already committed)
-              if (rpcResult?.transaction_id) {
-                (supabase as any)
-                  .from('down_payment_requests')
-                  .update({ pre_fund_transaction_id: rpcResult.transaction_id })
-                  .eq('id', req.id)
-                  .then(({ error: blErr }: { error: any }) => {
-                    if (blErr) console.warn('[BatchPay] Back-link update failed for', req.id, blErr.message);
-                  });
+              // directLinkPayment fallback: updates available_balance + paid_amount
+              // directly even when the pre_fund_transactions INSERT is RLS-blocked
+              try {
+                const { linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+                const fallback = await linkPaymentToKnownFund({
+                  fundId:      preFundId,
+                  fundName:    selectedFund?.name ?? preFundId,
+                  amount:      paidAmt,
+                  currency:    selectedFund?.currency ?? 'SDG',
+                  sourceTable: 'down_payment_requests',
+                  sourceId:    req.id,
+                  reference:   null,
+                  description: `Down-payment: ${(req as any).siteName ?? req.id}`,
+                  paymentDate: today,
+                  createdBy:   currentUser?.id ?? null,
+                  userId:      (req as any).requestedBy ?? null,
+                });
+                if (fallback.linked) {
+                  pfLinked++;
+                  pfTotal += paidAmt;
+                } else {
+                  console.warn(`[BatchPay] Fallback link failed for ${req.id}:`, fallback.message);
+                }
+              } catch (fbErr: any) {
+                console.warn(`[BatchPay] Fallback link error for ${req.id}:`, fbErr.message);
               }
             }
 
