@@ -287,6 +287,21 @@ export default function PreFundingOverview() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Auto-refresh whenever a fund's paid_amount / available_balance changes in the DB.
+  // This fires when directLinkPayment (or any other path) writes a new balance — so the
+  // Overview always reflects the latest Paid-Out figure without needing a manual refresh.
+  useEffect(() => {
+    const channel = supabase
+      .channel('overview_pre_fund_balance')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pre_fund_requests' },
+        () => { load(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
+
   const handleRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const latestRateMap = useMemo(() => {
