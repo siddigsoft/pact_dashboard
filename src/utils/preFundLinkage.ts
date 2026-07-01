@@ -1,11 +1,12 @@
 import { supabase } from '@/integrations/supabase/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Direct (non-atomic) fallback used when link_payment_atomically_rpc is not
-// deployed yet. Performs the same 3 writes as the RPC but without a DB
-// transaction wrapper — safe for production since each write is idempotent
-// when retried and the pre_fund_transactions.source_id uniqueness prevents
-// duplicate deductions.
+// Best-effort (non-atomic) fallback used when link_payment_atomically_rpc is
+// not yet deployed. Performs the same 3 writes as the RPC but without a DB
+// transaction wrapper. The duplicate-guard is a SELECT-then-INSERT pattern
+// which is NOT race-safe under concurrent calls; a unique DB constraint on
+// (source_table, source_id) does not currently exist. This path should be
+// replaced by deploying the RPC (which wraps all writes in a transaction).
 // ─────────────────────────────────────────────────────────────────────────────
 async function directLinkPayment(params: {
   fundId: string;

@@ -372,9 +372,9 @@ export default function PreFundingOverview() {
   // is never used as a fallback — if all payment txns were filtered out (e.g.
   // the DP was reverted/cancelled), the fund correctly shows 0 paid out.
   // FALLBACK: when no pre_fund_transactions rows exist (RPC not deployed /
-  // directLinkPayment blocked by RLS), attribute unlinked paid DPs directly:
-  //   • If only 1 active fund exists → all unlinked paid DPs belong to it.
-  //   • Otherwise → match by country_id, then any fund as last resort.
+  // directLinkPayment blocked by RLS), attribute unlinked paid DPs directly.
+  // Attribution is only applied when there is exactly ONE active fund to avoid
+  // the risk of misassigning amounts across multiple funds with ambiguous linkage.
   const effectivePaidByFund = useMemo(() => {
     const m = new Map<string, number>();
     for (const f of funds) m.set(f.id, 0);
@@ -383,20 +383,14 @@ export default function PreFundingOverview() {
       if (t.transaction_type !== 'payment') continue;
       m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
     }
-    // 2. Add unlinked paid DPs as fallback (no pre_fund_transactions rows)
+    // 2. Add unlinked paid DPs as fallback — only when exactly 1 active fund exists
+    // so there is no ambiguity about which fund to deduct from.
     if (unlinkedPaidDps.length > 0) {
       const activeFundsList = funds.filter(f => ['active', 'low_balance'].includes(f.status));
-      for (const dp of unlinkedPaidDps) {
-        const dpAmt = Number(dp.total_paid_amount ?? 0);
-        if (dpAmt <= 0) continue;
-        let targetId: string | null = null;
-        if (activeFundsList.length === 1) {
-          targetId = activeFundsList[0].id;
-        } else {
-          const byCountry = activeFundsList.find(f => f.country_id && f.country_id === dp.country_id);
-          targetId = byCountry?.id ?? (activeFundsList[0]?.id ?? null);
-        }
-        if (targetId) m.set(targetId, (m.get(targetId) ?? 0) + dpAmt);
+      if (activeFundsList.length === 1) {
+        const targetId = activeFundsList[0].id;
+        const unlinkedTotal = unlinkedPaidDps.reduce((s, dp) => s + Number(dp.total_paid_amount ?? 0), 0);
+        m.set(targetId, (m.get(targetId) ?? 0) + unlinkedTotal);
       }
     }
     return m;
