@@ -5174,17 +5174,43 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           {batchPayDialog.requests.length > 0 && (
             <div className="space-y-4">
               {/* Summary */}
-              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                    {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}
-                  </span>
-                  <span className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                    SDG {batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground">Total covered by this single receipt</div>
-              </div>
+              {(() => {
+                const fullTotal = batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+                const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
+                const partialTotal = isPartial ? Math.round(fullTotal * (batchPayDialog.partialPercent! / 100)) : null;
+                const remainingTotal = partialTotal !== null ? fullTotal - partialTotal : null;
+                return (
+                  <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                        {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}
+                      </span>
+                      <span className={`text-lg font-bold tabular-nums ${isPartial ? 'text-emerald-600/60 dark:text-emerald-500/60 line-through text-base' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                        SDG {fullTotal.toLocaleString()}
+                      </span>
+                    </div>
+                    {isPartial && partialTotal !== null && (
+                      <div className="flex items-center justify-between pt-1 border-t border-emerald-200 dark:border-emerald-700">
+                        <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                          Total Partial ({batchPayDialog.partialPercent}%)
+                        </span>
+                        <span className="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                          SDG {partialTotal.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    {isPartial && remainingTotal !== null && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Remainder (stays as &quot;Partially Paid&quot;)</span>
+                        <span className="tabular-nums">SDG {remainingTotal.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      {isPartial ? `Paying ${batchPayDialog.partialPercent}% now — remainder left unpaid` : 'Total covered by this single receipt'}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Breakdown */}
               <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
