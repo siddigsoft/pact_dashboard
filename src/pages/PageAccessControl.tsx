@@ -21,8 +21,10 @@ import {
   Coins, ListChecks, Plug, History, HeartHandshake, Zap, Smartphone,
   BookOpen, Building, UserCog, Layers, GitBranch, BarChart2,
   ScanLine, Eye, Key, PlugZap, Megaphone, ClipboardEdit,
+  Pencil, X, Check, Filter,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 // ── Role code constants (matching normalizeRole() output exactly) ─────────────
 //  superAdmin | admin | ict | fom | financialAdmin | auditor | supervisor
@@ -483,6 +485,13 @@ const ROLE_LABELS: Record<string, string> = {
   reviewer: 'Reviewer',
 };
 
+/** All selectable roles for the Default Access editor (excludes superAdmin — always has access). */
+export const PAGE_ROLE_ALL_OPTIONS: string[] = [
+  'all', 'admin', 'ict', 'fom', 'financialAdmin', 'auditor',
+  'supervisor', 'coordinator', 'dataCollector', 'dataTeam',
+  'reviewer', 'projectManager', 'countryDirector',
+];
+
 function getRoleCode(rawRole: string | null): string | null {
   if (!rawRole) return null;
   return normalizeRole(rawRole) ?? null;
@@ -498,14 +507,16 @@ function roleLabel(rawRole: string | null) {
   return ROLE_LABELS[code ?? ''] ?? (rawRole ?? 'Unknown');
 }
 
-export function hasDefaultAccess(page: PageDef, rawRole: string | null): boolean {
+/** effectiveRoles overrides page.roles when the super admin has customised defaults. */
+export function hasDefaultAccess(page: PageDef, rawRole: string | null, effectiveRoles?: string[]): boolean {
   if (!rawRole) return false;
   const code = getRoleCode(rawRole);
   if (!code) return false;
   if (code === 'superAdmin') return true;
-  if (page.roles.includes('all')) return true;
-  if (page.roles.includes('!dataCollector')) return code !== 'dataCollector';
-  return page.roles.includes(code);
+  const roles = effectiveRoles ?? page.roles;
+  if (roles.includes('all')) return true;
+  if (roles.includes('!dataCollector')) return code !== 'dataCollector';
+  return roles.includes(code);
 }
 
 function initials(name: string | null) {
@@ -550,11 +561,12 @@ const STATUS_ORDER: Record<AccessStatus, number> = { blocked: 0, granted: 1, rol
 export function getAccessStatus(
   page: PageDef,
   profile: Profile,
-  overrideMap: Record<string, PageOverride>
+  overrideMap: Record<string, PageOverride>,
+  effectiveRoles?: string[],
 ): AccessStatus {
   const ov = overrideMap[profile.id];
   if (ov) return ov.is_blocked ? 'blocked' : 'granted';
-  return hasDefaultAccess(page, profile.role) ? 'role' : 'denied';
+  return hasDefaultAccess(page, profile.role, effectiveRoles) ? 'role' : 'denied';
 }
 
 // ── UserAccessRow (shared between page and modal) ─────────────────────────────
@@ -726,6 +738,9 @@ export default function PageAccessControl() {
   const [pageSearch, setPageSearch] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['My Workspace']));
+  const [statusFilter, setStatusFilter] = useState<AccessStatus | 'all'>('all');
+  const [rolePopoverOpen, setRolePopoverOpen] = useState(false);
+  const [savingRoles, setSavingRoles] = useState(false);
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ['pac-profiles'],
@@ -755,6 +770,19 @@ export default function PageAccessControl() {
     });
     return m;
   }, [overrides]);
+
+  // ── Custom default-role configs (super admin editable) ─────────────────────
+  const { data: roleConfigs = {}, refetch: refetchRoleConfigs } = useQuery<Record<string, string[]>>({
+    queryKey: ['pac-role-configs'],
+    queryFn: async () => {
+      const { data } = await supabase.from('page_role_configs').select('page_slug, roles');
+      const m: Record<string, string[]> = {};
+      (data ?? []).forEach((r: any) => { m[r.page_slug] = r.roles; });
+      return m;
+    },
+    staleTime: 30_000,
+    enabled: isSuperAdmin,
+  });
 
   // Guard — after all hooks
   if (!isSuperAdmin) {
@@ -809,21 +837,41 @@ export default function PageAccessControl() {
     } finally { setSavingId(null); }
   }
 
+  async function saveRoleConfig(slug: string, roles: string[]) {
+    setSavingRoles(true);
+    try {
+      await supabase.from('page_role_configs').upsert(
+        { page_slug: slug, roles, updated_by: currentUser?.id, updated_at: new Date().toISOString() },
+        { onConflict: 'page_slug' }
+      );
+      refetchRoleConfigs();
+      qc.invalidateQueries({ queryKey: ['pac-role-configs'] });
+      toast({ title: 'Default access updated', description: `Roles saved for ${PAGE_DEFS.find(p => p.slug === slug)?.label ?? slug}.` });
+    } catch (e: any) {
+      toast({ title: 'Error saving roles', description: e.message, variant: 'destructive' });
+    } finally { setSavingRoles(false); }
+  }
+
   const nonSuperProfiles = profiles.filter(p => getRoleCode(p.role) !== 'superAdmin');
   const pageOverrideMap = overrideMap[selectedPage.slug] ?? {};
+
+  // Use DB-stored role config if available, else fall back to PAGE_DEFS hardcoded roles
+  const effectiveRoles = roleConfigs[selectedPage.slug] ?? selectedPage.roles;
 
   const filteredUsers = nonSuperProfiles.filter(p =>
     (p.full_name ?? '').toLowerCase().includes(userSearch.toLowerCase()) ||
     roleLabel(p.role).toLowerCase().includes(userSearch.toLowerCase())
   );
 
-  const sortedUsers = [...filteredUsers].sort((a, b) =>
-    STATUS_ORDER[getAccessStatus(selectedPage, a, pageOverrideMap)] -
-    STATUS_ORDER[getAccessStatus(selectedPage, b, pageOverrideMap)]
-  );
+  const sortedUsers = [...filteredUsers]
+    .filter(p => statusFilter === 'all' || getAccessStatus(selectedPage, p, pageOverrideMap, effectiveRoles) === statusFilter)
+    .sort((a, b) =>
+      STATUS_ORDER[getAccessStatus(selectedPage, a, pageOverrideMap, effectiveRoles)] -
+      STATUS_ORDER[getAccessStatus(selectedPage, b, pageOverrideMap, effectiveRoles)]
+    );
 
   const counts = { blocked: 0, granted: 0, role: 0, denied: 0 };
-  nonSuperProfiles.forEach(p => { counts[getAccessStatus(selectedPage, p, pageOverrideMap)]++; });
+  nonSuperProfiles.forEach(p => { counts[getAccessStatus(selectedPage, p, pageOverrideMap, effectiveRoles)]++; });
 
   const ovCountForPage = (slug: string) => Object.keys(overrideMap[slug] ?? {}).length;
 
@@ -898,7 +946,7 @@ export default function PageAccessControl() {
           {/* Header */}
           <div className="px-6 py-4 border-b bg-card flex-shrink-0">
             <div className="flex items-start gap-3">
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold">{selectedPage.label}</h3>
                   {selectedPage.note && (
@@ -907,30 +955,115 @@ export default function PageAccessControl() {
                       <TooltipContent className="text-xs max-w-[220px]">{selectedPage.note}</TooltipContent>
                     </Tooltip>
                   )}
+                  {roleConfigs[selectedPage.slug] && (
+                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">custom</span>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground font-mono">{selectedPage.path}</p>
-              </div>
-              <div className="flex-1" />
-              <div className="flex items-center gap-1 flex-wrap justify-end max-w-[420px]">
-                <span className="text-[10px] text-muted-foreground mr-1 shrink-0">Default access:</span>
-                {selectedPage.roles.map(r => (
-                  <span key={r} className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded-full capitalize',
-                    r === 'all' ? 'bg-blue-100 text-blue-700' :
-                    r === '!dataCollector' ? 'bg-orange-100 text-orange-700' :
-                    ROLE_COLORS[r] ?? 'bg-slate-100 text-slate-500')}>
-                    {r === 'all' ? 'Everyone' : r === '!dataCollector' ? 'All except Data Collector' : ROLE_LABELS[r] ?? r}
-                  </span>
-                ))}
+
+                {/* Editable default-role badges */}
+                <div className="flex items-center gap-1 flex-wrap mt-2">
+                  <span className="text-[10px] text-muted-foreground shrink-0">Default access:</span>
+                  {effectiveRoles.map(r => (
+                    <button
+                      key={r}
+                      onClick={() => saveRoleConfig(selectedPage.slug, effectiveRoles.filter(x => x !== r))}
+                      disabled={savingRoles}
+                      title={`Remove ${r === 'all' ? 'Everyone' : ROLE_LABELS[r] ?? r} from default access`}
+                      className={cn('group flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full transition-opacity',
+                        r === 'all' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
+                        r === '!dataCollector' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' :
+                        cn(ROLE_COLORS[r] ?? 'bg-slate-100 text-slate-500', 'hover:opacity-80')
+                      )}>
+                      {r === 'all' ? 'Everyone' : r === '!dataCollector' ? 'All except DC' : ROLE_LABELS[r] ?? r}
+                      <X className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity -mr-0.5" />
+                    </button>
+                  ))}
+
+                  {/* Add role popover */}
+                  <Popover open={rolePopoverOpen} onOpenChange={setRolePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground border border-dashed transition-colors">
+                        <Pencil className="h-2.5 w-2.5" />
+                        Edit
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-72 p-3">
+                      <div className="text-xs font-semibold mb-2 flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 text-[#1D3461]" />
+                        Edit default access roles
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mb-3">
+                        Toggle which roles have default access to <span className="font-medium">{selectedPage.label}</span>. Changes are saved immediately to the database.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {PAGE_ROLE_ALL_OPTIONS.map(r => {
+                          const active = effectiveRoles.includes(r);
+                          return (
+                            <button
+                              key={r}
+                              disabled={savingRoles}
+                              onClick={() => {
+                                const next = active
+                                  ? effectiveRoles.filter(x => x !== r)
+                                  : [...effectiveRoles, r];
+                                saveRoleConfig(selectedPage.slug, next);
+                              }}
+                              className={cn(
+                                'flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded-full border transition-all',
+                                active
+                                  ? cn('border-transparent', r === 'all' ? 'bg-blue-100 text-blue-700' : ROLE_COLORS[r] ?? 'bg-slate-100 text-slate-500')
+                                  : 'bg-background border-dashed text-muted-foreground hover:bg-muted'
+                              )}>
+                              {active && <Check className="h-2.5 w-2.5" />}
+                              {r === 'all' ? 'Everyone' : ROLE_LABELS[r] ?? r}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {roleConfigs[selectedPage.slug] && (
+                        <button
+                          disabled={savingRoles}
+                          onClick={() => {
+                            supabase.from('page_role_configs').delete().eq('page_slug', selectedPage.slug).then(() => {
+                              refetchRoleConfigs();
+                              qc.invalidateQueries({ queryKey: ['pac-role-configs'] });
+                              toast({ title: 'Reset to defaults', description: `${selectedPage.label} reverted to built-in roles.` });
+                            });
+                          }}
+                          className="w-full text-[9px] text-muted-foreground hover:text-destructive text-center py-1 transition-colors">
+                          Reset to built-in defaults
+                        </button>
+                      )}
+                      {savingRoles && <p className="text-[9px] text-center text-muted-foreground mt-1 animate-pulse">Saving…</p>}
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             </div>
-            {/* Counts */}
-            <div className="flex items-center gap-4 mt-3 flex-wrap">
+
+            {/* Counts as clickable filter chips */}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all',
+                  statusFilter === 'all'
+                    ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                    : 'bg-background border-muted-foreground/30 text-muted-foreground hover:border-[#1D3461] hover:text-[#1D3461]')}>
+                <Filter className="h-2.5 w-2.5" />
+                All <span className="font-bold">{nonSuperProfiles.length}</span>
+              </button>
               {(Object.entries(STATUS_UI) as [AccessStatus, typeof STATUS_UI[AccessStatus]][]).map(([key, ui]) => (
-                <div key={key} className="flex items-center gap-1.5">
-                  <span className={cn('w-2 h-2 rounded-full inline-block', ui.dot)} />
-                  <span className="text-[11px] text-muted-foreground">{ui.label}:</span>
-                  <span className="text-[11px] font-bold">{counts[key]}</span>
-                </div>
+                <button
+                  key={key}
+                  onClick={() => setStatusFilter(prev => prev === key ? 'all' : key)}
+                  className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all',
+                    statusFilter === key
+                      ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                      : 'bg-background border-muted-foreground/30 text-muted-foreground hover:border-[#1D3461] hover:text-[#1D3461]')}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full inline-block', ui.dot)} />
+                  {ui.label} <span className="font-bold">{counts[key]}</span>
+                </button>
               ))}
             </div>
           </div>
@@ -966,8 +1099,15 @@ export default function PageAccessControl() {
           {/* User list */}
           <div className="flex-1 overflow-y-auto px-6 py-3">
             <div className="space-y-1 max-w-3xl">
+              {sortedUsers.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Filter className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">No users match this filter.</p>
+                  <button onClick={() => setStatusFilter('all')} className="text-xs text-[#1D3461] hover:underline mt-1">Clear filter</button>
+                </div>
+              )}
               {sortedUsers.map(profile => {
-                const status = getAccessStatus(selectedPage, profile, pageOverrideMap);
+                const status = getAccessStatus(selectedPage, profile, pageOverrideMap, effectiveRoles);
                 const ov = pageOverrideMap[profile.id];
                 return (
                   <UserAccessRow
