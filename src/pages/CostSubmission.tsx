@@ -2598,8 +2598,26 @@ const CostSubmission = () => {
     setActionProcessing(true);
     try {
       // Reverse any pre-fund linkage first (restores fund balance + allocation)
-      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
-      await unlinkPaymentFromPreFund('operational_cost_submissions', deleteConfirm.id);
+      const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
+      const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', deleteConfirm.id);
+
+      // If unlink_payment_atomically_rpc is not yet deployed, fall back to
+      // reverseDirectDeduction (mirrors DownPaymentContext cancel/delete pattern)
+      if (!unlinkResult.unlinked) {
+        const { data: ocRow } = await (supabase as any)
+          .from('operational_cost_submissions')
+          .select('amount_cents, submitted_by, metadata')
+          .eq('id', deleteConfirm.id)
+          .single();
+        const meta = (ocRow?.metadata ?? {}) as any;
+        if (meta.pre_fund_deducted === true && meta.pre_fund_id && ocRow?.amount_cents) {
+          await reverseDirectDeduction(
+            meta.pre_fund_id,
+            ocRow.amount_cents / 100,
+            ocRow.submitted_by ?? null,
+          );
+        }
+      }
 
       let query = supabase
         .from('operational_cost_submissions')
