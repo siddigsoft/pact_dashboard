@@ -20,7 +20,7 @@ import {
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
   Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
   ExternalLink, ChevronDown, History, Trash2, Filter, AlertCircle,
-  Info, Receipt, User, Clock, FileSpreadsheet,
+  Info, Receipt, User, Clock, FileSpreadsheet, Hash,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -1974,124 +1974,181 @@ export default function PreFundingReconciliation() {
                   ).entries()];
                   const uniqueDates = [...new Set(transactions.map(t => t.transaction_date.split('T')[0]))].sort().reverse();
 
+                  // Cycle indicator: none → some → all
+                  const cycleState: 'none' | 'some' | 'all' = allSelected ? 'all' : someSelected ? 'some' : 'none';
+
                   return (
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      {/* Select-all toggle */}
-                      <button
-                        onClick={() => setSelectedTxnIds(allSelected ? new Set() : new Set(transactions.map(t => t.id)))}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
-                          allSelected
-                            ? 'bg-[#1D3461] text-white border-[#1D3461]'
-                            : 'bg-background border-muted-foreground/30 text-muted-foreground hover:border-[#1D3461] hover:text-[#1D3461]'
-                        )}
-                        data-testid="button-select-all-txns"
-                      >
-                        <Checkbox
-                          checked={allSelected}
-                          className="h-3 w-3 border-current data-[state=checked]:bg-white data-[state=checked]:text-[#1D3461] pointer-events-none"
-                        />
-                        {allSelected ? 'Deselect all' : 'Select all'}
-                      </button>
+                    <div className={cn(
+                      'rounded-xl border mb-3 overflow-hidden transition-all',
+                      someSelected
+                        ? 'border-[#1D3461]/30 shadow-sm'
+                        : 'border-border'
+                    )}>
+                      {/* ── Main select/filter row ── */}
+                      <div className="flex items-center gap-0 px-3 py-2 bg-muted/20">
 
-                      <span className="text-[10px] text-muted-foreground shrink-0">Quick select:</span>
-
-                      {/* By Reference */}
-                      {uniqueRefs.length > 0 && (
-                        <Select value={groupByRef} onValueChange={val => {
-                          setGroupByRef('');
-                          setSelectedTxnIds(prev => {
-                            const next = new Set(prev);
-                            transactions.filter(t => t.reference === val).forEach(t => next.add(t.id));
-                            return next;
-                          });
-                        }}>
-                          <SelectTrigger className="h-6 text-[11px] w-auto min-w-[130px] px-2 border-dashed" data-testid="select-group-by-ref">
-                            <SelectValue placeholder="Same Reference…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {uniqueRefs.map(r => (
-                              <SelectItem key={r} value={r} className="text-xs">
-                                {r} ({transactions.filter(t => t.reference === r).length} txns)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-
-                      {/* By Collector */}
-                      {uniqueCollectors.length > 0 && (
-                        <Select value={groupByCollector} onValueChange={val => {
-                          setGroupByCollector('');
-                          setSelectedTxnIds(prev => {
-                            const next = new Set(prev);
-                            transactions.filter(t => t.user_id === val).forEach(t => next.add(t.id));
-                            return next;
-                          });
-                        }}>
-                          <SelectTrigger className="h-6 text-[11px] w-auto min-w-[130px] px-2 border-dashed" data-testid="select-group-by-collector">
-                            <SelectValue placeholder="By Collector…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {uniqueCollectors.map(([uid, name]) => (
-                              <SelectItem key={uid} value={uid} className="text-xs">
-                                {name} ({transactions.filter(t => t.user_id === uid).length} txns)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-
-                      {/* By Date */}
-                      <Select value={groupByDate} onValueChange={val => {
-                        setGroupByDate('');
-                        setSelectedTxnIds(prev => {
-                          const next = new Set(prev);
-                          transactions.filter(t => t.transaction_date.startsWith(val)).forEach(t => next.add(t.id));
-                          return next;
-                        });
-                      }}>
-                        <SelectTrigger className="h-6 text-[11px] w-auto min-w-[110px] px-2 border-dashed" data-testid="select-group-by-date">
-                          <SelectValue placeholder="By Date…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uniqueDates.map(d => (
-                            <SelectItem key={d} value={d} className="text-xs">
-                              {format(parseISO(d), 'MMM d, yyyy')} ({transactions.filter(t => t.transaction_date.startsWith(d)).length} txns)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      {/* Bulk action bar — shows when anything is selected */}
-                      {someSelected && (
-                        <>
-                          <div className="flex-1" />
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-medium text-[#1D3461]">
-                              {selectedTxnIds.size} selected · {currency} {formatNumber(selectedTotal, 0)}
-                            </span>
-                            <button
-                              onClick={() => setSelectedTxnIds(new Set())}
-                              className="text-[10px] text-muted-foreground hover:text-foreground underline transition-colors"
-                              data-testid="button-clear-selection"
-                            >
-                              Clear
-                            </button>
-                            <Button
-                              size="sm" variant="destructive"
-                              className="h-6 text-xs px-2.5 gap-1"
-                              onClick={() => setConfirmBulkDelete(true)}
-                              disabled={bulkDeleting}
-                              data-testid="button-bulk-delete"
-                            >
-                              {bulkDeleting
-                                ? <><RefreshCw className="h-3 w-3 animate-spin" />Removing…</>
-                                : <><Trash2 className="h-3 w-3" />Delete {selectedTxnIds.size}</>
-                              }
-                            </Button>
+                        {/* Cycle select-all button */}
+                        <button
+                          onClick={() => setSelectedTxnIds(allSelected ? new Set() : new Set(transactions.map(t => t.id)))}
+                          className="flex items-center gap-2 pr-3 mr-3 border-r border-border/60 shrink-0 group"
+                          data-testid="button-select-all-txns"
+                        >
+                          {/* Animated ring indicator */}
+                          <div className={cn(
+                            'relative h-5 w-5 rounded-full border-2 transition-all duration-200 flex items-center justify-center shrink-0',
+                            cycleState === 'all'  ? 'bg-[#1D3461] border-[#1D3461]' :
+                            cycleState === 'some' ? 'bg-blue-50 border-blue-500 dark:bg-blue-950/40' :
+                            'border-muted-foreground/40 bg-background group-hover:border-[#1D3461]/60'
+                          )}>
+                            {cycleState === 'all'  && <div className="h-2 w-2 rounded-full bg-white" />}
+                            {cycleState === 'some' && <div className="h-0.5 w-2.5 rounded-full bg-blue-500" />}
                           </div>
-                        </>
+                          <span className={cn(
+                            'text-[11px] font-medium transition-colors whitespace-nowrap',
+                            cycleState === 'all'  ? 'text-[#1D3461]' :
+                            cycleState === 'some' ? 'text-blue-600 dark:text-blue-400' :
+                            'text-muted-foreground group-hover:text-foreground'
+                          )}>
+                            {cycleState === 'all' ? 'Deselect all' : 'Select all'}
+                          </span>
+                        </button>
+
+                        {/* Group-select pills */}
+                        <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                          <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60 mr-0.5 shrink-0">Group:</span>
+
+                          {/* By Reference */}
+                          {uniqueRefs.length > 0 && (
+                            <Select value={groupByRef} onValueChange={val => {
+                              setGroupByRef('');
+                              setSelectedTxnIds(prev => {
+                                const next = new Set(prev);
+                                transactions.filter(t => t.reference === val).forEach(t => next.add(t.id));
+                                return next;
+                              });
+                            }}>
+                              <SelectTrigger
+                                className="h-6 text-[10px] font-medium w-auto px-2.5 rounded-full border bg-background hover:bg-[#1D3461]/5 hover:border-[#1D3461]/40 gap-1 [&>svg]:hidden transition-colors"
+                                data-testid="select-group-by-ref"
+                              >
+                                <Hash className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                                <SelectValue placeholder="By Reference" />
+                                <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {uniqueRefs.map(r => (
+                                  <SelectItem key={r} value={r} className="text-xs">
+                                    <span className="font-mono">{r}</span>
+                                    <span className="text-muted-foreground ml-1">· {transactions.filter(t => t.reference === r).length} txns</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+
+                          {/* By Collector */}
+                          {uniqueCollectors.length > 0 && (
+                            <Select value={groupByCollector} onValueChange={val => {
+                              setGroupByCollector('');
+                              setSelectedTxnIds(prev => {
+                                const next = new Set(prev);
+                                transactions.filter(t => t.user_id === val).forEach(t => next.add(t.id));
+                                return next;
+                              });
+                            }}>
+                              <SelectTrigger
+                                className="h-6 text-[10px] font-medium w-auto px-2.5 rounded-full border bg-background hover:bg-[#1D3461]/5 hover:border-[#1D3461]/40 gap-1 [&>svg]:hidden transition-colors"
+                                data-testid="select-group-by-collector"
+                              >
+                                <User className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                                <SelectValue placeholder="By Collector" />
+                                <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {uniqueCollectors.map(([uid, name]) => (
+                                  <SelectItem key={uid} value={uid} className="text-xs">
+                                    {name}
+                                    <span className="text-muted-foreground ml-1">· {transactions.filter(t => t.user_id === uid).length} txns</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+
+                          {/* By Date */}
+                          <Select value={groupByDate} onValueChange={val => {
+                            setGroupByDate('');
+                            setSelectedTxnIds(prev => {
+                              const next = new Set(prev);
+                              transactions.filter(t => t.transaction_date.startsWith(val)).forEach(t => next.add(t.id));
+                              return next;
+                            });
+                          }}>
+                            <SelectTrigger
+                              className="h-6 text-[10px] font-medium w-auto px-2.5 rounded-full border bg-background hover:bg-[#1D3461]/5 hover:border-[#1D3461]/40 gap-1 [&>svg]:hidden transition-colors"
+                              data-testid="select-group-by-date"
+                            >
+                              <Calendar className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                              <SelectValue placeholder="By Date" />
+                              <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {uniqueDates.map(d => (
+                                <SelectItem key={d} value={d} className="text-xs">
+                                  {format(parseISO(d), 'MMM d, yyyy')}
+                                  <span className="text-muted-foreground ml-1">· {transactions.filter(t => t.transaction_date.startsWith(d)).length} txns</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Count badge (always visible, shows 0 when none) */}
+                        <div className={cn(
+                          'flex items-center gap-1.5 ml-2 pl-3 border-l border-border/60 shrink-0 transition-all',
+                          someSelected ? 'opacity-100' : 'opacity-40'
+                        )}>
+                          <span className={cn(
+                            'text-[10px] font-semibold tabular-nums transition-colors',
+                            someSelected ? 'text-[#1D3461]' : 'text-muted-foreground'
+                          )}>
+                            {selectedTxnIds.size} of {transactions.length}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* ── Bulk action strip (slides in when selected) ── */}
+                      {someSelected && (
+                        <div className="flex items-center gap-3 px-3 py-2 bg-[#1D3461]/5 border-t border-[#1D3461]/15">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461] shrink-0" />
+                            <span className="text-[11px] font-semibold text-[#1D3461] truncate">
+                              {selectedTxnIds.size} transaction{selectedTxnIds.size !== 1 ? 's' : ''} selected
+                            </span>
+                            <span className="text-[11px] text-muted-foreground shrink-0">
+                              · {currency} {formatNumber(selectedTotal, 0)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setSelectedTxnIds(new Set())}
+                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            data-testid="button-clear-selection"
+                          >
+                            <X className="h-3 w-3" /> Clear
+                          </button>
+                          <Button
+                            size="sm" variant="destructive"
+                            className="h-7 text-xs px-3 gap-1.5 rounded-lg shrink-0"
+                            onClick={() => setConfirmBulkDelete(true)}
+                            disabled={bulkDeleting}
+                            data-testid="button-bulk-delete"
+                          >
+                            {bulkDeleting
+                              ? <><RefreshCw className="h-3 w-3 animate-spin" />Removing…</>
+                              : <><Trash2 className="h-3 w-3" />Delete {selectedTxnIds.size}</>
+                            }
+                          </Button>
+                        </div>
                       )}
                     </div>
                   );
@@ -2110,12 +2167,31 @@ export default function PreFundingReconciliation() {
                       <TableHeader>
                         <TableRow className="text-[11px]">
                           <TableHead className="w-8 text-center px-2">
-                            <Checkbox
-                              checked={transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id))}
-                              onCheckedChange={checked => setSelectedTxnIds(checked ? new Set(transactions.map(t => t.id)) : new Set())}
-                              className="h-3.5 w-3.5"
+                            <button
+                              onClick={() => setSelectedTxnIds(
+                                transactions.every(t => selectedTxnIds.has(t.id))
+                                  ? new Set()
+                                  : new Set(transactions.map(t => t.id))
+                              )}
+                              className="group mx-auto flex items-center justify-center"
                               data-testid="checkbox-select-all-header"
-                            />
+                            >
+                              <div className={cn(
+                                'h-4 w-4 rounded-full border-2 transition-all duration-150 flex items-center justify-center',
+                                transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id))
+                                  ? 'bg-[#1D3461] border-[#1D3461]'
+                                  : selectedTxnIds.size > 0
+                                  ? 'bg-blue-50 border-blue-400 dark:bg-blue-950/30'
+                                  : 'border-muted-foreground/30 group-hover:border-[#1D3461]/50'
+                              )}>
+                                {transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id)) && (
+                                  <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                                )}
+                                {selectedTxnIds.size > 0 && !transactions.every(t => selectedTxnIds.has(t.id)) && (
+                                  <div className="h-px w-2 rounded-full bg-blue-500" />
+                                )}
+                              </div>
+                            </button>
                           </TableHead>
                           <TableHead className="whitespace-nowrap">Date</TableHead>
                           <TableHead>Type</TableHead>
@@ -2166,18 +2242,26 @@ export default function PreFundingReconciliation() {
                             onClick={() => handleDrillDown(t)}
                           >
                             <TableCell className="w-8 text-center px-2" onClick={e => e.stopPropagation()}>
-                              <Checkbox
-                                checked={selectedTxnIds.has(t.id)}
-                                onCheckedChange={checked => {
-                                  setSelectedTxnIds(prev => {
-                                    const next = new Set(prev);
-                                    checked ? next.add(t.id) : next.delete(t.id);
-                                    return next;
-                                  });
-                                }}
-                                className="h-3.5 w-3.5"
+                              <button
+                                onClick={() => setSelectedTxnIds(prev => {
+                                  const next = new Set(prev);
+                                  next.has(t.id) ? next.delete(t.id) : next.add(t.id);
+                                  return next;
+                                })}
+                                className="group mx-auto flex items-center justify-center"
                                 data-testid={`checkbox-txn-${t.id}`}
-                              />
+                              >
+                                <div className={cn(
+                                  'h-4 w-4 rounded-full border-2 transition-all duration-150 flex items-center justify-center',
+                                  selectedTxnIds.has(t.id)
+                                    ? 'bg-[#1D3461] border-[#1D3461]'
+                                    : 'border-muted-foreground/25 group-hover:border-[#1D3461]/50 bg-background'
+                                )}>
+                                  {selectedTxnIds.has(t.id) && (
+                                    <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                                  )}
+                                </div>
+                              </button>
                             </TableCell>
                             <TableCell className="whitespace-nowrap">
                               <div>{format(parseISO(t.transaction_date), 'MMM d, yyyy')}</div>
