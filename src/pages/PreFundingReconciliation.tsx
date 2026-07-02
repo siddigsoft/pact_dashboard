@@ -53,15 +53,44 @@ interface Reconciliation {
   status: string; closed_at: string | null; pdf_url: string | null; notes: string | null;
 }
 
-const TXN_TYPE_CFG: Record<string, { label: string; color: string }> = {
-  receipt:       { label: 'Receipt',        color: 'text-emerald-600' },
-  commitment:    { label: 'Commitment',     color: 'text-violet-600' },
-  payment:       { label: 'Payment',        color: 'text-sky-600' },
-  reversal:      { label: 'Reversal',       color: 'text-orange-600' },
-  carry_forward: { label: 'Carry-Forward',  color: 'text-indigo-600' },
-  return:        { label: 'Return',         color: 'text-rose-600' },
-  adjustment:    { label: 'Adjustment',     color: 'text-amber-600' },
+const TXN_TYPE_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  receipt:       { label: 'Receipt',        color: 'text-emerald-700', bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' },
+  commitment:    { label: 'Commitment',     color: 'text-violet-700',  bg: 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800' },
+  payment:       { label: 'Payment',        color: 'text-sky-700',     bg: 'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800' },
+  reversal:      { label: 'Reversal',       color: 'text-orange-700',  bg: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800' },
+  carry_forward: { label: 'Carry-Forward',  color: 'text-indigo-700',  bg: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800' },
+  return:        { label: 'Return',         color: 'text-rose-700',    bg: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800' },
+  adjustment:    { label: 'Adjustment',     color: 'text-amber-700',   bg: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800' },
 };
+
+// Organised field layout for known source tables inside the drill-down modal
+const SOURCE_SECTIONS: Record<string, Array<{ label: string; keys: string[] }>> = {
+  down_payment_requests: [
+    { label: 'Site & Request',   keys: ['site_name','mmp_site_entry_id','requested_by','requested_at','requester_role','status'] },
+    { label: 'Financial',        keys: ['total_transportation_budget','requested_amount','payment_type','installment_plan','paid_installments','amount_per_installment'] },
+    { label: 'Hub',              keys: ['hub_id','hub_name','locality','state_name'] },
+    { label: 'Notes & Docs',     keys: ['justification','notes','rejection_reason','supporting_documents'] },
+  ],
+  operational_cost_submissions: [
+    { label: 'Request',          keys: ['title','expense_category','submitted_by','submitted_at','status','hub_id','hub_name'] },
+    { label: 'Financial',        keys: ['total_amount','approved_amount','currency','payment_method'] },
+    { label: 'Notes & Docs',     keys: ['description','notes','rejection_reason','supporting_documents'] },
+  ],
+};
+
+function getInitials(name: string): string {
+  return name.split(' ').filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('');
+}
+
+// Hue derived from first char so each person gets a consistent colour
+const AVATAR_COLORS = [
+  'bg-blue-600','bg-violet-600','bg-emerald-600','bg-rose-600',
+  'bg-amber-600','bg-cyan-600','bg-indigo-600','bg-pink-600',
+];
+function avatarColor(name: string): string {
+  const c = name.charCodeAt(0) || 0;
+  return AVATAR_COLORS[c % AVATAR_COLORS.length];
+}
 
 const SURPLUS_OPTIONS = [
   { value: 'carry_forward',    label: 'Carry Full Surplus to Next Period' },
@@ -658,7 +687,8 @@ export default function PreFundingReconciliation() {
   const [importing, setImporting]     = useState(false);
 
   // Profile name map (user_id → full name) for transaction table
-  const [profileMap, setProfileMap]   = useState<Map<string, string>>(new Map());
+  const [profileMap, setProfileMap]       = useState<Map<string, string>>(new Map());
+  const [profileEmailMap, setProfileEmailMap] = useState<Map<string, string>>(new Map());
   const [exportingExcel, setExportingExcel] = useState(false);
 
   // Inline receipt preview
@@ -791,10 +821,16 @@ export default function PreFundingReconciliation() {
         const { data: profiles } = await supabase
           .from('profiles').select('id,full_name,email').in('id', [...userIds]);
         const map = new Map<string, string>();
-        (profiles ?? []).forEach((p: any) => map.set(p.id, p.full_name || p.email || 'Unknown'));
+        const emailMap = new Map<string, string>();
+        (profiles ?? []).forEach((p: any) => {
+          map.set(p.id, p.full_name || p.email || 'Unknown');
+          if (p.email) emailMap.set(p.id, p.email);
+        });
         setProfileMap(map);
+        setProfileEmailMap(emailMap);
       } else {
         setProfileMap(new Map());
+        setProfileEmailMap(new Map());
       }
     } catch (e: any) { toast({ title: 'Failed to load transactions', description: e.message, variant: 'destructive' }); }
     finally { setTxnLoading(false); }
@@ -1131,6 +1167,11 @@ export default function PreFundingReconciliation() {
           setProfileMap(prev => {
             const next = new Map(prev);
             (profiles ?? []).forEach((p: any) => next.set(p.id, p.full_name || p.email || 'Unknown'));
+            return next;
+          });
+          setProfileEmailMap(prev => {
+            const next = new Map(prev);
+            (profiles ?? []).forEach((p: any) => { if (p.email) next.set(p.id, p.email); });
             return next;
           });
         }
@@ -2549,176 +2590,335 @@ export default function PreFundingReconciliation() {
 
       {/* ── Transaction Drill-Down Dialog ──────────────────────────────────── */}
       <Dialog open={!!drillTxn} onOpenChange={v => { if (!v) { setDrillTxn(null); setDrillSrc(null); } }}>
-        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
-          <DialogHeader className="shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <ExternalLink className="h-4 w-4" />
-              Transaction Detail
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-xl flex flex-col max-h-[90vh] p-0 gap-0 overflow-hidden">
+          {/* ── Sticky header ── */}
+          <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b shrink-0">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-muted-foreground" />
+              <span className="font-semibold text-base">Transaction Detail</span>
+            </div>
+            {drillTxn && (
+              <div className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border',
+                TXN_TYPE_CFG[drillTxn.transaction_type]?.bg ?? 'bg-muted border-border',
+                TXN_TYPE_CFG[drillTxn.transaction_type]?.color ?? 'text-foreground',
+              )}>
+                {TXN_TYPE_CFG[drillTxn.transaction_type]?.label ?? drillTxn.transaction_type}
+              </div>
+            )}
+          </div>
+
           {drillTxn && (
-            <div className="space-y-4 py-1 overflow-y-auto flex-1 pr-1">
-              {/* Core transaction fields */}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {([
-                  ['Payment Date',    format(parseISO(drillTxn.transaction_date), 'MMMM d, yyyy')],
-                  ['Recorded At',     format(parseISO(drillTxn.created_at), 'MMM d, yyyy HH:mm')],
-                  ['Type',            TXN_TYPE_CFG[drillTxn.transaction_type]?.label ?? drillTxn.transaction_type],
-                  ['Amount',          `${drillTxn.currency} ${formatNumber(drillTxn.amount, 0)}`],
-                  ['Reference',       drillTxn.reference ?? '—'],
-                  ['Source Module',   drillTxn.source_table ? drillTxn.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Manual Entry'],
-                  ['Reconciled',      drillTxn.reconciled ? `Yes — ${drillTxn.reconciled_at ? format(parseISO(drillTxn.reconciled_at), 'MMM d, yyyy HH:mm') : ''}` : 'No'],
-                  ['GL Journal',      drillTxn.gl_journal_entry_id ?? '—'],
-                ] as [string,string][]).map(([k, v]) => (
-                  <div key={k}>
-                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{k}</p>
-                    <p className="font-medium mt-0.5 text-sm">{v}</p>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+
+              {/* ── Hero: amount + status badges ── */}
+              <div className="rounded-xl border bg-gradient-to-br from-[#1D3461]/6 to-transparent p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-3xl font-bold tabular-nums text-[#1D3461] dark:text-blue-300 tracking-tight">
+                      {drillTxn.currency} {formatNumber(drillTxn.amount, 0)}
+                    </p>
+                    {drillTxn.description && (
+                      <p className="text-sm text-muted-foreground mt-1 leading-snug line-clamp-2">{drillTxn.description}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {drillTxn.reconciled ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                          <CheckCircle2 className="h-3 w-3" />Reconciled
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border">
+                          Pending reconciliation
+                        </span>
+                      )}
+                      {drillTxn.gl_journal_entry_id && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-800">
+                          GL Posted
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ))}
-                <div className="col-span-2">
-                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Description</p>
-                  <p className="font-medium mt-0.5 text-sm">{drillTxn.description ?? '—'}</p>
+                  {drillTxn.reference && (
+                    <div className="text-right shrink-0 bg-background rounded-lg border px-3 py-2">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Reference</p>
+                      <p className="font-mono font-semibold text-sm mt-0.5">{drillTxn.reference}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* People */}
-              {(drillTxn.user_id || drillTxn.created_by) && (
-                <>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    {drillTxn.user_id && (
-                      <div>
-                        <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1"><User className="h-3 w-3" />Paid By</p>
-                        <p className="font-medium mt-0.5">{profileMap.get(drillTxn.user_id) ?? drillTxn.user_id.slice(0,8)}</p>
-                      </div>
-                    )}
-                    {drillTxn.created_by && (
-                      <div>
-                        <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1"><Clock className="h-3 w-3" />Recorded By</p>
-                        <p className="font-medium mt-0.5">{profileMap.get(drillTxn.created_by) ?? drillTxn.created_by.slice(0,8)}</p>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+              {/* ── Date timeline ── */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-muted/30 border rounded-xl px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1 mb-1">
+                    <Calendar className="h-2.5 w-2.5" /> Payment Date
+                  </p>
+                  <p className="text-sm font-semibold">{format(parseISO(drillTxn.transaction_date), 'MMM d, yyyy')}</p>
+                  <p className="text-[11px] text-muted-foreground">{format(parseISO(drillTxn.transaction_date), 'EEEE')}</p>
+                </div>
+                <div className="bg-muted/30 border rounded-xl px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1 mb-1">
+                    <Clock className="h-2.5 w-2.5" /> Recorded At
+                  </p>
+                  <p className="text-sm font-semibold">{format(parseISO(drillTxn.created_at), 'MMM d, yyyy')}</p>
+                  <p className="text-[11px] text-muted-foreground">{format(parseISO(drillTxn.created_at), 'HH:mm')}</p>
+                </div>
+              </div>
 
-              {/* Receipt */}
-              {drillTxn.receipt_url && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1"><Receipt className="h-3 w-3" />Receipt / Proof of Payment</p>
-
-                    {/* Batch receipt banner */}
-                    {receiptGroupMap.has(drillTxn.receipt_url) && (() => {
-                      const group = receiptGroupMap.get(drillTxn.receipt_url)!;
-                      const total = group.reduce((s, t) => s + t.amount, 0);
-                      return (
-                        <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-                          <Shuffle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
-                          <div>
-                            <p className="font-semibold">Batch receipt — 1 receipt covers {group.length} transactions</p>
-                            <p className="text-amber-700 dark:text-amber-400 mt-0.5">
-                              Total covered: {drillTxn.currency} {formatNumber(total, 0)}
-                            </p>
-                            <div className="mt-1.5 space-y-0.5">
-                              {group.map((t, i) => (
-                                <div key={t.id} className="flex justify-between gap-4">
-                                  <span className="text-amber-700/80 dark:text-amber-400/80">
-                                    {i + 1}. {t.description ?? t.reference ?? `Txn ${t.id.slice(0, 8)}`}
-                                  </span>
-                                  <span className="font-mono font-medium shrink-0">{t.currency} {formatNumber(t.amount, 0)}</span>
-                                </div>
-                              ))}
+              {/* ── People ── */}
+              {(drillTxn.user_id || drillTxn.created_by) && (() => {
+                const people: Array<{ label: string; uid: string }> = [];
+                if (drillTxn.user_id)    people.push({ label: 'Paid By',     uid: drillTxn.user_id });
+                if (drillTxn.created_by) people.push({ label: 'Recorded By', uid: drillTxn.created_by });
+                return (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">People</p>
+                    <div className={cn('grid gap-2', people.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
+                      {people.map(({ label, uid }) => {
+                        const name  = profileMap.get(uid) ?? uid.slice(0,8) + '…';
+                        const email = profileEmailMap.get(uid);
+                        const initials = getInitials(name);
+                        const bgCls = avatarColor(name);
+                        return (
+                          <div key={uid} className="flex items-center gap-3 border rounded-xl px-3 py-2.5 bg-background">
+                            <div className={cn('h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0', bgCls)}>
+                              {initials}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
+                              <p className="text-sm font-semibold leading-tight truncate">{name}</p>
+                              {email && <p className="text-[11px] text-muted-foreground truncate">{email}</p>}
                             </div>
                           </div>
-                        </div>
-                      );
-                    })()}
-
-                    {(() => {
-                      const cleanUrl = normalizeReceiptUrl(drillTxn.receipt_url);
-                      if (!cleanUrl) return null;
-                      return cleanUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ? (
-                        <button onClick={() => setPreviewReceiptUrl(cleanUrl)} className="w-full text-left">
-                          <img src={cleanUrl} alt="Receipt" className="max-h-48 rounded-lg border object-contain w-full hover:opacity-90 transition-opacity cursor-pointer" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setPreviewReceiptUrl(cleanUrl)}
-                          className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-lg px-3 py-2 border border-sky-200 dark:border-sky-800 w-full"
-                        >
-                          <Receipt className="h-4 w-4 shrink-0" />
-                          View Receipt / Attachment
-                          <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
-                        </button>
-                      );
-                    })()}
+                        );
+                      })}
+                    </div>
                   </div>
-                </>
+                );
+              })()}
+
+              {/* ── Transaction metadata ── */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Transaction Info</p>
+                <div className="rounded-xl border overflow-hidden">
+                  {([
+                    ['Source Module',  drillTxn.source_table
+                      ? drillTxn.source_table.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())
+                      : 'Manual Entry'],
+                    ['GL Journal',     drillTxn.gl_journal_entry_id ?? null],
+                    ['Reconciled At',  drillTxn.reconciled && drillTxn.reconciled_at
+                      ? format(parseISO(drillTxn.reconciled_at), 'MMM d, yyyy HH:mm')
+                      : null],
+                    ['Transaction ID', drillTxn.id],
+                  ] as [string, string | null][])
+                    .filter(([,v]) => v != null)
+                    .map(([k, v], i, arr) => (
+                      <div key={k} className={cn(
+                        'flex items-center justify-between gap-4 px-3 py-2 text-sm',
+                        i < arr.length - 1 && 'border-b'
+                      )}>
+                        <span className="text-muted-foreground text-xs shrink-0">{k}</span>
+                        <span className={cn(
+                          'font-medium text-xs text-right truncate max-w-[240px]',
+                          k === 'Transaction ID' && 'font-mono text-muted-foreground'
+                        )}>
+                          {k === 'Transaction ID' ? `${v!.slice(0,8)}…${v!.slice(-4)}` : v}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* ── Receipt ── */}
+              {drillTxn.receipt_url && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+                    <Receipt className="h-3 w-3" /> Receipt / Proof of Payment
+                  </p>
+                  {receiptGroupMap.has(drillTxn.receipt_url) && (() => {
+                    const group = receiptGroupMap.get(drillTxn.receipt_url)!;
+                    const total = group.reduce((s, t) => s + t.amount, 0);
+                    return (
+                      <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-2">
+                        <Shuffle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
+                        <div>
+                          <p className="font-semibold">Batch receipt — 1 receipt covers {group.length} transactions</p>
+                          <p className="text-amber-700 dark:text-amber-400 mt-0.5">Total: {drillTxn.currency} {formatNumber(total, 0)}</p>
+                          <div className="mt-1.5 space-y-0.5">
+                            {group.map((t, i) => (
+                              <div key={t.id} className="flex justify-between gap-4">
+                                <span className="text-amber-700/80 dark:text-amber-400/80">
+                                  {i + 1}. {t.description ?? t.reference ?? `Txn ${t.id.slice(0,8)}`}
+                                </span>
+                                <span className="font-mono font-medium shrink-0">{t.currency} {formatNumber(t.amount, 0)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const cleanUrl = normalizeReceiptUrl(drillTxn.receipt_url);
+                    if (!cleanUrl) return null;
+                    return cleanUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ? (
+                      <button onClick={() => setPreviewReceiptUrl(cleanUrl)} className="w-full text-left">
+                        <img src={cleanUrl} alt="Receipt" className="max-h-48 rounded-xl border object-contain w-full hover:opacity-90 transition-opacity cursor-pointer" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setPreviewReceiptUrl(cleanUrl)}
+                        className="flex items-center gap-2 text-sky-600 hover:text-sky-700 text-sm font-medium bg-sky-50 dark:bg-sky-950/20 rounded-xl px-3 py-2.5 border border-sky-200 dark:border-sky-800 w-full transition-colors"
+                      >
+                        <Receipt className="h-4 w-4 shrink-0" />
+                        View Receipt / Attachment
+                        <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
+                      </button>
+                    );
+                  })()}
+                </div>
               )}
 
-              {/* Source record details */}
+              {/* ── Source record ── */}
               {drillTxn.source_id && (
-                <>
-                  <Separator />
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                      Source Record {loadingDrill && <span className="text-[10px] font-normal">(loading…)</span>}
-                    </p>
-                    {loadingDrill ? (
-                      <div className="space-y-1.5">{[1,2,3].map(i => <Skeleton key={i} className="h-4 w-full" />)}</div>
-                    ) : drillSrc ? (
-                      <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1.5">
-                        {Object.entries(drillSrc)
-                          .filter(([k, v]) => v != null && v !== '' && !['id','pre_fund_request_id','mmp_id','mmp_file_id'].includes(k))
-                          .slice(0, 14)
-                          .map(([k, v]) => {
-                            // Friendly label
-                            const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                            // Resolve value
-                            let display: React.ReactNode;
-                            const str = String(v);
-                            if (k.includes('_at') || k.includes('_date')) {
-                              try { display = format(parseISO(str), 'MMM d, yyyy HH:mm'); } catch { display = str; }
-                            } else if (k.includes('receipt') || k.includes('url') || k.includes('proof')) {
-                              display = <a href={str} target="_blank" rel="noreferrer" className="text-sky-600 underline">View file</a>;
-                            } else if (
-                              UUID_RE.test(str) &&
-                              (USER_ID_FIELDS.has(k) || k.endsWith('_by') || k.endsWith('_user_id'))
-                            ) {
-                              // Resolve UUID to name
-                              display = (
-                                <span className="flex items-center gap-1">
-                                  <User className="h-3 w-3 text-muted-foreground shrink-0" />
-                                  {profileMap.get(str) ?? str.slice(0, 8) + '…'}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Link2 className="h-3 w-3" />
+                    {drillTxn.source_table
+                      ? drillTxn.source_table.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())
+                      : 'Source Record'}
+                    {loadingDrill && <span className="text-[10px] font-normal text-muted-foreground">(loading…)</span>}
+                  </p>
+
+                  {loadingDrill ? (
+                    <div className="space-y-2">{[1,2,3,4].map(i => <Skeleton key={i} className="h-5 w-full" />)}</div>
+                  ) : drillSrc ? (() => {
+                    // Helper to render a single source field value
+                    const renderVal = (k: string, v: unknown): React.ReactNode => {
+                      if (v == null || v === '') return null;
+                      const str = String(v);
+                      if (k.includes('_at') || k.includes('_date')) {
+                        try { return format(parseISO(str), 'MMM d, yyyy HH:mm'); } catch { return str; }
+                      }
+                      if (k.includes('receipt') || k.includes('url') || k.includes('proof') || k.includes('document')) {
+                        return <a href={str} target="_blank" rel="noreferrer" className="text-sky-600 underline text-xs">View file ↗</a>;
+                      }
+                      if (UUID_RE.test(str) && (USER_ID_FIELDS.has(k) || k.endsWith('_by') || k.endsWith('_user_id'))) {
+                        const uname = profileMap.get(str);
+                        return (
+                          <span className="flex items-center gap-1.5">
+                            {uname ? (
+                              <>
+                                <span className={cn('h-4 w-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0', avatarColor(uname))}>
+                                  {getInitials(uname)}
                                 </span>
-                              );
-                            } else if (UUID_RE.test(str)) {
-                              // Generic UUID — show shortened
-                              display = str.slice(0, 8) + '…';
-                            } else {
-                              display = str;
-                            }
+                                <span>{uname}</span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">{str.slice(0,8)}…</span>
+                            )}
+                          </span>
+                        );
+                      }
+                      if (UUID_RE.test(str)) return <span className="font-mono text-muted-foreground text-[11px]">{str.slice(0,8)}…</span>;
+                      // Numeric-looking values — just show as-is (they may be budget amounts)
+                      return str;
+                    };
+
+                    const sections = SOURCE_SECTIONS[drillTxn.source_table ?? ''];
+                    const SKIP_KEYS = new Set(['id','pre_fund_request_id','mmp_id','mmp_file_id','pre_fund_transaction_id']);
+
+                    if (sections) {
+                      // Structured layout for known tables
+                      return (
+                        <div className="space-y-3">
+                          {sections.map(sec => {
+                            const rows = sec.keys
+                              .map(k => [k, drillSrc[k]] as [string, unknown])
+                              .filter(([, v]) => v != null && v !== '');
+                            if (rows.length === 0) return null;
                             return (
-                              <div key={k} className="flex justify-between gap-4">
-                                <span className="text-muted-foreground shrink-0">{label}</span>
-                                <span className="font-medium truncate max-w-[240px] text-right">{display}</span>
+                              <div key={sec.label} className="rounded-xl border overflow-hidden">
+                                <div className="bg-muted/40 px-3 py-1.5 border-b">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{sec.label}</p>
+                                </div>
+                                <div className="divide-y">
+                                  {rows.map(([k, v]) => {
+                                    const display = renderVal(k, v);
+                                    if (display == null) return null;
+                                    const label = k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+                                    return (
+                                      <div key={k} className="flex items-center justify-between gap-4 px-3 py-2">
+                                        <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+                                        <span className="text-xs font-medium text-right max-w-[220px] truncate">{display}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             );
                           })}
+                          {/* Any leftover keys not in the section map */}
+                          {(() => {
+                            const coveredKeys = new Set(sections.flatMap(s => s.keys));
+                            const leftover = Object.entries(drillSrc)
+                              .filter(([k, v]) => !coveredKeys.has(k) && !SKIP_KEYS.has(k) && v != null && v !== '');
+                            if (leftover.length === 0) return null;
+                            return (
+                              <div className="rounded-xl border overflow-hidden">
+                                <div className="bg-muted/40 px-3 py-1.5 border-b">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Other</p>
+                                </div>
+                                <div className="divide-y">
+                                  {leftover.map(([k, v]) => {
+                                    const display = renderVal(k, v);
+                                    if (display == null) return null;
+                                    return (
+                                      <div key={k} className="flex items-center justify-between gap-4 px-3 py-2">
+                                        <span className="text-xs text-muted-foreground shrink-0">{k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
+                                        <span className="text-xs font-medium text-right max-w-[220px] truncate">{display}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      );
+                    }
+
+                    // Generic fallback for unknown source tables
+                    const rows = Object.entries(drillSrc)
+                      .filter(([k, v]) => v != null && v !== '' && !SKIP_KEYS.has(k))
+                      .slice(0, 20);
+                    return (
+                      <div className="rounded-xl border overflow-hidden">
+                        <div className="divide-y">
+                          {rows.map(([k, v]) => {
+                            const display = renderVal(k, v);
+                            if (display == null) return null;
+                            return (
+                              <div key={k} className="flex items-center justify-between gap-4 px-3 py-2">
+                                <span className="text-xs text-muted-foreground shrink-0">{k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
+                                <span className="text-xs font-medium text-right max-w-[220px] truncate">{display}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No source record found or not accessible.</p>
-                    )}
-                  </div>
-                </>
+                    );
+                  })() : (
+                    <p className="text-sm text-muted-foreground italic">No source record found or not accessible.</p>
+                  )}
+                </div>
               )}
             </div>
           )}
-          <DialogFooter className="shrink-0 pt-2 border-t">
+
+          <div className="shrink-0 px-5 py-3 border-t flex justify-end">
             <Button variant="outline" onClick={() => { setDrillTxn(null); setDrillSrc(null); }}>Close</Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
