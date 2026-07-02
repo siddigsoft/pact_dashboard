@@ -485,6 +485,31 @@ const STATUS_UI = {
   denied:  { label: 'No Access',           cls: 'bg-slate-100 text-slate-500',  dot: 'bg-slate-300',   icon: UserX    },
 };
 
+// ── Granular permissions (R/W/C/D) ────────────────────────────────────────────
+// Stored as JSON in page_access_overrides.notes: {"r":true,"w":false,"c":false,"d":false}
+// This avoids any DB schema migration — the notes column is already TEXT / nullable.
+export type Perms = { r: boolean; w: boolean; c: boolean; d: boolean };
+export const DEFAULT_PERMS: Perms = { r: true, w: false, c: false, d: false };
+
+export function parsePermissions(notes: string | null): Perms {
+  if (!notes) return { ...DEFAULT_PERMS };
+  try {
+    const p = JSON.parse(notes);
+    if (p && typeof p === 'object' && 'r' in p)
+      return { r: !!p.r, w: !!p.w, c: !!p.c, d: !!p.d };
+  } catch { /* ignore */ }
+  return { ...DEFAULT_PERMS };
+}
+
+function packPermissions(perms: Perms): string { return JSON.stringify(perms); }
+
+const PERM_DEFS: { key: keyof Perms; label: string; desc: string; activeClass: string }[] = [
+  { key: 'r', label: 'Read',   desc: 'View and read data on this page',  activeClass: 'bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-900/30 dark:text-sky-300' },
+  { key: 'w', label: 'Write',  desc: 'Edit and update existing records', activeClass: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300' },
+  { key: 'c', label: 'Create', desc: 'Create new records on this page',  activeClass: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300' },
+  { key: 'd', label: 'Delete', desc: 'Delete records on this page',      activeClass: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-300' },
+];
+
 export type AccessStatus = keyof typeof STATUS_UI;
 const STATUS_ORDER: Record<AccessStatus, number> = { blocked: 0, granted: 1, role: 2, denied: 3 };
 
@@ -505,7 +530,7 @@ export function UserAccessRow({
   override,
   isSaving,
   pageLabel,
-  onGrant,
+  onTogglePerm,
   onBlock,
   onReset,
 }: {
@@ -514,13 +539,26 @@ export function UserAccessRow({
   override?: PageOverride;
   isSaving: boolean;
   pageLabel: string;
-  onGrant: (level: 'view' | 'manage') => void;
+  onTogglePerm: (perms: Perms) => void;
   onBlock: () => void;
   onReset: () => void;
 }) {
   const ui = STATUS_UI[status];
   const Icon = ui.icon;
-  const grantedLevel = override && !override.is_blocked ? (override.level ?? 'view') : null;
+  const isGranted = status === 'granted';
+  const currentPerms = (isGranted && override) ? parsePermissions(override.notes) : { ...DEFAULT_PERMS };
+
+  function togglePerm(key: keyof Perms) {
+    const next = { ...currentPerms, [key]: !currentPerms[key] };
+    // Always keep at least Read when granting
+    if (!next.r && !next.w && !next.c && !next.d) next.r = true;
+    onTogglePerm(next);
+  }
+
+  function grantDefault() {
+    onTogglePerm({ ...DEFAULT_PERMS });
+  }
+
   return (
     <div className={cn(
       'flex items-center gap-3 p-3 rounded-xl border transition-colors group',
@@ -529,6 +567,7 @@ export function UserAccessRow({
       status === 'role'    ? 'bg-blue-50/20 border-blue-100/40' :
       'bg-card border-transparent hover:border-border'
     )}>
+      {/* Avatar */}
       <div className={cn(
         'w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0',
         status === 'denied' || status === 'blocked'
@@ -537,97 +576,103 @@ export function UserAccessRow({
       )}>
         {initials(profile.full_name)}
       </div>
+
+      {/* Name + role */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold truncate">{profile.full_name ?? 'Unknown'}</p>
         <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded-full capitalize inline-block mt-0.5', roleCls(profile.role))}>
           {roleLabel(profile.role)}
         </span>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className={cn('text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap', ui.cls)}>
-          <Icon className="h-3 w-3" />{ui.label}
-        </span>
-        {grantedLevel && (
-          <span className={cn(
-            'text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap',
-            grantedLevel === 'manage'
-              ? 'bg-purple-100 text-purple-700'
-              : 'bg-sky-100 text-sky-700'
-          )}>
-            {grantedLevel === 'manage' ? 'Manage' : 'View Only'}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-1 shrink-0 min-w-[150px] justify-end">
+
+      {/* Status badge */}
+      <span className={cn('text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap shrink-0', ui.cls)}>
+        <Icon className="h-3 w-3" />{ui.label}
+      </span>
+
+      {/* ── Granular permission toggles ────────────────────────────── */}
+      <div className="flex items-center gap-1 shrink-0">
         {isSaving ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : status === 'blocked' ? (
+          /* Blocked — show "Unblock with Read" button */
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="ghost"
+                className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-opacity"
+                onClick={grantDefault}>
+                <Unlock className="h-3 w-3 mr-1" />Unblock
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Unblock and grant Read access to {pageLabel}</TooltipContent>
+          </Tooltip>
         ) : (
           <>
-            {(status === 'denied' || status === 'blocked') && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost"
-                      className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-opacity"
-                      onClick={() => onGrant('view')}>
-                      <Unlock className="h-3 w-3 mr-1" />View
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs">Grant view-only access to {pageLabel}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost"
-                      className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-opacity"
-                      onClick={() => onGrant('manage')}>
-                      <Shield className="h-3 w-3 mr-1" />Manage
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs">Grant full manage (edit/create/delete) access to {pageLabel}</TooltipContent>
-                </Tooltip>
-              </>
-            )}
-            {status === 'granted' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="ghost"
-                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs transition-opacity"
-                    onClick={() => onGrant(grantedLevel === 'manage' ? 'view' : 'manage')}>
-                    {grantedLevel === 'manage'
-                      ? <><Unlock className="h-3 w-3 mr-1 text-sky-500" />→ View</>
-                      : <><Shield className="h-3 w-3 mr-1 text-purple-500" />→ Manage</>}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">
-                  Switch to {grantedLevel === 'manage' ? 'View Only' : 'Manage'} access
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {(status === 'role' || status === 'granted') && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="ghost"
-                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-opacity"
-                    onClick={onBlock}>
-                    <Lock className="h-3 w-3 mr-1" />Block
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Block {profile.full_name?.split(' ')[0]} from {pageLabel}</TooltipContent>
-              </Tooltip>
-            )}
-            {override && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="ghost"
-                    className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-muted-foreground hover:bg-muted transition-opacity"
-                    onClick={onReset}>
-                    Reset
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Remove override — revert to role-based access</TooltipContent>
-              </Tooltip>
-            )}
+            {/* R / W / C / D permission pills — always visible when granted; appear on hover when role/denied */}
+            <div className={cn(
+              'flex items-center gap-0.5 transition-opacity',
+              (status === 'role' || status === 'denied') && 'opacity-0 group-hover:opacity-100'
+            )}>
+              {PERM_DEFS.map(pd => {
+                const active = isGranted && currentPerms[pd.key];
+                return (
+                  <Tooltip key={pd.key}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => {
+                          if (!isGranted) {
+                            // Grant with this one perm enabled (+ Read always)
+                            onTogglePerm({ r: true, w: pd.key === 'w', c: pd.key === 'c', d: pd.key === 'd' });
+                          } else {
+                            togglePerm(pd.key);
+                          }
+                        }}
+                        className={cn(
+                          'text-[9px] font-bold px-1.5 py-1 rounded-md border transition-all',
+                          active
+                            ? pd.activeClass
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                        )}
+                      >
+                        {pd.label[0]}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      {active
+                        ? `Remove ${pd.label} permission from ${profile.full_name?.split(' ')[0]}`
+                        : `Grant ${pd.label} permission: ${pd.desc}`}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+
+            {/* Block */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost"
+                  className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-opacity ml-1"
+                  onClick={onBlock}>
+                  <Lock className="h-3 w-3 mr-1" />Block
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="text-xs">Block {profile.full_name?.split(' ')[0]} from {pageLabel}</TooltipContent>
+            </Tooltip>
           </>
+        )}
+
+        {/* Reset (always shown if override exists) */}
+        {override && !isSaving && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="ghost"
+                className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-muted-foreground hover:bg-muted transition-opacity"
+                onClick={onReset}>
+                Reset
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Remove override — revert to role-based access</TooltipContent>
+          </Tooltip>
         )}
       </div>
     </div>
@@ -692,17 +737,25 @@ export default function PageAccessControl() {
     );
   }
 
-  async function applyOverride(userId: string, isBlocked: boolean, level: 'view' | 'manage' = 'view', existingId?: string) {
+  async function applyOverride(userId: string, isBlocked: boolean, perms: Perms = DEFAULT_PERMS, existingId?: string) {
     setSavingId(userId);
     try {
+      // level stays backward-compatible: 'manage' if any write perm, else 'view'
+      const level: 'view' | 'manage' = (perms.w || perms.c || perms.d) ? 'manage' : 'view';
+      const notes = isBlocked ? null : packPermissions(perms);
       if (existingId) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, granted_by: currentUser?.id }).eq('id', existingId);
+        await supabase.from('page_access_overrides')
+          .update({ is_blocked: isBlocked, level, notes, granted_by: currentUser?.id })
+          .eq('id', existingId);
       } else {
-        await supabase.from('page_access_overrides').insert({ page_slug: selectedPage.slug, user_id: userId, is_blocked: isBlocked, level, granted_by: currentUser?.id });
+        await supabase.from('page_access_overrides')
+          .insert({ page_slug: selectedPage.slug, user_id: userId, is_blocked: isBlocked, level, notes, granted_by: currentUser?.id });
       }
       const name = profiles.find(p => p.id === userId)?.full_name ?? 'User';
-      const desc = isBlocked ? `${name} → ${selectedPage.label}` : `${name} → ${selectedPage.label} (${level === 'manage' ? 'Manage' : 'View Only'})`;
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: desc });
+      const permStr = isBlocked ? 'Blocked' :
+        [perms.r && 'Read', perms.w && 'Write', perms.c && 'Create', perms.d && 'Delete']
+          .filter(Boolean).join(' + ');
+      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${name} → ${selectedPage.label} (${permStr})` });
       refetch();
       qc.invalidateQueries({ queryKey: ['pac-overrides'] });
     } catch (e: any) {
@@ -848,12 +901,31 @@ export default function PageAccessControl() {
             </div>
           </div>
 
-          {/* Search */}
+          {/* Search + permission legend */}
           <div className="px-6 py-3 border-b flex-shrink-0 bg-muted/20">
-            <div className="relative max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input value={userSearch} onChange={e => setUserSearch(e.target.value)}
-                placeholder="Search users by name or role…" className="pl-8 h-8 text-xs" />
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[180px] max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input value={userSearch} onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Search users by name or role…" className="pl-8 h-8 text-xs" />
+              </div>
+              {/* Permission legend */}
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+                <span className="font-medium">Permissions:</span>
+                {PERM_DEFS.map(pd => (
+                  <Tooltip key={pd.key}>
+                    <TooltipTrigger asChild>
+                      <span className={cn('px-1.5 py-0.5 rounded-md border text-[9px] font-bold cursor-help', pd.activeClass)}>
+                        {pd.label[0]}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      <span className="font-bold">{pd.label}:</span> {pd.desc}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+                <span className="text-muted-foreground/60 ml-1">← click to toggle per user</span>
+              </div>
             </div>
           </div>
 
@@ -871,8 +943,8 @@ export default function PageAccessControl() {
                     override={ov}
                     isSaving={savingId === profile.id}
                     pageLabel={selectedPage.label}
-                    onGrant={(level) => applyOverride(profile.id, false, level, ov?.id)}
-                    onBlock={() => applyOverride(profile.id, true, 'view', ov?.id)}
+                    onTogglePerm={(perms) => applyOverride(profile.id, false, perms, ov?.id)}
+                    onBlock={() => applyOverride(profile.id, true, DEFAULT_PERMS, ov?.id)}
                     onReset={() => removeOverride(ov!.id, profile.id)}
                   />
                 );

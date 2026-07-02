@@ -16,6 +16,8 @@ import {
   UserAccessRow,
   getAccessStatus,
   AccessStatus,
+  Perms,
+  DEFAULT_PERMS,
 } from '@/pages/PageAccessControl';
 
 const STATUS_ORDER: Record<AccessStatus, number> = { blocked: 0, granted: 1, role: 2, denied: 3 };
@@ -82,17 +84,20 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
     return m;
   }, [overrides]);
 
-  async function applyOverride(userId: string, isBlocked: boolean, level: 'view' | 'manage' = 'view', existingId?: string) {
+  async function applyOverride(userId: string, isBlocked: boolean, perms: Perms = DEFAULT_PERMS, existingId?: string) {
     setSavingId(userId);
     try {
+      const level: 'view' | 'manage' = (perms.w || perms.c || perms.d) ? 'manage' : 'view';
+      const notes = isBlocked ? null : JSON.stringify(perms);
       if (existingId) {
-        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, granted_by: currentUser?.id }).eq('id', existingId);
+        await supabase.from('page_access_overrides').update({ is_blocked: isBlocked, level, notes, granted_by: currentUser?.id }).eq('id', existingId);
       } else {
-        await supabase.from('page_access_overrides').insert({ page_slug: pageSlug, user_id: userId, is_blocked: isBlocked, level, granted_by: currentUser?.id });
+        await supabase.from('page_access_overrides').insert({ page_slug: pageSlug, user_id: userId, is_blocked: isBlocked, level, notes, granted_by: currentUser?.id });
       }
       const name = profiles.find(p => p.id === userId)?.full_name ?? 'User';
-      const desc = isBlocked ? `${name} → ${page.label}` : `${name} → ${page.label} (${level === 'manage' ? 'Manage' : 'View Only'})`;
-      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: desc });
+      const permStr = isBlocked ? 'Blocked' :
+        [perms.r && 'Read', perms.w && 'Write', perms.c && 'Create', perms.d && 'Delete'].filter(Boolean).join(' + ');
+      toast({ title: isBlocked ? 'Access blocked' : 'Access granted', description: `${name} → ${page.label} (${permStr})` });
       refetch();
       qc.invalidateQueries({ queryKey: ['pac-overrides'] });
     } catch (e: any) {
@@ -197,8 +202,8 @@ export function PageAccessModal({ open, onClose, pageSlug }: PageAccessModalProp
                     override={ov}
                     isSaving={savingId === profile.id}
                     pageLabel={page.label}
-                    onGrant={(level) => applyOverride(profile.id, false, level, ov?.id)}
-                    onBlock={() => applyOverride(profile.id, true, 'view', ov?.id)}
+                    onTogglePerm={(perms) => applyOverride(profile.id, false, perms, ov?.id)}
+                    onBlock={() => applyOverride(profile.id, true, DEFAULT_PERMS, ov?.id)}
                     onReset={() => removeOverride(ov!.id, profile.id)}
                   />
                 );
