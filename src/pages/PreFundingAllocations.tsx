@@ -12,7 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Users, RefreshCw, AlertTriangle, Search, ChevronDown, ChevronRight,
-  Wallet, TrendingDown, CheckCircle2,
+  Wallet, TrendingDown, CheckCircle2, Info,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -89,6 +89,8 @@ export default function PreFundingAllocations() {
   const [fundFilter, setFund]   = useState('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [funds, setFunds]       = useState<{ id: string; name: string }[]>([]);
+  // Fund-level paid_amount — source of truth for actual total spend
+  const [fundPaidMap, setFundPaidMap] = useState<Map<string, number>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,12 +114,11 @@ export default function PreFundingAllocations() {
       const userIds  = [...new Set(allocs.map((a: any) => a.user_id).filter(Boolean))];
       const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id).filter(Boolean))];
 
-      // Fetch profiles, fund metadata, AND actual per-user payments from pre_fund_transactions
+      // Fetch profiles, fund metadata (with paid_amount), AND transactions
       const [profilesRes, fundsRes, txnRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,role').in('id', userIds),
-        (supabase as any).from('pre_fund_requests').select('id,name,status,currency').in('id', fundIds),
-        // Aggregate actual payments per user per fund from the transactions table
-        // Include source_table + source_id so we can filter out deleted source records
+        // paid_amount = fund's authoritative total spend (always correct regardless of user attribution)
+        (supabase as any).from('pre_fund_requests').select('id,name,status,currency,paid_amount').in('id', fundIds),
         (supabase as any)
           .from('pre_fund_transactions')
           .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id')
@@ -127,6 +128,8 @@ export default function PreFundingAllocations() {
 
       const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
       const fundMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, f]));
+      // Fund-level paid_amount: source of truth for "how much left the fund"
+      const paidMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, Number(f.paid_amount ?? 0)]));
 
       // Validate DP-sourced transactions — exclude any whose source DP is deleted/cancelled
       const rawTxns: any[] = txnRes.data ?? [];
@@ -135,7 +138,7 @@ export default function PreFundingAllocations() {
           .filter(t => t.source_table === 'down_payment_requests' && t.source_id)
           .map(t => t.source_id as string)
       )];
-      let validDpIds = new Set<string>(dpSourceIds); // default: all valid
+      let validDpIds = new Set<string>(dpSourceIds);
       if (dpSourceIds.length > 0) {
         const { data: validDps } = await (supabase as any)
           .from('down_payment_requests')
@@ -148,7 +151,6 @@ export default function PreFundingAllocations() {
         );
       }
 
-      // Do the same for OCS-sourced transactions
       const ocsSourceIds = [...new Set(
         rawTxns
           .filter(t => t.source_table === 'operational_cost_submissions' && t.source_id)
@@ -163,25 +165,22 @@ export default function PreFundingAllocations() {
         validOcsIds = new Set((validOcs ?? []).map((o: any) => o.id as string));
       }
 
-      // Filter: only include transactions whose source record still exists and is active
       const validTxns = rawTxns.filter(t => {
         if (t.source_table === 'down_payment_requests')
           return !t.source_id || validDpIds.has(t.source_id);
         if (t.source_table === 'operational_cost_submissions')
           return !t.source_id || validOcsIds.has(t.source_id);
-        return true; // manual entries have no source — always include
+        return true;
       });
 
-      // Build per-user per-fund spend map from valid transaction rows
-      // payment + commitment = outgoing; reversal + return = credits back
+      // Build per-user per-fund spend from transactions that carry a user_id
       const spendKey = (userId: string, fundId: string) => `${userId}::${fundId}`;
       const spendMap = new Map<string, number>();
       for (const t of validTxns) {
         if (!t.user_id || !t.pre_fund_request_id) continue;
-        const key = spendKey(t.user_id, t.pre_fund_request_id);
+        const key  = spendKey(t.user_id, t.pre_fund_request_id);
         const prev = spendMap.get(key) ?? 0;
         const amt  = Number(t.amount) || 0;
-        // reversal / return reduce the spend; payment / commitment add to it
         const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
         spendMap.set(key, Math.max(0, prev + delta));
       }
@@ -189,9 +188,13 @@ export default function PreFundingAllocations() {
       const enriched: AllocRow[] = allocs.map((a: any) => {
         const p = profileMap.get(a.user_id) as any;
         const f = fundMap.get(a.pre_fund_request_id) as any;
-        // Per-user actual spend from pre_fund_transactions; fall back to allocation's spent_amount
-        const txnSpent = spendMap.get(spendKey(a.user_id, a.pre_fund_request_id));
-        const spent    = txnSpent !== undefined ? txnSpent : Number(a.spent_amount ?? 0);
+        // Prefer txn-computed spend (user_id-attributed rows).
+        // If no txn rows carry this user_id, use the stored spent_amount column —
+        // it is updated by the RPC when a payment is attributed to this allocation.
+        // Take the MAX so we never show less than what the allocation record says.
+        const txnSpent     = spendMap.get(spendKey(a.user_id, a.pre_fund_request_id)) ?? 0;
+        const storedSpent  = Number(a.spent_amount ?? 0);
+        const spent        = Math.max(txnSpent, storedSpent);
         return {
           ...a,
           allocated_amount: Number(a.allocated_amount),
@@ -205,6 +208,7 @@ export default function PreFundingAllocations() {
       });
 
       setAll(enriched);
+      setFundPaidMap(paidMap);
       setFunds((fundsRes.data ?? []).map((f: any) => ({ id: f.id, name: f.name })));
     } catch (e: any) {
       console.error('Allocations load error', e);
@@ -245,6 +249,17 @@ export default function PreFundingAllocations() {
   const totalSpent     = staff.reduce((s, p) => s + p.total_spent, 0);
   const overUsed       = staff.filter(p => p.total_spent > p.total_allocated).length;
 
+  // Fund-level totals: use the authoritative paid_amount from pre_fund_requests
+  // This captures spend that was linked without user attribution (null user_id transactions)
+  const visibleFundIds = fundFilter === 'all'
+    ? [...fundPaidMap.keys()]
+    : [fundFilter];
+  const fundTotalPaid = visibleFundIds.reduce((s, id) => s + (fundPaidMap.get(id) ?? 0), 0);
+  // Spend attributed to specific allocated users
+  const attributedSpend = totalSpent;
+  // Spend in the fund that hasn't been attributed to any allocation yet
+  const unattributedSpend = Math.max(0, fundTotalPaid - attributedSpend);
+
   const toggleExpand = (uid: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(uid) ? n.delete(uid) : n.add(uid); return n; });
 
@@ -280,13 +295,13 @@ export default function PreFundingAllocations() {
       {!loading && (
         <div className={`grid gap-3 ${isFinanceAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
           {(isFinanceAdmin ? [
-            { label: 'Staff Allocated', value: String(staff.length),           sub: 'unique people',       icon: Users,          accent: 'bg-violet-600' },
-            { label: 'Total Allocated', value: formatNumber(totalAllocated, 0), sub: 'across all funds',   icon: Wallet,         accent: 'bg-sky-600' },
-            { label: 'Total Spent',     value: formatNumber(totalSpent, 0),     sub: 'from allocations',   icon: TrendingDown,   accent: 'bg-emerald-600' },
-            { label: 'Over Budget',     value: String(overUsed),                sub: 'staff exceeded limit', icon: AlertTriangle, accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
+            { label: 'Staff Allocated', value: String(staff.length),              sub: 'unique people',          icon: Users,          accent: 'bg-violet-600' },
+            { label: 'Total Allocated', value: formatNumber(totalAllocated, 0),   sub: 'across all funds',       icon: Wallet,         accent: 'bg-sky-600' },
+            { label: 'Total Paid Out',  value: formatNumber(fundTotalPaid, 0),    sub: 'from fund balance',      icon: TrendingDown,   accent: 'bg-emerald-600' },
+            { label: 'Over Budget',     value: String(overUsed),                  sub: 'staff exceeded limit',   icon: AlertTriangle,  accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
           ] : [
-            { label: 'My Allocation',   value: formatNumber(totalAllocated, 0), sub: 'assigned to you',    icon: Wallet,         accent: 'bg-sky-600' },
-            { label: 'Spent So Far',    value: formatNumber(totalSpent, 0),     sub: 'against your fund',  icon: TrendingDown,   accent: totalSpent > totalAllocated ? 'bg-rose-600' : 'bg-emerald-600' },
+            { label: 'My Allocation',   value: formatNumber(totalAllocated, 0),   sub: 'assigned to you',        icon: Wallet,         accent: 'bg-sky-600' },
+            { label: 'Spent So Far',    value: formatNumber(fundTotalPaid, 0),    sub: 'from fund (all payments)', icon: TrendingDown,  accent: fundTotalPaid > totalAllocated ? 'bg-rose-600' : 'bg-emerald-600' },
           ]).map(k => (
             <Card key={k.label}>
               <CardContent className="pt-4 pb-3">
@@ -304,6 +319,26 @@ export default function PreFundingAllocations() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Unattributed spend alert — shows when fund has paid out more than is tracked in allocations */}
+      {!loading && isFinanceAdmin && unattributedSpend > 0 && (
+        <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+          <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+          <AlertDescription className="text-sm text-amber-800 dark:text-amber-300">
+            <span className="font-semibold">Unattributed spend detected:</span>{' '}
+            The fund has paid out{' '}
+            <span className="font-mono font-semibold">{formatNumber(fundTotalPaid, 0)}</span> total,
+            but only{' '}
+            <span className="font-mono font-semibold">{formatNumber(attributedSpend, 0)}</span> is
+            tracked against specific allocations.{' '}
+            <span className="font-mono font-semibold text-amber-700">{formatNumber(unattributedSpend, 0)}</span> was
+            paid out without user attribution — likely linked via Reconciliation without selecting an allocated
+            staff member, or auto-linked to an open-pool fund.
+            To fix: in <strong>Reconciliation → Add Transaction</strong>, set the staff member when
+            adding payment transactions.
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Filters — only show for finance/admin who see all staff */}
