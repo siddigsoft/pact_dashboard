@@ -106,6 +106,61 @@ const EMPTY_FORM = {
   notification_recipients: [] as string[],
 };
 
+// ── GL auto-detection ────────────────────────────────────────────────────────
+// Returns suggested GL account codes for a given fund currency based on the
+// loaded Chart of Accounts. Used to pre-fill the Edit/Create form so finance
+// staff don't need to set these manually on every fund.
+function detectGlDefaults(
+  currency: string,
+  accounts: { id: string; code: string; name_en: string }[],
+): { gl_receipt_account: string; gl_liability_account: string; gl_expense_account: string; gl_cf_account: string; gl_encumbrance_account: string } {
+  const cur = currency.toUpperCase();
+
+  // Receipt / Bank: cash-at-bank account whose name contains the fund currency
+  const receiptAcct =
+    accounts.find(a => a.name_en.toUpperCase().includes(cur) && a.name_en.toUpperCase().includes('CASH')) ??
+    accounts.find(a => a.name_en.toUpperCase().includes(cur) && a.code.startsWith('12')) ??
+    accounts.find(a => a.name_en.toUpperCase().includes(cur)) ??
+    accounts.find(a => a.name_en.toUpperCase().includes('CASH AT BANK')) ??
+    accounts.find(a => a.code.startsWith('12'));
+
+  // Donor Liability: pre-fund / donor liability (2xxx range, prefer code 2400)
+  const liabilityAcct =
+    accounts.find(a => a.code === '2400') ??
+    accounts.find(a => a.name_en.toUpperCase().includes('DONOR') && a.name_en.toUpperCase().includes('PRE')) ??
+    accounts.find(a => a.name_en.toUpperCase().includes('DONOR')) ??
+    accounts.find(a => a.name_en.toUpperCase().includes('PRE-FUND') || a.name_en.toUpperCase().includes('PREFUND')) ??
+    accounts.find(a => a.code.startsWith('24')) ??
+    accounts.find(a => a.code.startsWith('20'));
+
+  // Expense / Payment: programme expense, default 5600
+  const expenseAcct =
+    accounts.find(a => a.code === '5600') ??
+    accounts.find(a => a.name_en.toUpperCase().includes('PROGRAMME') && a.name_en.toUpperCase().includes('EXPENSE')) ??
+    accounts.find(a => a.name_en.toUpperCase().includes('GRANT') && a.name_en.toUpperCase().includes('EXPENSE')) ??
+    accounts.find(a => a.code.startsWith('56')) ??
+    accounts.find(a => a.code.startsWith('50'));
+
+  // Carry-Forward: 2401 or name containing "carry"
+  const cfAcct =
+    accounts.find(a => a.code === '2401') ??
+    accounts.find(a => a.name_en.toUpperCase().includes('CARRY')) ??
+    accounts.find(a => a.name_en.toUpperCase().includes('NEXT PERIOD'));
+
+  // Encumbrance Reserve: 2105
+  const encAcct =
+    accounts.find(a => a.code === '2105') ??
+    accounts.find(a => a.name_en.toUpperCase().includes('ENCUMBRANCE'));
+
+  return {
+    gl_receipt_account:     receiptAcct?.code  ?? '',
+    gl_liability_account:   liabilityAcct?.code ?? '',
+    gl_expense_account:     expenseAcct?.code   ?? '',
+    gl_cf_account:          cfAcct?.code        ?? '',
+    gl_encumbrance_account: encAcct?.code       ?? '',
+  };
+}
+
 const THRESHOLD_MODE_OPTIONS = [
   { value: 'pct',   label: '% of funded amount' },
   { value: 'fixed', label: 'Fixed amount' },
@@ -197,6 +252,23 @@ export default function PreFundingRegistry() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Auto-fill GL accounts when form opens or currency changes ─────────────
+  // Only fills EMPTY fields — never overwrites a value the user/fund already set.
+  // Receipt account is re-evaluated on currency change because it is currency-specific.
+  useEffect(() => {
+    if (!showForm || acctAccounts.length === 0) return;
+    const defaults = detectGlDefaults(form.currency, acctAccounts);
+    setForm(prev => ({
+      ...prev,
+      gl_receipt_account:     prev.gl_receipt_account     || defaults.gl_receipt_account,
+      gl_liability_account:   prev.gl_liability_account   || defaults.gl_liability_account,
+      gl_expense_account:     prev.gl_expense_account     || defaults.gl_expense_account,
+      gl_cf_account:          prev.gl_cf_account          || defaults.gl_cf_account,
+      gl_encumbrance_account: prev.gl_encumbrance_account || defaults.gl_encumbrance_account,
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showForm, form.currency, acctAccounts]);
 
   // Load transactions whenever a fund is targeted for deletion
   useEffect(() => {
