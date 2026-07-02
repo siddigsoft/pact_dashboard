@@ -31,6 +31,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { FilePreviewDialog } from '@/components/ui/FilePreviewDialog';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface PreFundSummary {
   id: string; name: string; source: string | null; currency: string;
@@ -636,6 +637,13 @@ export default function PreFundingReconciliation() {
   // Unlink / remove a linked transaction
   const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
   const [unlinkingId, setUnlinkingId]           = useState<string | null>(null);
+  // ── Bulk-select state ────────────────────────────────────────────────────
+  const [selectedTxnIds, setSelectedTxnIds]   = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting]        = useState(false);
+  const [groupByRef, setGroupByRef]            = useState('');
+  const [groupByCollector, setGroupByCollector]= useState('');
+  const [groupByDate, setGroupByDate]          = useState('');
   const [reconcilingAll, setReconcilingAll]     = useState(false);
 
   // Transaction drill-down
@@ -1044,6 +1052,49 @@ export default function PreFundingReconciliation() {
       toast({ title: 'Unlink failed', description: e.message, variant: 'destructive' });
     } finally {
       setUnlinkingId(null);
+    }
+  };
+
+  // ── Bulk delete handler ─────────────────────────────────────────────────
+  const handleBulkUnlink = async () => {
+    if (!selectedFund || selectedTxnIds.size === 0) return;
+    setBulkDeleting(true);
+    setConfirmBulkDelete(false);
+    const toDelete = transactions.filter(t => selectedTxnIds.has(t.id));
+    let totalRestored = 0;
+    let errors = 0;
+    for (const txn of toDelete) {
+      try {
+        const { error } = await supabase.from('pre_fund_transactions').delete().eq('id', txn.id);
+        if (error) throw error;
+        totalRestored += txn.amount;
+        if (txn.source_table && txn.source_id) {
+          await (supabase as any).from(txn.source_table).update({ pre_fund_transaction_id: null }).eq('id', txn.source_id);
+          // Restore allocation spent_amount
+          const { data: srcRow } = await (supabase as any).from(txn.source_table).select('requested_by,submitted_by').eq('id', txn.source_id).maybeSingle();
+          const userId = srcRow?.requested_by ?? srcRow?.submitted_by ?? null;
+          if (userId) {
+            const { data: alloc } = await supabase.from('pre_fund_allocations').select('id,spent_amount').eq('pre_fund_request_id', selectedFund.id).eq('user_id', userId).maybeSingle();
+            if (alloc) await supabase.from('pre_fund_allocations').update({ spent_amount: Math.max(0, (alloc.spent_amount ?? 0) - txn.amount) }).eq('id', alloc.id);
+          }
+        }
+      } catch { errors++; }
+    }
+    // Restore total balance in one shot
+    if (totalRestored > 0) {
+      await supabase.from('pre_fund_requests').update({
+        available_balance: (selectedFund.available_balance ?? 0) + totalRestored,
+        paid_amount: Math.max(0, (selectedFund.paid_amount ?? 0) - totalRestored),
+      }).eq('id', selectedFund.id);
+    }
+    setSelectedTxnIds(new Set());
+    setBulkDeleting(false);
+    loadFunds();
+    loadTxns(selectedFund.id);
+    if (errors === 0) {
+      toast({ title: `${toDelete.length} transaction${toDelete.length !== 1 ? 's' : ''} removed`, description: `Balance restored by ${selectedFund.currency} ${formatNumber(totalRestored, 0)}.` });
+    } else {
+      toast({ title: `${toDelete.length - errors} of ${toDelete.length} removed`, description: `${errors} failed. Please retry.`, variant: 'destructive' });
     }
   };
 
@@ -1908,6 +1959,144 @@ export default function PreFundingReconciliation() {
                     </Button>
                   </div>
                 </div>
+
+                {/* ── Group-select + bulk action toolbar ─────────────────── */}
+                {transactions.length > 0 && (() => {
+                  const allSelected = transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id));
+                  const someSelected = selectedTxnIds.size > 0;
+                  const selectedTotal = transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0);
+                  const currency = transactions[0]?.currency ?? '';
+
+                  // Unique groups for quick-select dropdowns
+                  const uniqueRefs = [...new Set(transactions.filter(t => t.reference).map(t => t.reference!))];
+                  const uniqueCollectors = [...new Map(
+                    transactions.filter(t => t.user_id).map(t => [t.user_id!, profileMap.get(t.user_id!) ?? t.user_id!.slice(0, 8)])
+                  ).entries()];
+                  const uniqueDates = [...new Set(transactions.map(t => t.transaction_date.split('T')[0]))].sort().reverse();
+
+                  return (
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {/* Select-all toggle */}
+                      <button
+                        onClick={() => setSelectedTxnIds(allSelected ? new Set() : new Set(transactions.map(t => t.id)))}
+                        className={cn(
+                          'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
+                          allSelected
+                            ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                            : 'bg-background border-muted-foreground/30 text-muted-foreground hover:border-[#1D3461] hover:text-[#1D3461]'
+                        )}
+                        data-testid="button-select-all-txns"
+                      >
+                        <Checkbox
+                          checked={allSelected}
+                          className="h-3 w-3 border-current data-[state=checked]:bg-white data-[state=checked]:text-[#1D3461] pointer-events-none"
+                        />
+                        {allSelected ? 'Deselect all' : 'Select all'}
+                      </button>
+
+                      <span className="text-[10px] text-muted-foreground shrink-0">Quick select:</span>
+
+                      {/* By Reference */}
+                      {uniqueRefs.length > 0 && (
+                        <Select value={groupByRef} onValueChange={val => {
+                          setGroupByRef('');
+                          setSelectedTxnIds(prev => {
+                            const next = new Set(prev);
+                            transactions.filter(t => t.reference === val).forEach(t => next.add(t.id));
+                            return next;
+                          });
+                        }}>
+                          <SelectTrigger className="h-6 text-[11px] w-auto min-w-[130px] px-2 border-dashed" data-testid="select-group-by-ref">
+                            <SelectValue placeholder="Same Reference…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {uniqueRefs.map(r => (
+                              <SelectItem key={r} value={r} className="text-xs">
+                                {r} ({transactions.filter(t => t.reference === r).length} txns)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {/* By Collector */}
+                      {uniqueCollectors.length > 0 && (
+                        <Select value={groupByCollector} onValueChange={val => {
+                          setGroupByCollector('');
+                          setSelectedTxnIds(prev => {
+                            const next = new Set(prev);
+                            transactions.filter(t => t.user_id === val).forEach(t => next.add(t.id));
+                            return next;
+                          });
+                        }}>
+                          <SelectTrigger className="h-6 text-[11px] w-auto min-w-[130px] px-2 border-dashed" data-testid="select-group-by-collector">
+                            <SelectValue placeholder="By Collector…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {uniqueCollectors.map(([uid, name]) => (
+                              <SelectItem key={uid} value={uid} className="text-xs">
+                                {name} ({transactions.filter(t => t.user_id === uid).length} txns)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {/* By Date */}
+                      <Select value={groupByDate} onValueChange={val => {
+                        setGroupByDate('');
+                        setSelectedTxnIds(prev => {
+                          const next = new Set(prev);
+                          transactions.filter(t => t.transaction_date.startsWith(val)).forEach(t => next.add(t.id));
+                          return next;
+                        });
+                      }}>
+                        <SelectTrigger className="h-6 text-[11px] w-auto min-w-[110px] px-2 border-dashed" data-testid="select-group-by-date">
+                          <SelectValue placeholder="By Date…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uniqueDates.map(d => (
+                            <SelectItem key={d} value={d} className="text-xs">
+                              {format(parseISO(d), 'MMM d, yyyy')} ({transactions.filter(t => t.transaction_date.startsWith(d)).length} txns)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {/* Bulk action bar — shows when anything is selected */}
+                      {someSelected && (
+                        <>
+                          <div className="flex-1" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-medium text-[#1D3461]">
+                              {selectedTxnIds.size} selected · {currency} {formatNumber(selectedTotal, 0)}
+                            </span>
+                            <button
+                              onClick={() => setSelectedTxnIds(new Set())}
+                              className="text-[10px] text-muted-foreground hover:text-foreground underline transition-colors"
+                              data-testid="button-clear-selection"
+                            >
+                              Clear
+                            </button>
+                            <Button
+                              size="sm" variant="destructive"
+                              className="h-6 text-xs px-2.5 gap-1"
+                              onClick={() => setConfirmBulkDelete(true)}
+                              disabled={bulkDeleting}
+                              data-testid="button-bulk-delete"
+                            >
+                              {bulkDeleting
+                                ? <><RefreshCw className="h-3 w-3 animate-spin" />Removing…</>
+                                : <><Trash2 className="h-3 w-3" />Delete {selectedTxnIds.size}</>
+                              }
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {txnLoading ? (
                   <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
                 ) : transactions.length === 0 ? (
@@ -1920,6 +2109,14 @@ export default function PreFundingReconciliation() {
                     <Table>
                       <TableHeader>
                         <TableRow className="text-[11px]">
+                          <TableHead className="w-8 text-center px-2">
+                            <Checkbox
+                              checked={transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id))}
+                              onCheckedChange={checked => setSelectedTxnIds(checked ? new Set(transactions.map(t => t.id)) : new Set())}
+                              className="h-3.5 w-3.5"
+                              data-testid="checkbox-select-all-header"
+                            />
+                          </TableHead>
                           <TableHead className="whitespace-nowrap">Date</TableHead>
                           <TableHead>Type</TableHead>
                           <TableHead>Reference</TableHead>
@@ -1965,9 +2162,23 @@ export default function PreFundingReconciliation() {
                           <TableRow
                             key={t.id}
                             data-testid={`row-txn-${t.id}`}
-                            className="cursor-pointer hover:bg-muted/40 text-xs"
+                            className={cn('cursor-pointer hover:bg-muted/40 text-xs', selectedTxnIds.has(t.id) && 'bg-blue-50/60 dark:bg-blue-950/20')}
                             onClick={() => handleDrillDown(t)}
                           >
+                            <TableCell className="w-8 text-center px-2" onClick={e => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selectedTxnIds.has(t.id)}
+                                onCheckedChange={checked => {
+                                  setSelectedTxnIds(prev => {
+                                    const next = new Set(prev);
+                                    checked ? next.add(t.id) : next.delete(t.id);
+                                    return next;
+                                  });
+                                }}
+                                className="h-3.5 w-3.5"
+                                data-testid={`checkbox-txn-${t.id}`}
+                              />
+                            </TableCell>
                             <TableCell className="whitespace-nowrap">
                               <div>{format(parseISO(t.transaction_date), 'MMM d, yyyy')}</div>
                               <div className="text-[10px] text-muted-foreground/70">{format(parseISO(t.created_at), 'HH:mm')}</div>
@@ -2061,7 +2272,7 @@ export default function PreFundingReconciliation() {
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30 font-semibold">
-                          <TableCell colSpan={7} className="text-xs">Totals</TableCell>
+                          <TableCell colSpan={8} className="text-xs">Totals</TableCell>
                           <TableCell className="text-right font-mono text-sm">
                             {selectedFund.currency} {formatNumber(accountingTxns.reduce((s, t) => s + t.amount, 0), 0)}
                           </TableCell>
@@ -2540,6 +2751,62 @@ export default function PreFundingReconciliation() {
             <Button variant="outline" onClick={() => setShowClose(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleClosePeriod} disabled={closing} data-testid="button-confirm-close">
               {closing ? 'Closing…' : 'Close Period'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk delete confirmation dialog ─────────────────────────────────── */}
+      <Dialog open={confirmBulkDelete} onOpenChange={open => { if (!open) setConfirmBulkDelete(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600">
+              <Trash2 className="h-4 w-4" /> Remove {selectedTxnIds.size} Transaction{selectedTxnIds.size !== 1 ? 's' : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-sm text-muted-foreground">
+              This will permanently remove the selected {selectedTxnIds.size} transaction{selectedTxnIds.size !== 1 ? 's' : ''} and restore the fund balance.
+            </p>
+            {selectedFund && (
+              <div className="rounded-lg border p-3 space-y-1 bg-muted/30 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Selected transactions</span>
+                  <span className="font-semibold">{selectedTxnIds.size}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Balance to restore</span>
+                  <span className="font-mono font-semibold text-emerald-600">
+                    {selectedFund.currency} {formatNumber(transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0), 0)}
+                  </span>
+                </div>
+                {/* Group breakdown */}
+                {(() => {
+                  const sel = transactions.filter(t => selectedTxnIds.has(t.id));
+                  const byType = sel.reduce((m, t) => { m[t.transaction_type] = (m[t.transaction_type] ?? 0) + 1; return m; }, {} as Record<string, number>);
+                  return (
+                    <div className="flex gap-1.5 flex-wrap pt-1">
+                      {Object.entries(byType).map(([type, count]) => (
+                        <span key={type} className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted', TXN_TYPE_CFG[type]?.color)}>
+                          {TXN_TYPE_CFG[type]?.label ?? type} ×{count}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                Original payment records are not deleted — only the fund linkage is removed.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmBulkDelete(false)} data-testid="button-cancel-bulk-delete">Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkUnlink} disabled={bulkDeleting} data-testid="button-confirm-bulk-delete">
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {selectedTxnIds.size} & Restore Balance
             </Button>
           </DialogFooter>
         </DialogContent>
