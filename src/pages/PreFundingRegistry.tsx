@@ -20,7 +20,12 @@ import {
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
   Users, UserPlus, Wallet, TrendingUp, Bell,
+  PauseCircle, PlayCircle, Lock, RotateCcw, ChevronDown, MoreHorizontal,
 } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -74,8 +79,24 @@ const STATUS_CFG: Record<string, { label: string; cls: string }> = {
   awaiting_receipt: { label: 'Awaiting Receipt', cls: 'bg-sky-100 text-sky-700 border-sky-200' },
   active:           { label: 'Active',           cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
   low_balance:      { label: 'Low Balance',      cls: 'bg-orange-100 text-orange-700 border-orange-200' },
+  paused:           { label: 'Paused',           cls: 'bg-violet-100 text-violet-700 border-violet-200' },
   closed:           { label: 'Closed',           cls: 'bg-slate-100 text-slate-500 border-slate-200' },
   period_locked:    { label: 'Period Locked',    cls: 'bg-slate-100 text-slate-500 border-slate-200' },
+};
+
+// Status transitions available per current status
+type StatusAction = 'pause' | 'close' | 'reactivate' | 'reopen';
+const STATUS_ACTIONS: Record<string, StatusAction[]> = {
+  active:      ['pause', 'close'],
+  low_balance: ['pause', 'close'],
+  paused:      ['reactivate', 'close'],
+  closed:      ['reopen'],
+};
+const STATUS_ACTION_CFG: Record<StatusAction, { label: string; icon: React.ReactNode; targetStatus: string; confirm: string; cls: string }> = {
+  pause:      { label: 'Pause Fund',      icon: <PauseCircle className="h-3.5 w-3.5" />,  targetStatus: 'paused', confirm: 'Pause this fund? Allocations and matching will be suspended until you reactivate it.', cls: 'text-violet-700' },
+  close:      { label: 'Close Fund',      icon: <Lock className="h-3.5 w-3.5" />,          targetStatus: 'closed', confirm: 'Close this fund? It will become read-only and no new payments can be linked. This can be reopened later.', cls: 'text-destructive' },
+  reactivate: { label: 'Reactivate Fund', icon: <PlayCircle className="h-3.5 w-3.5" />,   targetStatus: 'active', confirm: 'Reactivate this fund? It will be set back to Active and allocations will resume.', cls: 'text-emerald-700' },
+  reopen:     { label: 'Reopen Fund',     icon: <RotateCcw className="h-3.5 w-3.5" />,    targetStatus: 'active', confirm: 'Reopen this fund? It will be set back to Active.', cls: 'text-sky-700' },
 };
 
 const MATCHING_SCOPE_OPTIONS = [
@@ -196,6 +217,12 @@ export default function PreFundingRegistry() {
   const [receiptDialog, setReceiptDialog] = useState<{ open: boolean; fundId: string; fundName: string }>({ open: false, fundId: '', fundName: '' });
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [uploading, setUploading]   = useState(false);
+
+  // Fund status-change state
+  const [statusChangeDialog, setStatusChangeDialog] = useState<{
+    open: boolean; fundId: string; fundName: string; action: StatusAction | null;
+  }>({ open: false, fundId: '', fundName: '', action: null });
+  const [statusChanging, setStatusChanging] = useState(false);
 
   // ── Allocations ────────────────────────────────────────────────────────────
   const [allocDialog, setAllocDialog] = useState<{ open: boolean; fund: PreFundRequest | null }>({ open: false, fund: null });
@@ -560,6 +587,28 @@ export default function PreFundingRegistry() {
       toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // ── Fund status management ─────────────────────────────────────────────────
+  const handleStatusChange = async () => {
+    const { fundId, action } = statusChangeDialog;
+    if (!fundId || !action) return;
+    const cfg = STATUS_ACTION_CFG[action];
+    setStatusChanging(true);
+    try {
+      const { error: e } = await supabase
+        .from('pre_fund_requests')
+        .update({ status: cfg.targetStatus } as any)
+        .eq('id', fundId);
+      if (e) throw e;
+      toast({ title: `Fund ${cfg.label.toLowerCase()}d`, description: `Status changed to "${STATUS_CFG[cfg.targetStatus]?.label}".` });
+      setStatusChangeDialog({ open: false, fundId: '', fundName: '', action: null });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Status change failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setStatusChanging(false);
     }
   };
 
@@ -1021,6 +1070,7 @@ export default function PreFundingRegistry() {
             { key: 'draft',            label: 'Draft' },
             { key: 'pending_approval', label: 'Awaiting Approval' },
             { key: 'awaiting_receipt', label: 'Awaiting Receipt' },
+            { key: 'paused',           label: 'Paused' },
             { key: 'closed',           label: 'Closed' },
           ].map(({ key, label }) => (
             <button key={key} onClick={() => setStatus(key)}
@@ -1157,6 +1207,33 @@ export default function PreFundingRegistry() {
                         <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50 gap-1.5" title="Request a top-up for this fund" onClick={() => openTopUp(f)} data-testid={`button-topup-${f.id}`}>
                           <TrendingUp className="h-3.5 w-3.5" />Top-up
                         </Button>
+                      )}
+                      {canManage && STATUS_ACTIONS[f.status] && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1" title="Change fund status" data-testid={`button-status-menu-${f.id}`}>
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                              <ChevronDown className="h-3 w-3 opacity-60" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Change Status</div>
+                            <DropdownMenuSeparator />
+                            {STATUS_ACTIONS[f.status].map(action => {
+                              const ac = STATUS_ACTION_CFG[action];
+                              return (
+                                <DropdownMenuItem
+                                  key={action}
+                                  className={cn('gap-2 text-xs cursor-pointer', ac.cls)}
+                                  onClick={() => setStatusChangeDialog({ open: true, fundId: f.id, fundName: f.name, action })}
+                                  data-testid={`menu-${action}-${f.id}`}
+                                >
+                                  {ac.icon}{ac.label}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       {canManage && (
                         <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
@@ -1729,6 +1806,55 @@ export default function PreFundingRegistry() {
           </Dialog>
         );
       })()}
+
+      {/* ── Fund Status-Change Confirmation Dialog ───────────────────────────── */}
+      <Dialog open={statusChangeDialog.open} onOpenChange={o => { if (!o) setStatusChangeDialog(p => ({ ...p, open: false })); }}>
+        <DialogContent className="max-w-md">
+          {statusChangeDialog.action && (() => {
+            const ac = STATUS_ACTION_CFG[statusChangeDialog.action];
+            const isClose = statusChangeDialog.action === 'close';
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className={cn('flex items-center gap-2', ac.cls)}>
+                    {ac.icon}
+                    {ac.label}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="py-2 space-y-3">
+                  <p className="text-sm text-muted-foreground">{ac.confirm}</p>
+                  <div className={cn(
+                    'rounded-lg border px-4 py-3 text-sm',
+                    isClose ? 'bg-destructive/5 border-destructive/20' : 'bg-muted/40 border-border'
+                  )}>
+                    <span className="font-medium">{statusChangeDialog.fundName}</span>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <span>Current: <span className={cn('font-medium', STATUS_CFG[funds.find(f => f.id === statusChangeDialog.fundId)?.status ?? '']?.cls?.split(' ')[1])}>{STATUS_CFG[funds.find(f => f.id === statusChangeDialog.fundId)?.status ?? '']?.label}</span></span>
+                      <ChevronRight className="h-3 w-3" />
+                      <span>New: <span className="font-medium">{STATUS_CFG[ac.targetStatus]?.label}</span></span>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setStatusChangeDialog(p => ({ ...p, open: false }))} disabled={statusChanging}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className={isClose ? 'bg-destructive hover:bg-destructive/90 text-white' : ''}
+                    variant={isClose ? 'destructive' : 'default'}
+                    onClick={handleStatusChange}
+                    disabled={statusChanging}
+                    data-testid="button-confirm-status-change"
+                  >
+                    {statusChanging ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+                    {ac.label}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Delete Fund Dialog (Super Admin only) ──────────────────────────── */}
       <Dialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
