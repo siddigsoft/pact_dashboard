@@ -702,27 +702,32 @@ export default function PreFundingRegistry() {
       const fileWord = receiptFiles.length === 1 ? 'Receipt' : `${receiptFiles.length} receipts`;
 
       if (!hasGL) {
-        // Block activation until GL accounts are configured — prevent ledger divergence
+        // No GL accounts configured — activate fund directly without journal posting.
+        // The receipt is stored and the fund goes active; GL can be posted later once
+        // accounts are configured via Edit Fund → re-upload or manual journal entry.
+        const { error: directErr } = await supabase
+          .from('pre_fund_requests' as any)
+          .update({ status: 'active', receipt_url: uploadResults[0] })
+          .eq('id', receiptDialog.fundId);
+        if (directErr) throw new Error(`Activation failed: ${directErr.message}`);
         toast({
-          title: 'GL Accounts Required',
-          description: 'This fund is missing a Receipt (bank) account or Donor Liability account. Open Edit Fund and configure both GL accounts before uploading the receipt.',
-          variant: 'destructive',
+          title: `${fileWord} uploaded — fund is now Active`,
+          description: 'GL accounts are not configured — fund activated without a journal entry. Configure GL accounts in Edit Fund to post the journal later.',
         });
-        return;
+      } else {
+        // Full GL activation — posts journal entry + bank statement line via RPC
+        await activatePreFund({
+          fundId: receiptDialog.fundId,
+          fundName: fund?.name ?? 'Fund',
+          amount: fund?.amount ?? 0,
+          currency: fund?.currency ?? 'USD',
+          glReceiptCode:   glReceipt,
+          glLiabilityCode: glLiability,
+          createdBy: currentUser?.id ?? null,
+          receiptUrl: uploadResults[0],
+        });
+        toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
       }
-
-      // Full GL activation — posts journal entry + bank statement line via RPC
-      await activatePreFund({
-        fundId: receiptDialog.fundId,
-        fundName: fund?.name ?? 'Fund',
-        amount: fund?.amount ?? 0,
-        currency: fund?.currency ?? 'USD',
-        glReceiptCode:   glReceipt,
-        glLiabilityCode: glLiability,
-        createdBy: currentUser?.id ?? null,
-        receiptUrl: uploadResults[0],
-      });
-      toast({ title: `${fileWord} uploaded — fund is now Active`, description: 'GL journal entry and bank statement line created.' });
 
       try {
         await supabase.from('notification_events' as any).insert({
@@ -1644,14 +1649,16 @@ export default function PreFundingRegistry() {
                   Upload bank receipt(s) for <strong>{receiptDialog.fundName}</strong>. This will activate the fund.
                 </p>
 
-                {/* GL warning — shown immediately if accounts are missing */}
+                {/* GL warning — informational only, does not block upload */}
                 {missingGL && (
                   <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 space-y-2">
                     <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                      <span>⚠</span> GL Accounts Required
+                      <span>⚠</span> GL Accounts Not Configured
                     </p>
                     <p className="text-xs text-amber-700 dark:text-amber-400">
-                      This fund is missing the <strong>{missing}</strong>. Configure both GL accounts in Edit Fund before uploading.
+                      The <strong>{missing}</strong> {missing.includes('and') ? 'are' : 'is'} not set.
+                      You can still upload and activate the fund — the GL journal entry will be skipped.
+                      Configure the accounts in Edit Fund to post the journal entry later.
                     </p>
                     <Button
                       size="sm"
@@ -1674,7 +1681,6 @@ export default function PreFundingRegistry() {
                     type="file"
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
                     multiple
-                    disabled={missingGL}
                     onChange={e => setReceiptFiles(Array.from(e.target.files ?? []))}
                     data-testid="input-receipt-file"
                   />
@@ -1702,8 +1708,12 @@ export default function PreFundingRegistry() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setReceiptDialog({ open: false, fundId: '', fundName: '' }); setReceiptFiles([]); }}>Cancel</Button>
-                <Button onClick={handleReceiptUpload} disabled={uploading || receiptFiles.length === 0 || missingGL} data-testid="button-upload-receipt">
-                  {uploading ? 'Uploading…' : receiptFiles.length > 1 ? `Upload ${receiptFiles.length} Files & Activate` : 'Upload & Activate'}
+                <Button onClick={handleReceiptUpload} disabled={uploading || receiptFiles.length === 0} data-testid="button-upload-receipt">
+                  {uploading
+                    ? 'Uploading…'
+                    : missingGL
+                    ? receiptFiles.length > 1 ? `Upload ${receiptFiles.length} Files & Activate (No GL)` : 'Upload & Activate (No GL)'
+                    : receiptFiles.length > 1 ? `Upload ${receiptFiles.length} Files & Activate` : 'Upload & Activate'}
                 </Button>
               </DialogFooter>
             </DialogContent>
