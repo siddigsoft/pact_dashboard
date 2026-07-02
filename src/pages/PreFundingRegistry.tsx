@@ -526,6 +526,16 @@ export default function PreFundingRegistry() {
         notification_recipients: form.notification_recipients.length > 0 ? form.notification_recipients : [],
       };
       if (editing) {
+        // If the fund has already been activated (paid_amount/committed_amount tracked),
+        // editing the Amount must also recompute available_balance — otherwise the
+        // Available column goes stale and can end up higher or lower than reality.
+        // Invariant: available_balance = amount - paid_amount - committed_amount.
+        const oldAmount = Number(editing.amount ?? 0);
+        if (parsedAmount !== oldAmount && editing.status !== 'draft') {
+          const paid      = Number(editing.paid_amount ?? 0);
+          const committed = Number(editing.committed_amount ?? 0);
+          payload.available_balance = Math.max(0, parsedAmount - paid - committed);
+        }
         const { error: e } = await supabase.from('pre_fund_requests').update(payload).eq('id', editing.id);
         if (e) throw e;
         toast({ title: 'Fund updated' });
@@ -632,6 +642,55 @@ export default function PreFundingRegistry() {
       toast({ title: 'Force delete failed', description: e.message, variant: 'destructive' });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Recalculate available_balance / paid_amount / committed_amount for a fund from its
+  // actual transaction history. Fixes drift caused by manual amount edits, RLS-blocked
+  // txn inserts, or any other path that updated balances out of sync with the ledger.
+  const [recalcingId, setRecalcingId] = useState<string | null>(null);
+  const handleRecalcBalance = async (f: PreFundRequest) => {
+    setRecalcingId(f.id);
+    try {
+      const { data: txns, error: sumErr } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .select('transaction_type, amount')
+        .eq('pre_fund_request_id', f.id)
+        .not('transaction_type', 'eq', 'bank_statement');
+      if (sumErr) throw sumErr;
+
+      const sum = (types: string[]) =>
+        (txns ?? [])
+          .filter((t: any) => types.includes(t.transaction_type))
+          .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+
+      const totalIn    = sum(['receipt', 'carry_forward', 'reversal']);
+      const totalOut   = sum(['payment', 'commitment', 'return']);
+      const newPaid      = sum(['payment']);
+      const newCommitted = sum(['commitment']);
+      // Prefer ledger-derived balance when the fund has transaction history; otherwise
+      // fall back to the amount-based invariant (amount - paid - committed) so funds
+      // whose payments were recorded only via direct balance updates (no txn rows) are
+      // still corrected.
+      const ledgerBalance = totalIn - totalOut;
+      const invariantBalance = f.amount - newPaid - newCommitted;
+      const newBalance = (txns ?? []).length > 0 ? ledgerBalance : invariantBalance;
+
+      const { error: upErr } = await supabase
+        .from('pre_fund_requests')
+        .update({
+          available_balance: Math.max(0, newBalance),
+          paid_amount: newPaid,
+          committed_amount: newCommitted,
+        })
+        .eq('id', f.id);
+      if (upErr) throw upErr;
+      toast({ title: 'Balance recalculated', description: `"${f.name}" balances refreshed from transaction history.` });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Recalculate failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setRecalcingId(null);
     }
   };
 
@@ -1200,6 +1259,21 @@ export default function PreFundingRegistry() {
                       {['active', 'low_balance'].includes(f.status) && canManage && (
                         <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50 gap-1.5" title="Request a top-up for this fund" onClick={() => openTopUp(f)} data-testid={`button-topup-${f.id}`}>
                           <TrendingUp className="h-3.5 w-3.5" />Top-up
+                        </Button>
+                      )}
+                      {canManage && f.status !== 'draft' && f.status !== 'period_locked' && (
+                        <Button
+                          size="sm" variant="outline"
+                          className="h-8 px-3 text-xs text-amber-600 border-amber-300 hover:bg-amber-50 gap-1.5"
+                          title="Recalculate Available/Paid/Committed from actual transaction history"
+                          onClick={() => handleRecalcBalance(f)}
+                          disabled={recalcingId === f.id}
+                          data-testid={`button-recalc-${f.id}`}
+                        >
+                          {recalcingId === f.id
+                            ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            : <RefreshCw className="h-3.5 w-3.5" />}
+                          Recalc
                         </Button>
                       )}
                       {canManage && f.status !== 'period_locked' && (
