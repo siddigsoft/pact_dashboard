@@ -121,7 +121,7 @@ export default function PreFundingAllocations() {
         (supabase as any).from('pre_fund_requests').select('id,name,status,currency,paid_amount').in('id', fundIds),
         (supabase as any)
           .from('pre_fund_transactions')
-          .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id')
+          .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
           .in('pre_fund_request_id', fundIds)
           .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
       ]);
@@ -204,12 +204,37 @@ export default function PreFundingAllocations() {
         return null;
       };
 
-      // Build per-user per-fund spend from transactions (using the direct user_id
-      // when present, falling back to the recovered source-record owner above)
+      // Some funds allocate budget to a *disbursing officer* (e.g. a Finance/Ops
+      // lead responsible for a slice of the pool) rather than to the individual
+      // field beneficiaries who ultimately receive each down-payment. In that
+      // case every transaction's user_id points at the (unallocated) recipient,
+      // while created_by correctly identifies the officer who approved/processed
+      // the payment out of their allocation. Build, per fund, the set of user_ids
+      // that actually hold an allocation, so we can fall back to created_by when
+      // the recipient isn't one of the fund's allocated staff.
+      const allocatedUserIdsByFund = new Map<string, Set<string>>();
+      for (const a of allocs) {
+        if (!a.pre_fund_request_id || !a.user_id) continue;
+        if (!allocatedUserIdsByFund.has(a.pre_fund_request_id)) allocatedUserIdsByFund.set(a.pre_fund_request_id, new Set());
+        allocatedUserIdsByFund.get(a.pre_fund_request_id)!.add(a.user_id);
+      }
+      const resolveAttributedStaff = (t: any): string | null => {
+        const allocatedIds = allocatedUserIdsByFund.get(t.pre_fund_request_id);
+        const ownerId = resolveOwner(t);
+        if (ownerId && allocatedIds?.has(ownerId)) return ownerId;
+        if (t.created_by && allocatedIds?.has(t.created_by)) return t.created_by;
+        // Neither the recipient nor the approver is an allocated staff member —
+        // fall back to whichever owner we could resolve (may still be null).
+        return ownerId;
+      };
+
+      // Build per-user per-fund spend from transactions, preferring an allocated
+      // staff match (recipient, then approving/disbursing officer) over a
+      // non-allocated recipient so real disbursements aren't shown as "spent 0".
       const spendKey = (userId: string, fundId: string) => `${userId}::${fundId}`;
       const spendMap = new Map<string, number>();
       for (const t of validTxns) {
-        const ownerId = resolveOwner(t);
+        const ownerId = resolveAttributedStaff(t);
         if (!ownerId || !t.pre_fund_request_id) continue;
         const key  = spendKey(ownerId, t.pre_fund_request_id);
         const prev = spendMap.get(key) ?? 0;
