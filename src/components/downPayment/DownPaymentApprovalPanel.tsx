@@ -1786,7 +1786,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const handleOpenBatchPay = async (reqs: DownPaymentRequest[]) => {
-    const eligible = reqs.filter(r => r.status === 'approved');
+    const eligible = reqs.filter(r => r.status === 'approved' || r.status === 'partially_paid');
     if (eligible.length === 0) return;
     const { data: pfData } = await supabase
       .from('pre_fund_requests' as any)
@@ -1842,6 +1842,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     });
   };
 
+  /** Amount still owed for this request — full approved amount for a fresh
+   *  approval, or just the outstanding balance for a request that already
+   *  received a partial payment (status === 'partially_paid'). */
+  const getBatchPayBasis = (req: DownPaymentRequest): number => {
+    if (req.status === 'partially_paid') {
+      return req.remainingAmount || 0;
+    }
+    return req.approvedAmount || req.requestedAmount || 0;
+  };
+
   const handleConfirmBatchPay = async () => {
     const { requests: reqs, proofFiles, notes, partialPercent } = batchPayDialog;
     if (!currentUser?.id || reqs.length === 0) return;
@@ -1892,15 +1902,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         console.warn('[BatchPay] RPC not deployed yet — using direct updates as fallback');
         const fallbackNow = new Date().toISOString();
         for (const req of reqs) {
-          const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
-          const paidAmt     = isPartial && partialPercent ? Math.round(approvedAmt * partialPercent / 100) : approvedAmt;
-          const remaining   = isPartial && partialPercent ? approvedAmt - paidAmt : 0;
-          const newStatus   = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'fully_paid';
+          const basisAmt       = getBatchPayBasis(req);
+          const paidThisRound  = isPartial && partialPercent ? Math.round(basisAmt * partialPercent / 100) : basisAmt;
+          const remaining      = isPartial && partialPercent ? basisAmt - paidThisRound : 0;
+          const newTotalPaid   = (req.totalPaidAmount || 0) + paidThisRound;
+          const newStatus      = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'fully_paid';
           const { error: rowErr } = await (supabase as any)
             .from('down_payment_requests')
             .update({
               status:                    newStatus,
-              total_paid_amount:         paidAmt,
+              total_paid_amount:         newTotalPaid,
               remaining_amount:          remaining,
               payment_proof_url:         proofUrl,
               payment_proof_notes:       notes.trim() || null,
@@ -2031,10 +2042,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             let rpcNotDeployed = false;
 
             for (const req of confirmedReqs) {
-              const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
+              const basisAmt = getBatchPayBasis(req);
               const paidAmt = isPartial && partialPercent
-                ? Math.round(approvedAmt * partialPercent / 100)
-                : approvedAmt;
+                ? Math.round(basisAmt * partialPercent / 100)
+                : basisAmt;
 
               // Atomic: single RPC handles pre_fund_transactions insert +
               //         available_balance debit + allocation deduction in one tx.
@@ -3774,7 +3785,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           {selectedIds.size > 0 && processingRequests.length > 0 && (() => {
             const selectedProcessing = processingRequests.filter(r => selectedIds.has(r.id));
             const approvedCount = selectedProcessing.filter(r => r.status === 'approved').length;
-            const totalAmount = selectedProcessing.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+            const payableCount = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid').length;
+            const totalAmount = selectedProcessing.reduce((s, r) => s + getBatchPayBasis(r), 0);
             return (
             <Card className="mb-4 border-primary">
               <CardContent className="p-3 space-y-2">
@@ -3783,7 +3795,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     <CheckSquare className="h-5 w-5 text-primary" />
                     <span className="font-medium">{selectedIds.size} selected</span>
                     <span className="text-xs text-muted-foreground">
-                      SDG {totalAmount.toLocaleString()}
+                      SDG {totalAmount.toLocaleString()} remaining
                     </span>
                   </div>
                   <Button size="sm" variant="ghost" onClick={clearSelection} data-testid="button-clear-processing-selection">
@@ -3800,22 +3812,22 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     Request Payment ({approvedCount})
                   </Button>
                   <Button size="sm" variant="default" onClick={() => {
-                    const selected = selectedProcessing.filter(r => r.status === 'approved');
+                    const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                     if (selected.length > 0) {
                       openActionDialog(selected[0], 'pay');
                     }
-                  }} disabled={approvedCount === 0 || processing} data-testid="button-selected-process-payment">
+                  }} disabled={payableCount === 0 || processing} data-testid="button-selected-process-payment">
                     <DollarSign className="h-4 w-4 mr-1" />
                     Process Payment
                   </Button>
 
-                  {approvedCount > 1 && (
+                  {payableCount > 1 && (
                     <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                      const selected = selectedProcessing.filter(r => r.status === 'approved');
+                      const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                       handleOpenBatchPay(selected);
                     }} disabled={processing} data-testid="button-batch-pay">
                       <Wallet className="h-4 w-4 mr-1" />
-                      Batch Pay ({approvedCount})
+                      Batch Pay ({payableCount})
                     </Button>
                   )}
 
@@ -5243,7 +5255,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             <div className="space-y-4">
               {/* Summary */}
               {(() => {
-                const fullTotal = batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+                const fullTotal = batchPayDialog.requests.reduce((s, r) => s + getBatchPayBasis(r), 0);
                 const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
                 const partialTotal = isPartial ? Math.round(fullTotal * (batchPayDialog.partialPercent! / 100)) : null;
                 const remainingTotal = partialTotal !== null ? fullTotal - partialTotal : null;
@@ -5286,10 +5298,15 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   <div key={req.id} className="flex items-center justify-between px-3 py-2 text-sm">
                     <div className="min-w-0">
                       <p className="font-medium truncate">{req.siteName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{req.requestedByName || req.requestedBy}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {req.requestedByName || req.requestedBy}
+                        {req.status === 'partially_paid' && (
+                          <span className="ml-1.5 text-amber-600 dark:text-amber-400">· remaining balance</span>
+                        )}
+                      </p>
                     </div>
                     <span className="font-semibold tabular-nums shrink-0 ml-2">
-                      {(req.approvedAmount || req.requestedAmount).toLocaleString()} SDG
+                      {getBatchPayBasis(req).toLocaleString()} SDG
                     </span>
                   </div>
                 ))}
