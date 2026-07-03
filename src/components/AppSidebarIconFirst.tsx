@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { RealtimeStatusDot } from "@/components/realtime";
 import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
+import { formatNotificationBadgeCount } from "@/utils/notification-badge";
 import Logo from "../assets/logo.png";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { useAppContext } from "@/context/AppContext";
@@ -464,7 +465,7 @@ const AppSidebarIconFirst = () => {
               <Bell className="w-4.5 h-4.5 text-indigo-300 hover:text-white transition-colors" />
               {unreadNotifCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
-                  {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                  {formatNotificationBadgeCount(unreadNotifCount)}
                 </span>
               )}
             </Link>

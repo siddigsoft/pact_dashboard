@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 /** Serialized badge fetches avoid thundering the PostgREST pool on micro instances (503s under load). */
 const INITIAL_DELAY_MS = 400;
 const REFRESH_INTERVAL_MS = 5 * 60_000;
+const UNREAD_BADGE_WINDOW_DAYS = 30;
 
 export interface NavBadgeCounts {
   pendingCostTier1Hub: number;
@@ -328,12 +329,16 @@ export function useNavBadgeCounts({
         }
       }
 
+      const unreadSince = new Date();
+      unreadSince.setDate(unreadSince.getDate() - UNREAD_BADGE_WINDOW_DAYS);
+
       next.unreadNotifications = await headCount(
         supabase
           .from('notifications')
           .select('id', { count: 'exact', head: true })
-          .eq('recipient_id', currentUserId)
+          .or(`recipient_id.eq.${currentUserId},user_id.eq.${currentUserId}`)
           .eq('is_read', false)
+          .gte('created_at', unreadSince.toISOString())
       );
 
       if (roleCanSeeIncident) {

@@ -3,6 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/context/settings/SettingsContext';
 
 const MAX_AGE_DAYS = 90;
+const BADGE_WINDOW_DAYS = 30;
+
+function userNotificationOrFilter(userId: string): string {
+  return `recipient_id.eq.${userId},user_id.eq.${userId}`;
+}
 
 export function useNotificationCleanup() {
   const { notificationSettings } = useSettings();
@@ -13,6 +18,7 @@ export function useNotificationCleanup() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) return;
 
+      const userId = user.id;
       const autoDeleteDays = notificationSettings.autoDeleteDays || 30;
       const readCutoff = new Date();
       readCutoff.setDate(readCutoff.getDate() - autoDeleteDays);
@@ -23,7 +29,7 @@ export function useNotificationCleanup() {
       const { error: readError } = await supabase
         .from('notifications')
         .delete()
-        .eq('user_id', user.id)
+        .or(userNotificationOrFilter(userId))
         .eq('is_read', true)
         .lt('created_at', readCutoff.toISOString());
 
@@ -34,13 +40,15 @@ export function useNotificationCleanup() {
       const { error: maxAgeError } = await supabase
         .from('notifications')
         .delete()
-        .eq('user_id', user.id)
+        .or(userNotificationOrFilter(userId))
         .lt('created_at', maxAgeCutoff.toISOString());
 
       if (maxAgeError) {
         console.error('Failed to cleanup old notifications beyond max age:', maxAgeError);
       } else {
-        console.log(`Cleaned up read notifications older than ${autoDeleteDays} days and all notifications older than ${MAX_AGE_DAYS} days`);
+        console.log(
+          `Cleaned up read notifications older than ${autoDeleteDays} days and all notifications older than ${MAX_AGE_DAYS} days`
+        );
       }
     } catch (error) {
       console.error('Error during notification cleanup:', error);
@@ -55,8 +63,8 @@ export function useNotificationCleanup() {
       const { error, count } = await supabase
         .from('notifications')
         .delete()
-        .eq('user_id', user.id)
-        .eq('category', category)
+        .or(userNotificationOrFilter(user.id))
+        .eq('event_type', category)
         .eq('is_read', true);
 
       if (error) {
@@ -74,6 +82,7 @@ export function useNotificationCleanup() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) return { readExpired: 0, maxAgeExpired: 0, total: 0 };
 
+      const userId = user.id;
       const autoDeleteDays = notificationSettings.autoDeleteDays || 30;
       const readCutoff = new Date();
       readCutoff.setDate(readCutoff.getDate() - autoDeleteDays);
@@ -84,14 +93,14 @@ export function useNotificationCleanup() {
       const { count: readExpired } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .or(userNotificationOrFilter(userId))
         .eq('is_read', true)
         .lt('created_at', readCutoff.toISOString());
 
       const { count: maxAgeExpired } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .or(userNotificationOrFilter(userId))
         .lt('created_at', maxAgeCutoff.toISOString());
 
       const totalReadExpired = readExpired ?? 0;
@@ -120,7 +129,7 @@ export function useNotificationCleanup() {
     }
   }, [notificationSettings.autoDeleteDays, lastAutoDeleteDays, cleanupOldNotifications]);
 
-  return { cleanupOldNotifications, cleanupByCategory, getCleanupStats };
+  return { cleanupOldNotifications, cleanupByCategory, getCleanupStats, badgeWindowDays: BADGE_WINDOW_DAYS };
 }
 
 export default useNotificationCleanup;
