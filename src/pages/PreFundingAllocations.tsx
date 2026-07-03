@@ -173,12 +173,45 @@ export default function PreFundingAllocations() {
         return true;
       });
 
-      // Build per-user per-fund spend from transactions that carry a user_id
+      // Some transactions (esp. manually added via Reconciliation, or auto-linked
+      // where the staff member has no allocation yet) are saved with user_id = NULL
+      // even though the underlying source record (a down-payment request or a cost
+      // submission) clearly belongs to a specific staff member. Recover that
+      // ownership from the source record so per-staff totals aren't silently
+      // dropped into "unattributed" when we can actually identify the owner.
+      const untaggedDpIds = [...new Set(
+        validTxns.filter(t => !t.user_id && t.source_table === 'down_payment_requests' && t.source_id)
+          .map(t => t.source_id as string)
+      )];
+      const untaggedOcsIds = [...new Set(
+        validTxns.filter(t => !t.user_id && t.source_table === 'operational_cost_submissions' && t.source_id)
+          .map(t => t.source_id as string)
+      )];
+      const [dpOwnersRes, ocsOwnersRes] = await Promise.all([
+        untaggedDpIds.length > 0
+          ? (supabase as any).from('down_payment_requests').select('id,requested_by').in('id', untaggedDpIds)
+          : Promise.resolve({ data: [] }),
+        untaggedOcsIds.length > 0
+          ? (supabase as any).from('operational_cost_submissions').select('id,submitted_by').in('id', untaggedOcsIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const dpOwnerMap  = new Map((dpOwnersRes.data ?? []).map((r: any) => [r.id, r.requested_by]));
+      const ocsOwnerMap = new Map((ocsOwnersRes.data ?? []).map((r: any) => [r.id, r.submitted_by]));
+      const resolveOwner = (t: any): string | null => {
+        if (t.user_id) return t.user_id;
+        if (t.source_table === 'down_payment_requests' && t.source_id) return dpOwnerMap.get(t.source_id) ?? null;
+        if (t.source_table === 'operational_cost_submissions' && t.source_id) return ocsOwnerMap.get(t.source_id) ?? null;
+        return null;
+      };
+
+      // Build per-user per-fund spend from transactions (using the direct user_id
+      // when present, falling back to the recovered source-record owner above)
       const spendKey = (userId: string, fundId: string) => `${userId}::${fundId}`;
       const spendMap = new Map<string, number>();
       for (const t of validTxns) {
-        if (!t.user_id || !t.pre_fund_request_id) continue;
-        const key  = spendKey(t.user_id, t.pre_fund_request_id);
+        const ownerId = resolveOwner(t);
+        if (!ownerId || !t.pre_fund_request_id) continue;
+        const key  = spendKey(ownerId, t.pre_fund_request_id);
         const prev = spendMap.get(key) ?? 0;
         const amt  = Number(t.amount) || 0;
         const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
