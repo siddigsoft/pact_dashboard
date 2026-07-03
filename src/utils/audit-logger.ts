@@ -3,6 +3,11 @@ import type { AuditModule, AuditAction, AuditSeverity, AuditLogEntry, WorkflowSt
 
 const STORAGE_KEY = 'pact_audit_logs';
 const PENDING_SYNC_KEY = 'pact_audit_pending_sync';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function newAuditLogId(): string {
+  return crypto.randomUUID();
+}
 
 interface ServiceAuditLogInput {
   module: AuditModule;
@@ -31,8 +36,8 @@ export async function logAuditEvent(data: ServiceAuditLogInput): Promise<string 
     const sessionId = session?.session?.access_token?.substring(0, 16) || 'system-session';
     
     const timestamp = new Date().toISOString();
-    const localFallbackId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    
+    const clientId = newAuditLogId();
+
     const dbRecord = {
       module: data.module,
       action: data.action,
@@ -67,13 +72,13 @@ export async function logAuditEvent(data: ServiceAuditLogInput): Promise<string 
 
     if (error) {
       console.warn('[AuditLogger] Failed to save to database, caching locally:', error);
-      const camelCaseLog = dbLogToCamelCase({ ...dbRecord, id: localFallbackId });
+      const camelCaseLog = dbLogToCamelCase({ ...dbRecord, id: clientId });
       cacheLocalLog(camelCaseLog);
       addToPendingSync(camelCaseLog);
-      return localFallbackId;
+      return clientId;
     }
 
-    return insertedLog?.id ?? localFallbackId;
+    return insertedLog?.id ?? clientId;
   } catch (error) {
     console.warn('[AuditLogger] Error logging audit event:', error);
     return null;

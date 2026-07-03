@@ -227,11 +227,29 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     ),
   ];
 
+  async function fetchHubEnrichment(ids: string[]) {
+    const [{ data: hubs, error: hubError }, { data: hubStates, error: statesError }] =
+      await Promise.all([
+        supabase.from('hubs').select('id, name').in('id', ids),
+        supabase.from('hub_states').select('hub_id, state_id').in('hub_id', ids),
+      ]);
+    if (hubError) throw hubError;
+    if (statesError) throw statesError;
+    const statesByHub = new Map<string, string[]>();
+    for (const row of hubStates || []) {
+      const list = statesByHub.get(row.hub_id) || [];
+      list.push(row.state_id);
+      statesByHub.set(row.hub_id, list);
+    }
+    return (hubs || []).map((h) => ({
+      ...h,
+      states: statesByHub.get(h.id) || [],
+    }));
+  }
+
   const [enrichResult, hubResult, profileResult] = await Promise.allSettled([
     fetchEnrichmentBatched(entryIds),
-    hubIds.length > 0
-      ? supabase.from('hubs').select('id, name, states').in('id', hubIds)
-      : Promise.resolve({ data: [] }),
+    hubIds.length > 0 ? fetchHubEnrichment(hubIds) : Promise.resolve([]),
     missingNameIds.length > 0
       ? supabase.from('profiles').select('id, full_name, username, email').in('id', missingNameIds)
       : Promise.resolve({ data: [] }),
@@ -270,12 +288,12 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     console.warn('[DownPayment] Profile name enrichment failed (non-critical):', profileResult.reason);
   }
 
-  if (hubResult.status === 'fulfilled' && hubResult.value?.data?.length > 0) {
+  if (hubResult.status === 'fulfilled' && (hubResult.value as any[])?.length > 0) {
     // Build hub → name map AND hub → first-state-name map for records
     // that have no mmpSiteEntryId (and therefore no enrichment state).
     const hubNameMap = new Map<string, string>();
     const hubStateMap = new Map<string, string>();
-    (hubResult.value.data as any[]).forEach((h: any) => {
+    (hubResult.value as any[]).forEach((h: any) => {
       hubNameMap.set(h.id, h.name);
       if (Array.isArray(h.states) && h.states.length > 0) {
         const stateObj = sudanStates.find(s => s.id === h.states[0]);

@@ -34,6 +34,11 @@ const AuditContext = createContext<AuditContextType | undefined>(undefined);
 const STORAGE_KEY = 'pact_audit_logs';
 const PENDING_SYNC_KEY = 'pact_audit_pending_sync';
 const MAX_LOGS = 10000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isAuditLogUuid(id: string | undefined): boolean {
+  return !!id && UUID_RE.test(id);
+}
 const DEFAULT_DAYS_TO_KEEP = 90;
 
 export function AuditProvider({ children }: { children: ReactNode }) {
@@ -114,10 +119,7 @@ export function AuditProvider({ children }: { children: ReactNode }) {
     try {
       // Use upsert with ignoreDuplicates so retries after a 503 (where the insert
       // may have already succeeded server-side) don't throw duplicate key errors.
-      const { error } = await supabase
-        .from('audit_logs')
-        .upsert({
-          id: log.id,
+      const row: Record<string, unknown> = {
           module: log.module,
           action: log.action,
           entity_type: log.entityType,
@@ -141,7 +143,16 @@ export function AuditProvider({ children }: { children: ReactNode }) {
           success: log.success,
           error_message: log.errorMessage,
           session_id: log.sessionId,
-        }, { onConflict: 'id', ignoreDuplicates: true });
+        };
+      if (isAuditLogUuid(log.id)) {
+        row.id = log.id;
+      }
+
+      const { error } = await supabase
+        .from('audit_logs')
+        .upsert(row, isAuditLogUuid(log.id)
+          ? { onConflict: 'id', ignoreDuplicates: true }
+          : undefined);
 
       if (error) {
         // If a retry attempts to write a log row that already exists, treat it as
