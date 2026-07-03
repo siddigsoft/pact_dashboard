@@ -1620,10 +1620,19 @@ const CoordinatorSites: FC = () => {
       }
 
       await supabase.from('audit_logs').insert({
+        module: 'mmp',
         action: 'return_state_sites_to_fom',
-        details: `Returned ${eligibleSiteIds.length} pending sites in state "${selectedStateForReturn.state}" (MMP: ${selectedMmpNameForReturn}) to FOM. Reason: ${returnStateToFOMReason}`,
-        performed_by: currentUser?.id || null,
-        username: currentUser?.username || currentUser?.fullName || 'System',
+        entity_type: 'mmp_site_entry',
+        entity_id: selectedMmpIdForReturn || eligibleSiteIds[0] || 'batch',
+        entity_name: selectedMmpNameForReturn || selectedStateForReturn.state,
+        actor_id: currentUser?.id || 'system',
+        actor_name: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+        actor_role: currentUser?.role || 'coordinator',
+        actor_email: currentUser?.email || null,
+        severity: 'warning',
+        success: true,
+        description: `Returned ${eligibleSiteIds.length} pending sites in state "${selectedStateForReturn.state}" (MMP: ${selectedMmpNameForReturn}) to FOM`,
+        details: `Reason: ${returnStateToFOMReason}`,
       });
 
       toast({

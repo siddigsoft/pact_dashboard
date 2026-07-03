@@ -19,6 +19,7 @@ import {
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { ensureValidSession } from '@/lib/session-health';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { format } from 'date-fns';
@@ -603,8 +604,7 @@ export default function AdminBroadcastPage() {
         is_read: false,
         created_at: now,
       }));
-      const { error } = await supabase.from('notifications').insert(rows);
-      if (error) throw new Error(error.message);
+      await insertNotificationsToDb(rows);
 
       supabase.functions.invoke('send-fcm-push', {
         body: {
@@ -708,8 +708,11 @@ export default function AdminBroadcastPage() {
       type: notifType, is_read: false, created_at: now,
     }));
 
-    const { error: insertError } = await supabase.from('notifications').insert(rows);
-    if (insertError) throw new Error(insertError.message);
+    try {
+      await insertNotificationsToDb(rows);
+    } catch (insertError) {
+      throw new Error((insertError as Error).message);
+    }
 
     let fcmResult: SendSummary['fcm'] | undefined;
     try {

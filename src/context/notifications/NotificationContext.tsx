@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type FC, type ReactNode } from 'react';
 import { Notification, NotificationCategory } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 
 
 const initialNotifications: Notification[] = [];
@@ -466,9 +467,9 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
     // Fire-and-forget persistence to Supabase (using correct schema columns)
     (async () => {
       try {
-        const { error } = await supabase.from('notifications').insert({
+        await insertNotificationsToDb([{
           recipient_id: notification.userId,
-          user_id: notification.userId, // Also set for RLS policy compatibility
+          user_id: notification.userId,
           title_en: notification.title,
           title_ar: notification.title,
           message_en: notification.message,
@@ -480,10 +481,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
           event_type: notification.category || 'system',
           status: 'pending',
           email_sent: false,
-        });
-        if (error) {
-          console.warn('Failed to persist notification:', error.message);
-        }
+        }]);
       } catch (err) {
         console.warn('Failed to persist notification:', err);
       }

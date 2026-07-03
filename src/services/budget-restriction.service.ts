@@ -425,11 +425,17 @@ export async function processOverBudgetApproval(
     const { error: logError } = await supabase
       .from('audit_logs')
       .insert({
+        module: 'financial_operations',
         action: 'budget_override',
         entity_type: 'budget_transaction',
         entity_id: transactionId,
-        user_id: approverId,
-        details: {
+        actor_id: approverId,
+        actor_name: approverRole || 'Approver',
+        actor_role: approverRole,
+        severity: 'warning',
+        success: true,
+        description: `Budget restriction override approved for transaction ${transactionId}`,
+        metadata: {
           override_reason: overrideReason,
           approver_role: approverRole,
         },

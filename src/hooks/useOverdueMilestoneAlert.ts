@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
 import { startOfDay, isBefore, parseISO, isValid } from 'date-fns';
@@ -112,7 +113,7 @@ async function checkOverdueMilestones(userId: string) {
     // Batch insert in chunks to avoid request size limits
     const CHUNK = 50;
     for (let i = 0; i < notifications.length; i += CHUNK) {
-      await supabase.from('notifications').insert(notifications.slice(i, i + CHUNK));
+      await insertNotificationsToDb(notifications.slice(i, i + CHUNK));
     }
   }
 }

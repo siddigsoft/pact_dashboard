@@ -165,8 +165,10 @@ serve(async (req) => {
     // Log the password reset
     try {
       await supabase.from('audit_logs').insert({
+        module: 'auth',
         action: 'password_reset',
         entity_type: 'user',
+        entity_id: profile.id,
         entity_name: email,
         description: `Password reset completed for ${email}`,
         success: true,

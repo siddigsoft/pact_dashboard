@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
 import type { RewardDeduction } from '@/utils/rewardCalc';
 import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
@@ -403,7 +404,7 @@ async function sendTaskNotification(opts: {
 
   const m = msgs[opts.event];
   try {
-    await supabase.from('notifications').insert({
+    await insertNotificationsToDb([{
       event_type: 'personal_task',
       entity_type: 'personal_task',
       entity_id: opts.taskId,
@@ -416,7 +417,7 @@ async function sendTaskNotification(opts: {
       priority: notifPriority(opts.priority),
       status: 'unread',
       action_url: opts.taskId ? `/tasks/${opts.taskId}` : '/my-tasks',
-    });
+    }]);
   } catch {
     // Non-critical — don't throw
   }

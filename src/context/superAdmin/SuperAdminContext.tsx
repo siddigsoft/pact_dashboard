@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { isProtectedOwner } from '@/lib/protected-accounts';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
@@ -593,7 +594,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     relatedEntityType?: string
   ) => {
     try {
-      await supabase.from('notifications').insert({
+      await insertNotificationsToDb([{
         recipient_id: userId,
         title_en: title,
         title_ar: title,
@@ -604,7 +605,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         event_type: 'system',
         status: 'pending',
         priority: 'high',
-      });
+      }]);
     } catch (error) {
       console.error('Failed to send notification:', error);
     }

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ async function notifyAssignee(
   projectId: string,
   assignedByName: string,
 ) {
-  await supabase.from('notifications').insert({
+  await insertNotificationsToDb([{
     recipient_id: assigneeId,
     user_id: assigneeId,
     title_en: 'Field task assigned to you',
@@ -75,7 +76,7 @@ async function notifyAssignee(
     event_type: 'project_field_task_assigned',
     status: 'pending',
     email_sent: false,
-  });
+  }]);
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────

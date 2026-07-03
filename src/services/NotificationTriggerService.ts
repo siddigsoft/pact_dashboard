@@ -1,5 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from './email-notification.service';
+import { insertNotificationsToDb } from '@/services/notification-insert';
+import { ensureValidSession } from '@/lib/session-health';
 
 export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages' | 'recall' | 'wallet' | 'retainer' | 'account';
 
@@ -223,6 +225,12 @@ export const NotificationTriggerService = {
 
     console.log(`[NOTIFICATION] Starting send to user ${userId}: "${title}"`);
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      console.warn(`[NOTIFICATION] No valid session, skipping send to ${userId}`);
+      return false;
+    }
+
     const shouldSend = await shouldSendNotification(userId, category, priority);
     if (!shouldSend) {
       console.log(`[NOTIFICATION] Suppressed for user ${userId}: ${title}`);
@@ -278,18 +286,14 @@ export const NotificationTriggerService = {
         return false;
       }
 
-      const { data, error } = await supabase.from('notifications').insert(notificationData).select('id');
-
-      if (error) {
-        console.error('[NOTIFICATION] Failed to create notification:', error);
-        console.error('[NOTIFICATION] Error code:', error.code);
-        console.error('[NOTIFICATION] Error message:', error.message);
-        console.error('[NOTIFICATION] Error details:', error.details);
-        console.error('[NOTIFICATION] Error hint:', error.hint);
+      const insertedIds = await insertNotificationsToDb([notificationData]);
+      if (!insertedIds.length) {
+        console.error('[NOTIFICATION] Failed to create notification (no id returned)');
         return false;
       }
 
-      console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data?.[0]?.id);
+      const data = [{ id: insertedIds[0] }];
+      console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data[0].id);
 
       // Send FCM push notification to mobile devices (fire-and-forget, non-blocking)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;

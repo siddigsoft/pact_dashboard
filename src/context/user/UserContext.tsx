@@ -6,6 +6,7 @@ import { isProtectedOwner } from '@/lib/protected-accounts';
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import i18n from '@/lib/i18n';
 import { queryClient } from '@/lib/queryClient';
@@ -1102,17 +1103,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Insert in-app notification for the approved user
-        await supabase.from('notifications').insert({
+        await insertNotificationsToDb([{
           recipient_id: userId,
           title: 'Your account has been activated!',
           message: 'Welcome to PACT! Your account registration has been approved and you now have full access to the system. Log in to get started.',
+          event_type: 'account',
           type: 'success',
-          category: 'account',
           priority: 'high',
           link: '/dashboard',
           is_read: false,
           created_at: new Date().toISOString(),
-        });
+        }]);
       } catch (emailError) {
         console.error('Failed to send welcome email or notification:', emailError);
       }

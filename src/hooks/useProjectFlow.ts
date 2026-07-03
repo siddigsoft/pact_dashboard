@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { getProjectFlow, type FlowStage } from '@/config/projectFlows';
@@ -270,7 +271,7 @@ async function sendStageNotifications(
     email_sent: false,
   }));
 
-  await supabase.from('notifications').insert(notifications);
+  await insertNotificationsToDb(notifications);
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────

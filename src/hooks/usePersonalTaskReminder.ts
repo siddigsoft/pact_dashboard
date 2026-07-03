@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import { startOfDay, differenceInDays, parseISO, isValid } from 'date-fns';
 
@@ -64,7 +65,7 @@ async function checkOverdueTasks(userId: string) {
     ? differenceInDays(today, parseISO(oldest.due_date))
     : 0;
 
-  await supabase.from('notifications').insert({
+  await insertNotificationsToDb([{
     recipient_id: userId,
     event_type: 'task_overdue_summary',
     entity_type: 'personal_task',
@@ -74,5 +75,5 @@ async function checkOverdueTasks(userId: string) {
     status: 'pending',
     action_url: '/tasks',
     email_sent: false,
-  });
+  }]);
 }

@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
 import { differenceInDays, parseISO, startOfDay } from 'date-fns';
@@ -134,5 +135,5 @@ async function checkStalledProjects(userId: string) {
     };
   });
 
-  await supabase.from('notifications').insert(notifications);
+  await insertNotificationsToDb(notifications);
 }

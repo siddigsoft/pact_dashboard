@@ -120,8 +120,8 @@ export function AuditProvider({ children }: { children: ReactNode }) {
       // Use upsert with ignoreDuplicates so retries after a 503 (where the insert
       // may have already succeeded server-side) don't throw duplicate key errors.
       const row: Record<string, unknown> = {
-          module: log.module,
-          action: log.action,
+          module: log.module || 'system',
+          action: log.action || 'unknown',
           entity_type: log.entityType,
           entity_id: log.entityId,
           entity_name: log.entityName,
@@ -136,7 +136,7 @@ export function AuditProvider({ children }: { children: ReactNode }) {
           new_state: log.newState,
           changes: log.changes,
           metadata: log.metadata,
-          description: log.description,
+          description: log.description || `${log.action || 'unknown'} on ${log.entityType || 'entity'}`,
           details: log.details,
           tags: log.tags,
           related_entity_ids: log.relatedEntityIds,

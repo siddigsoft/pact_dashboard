@@ -1,5 +1,6 @@
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import type {
   RecallTier,
   RecallScopeType,
@@ -305,7 +306,7 @@ export async function performRecall(
 
         if (fomUsers) {
           for (const fom of fomUsers) {
-            await supabase.from('notifications').insert({
+            await insertNotificationsToDb([{
               recipient_id: fom.id,
               title_en: 'MMP Recalled',
               title_ar: 'تم سحب خطة المراقبة الشهرية',
@@ -317,7 +318,7 @@ export async function performRecall(
               event_type: 'assignments',
               status: 'pending',
               priority: 'high'
-            });
+            }]);
           }
         }
       } catch (notifError) {
@@ -921,7 +922,7 @@ async function sendRecallNotifications(
 
   for (const userId of affectedUserIds) {
     try {
-      await supabase.from('notifications').insert({
+      await insertNotificationsToDb([{
         recipient_id: userId,
         title_en: titleEn,
         title_ar: titleAr,
@@ -933,7 +934,7 @@ async function sendRecallNotifications(
         event_type: 'recall',
         status: 'pending',
         priority: 'high'
-      });
+      }]);
     } catch (err) {
       console.error('[RECALL] Failed to send notification to:', userId, err);
     }
@@ -949,7 +950,7 @@ async function sendRecallNotifications(
     if (superAdmins) {
       for (const admin of superAdmins) {
         if (!affectedUserIds.includes(admin.id)) {
-          await supabase.from('notifications').insert({
+          await insertNotificationsToDb([{
             recipient_id: admin.id,
             title_en: titleEn,
             title_ar: titleAr,
@@ -961,7 +962,7 @@ async function sendRecallNotifications(
             event_type: 'recall',
             status: 'pending',
             priority: 'medium'
-          });
+          }]);
         }
       }
     }
@@ -1157,7 +1158,7 @@ async function sendRecallApprovalNotifications(
         .single();
 
       if (initiator) {
-        await supabase.from('notifications').insert({
+        await insertNotificationsToDb([{
           recipient_id: initiator.id,
           title_en: 'Recall Request Approved',
           title_ar: 'تمت الموافقة على طلب السحب',
@@ -1169,7 +1170,7 @@ async function sendRecallApprovalNotifications(
           event_type: 'recall',
           status: 'pending',
           priority: 'high'
-        });
+        }]);
       }
     } catch (err) {
       console.error('[RECALL] Failed to notify initiator:', err);
@@ -1217,7 +1218,7 @@ async function sendRecallApprovalNotifications(
     // Send notifications to unique affected users
     const uniqueUserIds = [...new Set(affectedUserIds)];
     for (const userId of uniqueUserIds) {
-      await supabase.from('notifications').insert({
+      await insertNotificationsToDb([{
         recipient_id: userId,
         title_en: 'MMP Recall Executed',
         title_ar: 'تم تنفيذ سحب خطة المراقبة',
@@ -1229,7 +1230,7 @@ async function sendRecallApprovalNotifications(
         event_type: 'recall',
         status: 'pending',
         priority: 'medium'
-      });
+      }]);
     }
 
     // CC Super Admins
@@ -1242,7 +1243,7 @@ async function sendRecallApprovalNotifications(
     if (superAdmins) {
       for (const admin of superAdmins) {
         if (!uniqueUserIds.includes(admin.id)) {
-          await supabase.from('notifications').insert({
+          await insertNotificationsToDb([{
             recipient_id: admin.id,
             title_en: 'MMP Recall Executed',
             title_ar: 'تم تنفيذ سحب خطة المراقبة',
@@ -1254,7 +1255,7 @@ async function sendRecallApprovalNotifications(
             event_type: 'recall',
             status: 'pending',
             priority: 'normal'
-          });
+          }]);
         }
       }
     }
@@ -1289,7 +1290,7 @@ async function sendRecallRejectionNotification(
         .single();
 
       if (initiator) {
-        await supabase.from('notifications').insert({
+        await insertNotificationsToDb([{
           recipient_id: initiator.id,
           title_en: 'Recall Request Rejected',
           title_ar: 'تم رفض طلب السحب',
@@ -1301,7 +1302,7 @@ async function sendRecallRejectionNotification(
           event_type: 'recall',
           status: 'pending',
           priority: 'high'
-        });
+        }]);
       }
     } catch (err) {
       console.error('[RECALL] Failed to notify initiator of rejection:', err);
@@ -1317,7 +1318,7 @@ async function sendRecallRejectionNotification(
     
     if (supervisors) {
       for (const supervisor of supervisors) {
-        await supabase.from('notifications').insert({
+        await insertNotificationsToDb([{
           recipient_id: supervisor.id,
           title_en: 'MMP Recall Request Rejected',
           title_ar: 'تم رفض طلب سحب خطة المراقبة',
@@ -1329,7 +1330,7 @@ async function sendRecallRejectionNotification(
           event_type: 'recall',
           status: 'pending',
           priority: 'normal'
-        });
+        }]);
       }
     }
   } catch (err) {

@@ -114,8 +114,10 @@ serve(async (req) => {
 
     try {
       await supabaseAdmin.from('audit_logs').insert({
+        module: 'auth',
         action: 'password_change',
         entity_type: 'user',
+        entity_id: currentUser.id,
         entity_name: currentUser.email,
         description: `User ${currentUser.email} changed their password`,
         success: true,

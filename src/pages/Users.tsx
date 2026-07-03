@@ -27,6 +27,7 @@ import { toDisplayLabel, VISIBLE_ROLE_CODES, normalizeRole } from '@/utils/roleM
 import { sudanStates } from '@/data/sudanStates';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import {
   User as UserIcon,
   Search,
@@ -492,16 +493,16 @@ const Users = () => {
       }
 
       // Insert rejection notification with mandatory reason
-      await supabase.from('notifications').insert({
+      await insertNotificationsToDb([{
         recipient_id: userId,
         title: 'Your registration was not approved',
         message: `Your account registration could not be approved at this time. Reason: ${rejectionReason.trim()}. Please contact your supervisor for more information.`,
+        event_type: 'account',
         type: 'warning',
-        category: 'account',
         priority: 'high',
         is_read: false,
         created_at: new Date().toISOString(),
-      });
+      }]);
 
       // Refresh users list to remove rejected user from local state
       await handleRefreshUsers();

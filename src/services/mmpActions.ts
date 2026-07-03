@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { logForwardingAudit, logStatusChangeAudit, logSiteEntryAction } from '@/services/mmpAudit.service';
 
 // Fetch FOM users — role stored as 'fom' or 'Field Operation Manager (FOM)'
@@ -172,11 +173,7 @@ export async function insertNotifications(rows: any[]) {
       is_read: false,
     };
   });
-  const { error } = await supabase.from('notifications').insert(sanitizedRows);
-  if (error) {
-    console.error('[insertNotifications] Error inserting notifications:', error);
-    throw error;
-  }
+  await insertNotificationsToDb(sanitizedRows);
 }
 
 // Batch update mmp_site_entries forwarding to coordinator
