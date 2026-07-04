@@ -305,8 +305,21 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     keyOutputs: entry.customOutputs ?? [],
   });
 
-  const resolveStageForEntry = (entry: CustomStageEntry): FlowStage =>
-    allDefaultStages.find(s => s.id === entry.id) ?? synthesizeCustomStage(entry);
+  // Apply any custom* overrides on top of a matching default stage (e.g. a
+  // user renamed "Analysis" to "Finance & Fund Approvals" via customLabel).
+  // Without this, only the id/order come from the override and every UI spot
+  // that reads `.label` directly (flow banner, FlowStrip icons, etc.) would
+  // keep showing the stale default label instead of the renamed one.
+  const resolveStageForEntry = (entry: CustomStageEntry): FlowStage => {
+    const base = allDefaultStages.find(s => s.id === entry.id);
+    if (!base) return synthesizeCustomStage(entry);
+    return {
+      ...base,
+      label: entry.customLabel?.trim() || base.label,
+      description: entry.customDescription ?? base.description,
+      keyOutputs: entry.customOutputs ?? base.keyOutputs,
+    };
+  };
 
   // displayStages = everything the UI should iterate over (default + user-added),
   // including skipped ones. Order follows customEntries when present, else default.
