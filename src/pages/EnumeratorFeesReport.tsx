@@ -46,6 +46,10 @@ interface FeeRow {
   feePaidAt: string | null;
   feePaymentMethod: string | null;
   feePaymentNotes: string | null;
+  advanceStatus: 'none' | 'pending' | 'partially_paid' | 'fully_paid' | 'rejected' | 'other';
+  advanceRequestedAmount: number | null;
+  advancePaidAmount: number | null;
+  advanceRequestedBy: string | null;
 }
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Bankak', 'Cash', 'Other'];
@@ -80,6 +84,25 @@ function statusBadge(status: string) {
   const cls = map[status] || map[status?.toLowerCase()] || map['pending'];
   const label = status?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Unknown';
   return <Badge className={`text-[10px] ${cls}`}>{label}</Badge>;
+}
+
+function advanceBadge(status: FeeRow['advanceStatus'], paid: number | null, requested: number | null) {
+  if (status === 'fully_paid') {
+    return <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">✓ Advance Paid{paid ? ` (${paid.toLocaleString()})` : ''}</Badge>;
+  }
+  if (status === 'partially_paid') {
+    return <Badge className="text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Partial Advance{paid ? ` (${paid.toLocaleString()})` : ''}</Badge>;
+  }
+  if (status === 'pending') {
+    return <Badge className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">⏳ Advance Requested{requested ? ` (${requested.toLocaleString()})` : ''}</Badge>;
+  }
+  if (status === 'rejected') {
+    return <Badge className="text-[10px] bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">Advance Rejected</Badge>;
+  }
+  if (status === 'other') {
+    return <Badge variant="outline" className="text-[10px] text-muted-foreground">Advance Requested</Badge>;
+  }
+  return <Badge variant="outline" className="text-[10px] text-orange-600 border-orange-300">No Advance Requested</Badge>;
 }
 
 function cycleBadge(cs: string) {
@@ -117,6 +140,7 @@ export default function EnumeratorFeesReport() {
   const [filterCycle, setFilterCycle] = useState('all');
   const [filterSiteStatus, setFilterSiteStatus] = useState('all');
   const [filterPaid, setFilterPaid] = useState('all');
+  const [filterAdvance, setFilterAdvance] = useState('all');
 
   // ── payment tracking state ────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -186,7 +210,44 @@ export default function EnumeratorFeesReport() {
         });
       }
 
+      // 5. Down payment / transport advance requests, keyed by mmp_site_entry_id
+      const entryIds = entryList.map((e: any) => e.id).filter(Boolean);
+      const dpMap: Record<string, { status: string; requested_amount: number | null; total_paid_amount: number | null; requested_by: string | null }> = {};
+      const DP_CHUNK = 500;
+      for (let i = 0; i < entryIds.length; i += DP_CHUNK) {
+        const chunk = entryIds.slice(i, i + DP_CHUNK);
+        const { data: dps, error: dpErr } = await supabase
+          .from('down_payment_requests')
+          .select('mmp_site_entry_id, site_visit_id, status, requested_amount, total_paid_amount, requested_by, created_at')
+          .or(`mmp_site_entry_id.in.(${chunk.join(',')}),site_visit_id.in.(${chunk.join(',')})`);
+        if (dpErr) throw dpErr;
+        (dps || []).forEach((d: any) => {
+          const key = d.mmp_site_entry_id || d.site_visit_id;
+          if (!key) return;
+          const existing = dpMap[key];
+          // keep the most "advanced" / most recent request per site
+          if (!existing || (d.created_at || '') >= (existing as any)._createdAt) {
+            dpMap[key] = {
+              status: d.status,
+              requested_amount: d.requested_amount != null ? Number(d.requested_amount) : null,
+              total_paid_amount: d.total_paid_amount != null ? Number(d.total_paid_amount) : null,
+              requested_by: d.requested_by || null,
+              ...({ _createdAt: d.created_at } as any),
+            };
+          }
+        });
+      }
+
       const mapped: FeeRow[] = entryList.map((e: any) => {
+        const dp = dpMap[e.id];
+        let advanceStatus: FeeRow['advanceStatus'] = 'none';
+        if (dp) {
+          if (dp.status === 'fully_paid') advanceStatus = 'fully_paid';
+          else if (dp.status === 'partially_paid') advanceStatus = 'partially_paid';
+          else if (dp.status === 'rejected' || dp.status === 'admin_rejected' || dp.status === 'supervisor_rejected') advanceStatus = 'rejected';
+          else if (dp.status === 'pending_supervisor' || dp.status === 'pending_admin' || dp.status === 'approved') advanceStatus = 'pending';
+          else advanceStatus = 'other';
+        }
         const mmp = mmpMap[e.mmp_file_id] || { name: '—', hub: '—', month: null, cycle_status: 'active' };
         const enumFee = e.enumerator_fee != null ? Number(e.enumerator_fee) : null;
         const transFee = e.transport_fee != null ? Number(e.transport_fee) : null;
@@ -220,6 +281,10 @@ export default function EnumeratorFeesReport() {
           feePaidAt: e.fee_paid_at || null,
           feePaymentMethod: e.fee_payment_method || null,
           feePaymentNotes: e.fee_payment_notes || null,
+          advanceStatus,
+          advanceRequestedAmount: dp?.requested_amount ?? null,
+          advancePaidAmount: dp?.total_paid_amount ?? null,
+          advanceRequestedBy: dp?.requested_by ?? null,
         };
       });
 
@@ -254,13 +319,16 @@ export default function EnumeratorFeesReport() {
       if (filterAck === 'has_fee' && r.totalFee === null) return false;
       if (filterPaid === 'paid' && r.feePaidStatus !== 'paid') return false;
       if (filterPaid === 'unpaid' && r.feePaidStatus !== 'unpaid') return false;
+      if (filterAdvance === 'none' && r.advanceStatus !== 'none') return false;
+      if (filterAdvance === 'requested' && r.advanceStatus === 'none') return false;
+      if (filterAdvance === 'fully_paid' && r.advanceStatus !== 'fully_paid') return false;
       if (q) {
         const hay = [r.siteName, r.siteCode, r.enumeratorName, r.state, r.locality, r.mmpName, r.mmpHub].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, filterMmp, filterHub, filterState, filterCycle, filterSiteStatus, filterAck, filterPaid]);
+  }, [rows, search, filterMmp, filterHub, filterState, filterCycle, filterSiteStatus, filterAck, filterPaid, filterAdvance]);
 
   // ── KPI totals ────────────────────────────────────────────────────────────
   const kpi = useMemo(() => {
@@ -282,7 +350,7 @@ export default function EnumeratorFeesReport() {
 
   // ── export ────────────────────────────────────────────────────────────────
   const exportCsv = () => {
-    const header = ['Enumerator','Site Name','Site Code','State','Locality','MMP','Hub','Month','Cycle Status','Site Status','Enumerator Fee (SDG)','Transport Fee (SDG)','Total Fee (SDG)','Acknowledged','Payment Status','Paid Date','Payment Method'];
+    const header = ['Enumerator','Site Name','Site Code','State','Locality','MMP','Hub','Month','Cycle Status','Site Status','Enumerator Fee (SDG)','Transport Fee (SDG)','Total Fee (SDG)','Acknowledged','Fee Payment Status','Paid Date','Payment Method','Transport Advance Status','Advance Requested (SDG)','Advance Paid (SDG)'];
     const lines = [header.join(','), ...filtered.map(r => [
       r.enumeratorName, r.siteName, r.siteCode, r.state, r.locality,
       r.mmpName, r.mmpHub, r.mmpMonth || '', r.cycleStatus, r.siteStatus,
@@ -291,6 +359,9 @@ export default function EnumeratorFeesReport() {
       r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
       r.feePaidAt ? fmtDate(r.feePaidAt) : '',
       r.feePaymentMethod || '',
+      r.advanceStatus === 'none' ? 'Not Requested' : r.advanceStatus.replace(/_/g, ' '),
+      r.advanceRequestedAmount ?? '',
+      r.advancePaidAmount ?? '',
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -396,9 +467,12 @@ export default function EnumeratorFeesReport() {
       'Transport Fee (SDG)': r.transportFee ?? '',
       'Total Fee (SDG)': r.totalFee ?? '',
       'Acknowledged': r.costAcknowledged ? 'Yes' : 'No',
-      'Payment Status': r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
+      'Fee Payment Status': r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
       'Paid Date': r.feePaidAt ? fmtDate(r.feePaidAt) : '',
       'Payment Method': r.feePaymentMethod || '',
+      'Transport Advance Status': r.advanceStatus === 'none' ? 'Not Requested' : r.advanceStatus.replace(/_/g, ' '),
+      'Advance Requested (SDG)': r.advanceRequestedAmount ?? '',
+      'Advance Paid (SDG)': r.advancePaidAmount ?? '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -578,6 +652,15 @@ export default function EnumeratorFeesReport() {
                 <SelectItem value="unpaid">⏳ Unpaid</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={filterAdvance} onValueChange={setFilterAdvance}>
+              <SelectTrigger className="w-[170px] h-8 text-xs" data-testid="select-fee-advance"><SelectValue placeholder="Transport Advance" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Advances</SelectItem>
+                <SelectItem value="none">No Advance Requested</SelectItem>
+                <SelectItem value="requested">Advance Requested (any)</SelectItem>
+                <SelectItem value="fully_paid">Advance Fully Paid</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="flex gap-1.5 ml-auto">
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} data-testid="button-export-fees-csv">
                 <Download className="h-3 w-3" /> CSV
@@ -653,7 +736,8 @@ export default function EnumeratorFeesReport() {
                     <TableHead className="text-center">Site Status</TableHead>
                     <TableHead className="text-center">Cycle</TableHead>
                     <TableHead className="text-center">Ack.</TableHead>
-                    <TableHead className="text-center">Payment</TableHead>
+                    <TableHead className="text-center">Fee Payment</TableHead>
+                    <TableHead className="text-center">Transport Advance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -727,6 +811,9 @@ export default function EnumeratorFeesReport() {
                         ) : (
                           <Badge variant="outline" className="text-[10px] text-muted-foreground">Unpaid</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {advanceBadge(r.advanceStatus, r.advancePaidAmount, r.advanceRequestedAmount)}
                       </TableCell>
                     </TableRow>
                     );
