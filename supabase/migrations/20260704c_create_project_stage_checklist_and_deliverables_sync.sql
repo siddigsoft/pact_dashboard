@@ -24,14 +24,32 @@ CREATE TABLE IF NOT EXISTS public.project_stage_checklist (
   completed_at   timestamptz,
   created_by     uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at     timestamptz NOT NULL DEFAULT now(),
-  sort_order     integer NOT NULL DEFAULT 0,
-  -- 'deliverable' rows are auto-created from the project type's Required
-  -- Deliverables list; 'manual' rows are ad-hoc items added from the Stages
-  -- tab. deliverable_id is the stable config id (e.g. "as-4") used to avoid
-  -- re-seeding the same deliverable twice.
-  source         text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'deliverable')),
-  deliverable_id text
+  sort_order     integer NOT NULL DEFAULT 0
 );
+
+-- Add the deliverable-sync columns even if the table already existed before
+-- this migration (e.g. from a previous partial run) without them.
+-- 'deliverable' rows are auto-created from the project type's Required
+-- Deliverables list; 'manual' rows are ad-hoc items added from the Stages
+-- tab. deliverable_id is the stable config id (e.g. "as-4") used to avoid
+-- re-seeding the same deliverable twice.
+ALTER TABLE public.project_stage_checklist
+  ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
+
+ALTER TABLE public.project_stage_checklist
+  ADD COLUMN IF NOT EXISTS deliverable_id text;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'project_stage_checklist_source_check'
+  ) THEN
+    ALTER TABLE public.project_stage_checklist
+      ADD CONSTRAINT project_stage_checklist_source_check
+      CHECK (source IN ('manual', 'deliverable'));
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_project_stage_checklist_project_stage
   ON public.project_stage_checklist(project_id, stage_id);
