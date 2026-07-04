@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { insertNotificationsToDb } from '@/services/notification-insert';
+import { dispatchNotification } from '@/lib/notify';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -62,21 +62,29 @@ async function notifyAssignee(
   projectId: string,
   assignedByName: string,
 ) {
-  await insertNotificationsToDb([{
-    recipient_id: assigneeId,
-    user_id: assigneeId,
-    title_en: 'Field task assigned to you',
-    title_ar: 'تم تعيين مهمة ميدانية لك',
-    message_en: `${assignedByName} assigned you to field task "${taskTitle}" in "${projectName}"`,
-    message_ar: `قام ${assignedByName} بتعيينك في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
+  // Routed through the central dispatcher (event: 'project_task_assigned') so the
+  // assignee gets this in-app AND by email — matching stage-assignment behavior.
+  // 'project_field_task_assigned' has no template in dispatch-notification and
+  // was previously in-app only via a direct DB insert.
+  await dispatchNotification({
+    event: 'project_task_assigned',
+    recipientIds: [assigneeId],
+    titleEn: 'Field task assigned to you',
+    titleAr: 'تم تعيين مهمة ميدانية لك',
+    messageEn: `${assignedByName} assigned you to field task "${taskTitle}" in "${projectName}"`,
+    messageAr: `قام ${assignedByName} بتعيينك في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
     priority: 'normal',
-    action_url: `/projects/${projectId}?tab=field_tasks`,
-    entity_id: projectId,
-    entity_type: 'project',
-    event_type: 'project_field_task_assigned',
-    status: 'pending',
-    email_sent: false,
-  }]);
+    entityType: 'project',
+    entityId: projectId,
+    actionUrl: `/projects/${projectId}?tab=field_tasks`,
+    sendEmail: true,
+    triggeredByName: assignedByName,
+    metadata: {
+      task_title: taskTitle,
+      project_name: projectName,
+      actor: assignedByName,
+    },
+  });
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────

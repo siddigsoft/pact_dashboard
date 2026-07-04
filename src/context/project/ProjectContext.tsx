@@ -42,6 +42,18 @@ const ProjectContext = createContext<ProjectContextProps>({
 
 export const useProjectContext = () => useContext(ProjectContext);
 
+/** Collect the unique set of user IDs referenced by a project's team object. */
+function extractTeamMemberIds(team: Project['team'] | undefined | null): Set<string> {
+  const ids = new Set<string>();
+  const t = team ?? {};
+  if (t.projectManager) ids.add(t.projectManager);
+  (Array.isArray(t.members) ? t.members : []).forEach((m: any) => m && ids.add(m));
+  (Array.isArray((t as any).teamComposition) ? (t as any).teamComposition : []).forEach(
+    (m: any) => m?.userId && ids.add(m.userId)
+  );
+  return ids;
+}
+
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
@@ -369,6 +381,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const session = await ensureValidSession();
     if (!session.success) return;
     try {
+      const existingProject = projects.find(p => p.id === projectId) ?? currentProject ?? undefined;
+      const previousMemberIds = extractTeamMemberIds(existingProject?.team);
+
       const { error } = await supabase
         .from('projects')
         .update({ 
@@ -385,6 +400,28 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       if (currentProject?.id === projectId) {
         setCurrentProject({ ...currentProject, team });
+      }
+
+      // ── Notify newly added team members (in-app + email) ──────────────────
+      const newMemberIds = Array.from(extractTeamMemberIds(team)).filter(
+        id => !previousMemberIds.has(id) && id !== currentUser?.id
+      );
+      if (newMemberIds.length > 0) {
+        const projectName = existingProject?.name ?? 'a project';
+        dispatchNotification({
+          event: 'project_member_added',
+          recipientIds: newMemberIds,
+          titleEn: `Added to project: ${projectName}`,
+          titleAr: `تمت إضافتك إلى مشروع: ${projectName}`,
+          messageEn: `${currentUser?.fullName ?? 'A team member'} added you to the team for project "${projectName}".`,
+          messageAr: `أضافك ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} إلى فريق مشروع "${projectName}".`,
+          entityType: 'project',
+          entityId: projectId,
+          actionUrl: `/projects/${projectId}`,
+          priority: 'normal',
+          triggeredBy: currentUser?.id,
+          triggeredByName: currentUser?.fullName ?? undefined,
+        }).catch(() => {});
       }
     } catch (err) {
       console.error("Error updating project team:", err);

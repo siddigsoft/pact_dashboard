@@ -5,3 +5,4 @@
 - [down-payment-batch-pay-basis](down-payment-batch-pay-basis.md) — batch-pay bulk actions must compute basis from remaining_amount for partially_paid rows, not full approved amount, or reused "approved"-only filters silently disable the action.
 - [project-flow-deliverables-sync](project-flow-deliverables-sync.md) — Overview deliverables checklist and Stage checklist share one table now; project_stage_assignees/attachments tables may still be missing in dev DB.
 - [project-flow-stage-label-duplication](project-flow-stage-label-duplication.md) — Any view showing a project's stage label/progress must use getEffectiveStages/getProjectStageProgress, not raw getProjectFlow(...).stages, or renamed/skipped stages show stale data.
+- [notification-email-coverage](notification-email-coverage.md) — Raw DB-insert notification helpers with unmapped event_type bypass dispatch-notification entirely, so email is silently never sent.
