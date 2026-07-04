@@ -132,6 +132,7 @@ serve(async (req: Request) => {
 
       const { error: insErr } = await sb.from('notifications').insert({
         recipient_id: recipientId,
+        user_id: recipientId,
         event_type: 'task_dependency_reminder',
         entity_type: 'personal_task',
         entity_id: t.id,

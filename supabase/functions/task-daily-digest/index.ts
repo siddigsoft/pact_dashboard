@@ -248,6 +248,7 @@ serve(async (req: Request) => {
             entity_type: 'personal_task',
             entity_id: profile.id,
             recipient_id: profile.id,
+            user_id: profile.id,
             triggered_by: profile.id,
             title_en: 'Daily Task Digest',
             title_ar: 'ملخص المهام اليومية',

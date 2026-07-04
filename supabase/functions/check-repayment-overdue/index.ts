@@ -65,6 +65,7 @@ async function insertNotification(
     priority,
     status: 'pending',
     recipient_id: recipientId,
+    user_id: recipientId,
     recipient_email: recipientEmail,
     recipient_role: recipientRole,
     title_en: titleEn,

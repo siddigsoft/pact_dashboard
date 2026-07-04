@@ -234,6 +234,7 @@ serve(async (req) => {
     if (initiator) {
       await supabase.from('notifications').insert({
         recipient_id: initiator.id,
+        user_id: initiator.id,
         title_en: action === 'approve' ? 'Recall Approved' : 'Recall Rejected',
         title_ar: action === 'approve' ? 'تمت الموافقة على الاستدعاء' : 'تم رفض الاستدعاء',
         message_en: `Your recall request has been ${action === 'approve' ? 'approved' : 'rejected'} by ${profile.full_name || profile.email}. ${notes ? `Notes: ${notes}` : ''}`,

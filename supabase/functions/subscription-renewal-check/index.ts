@@ -127,6 +127,7 @@ async function insertNotification(
     entity_type: 'subscription',
     entity_id: entityId,
     recipient_id: recipientId,
+    user_id: recipientId,
     triggered_by: null,
     title_en: titleEn,
     title_ar: titleAr,

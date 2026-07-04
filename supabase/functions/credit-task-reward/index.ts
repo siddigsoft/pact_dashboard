@@ -312,6 +312,7 @@ serve(async (req: Request) => {
   if (net <= 0) {
     await sb.from('notifications').insert({
       recipient_id: recipientId,
+      user_id: recipientId,
       event_type: 'task_reward_zero_net',
       entity_type: 'personal_task',
       entity_id: taskId,
@@ -397,6 +398,7 @@ serve(async (req: Request) => {
   await Promise.all([
     sb.from('notifications').insert({
       recipient_id: recipientId,
+      user_id: recipientId,
       event_type: 'task_reward_credited',
       entity_type: 'personal_task',
       entity_id: taskId,

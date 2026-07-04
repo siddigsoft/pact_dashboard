@@ -188,7 +188,7 @@ const AdminWallets: FC = () => {
 
     const { data, error } = await supabase
       .from('wallet_transactions')
-      .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(id, site_name, site_code, locality, state, completed_at)')
+      .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(id, site_name, site_code, locality, state, visit_completed_at)')
       .eq('wallet_id', walletId)
       .order('created_at', { ascending: false });
 
@@ -735,10 +735,10 @@ const AdminWallets: FC = () => {
                                           <p className="text-sm text-muted-foreground">
                                             {tx.description || 'No description'}
                                           </p>
-                                          {tx.mmp_site_entries?.completed_at && (
+                                          {tx.mmp_site_entries?.visit_completed_at && (
                                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                               <Calendar className="w-3 h-3" />
-                                              <span>{format(new Date(tx.mmp_site_entries.completed_at), 'MMM dd, yyyy')}</span>
+                                              <span>{format(new Date(tx.mmp_site_entries.visit_completed_at), 'MMM dd, yyyy')}</span>
                                             </div>
                                           )}
                                           <p className="text-xs text-muted-foreground">
