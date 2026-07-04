@@ -117,7 +117,7 @@ function mapCoordinatorRowToSiteVisit(row: CoordinatorSiteEntryRow): SiteVisit {
     verified_at: row.verified_at ?? undefined,
     verified_by: row.verified_by ?? undefined,
     verification_notes: row.verification_notes ?? undefined,
-    completed_at: row.completed_at ?? (ad as any).completed_at ?? (ad as any)['Completed At'] ?? undefined,
+    completed_at: row.visit_completed_at ?? (ad as any).completed_at ?? (ad as any)['Completed At'] ?? undefined,
     additional_data: ad,
   };
 }

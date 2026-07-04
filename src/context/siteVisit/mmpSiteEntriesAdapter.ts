@@ -36,6 +36,7 @@ interface MMPSiteEntry {
   dispatched_by: string;
   dispatched_at: string;
   updated_at: string;
+  visit_completed_at: string | null;
   completed_at: string | null;
   enumerator_fee: number;
   transport_fee: number;
@@ -87,7 +88,7 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     attachments: [],
     // Prefer trigger-stamped completed_at; fall back to updated_at only for
     // terminal completion-equivalent statuses (legacy backfill safety).
-    completedAt: entry.completed_at ?? (isTerminalCompletionAppStatus(appStatus) ? entry.updated_at : undefined),
+    completedAt: entry.visit_completed_at ?? entry.completed_at ?? (isTerminalCompletionAppStatus(appStatus) ? entry.updated_at : undefined),
     updatedAt: entry.updated_at,
     rating: undefined,
     ratingNotes: undefined,

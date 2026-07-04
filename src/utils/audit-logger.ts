@@ -9,6 +9,15 @@ function newAuditLogId(): string {
   return crypto.randomUUID();
 }
 
+function normalizeEntityId(entityId: string): string {
+  return String(entityId);
+}
+
+function normalizeActorId(actorId: string | undefined | null): string {
+  if (!actorId) return 'system';
+  return String(actorId);
+}
+
 interface ServiceAuditLogInput {
   module: AuditModule;
   action: AuditAction;
@@ -42,9 +51,9 @@ export async function logAuditEvent(data: ServiceAuditLogInput): Promise<string 
       module: data.module,
       action: data.action,
       entity_type: data.entityType,
-      entity_id: data.entityId,
+      entity_id: normalizeEntityId(data.entityId),
       entity_name: data.entityName || null,
-      actor_id: user?.id || 'system',
+      actor_id: normalizeActorId(user?.id),
       actor_name: user?.user_metadata?.full_name || user?.email || 'System Service',
       actor_role: user?.user_metadata?.role || 'system',
       actor_email: user?.email || null,

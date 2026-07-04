@@ -383,7 +383,7 @@ export async function getAuditTrailForSite(siteId: string, limit: number = 100):
   const { data, error } = await supabase
     .from('audit_logs')
     .select('*')
-    .eq('entity_id', siteId)
+    .eq('entity_id', String(siteId))
     .eq('entity_type', 'mmp_site_entry')
     .order('timestamp', { ascending: false })
     .limit(limit);

@@ -103,7 +103,7 @@ export function StatusHistoryPanel({
         .from('audit_logs')
         .select('id, actor_name, actor_role, timestamp, action, previous_state, new_state, metadata, description, details')
         .in('entity_type', entityTypeVariants)
-        .eq('entity_id', entityId)
+        .eq('entity_id', String(entityId))
         .order('timestamp', { ascending: false })
         .limit(50);
 
