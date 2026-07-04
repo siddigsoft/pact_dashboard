@@ -221,10 +221,10 @@ export default function EnumeratorFeesReport() {
       if (profileIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')
-          .select('id, full_name, display_name')
+          .select('id, full_name')
           .in('id', profileIds);
         (profs || []).forEach((p: any) => {
-          profileMap[p.id] = p.display_name || p.full_name || 'Unknown';
+          profileMap[p.id] = p.full_name || 'Unknown';
         });
       }
 
@@ -234,10 +234,10 @@ export default function EnumeratorFeesReport() {
       if (emails.length > 0) {
         const { data: emaPs } = await supabase
           .from('profiles')
-          .select('email, full_name, display_name')
+          .select('email, full_name')
           .in('email', emails);
         (emaPs || []).forEach((p: any) => {
-          if (p.email) emailMap[p.email] = p.display_name || p.full_name || p.email;
+          if (p.email) emailMap[p.email] = p.full_name || p.email;
         });
       }
 
