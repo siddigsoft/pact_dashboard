@@ -4,16 +4,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Users, DollarSign, CheckCircle2, Clock, AlertTriangle,
   Search, Download, FileSpreadsheet, RefreshCw, TrendingUp,
-  MapPin, Building2, Calendar,
+  MapPin, Building2, Calendar, Wallet, Undo2, Banknote,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
+import { useUser } from '@/context/user/UserContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 
 // ── types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +41,14 @@ interface FeeRow {
   mmpMonth: string | null;
   cycleStatus: string;
   currency: string;
+  feePaidStatus: 'unpaid' | 'paid';
+  feePaidAmount: number | null;
+  feePaidAt: string | null;
+  feePaymentMethod: string | null;
+  feePaymentNotes: string | null;
 }
+
+const PAYMENT_METHODS = ['Bank Transfer', 'Bankak', 'Cash', 'Other'];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +100,11 @@ function cycleBadge(cs: string) {
 
 export default function EnumeratorFeesReport() {
   const { toast } = useToast();
+  const { currentUser } = useUser();
+  const { isSuperAdmin } = useSuperAdmin();
+
+  const userRole = currentUser?.role?.toLowerCase();
+  const isFinance = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || isSuperAdmin;
 
   // ── state ──────────────────────────────────────────────────────────────────
   const [rows, setRows] = useState<FeeRow[]>([]);
@@ -98,6 +116,16 @@ export default function EnumeratorFeesReport() {
   const [filterAck, setFilterAck] = useState('all');
   const [filterCycle, setFilterCycle] = useState('all');
   const [filterSiteStatus, setFilterSiteStatus] = useState('all');
+  const [filterPaid, setFilterPaid] = useState('all');
+
+  // ── payment tracking state ────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payMethod, setPayMethod] = useState('Bank Transfer');
+  const [payNotes, setPayNotes] = useState('');
+  const [paySubmitting, setPaySubmitting] = useState(false);
+  const [unpayId, setUnpayId] = useState<string | null>(null);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
   const fetchData = async () => {
@@ -106,7 +134,7 @@ export default function EnumeratorFeesReport() {
       // 1. Site entries
       const { data: entries, error: entErr } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
         .order('site_name');
       if (entErr) throw entErr;
 
@@ -180,6 +208,11 @@ export default function EnumeratorFeesReport() {
           mmpMonth: mmp.month,
           cycleStatus: mmp.cycle_status,
           currency: 'SDG',
+          feePaidStatus: (e.fee_paid_status === 'paid' ? 'paid' : 'unpaid') as 'paid' | 'unpaid',
+          feePaidAmount: e.fee_paid_amount != null ? Number(e.fee_paid_amount) : null,
+          feePaidAt: e.fee_paid_at || null,
+          feePaymentMethod: e.fee_payment_method || null,
+          feePaymentNotes: e.fee_payment_notes || null,
         };
       });
 
@@ -212,13 +245,15 @@ export default function EnumeratorFeesReport() {
       if (filterAck === 'pending' && r.costAcknowledged) return false;
       if (filterAck === 'no_fee' && r.totalFee !== null) return false;
       if (filterAck === 'has_fee' && r.totalFee === null) return false;
+      if (filterPaid === 'paid' && r.feePaidStatus !== 'paid') return false;
+      if (filterPaid === 'unpaid' && r.feePaidStatus !== 'unpaid') return false;
       if (q) {
         const hay = [r.siteName, r.siteCode, r.enumeratorName, r.state, r.locality, r.mmpName, r.mmpHub].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, filterMmp, filterHub, filterState, filterCycle, filterSiteStatus, filterAck]);
+  }, [rows, search, filterMmp, filterHub, filterState, filterCycle, filterSiteStatus, filterAck, filterPaid]);
 
   // ── KPI totals ────────────────────────────────────────────────────────────
   const kpi = useMemo(() => {
@@ -226,28 +261,115 @@ export default function EnumeratorFeesReport() {
     const noFee   = filtered.filter(r => r.totalFee === null || r.totalFee === 0);
     const ackd    = withFee.filter(r => r.costAcknowledged);
     const pending = withFee.filter(r => !r.costAcknowledged);
+    const paid    = withFee.filter(r => r.feePaidStatus === 'paid');
+    const unpaid  = withFee.filter(r => r.feePaidStatus !== 'paid');
     const totalPayable  = withFee.reduce((s, r) => s + (r.totalFee ?? 0), 0);
     const totalAckd     = ackd.reduce((s, r) => s + (r.totalFee ?? 0), 0);
     const totalPending  = pending.reduce((s, r) => s + (r.totalFee ?? 0), 0);
     const totalEnumFee  = withFee.reduce((s, r) => s + (r.enumeratorFee ?? 0), 0);
     const totalTransFee = withFee.reduce((s, r) => s + (r.transportFee ?? 0), 0);
-    return { total: filtered.length, withFee: withFee.length, noFee: noFee.length, ackd: ackd.length, pending: pending.length, totalPayable, totalAckd, totalPending, totalEnumFee, totalTransFee };
+    const totalPaid     = paid.reduce((s, r) => s + (r.feePaidAmount ?? r.totalFee ?? 0), 0);
+    const totalUnpaid   = unpaid.reduce((s, r) => s + (r.totalFee ?? 0), 0);
+    return { total: filtered.length, withFee: withFee.length, noFee: noFee.length, ackd: ackd.length, pending: pending.length, totalPayable, totalAckd, totalPending, totalEnumFee, totalTransFee, paid: paid.length, unpaid: unpaid.length, totalPaid, totalUnpaid };
   }, [filtered]);
 
   // ── export ────────────────────────────────────────────────────────────────
   const exportCsv = () => {
-    const header = ['Enumerator','Site Name','Site Code','State','Locality','MMP','Hub','Month','Cycle Status','Site Status','Enumerator Fee (SDG)','Transport Fee (SDG)','Total Fee (SDG)','Acknowledged'];
+    const header = ['Enumerator','Site Name','Site Code','State','Locality','MMP','Hub','Month','Cycle Status','Site Status','Enumerator Fee (SDG)','Transport Fee (SDG)','Total Fee (SDG)','Acknowledged','Payment Status','Paid Date','Payment Method'];
     const lines = [header.join(','), ...filtered.map(r => [
       r.enumeratorName, r.siteName, r.siteCode, r.state, r.locality,
       r.mmpName, r.mmpHub, r.mmpMonth || '', r.cycleStatus, r.siteStatus,
       r.enumeratorFee ?? '', r.transportFee ?? '', r.totalFee ?? '',
       r.costAcknowledged ? 'Yes' : 'No',
+      r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
+      r.feePaidAt ? fmtDate(r.feePaidAt) : '',
+      r.feePaymentMethod || '',
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `enumerator-fees-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
+  };
+
+  // ── payment mutations ─────────────────────────────────────────────────────
+  const payableSelected = useMemo(
+    () => filtered.filter(r => selectedIds.has(r.id) && r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0),
+    [filtered, selectedIds]
+  );
+  const selectedTotal = useMemo(() => payableSelected.reduce((s, r) => s + (r.totalFee ?? 0), 0), [payableSelected]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllUnpaid = () => {
+    const unpaidVisible = filtered.filter(r => r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0).map(r => r.id);
+    const allSelected = unpaidVisible.length > 0 && unpaidVisible.every(id => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(unpaidVisible));
+  };
+
+  const submitPayment = async () => {
+    if (payableSelected.length === 0) return;
+    setPaySubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const paidAtIso = new Date(`${payDate}T12:00:00`).toISOString();
+      const updates = payableSelected.map(r => ({
+        id: r.id,
+        totalFee: r.totalFee ?? 0,
+      }));
+      for (const u of updates) {
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            fee_paid_status: 'paid',
+            fee_paid_amount: u.totalFee,
+            fee_paid_at: paidAtIso,
+            fee_paid_by: user?.id ?? null,
+            fee_payment_method: payMethod,
+            fee_payment_notes: payNotes || null,
+          })
+          .eq('id', u.id);
+        if (error) throw error;
+      }
+      toast({ title: 'Payment recorded', description: `Marked ${updates.length} fee${updates.length !== 1 ? 's' : ''} as paid (${selectedTotal.toLocaleString()} SDG).` });
+      setPayDialogOpen(false);
+      setSelectedIds(new Set());
+      setPayNotes('');
+      await fetchData();
+    } catch (err: any) {
+      toast({ title: 'Failed to record payment', description: err?.message, variant: 'destructive' });
+    } finally {
+      setPaySubmitting(false);
+    }
+  };
+
+  const confirmUnpay = async () => {
+    if (!unpayId) return;
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          fee_paid_status: 'unpaid',
+          fee_paid_amount: null,
+          fee_paid_at: null,
+          fee_paid_by: null,
+          fee_payment_method: null,
+          fee_payment_notes: null,
+        })
+        .eq('id', unpayId);
+      if (error) throw error;
+      toast({ title: 'Payment reverted', description: 'Fee marked as unpaid again.' });
+      setUnpayId(null);
+      await fetchData();
+    } catch (err: any) {
+      toast({ title: 'Failed to revert payment', description: err?.message, variant: 'destructive' });
+    }
   };
 
   const exportExcel = async () => {
@@ -267,6 +389,9 @@ export default function EnumeratorFeesReport() {
       'Transport Fee (SDG)': r.transportFee ?? '',
       'Total Fee (SDG)': r.totalFee ?? '',
       'Acknowledged': r.costAcknowledged ? 'Yes' : 'No',
+      'Payment Status': r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
+      'Paid Date': r.feePaidAt ? fmtDate(r.feePaidAt) : '',
+      'Payment Method': r.feePaymentMethod || '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -282,10 +407,11 @@ export default function EnumeratorFeesReport() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <DollarSign className="h-6 w-6 text-green-600" />
-            Enumerator Fees Report
+            Enumerator Fees Report & Payments
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Track enumerator and transport fees across all MMP site visits — by cycle, hub, state, and acknowledgement status.
+            {isFinance && ' Mark fees as paid here to reflect payments made outside the app (e.g. site visits completed manually).'}
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={fetchData} disabled={loading} data-testid="button-refresh-fees">
@@ -294,7 +420,7 @@ export default function EnumeratorFeesReport() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card data-testid="kpi-total-payable">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -305,6 +431,34 @@ export default function EnumeratorFeesReport() {
               <>
                 <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{kpi.totalPayable.toLocaleString()} SDG</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">{kpi.totalEnumFee.toLocaleString()} fees + {kpi.totalTransFee.toLocaleString()} transport</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-paid">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="h-4 w-4 text-emerald-600" />
+              <span className="text-xs text-muted-foreground font-medium">Paid</span>
+            </div>
+            {loading ? <Skeleton className="h-7 w-24" /> : (
+              <>
+                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{kpi.totalPaid.toLocaleString()} SDG</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{kpi.paid} site{kpi.paid !== 1 ? 's' : ''} paid</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-unpaid">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Banknote className="h-4 w-4 text-red-500" />
+              <span className="text-xs text-muted-foreground font-medium">Unpaid</span>
+            </div>
+            {loading ? <Skeleton className="h-7 w-24" /> : (
+              <>
+                <p className="text-xl font-bold text-red-600 dark:text-red-400">{kpi.totalUnpaid.toLocaleString()} SDG</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{kpi.unpaid} site{kpi.unpaid !== 1 ? 's' : ''} unpaid</p>
               </>
             )}
           </CardContent>
@@ -409,6 +563,14 @@ export default function EnumeratorFeesReport() {
                 <SelectItem value="no_fee">Fee Not Set</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={filterPaid} onValueChange={setFilterPaid}>
+              <SelectTrigger className="w-[130px] h-8 text-xs" data-testid="select-fee-paid"><SelectValue placeholder="Payment" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Payment</SelectItem>
+                <SelectItem value="paid">💰 Paid</SelectItem>
+                <SelectItem value="unpaid">⏳ Unpaid</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="flex gap-1.5 ml-auto">
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} data-testid="button-export-fees-csv">
                 <Download className="h-3 w-3" /> CSV
@@ -418,7 +580,22 @@ export default function EnumeratorFeesReport() {
               </Button>
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-2">{filtered.length} of {rows.length} entries</p>
+          <div className="flex items-center justify-between mt-2 gap-2 flex-wrap">
+            <p className="text-[11px] text-muted-foreground">{filtered.length} of {rows.length} entries</p>
+            {isFinance && (
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                disabled={payableSelected.length === 0}
+                onClick={() => setPayDialogOpen(true)}
+                data-testid="button-mark-paid"
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                Mark {payableSelected.length > 0 ? `${payableSelected.length} ` : ''}Paid
+                {payableSelected.length > 0 && ` (${selectedTotal.toLocaleString()} SDG)`}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -446,6 +623,18 @@ export default function EnumeratorFeesReport() {
               <Table>
                 <TableHeader>
                   <TableRow className="text-xs">
+                    {isFinance && (
+                      <TableHead className="w-8">
+                        <Checkbox
+                          checked={(() => {
+                            const unpaidVisible = filtered.filter(r => r.feePaidStatus !== 'paid' && (r.totalFee ?? 0) > 0).map(r => r.id);
+                            return unpaidVisible.length > 0 && unpaidVisible.every(id => selectedIds.has(id));
+                          })()}
+                          onCheckedChange={toggleSelectAllUnpaid}
+                          data-testid="checkbox-select-all-fees"
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>Enumerator</TableHead>
                     <TableHead>Site</TableHead>
                     <TableHead>State / Locality</TableHead>
@@ -457,11 +646,25 @@ export default function EnumeratorFeesReport() {
                     <TableHead className="text-center">Site Status</TableHead>
                     <TableHead className="text-center">Cycle</TableHead>
                     <TableHead className="text-center">Ack.</TableHead>
+                    <TableHead className="text-center">Payment</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map(r => (
+                  {filtered.map(r => {
+                    const payable = (r.totalFee ?? 0) > 0;
+                    return (
                     <TableRow key={r.id} className="text-xs hover:bg-muted/30" data-testid={`row-fee-${r.id}`}>
+                      {isFinance && (
+                        <TableCell>
+                          {payable && r.feePaidStatus !== 'paid' && (
+                            <Checkbox
+                              checked={selectedIds.has(r.id)}
+                              onCheckedChange={() => toggleSelected(r.id)}
+                              data-testid={`checkbox-fee-${r.id}`}
+                            />
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium max-w-[140px] truncate" title={r.enumeratorName}>{r.enumeratorName}</TableCell>
                       <TableCell>
                         <div className="font-medium max-w-[140px] truncate" title={r.siteName}>{r.siteName}</div>
@@ -496,8 +699,31 @@ export default function EnumeratorFeesReport() {
                             : <Badge className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">⏳ Pending</Badge>
                           : <span className="text-muted-foreground text-[10px]">—</span>}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {!payable ? (
+                          <span className="text-muted-foreground text-[10px]">—</span>
+                        ) : r.feePaidStatus === 'paid' ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">💰 Paid</Badge>
+                            <span className="text-[9px] text-muted-foreground">{r.feePaidAt ? fmtDate(r.feePaidAt) : ''}{r.feePaymentMethod ? ` · ${r.feePaymentMethod}` : ''}</span>
+                            {isFinance && (
+                              <button
+                                type="button"
+                                className="text-[9px] text-muted-foreground hover:text-red-600 underline flex items-center gap-0.5"
+                                onClick={() => setUnpayId(r.id)}
+                                data-testid={`button-unpay-${r.id}`}
+                              >
+                                <Undo2 className="h-2.5 w-2.5" /> Undo
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">Unpaid</Badge>
+                        )}
+                      </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -559,6 +785,88 @@ export default function EnumeratorFeesReport() {
           </CardContent>
         </Card>
       )}
+
+      {/* Mark as Paid dialog */}
+      <Dialog open={payDialogOpen} onOpenChange={(o) => { if (!paySubmitting) setPayDialogOpen(o); }}>
+        <DialogContent data-testid="dialog-mark-paid">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-emerald-600" /> Mark Fees as Paid
+            </DialogTitle>
+            <DialogDescription>
+              This records the payment on {payableSelected.length} site entr{payableSelected.length !== 1 ? 'ies' : 'y'} for a total of{' '}
+              <span className="font-semibold text-foreground">{selectedTotal.toLocaleString()} SDG</span>.
+              It does not touch the Wallet or Withdrawal system — use this to reflect fees already paid outside the app.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <Label className="text-xs">Payment Date</Label>
+              <Input
+                type="date"
+                value={payDate}
+                onChange={e => setPayDate(e.target.value)}
+                className="h-9 mt-1"
+                data-testid="input-pay-date"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Payment Method</Label>
+              <Select value={payMethod} onValueChange={setPayMethod}>
+                <SelectTrigger className="h-9 mt-1" data-testid="select-pay-method"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Notes (optional)</Label>
+              <Textarea
+                value={payNotes}
+                onChange={e => setPayNotes(e.target.value)}
+                placeholder="e.g. Paid in cash by hub coordinator, batch settled 04/07"
+                className="mt-1 text-sm"
+                rows={3}
+                data-testid="input-pay-notes"
+              />
+            </div>
+            <div className="max-h-32 overflow-y-auto rounded border p-2 space-y-1">
+              {payableSelected.map(r => (
+                <div key={r.id} className="flex justify-between text-xs">
+                  <span className="truncate max-w-[220px]" title={`${r.enumeratorName} — ${r.siteName}`}>{r.enumeratorName} — {r.siteName}</span>
+                  <span className="font-mono shrink-0">{(r.totalFee ?? 0).toLocaleString()} SDG</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialogOpen(false)} disabled={paySubmitting} data-testid="button-cancel-pay">
+              Cancel
+            </Button>
+            <Button onClick={submitPayment} disabled={paySubmitting} className="bg-emerald-600 hover:bg-emerald-700" data-testid="button-confirm-pay">
+              {paySubmitting ? 'Saving…' : `Confirm Payment (${selectedTotal.toLocaleString()} SDG)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo payment confirm dialog */}
+      <Dialog open={!!unpayId} onOpenChange={(o) => { if (!o) setUnpayId(null); }}>
+        <DialogContent data-testid="dialog-unpay">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-4 w-4 text-red-500" /> Revert Payment?
+            </DialogTitle>
+            <DialogDescription>
+              This will mark the fee as unpaid again and clear its payment date, method, and notes. Use this only to correct a mistake.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnpayId(null)} data-testid="button-cancel-unpay">Cancel</Button>
+            <Button variant="destructive" onClick={confirmUnpay} data-testid="button-confirm-unpay">Revert to Unpaid</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
