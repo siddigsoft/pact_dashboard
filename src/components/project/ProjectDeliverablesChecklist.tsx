@@ -1,60 +1,68 @@
-import { useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle, Circle, ChevronDown, ChevronUp, ClipboardList, Loader2 } from 'lucide-react';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
+import { getProjectFlow } from '@/config/projectFlows';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useProjectDeliverablesChecklist } from '@/hooks/useStageData';
 
 interface ProjectDeliverablesChecklistProps {
   projectId: string;
   projectType: string;
-  initialState?: Record<string, boolean>;
-  currentTeam?: Record<string, unknown>;
+  currentUserId?: string;
   canEdit?: boolean;
 }
 
 export function ProjectDeliverablesChecklist({
   projectId,
   projectType,
-  initialState,
-  currentTeam,
+  currentUserId,
   canEdit = true,
 }: ProjectDeliverablesChecklistProps) {
+  const { toast } = useToast();
   const config = getProjectTypeConfig(projectType);
-  const deliverables = config.deliverables;
+  const flow = getProjectFlow(projectType);
 
-  const [checked, setChecked] = useState<Record<string, boolean>>(initialState ?? {});
+  const deliverableDefs = useMemo(() => {
+    const stageByLabel = new Map(flow.stages.map(s => [s.label, s]));
+    const firstStage = flow.stages[0];
+    return config.deliverables.map(d => {
+      const phase = d.phase ?? 'General';
+      const stage = stageByLabel.get(phase) ?? firstStage;
+      return {
+        id: d.id,
+        label: d.label,
+        phase,
+        stageId: stage?.id ?? 'planning',
+        stageLabel: stage?.label ?? phase,
+      };
+    });
+  }, [config.deliverables, flow.stages]);
+
+  const { items, isLoading, toggleItem } = useProjectDeliverablesChecklist(projectId, deliverableDefs);
+
   const [collapsed, setCollapsed] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const toggle = useCallback(async (id: string) => {
-    if (!canEdit || saving) return;
-    const prev = checked;
-    const next = { ...checked, [id]: !checked[id] };
-    setChecked(next);
-    setSaving(true);
+  const toggle = async (id: string, completed: boolean) => {
+    if (!canEdit || pendingId) return;
+    setPendingId(id);
     try {
-      const updatedTeam = { ...(currentTeam ?? {}), deliverablesState: next };
-      const { error } = await supabase
-        .from('projects')
-        .update({ team: updatedTeam, updated_at: new Date().toISOString() })
-        .eq('id', projectId);
-      if (error) {
-        setChecked(prev);
-      }
+      await toggleItem(id, !completed, currentUserId);
     } catch {
-      setChecked(prev);
+      toast({ title: 'Failed to update deliverable', variant: 'destructive' });
     } finally {
-      setSaving(false);
+      setPendingId(null);
     }
-  }, [canEdit, saving, checked, projectId, currentTeam]);
+  };
 
-  const completedCount = deliverables.filter(d => checked[d.id]).length;
-  const totalCount = deliverables.length;
+  const completedCount = items.filter(i => i.completed).length;
+  const totalCount = items.length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const phases = Array.from(new Set(deliverables.map(d => d.phase ?? 'General'))).filter(Boolean);
+  const phases = Array.from(new Set(items.map(d => d.phase))).filter(Boolean);
 
-  if (deliverables.length === 0) return null;
+  if (deliverableDefs.length === 0) return null;
 
   return (
     <div className="rounded-lg border bg-card">
@@ -70,7 +78,7 @@ export function ProjectDeliverablesChecklist({
           <Badge variant={pct === 100 ? 'default' : 'secondary'} className="text-xs px-2 py-0">
             {completedCount}/{totalCount}
           </Badge>
-          {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {(isLoading || pendingId) && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -88,9 +96,12 @@ export function ProjectDeliverablesChecklist({
 
       {!collapsed && (
         <div className="px-4 pb-4 space-y-4">
+          <p className="text-xs text-muted-foreground -mt-1">
+            Ticking a deliverable here also ticks it in that deliverable's stage checklist on the Stages tab, and vice versa.
+          </p>
           {phases.map(phase => {
-            const phaseDeliverables = deliverables.filter(d => (d.phase ?? 'General') === phase);
-            const phaseCompleted = phaseDeliverables.filter(d => checked[d.id]).length;
+            const phaseDeliverables = items.filter(d => d.phase === phase);
+            const phaseCompleted = phaseDeliverables.filter(d => d.completed).length;
             return (
               <div key={phase}>
                 <div className="flex items-center gap-2 mb-1.5">
@@ -100,21 +111,21 @@ export function ProjectDeliverablesChecklist({
                 <div className="space-y-1">
                   {phaseDeliverables.map(d => (
                     <button
-                      key={d.id}
+                      key={d.deliverableId}
                       type="button"
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors text-sm ${
                         canEdit ? 'cursor-pointer hover:bg-muted/60' : 'cursor-default'
-                      } ${checked[d.id] ? 'text-muted-foreground' : 'text-foreground'}`}
-                      onClick={() => toggle(d.id)}
-                      disabled={!canEdit || saving}
-                      data-testid={`deliverable-${d.id}`}
+                      } ${d.completed ? 'text-muted-foreground' : 'text-foreground'}`}
+                      onClick={() => toggle(d.id, d.completed)}
+                      disabled={!canEdit || !!pendingId}
+                      data-testid={`deliverable-${d.deliverableId}`}
                     >
-                      {checked[d.id] ? (
+                      {d.completed ? (
                         <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       ) : (
                         <Circle className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
                       )}
-                      <span className={checked[d.id] ? 'line-through' : ''}>{d.label}</span>
+                      <span className={d.completed ? 'line-through' : ''}>{d.label}</span>
                     </button>
                   ))}
                 </div>

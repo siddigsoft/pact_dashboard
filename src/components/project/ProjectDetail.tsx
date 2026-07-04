@@ -1067,8 +1067,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <ProjectDeliverablesChecklist
                 projectId={project.id}
                 projectType={project.projectType}
-                initialState={project.team?.deliverablesState}
-                currentTeam={project.team as Record<string, unknown>}
+                currentUserId={currentUser?.id}
                 canEdit={!project.archived && canArchive}
               />
 

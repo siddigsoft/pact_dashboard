@@ -379,6 +379,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     partialPercent: number | null;
     preFundId: string | null;
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+    payMode?: 'percent' | 'amount';
+    amountInput?: string;
   }>({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
 
   const [bulkConfirmRequests, setBulkConfirmRequests] = useState<DownPaymentRequest[]>([]);
@@ -1786,7 +1788,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const handleOpenBatchPay = async (reqs: DownPaymentRequest[]) => {
-    const eligible = reqs.filter(r => r.status === 'approved');
+    const eligible = reqs.filter(r => r.status === 'approved' || r.status === 'partially_paid');
     if (eligible.length === 0) return;
     const { data: pfData } = await supabase
       .from('pre_fund_requests' as any)
@@ -1842,6 +1844,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     });
   };
 
+  /** Amount still owed for this request — full approved amount for a fresh
+   *  approval, or just the outstanding balance for a request that already
+   *  received a partial payment (status === 'partially_paid'). */
+  const getBatchPayBasis = (req: DownPaymentRequest): number => {
+    if (req.status === 'partially_paid') {
+      return req.remainingAmount || 0;
+    }
+    return req.approvedAmount || req.requestedAmount || 0;
+  };
+
   const handleConfirmBatchPay = async () => {
     const { requests: reqs, proofFiles, notes, partialPercent } = batchPayDialog;
     if (!currentUser?.id || reqs.length === 0) return;
@@ -1892,15 +1904,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         console.warn('[BatchPay] RPC not deployed yet — using direct updates as fallback');
         const fallbackNow = new Date().toISOString();
         for (const req of reqs) {
-          const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
-          const paidAmt     = isPartial && partialPercent ? Math.round(approvedAmt * partialPercent / 100) : approvedAmt;
-          const remaining   = isPartial && partialPercent ? approvedAmt - paidAmt : 0;
-          const newStatus   = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'fully_paid';
+          const basisAmt       = getBatchPayBasis(req);
+          const paidThisRound  = isPartial && partialPercent ? Math.round(basisAmt * partialPercent / 100) : basisAmt;
+          const remaining      = isPartial && partialPercent ? basisAmt - paidThisRound : 0;
+          const newTotalPaid   = (req.totalPaidAmount || 0) + paidThisRound;
+          const newStatus      = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'fully_paid';
           const { error: rowErr } = await (supabase as any)
             .from('down_payment_requests')
             .update({
               status:                    newStatus,
-              total_paid_amount:         paidAmt,
+              total_paid_amount:         newTotalPaid,
               remaining_amount:          remaining,
               payment_proof_url:         proofUrl,
               payment_proof_notes:       notes.trim() || null,
@@ -2031,10 +2044,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             let rpcNotDeployed = false;
 
             for (const req of confirmedReqs) {
-              const approvedAmt = req.approvedAmount || req.requestedAmount || 0;
+              const basisAmt = getBatchPayBasis(req);
               const paidAmt = isPartial && partialPercent
-                ? Math.round(approvedAmt * partialPercent / 100)
-                : approvedAmt;
+                ? Math.round(basisAmt * partialPercent / 100)
+                : basisAmt;
 
               // Atomic: single RPC handles pre_fund_transactions insert +
               //         available_balance debit + allocation deduction in one tx.
@@ -3774,7 +3787,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           {selectedIds.size > 0 && processingRequests.length > 0 && (() => {
             const selectedProcessing = processingRequests.filter(r => selectedIds.has(r.id));
             const approvedCount = selectedProcessing.filter(r => r.status === 'approved').length;
-            const totalAmount = selectedProcessing.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+            const payableCount = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid').length;
+            const totalAmount = selectedProcessing.reduce((s, r) => s + getBatchPayBasis(r), 0);
             return (
             <Card className="mb-4 border-primary">
               <CardContent className="p-3 space-y-2">
@@ -3783,7 +3797,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     <CheckSquare className="h-5 w-5 text-primary" />
                     <span className="font-medium">{selectedIds.size} selected</span>
                     <span className="text-xs text-muted-foreground">
-                      SDG {totalAmount.toLocaleString()}
+                      SDG {totalAmount.toLocaleString()} remaining
                     </span>
                   </div>
                   <Button size="sm" variant="ghost" onClick={clearSelection} data-testid="button-clear-processing-selection">
@@ -3800,22 +3814,22 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     Request Payment ({approvedCount})
                   </Button>
                   <Button size="sm" variant="default" onClick={() => {
-                    const selected = selectedProcessing.filter(r => r.status === 'approved');
+                    const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                     if (selected.length > 0) {
                       openActionDialog(selected[0], 'pay');
                     }
-                  }} disabled={approvedCount === 0 || processing} data-testid="button-selected-process-payment">
+                  }} disabled={payableCount === 0 || processing} data-testid="button-selected-process-payment">
                     <DollarSign className="h-4 w-4 mr-1" />
                     Process Payment
                   </Button>
 
-                  {approvedCount > 1 && (
+                  {payableCount > 1 && (
                     <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                      const selected = selectedProcessing.filter(r => r.status === 'approved');
+                      const selected = selectedProcessing.filter(r => r.status === 'approved' || r.status === 'partially_paid');
                       handleOpenBatchPay(selected);
                     }} disabled={processing} data-testid="button-batch-pay">
                       <Wallet className="h-4 w-4 mr-1" />
-                      Batch Pay ({approvedCount})
+                      Batch Pay ({payableCount})
                     </Button>
                   )}
 
@@ -5239,60 +5253,96 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             </DialogDescription>
           </DialogHeader>
 
-          {batchPayDialog.requests.length > 0 && (
+          {batchPayDialog.requests.length > 0 && (() => {
+            const fullTotal = batchPayDialog.requests.reduce((s, r) => s + getBatchPayBasis(r), 0);
+            const payMode: 'percent' | 'amount' = batchPayDialog.payMode ?? 'percent';
+            const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
+            const partialPct = batchPayDialog.partialPercent ?? 100;
+            const partialTotal = isPartial ? Math.round(fullTotal * (partialPct / 100)) : null;
+            const remainingTotal = partialTotal !== null ? fullTotal - partialTotal : null;
+            const pctLabel = (p: number) => (p % 1 === 0 ? p.toString() : p.toFixed(2));
+            const setPercent = (pct: number) => {
+              if (isNaN(pct)) return;
+              const clamped = Math.min(100, Math.max(0.01, pct));
+              const rounded = clamped >= 100 ? 100 : Number(clamped.toFixed(2));
+              setBatchPayDialog(prev => ({
+                ...prev,
+                partialPercent: rounded,
+                amountInput: String(Math.round(fullTotal * rounded / 100)),
+              }));
+            };
+            const setAmount = (raw: string) => {
+              const amt = Number(raw);
+              if (!raw || isNaN(amt) || amt <= 0) {
+                setBatchPayDialog(prev => ({ ...prev, amountInput: raw, partialPercent: 0.01 }));
+                return;
+              }
+              const pct = Math.min(100, Math.max(0.01, (amt / fullTotal) * 100));
+              setBatchPayDialog(prev => ({ ...prev, amountInput: raw, partialPercent: Number(pct.toFixed(2)) }));
+            };
+            const setFullRemaining = () => {
+              setBatchPayDialog(prev => ({ ...prev, partialPercent: null, payMode: 'percent', amountInput: '' }));
+            };
+            return (
             <div className="space-y-4">
               {/* Summary */}
-              {(() => {
-                const fullTotal = batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
-                const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
-                const partialTotal = isPartial ? Math.round(fullTotal * (batchPayDialog.partialPercent! / 100)) : null;
-                const remainingTotal = partialTotal !== null ? fullTotal - partialTotal : null;
-                return (
-                  <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                        {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}
-                      </span>
-                      <span className={`text-lg font-bold tabular-nums ${isPartial ? 'text-emerald-600/60 dark:text-emerald-500/60 line-through text-base' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                        SDG {fullTotal.toLocaleString()}
-                      </span>
-                    </div>
-                    {isPartial && partialTotal !== null && (
-                      <div className="flex items-center justify-between pt-1 border-t border-emerald-200 dark:border-emerald-700">
-                        <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                          Total Partial ({batchPayDialog.partialPercent}%)
-                        </span>
-                        <span className="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                          SDG {partialTotal.toLocaleString()}
-                        </span>
-                      </div>
-                    )}
-                    {isPartial && remainingTotal !== null && (
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Remainder (stays as &quot;Partially Paid&quot;)</span>
-                        <span className="tabular-nums">SDG {remainingTotal.toLocaleString()}</span>
-                      </div>
-                    )}
-                    <div className="text-xs text-muted-foreground">
-                      {isPartial ? `Paying ${batchPayDialog.partialPercent}% now — remainder left unpaid` : 'Total covered by this single receipt'}
-                    </div>
+              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}
+                  </span>
+                  <span className={`text-lg font-bold tabular-nums ${isPartial ? 'text-emerald-600/60 dark:text-emerald-500/60 line-through text-base' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                    SDG {fullTotal.toLocaleString()}
+                  </span>
+                </div>
+                {isPartial && partialTotal !== null && (
+                  <div className="flex items-center justify-between pt-1 border-t border-emerald-200 dark:border-emerald-700">
+                    <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                      Total Partial ({pctLabel(partialPct)}%)
+                    </span>
+                    <span className="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                      SDG {partialTotal.toLocaleString()}
+                    </span>
                   </div>
-                );
-              })()}
+                )}
+                {isPartial && remainingTotal !== null && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Remainder (stays as &quot;Partially Paid&quot;)</span>
+                    <span className="tabular-nums">SDG {remainingTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  {isPartial ? `Paying ${pctLabel(partialPct)}% now — remainder left unpaid` : 'Total covered by this single receipt'}
+                </div>
+              </div>
 
               {/* Breakdown */}
               <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                {batchPayDialog.requests.map((req) => (
-                  <div key={req.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{req.siteName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{req.requestedByName || req.requestedBy}</p>
+                {batchPayDialog.requests.map((req) => {
+                  const basis = getBatchPayBasis(req);
+                  const paying = isPartial ? Math.round(basis * partialPct / 100) : basis;
+                  return (
+                    <div key={req.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{req.siteName}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {req.requestedByName || req.requestedBy}
+                          {req.status === 'partially_paid' && (
+                            <span className="ml-1.5 text-amber-600 dark:text-amber-400">· remaining balance</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <span className="font-semibold tabular-nums block">
+                          {paying.toLocaleString()} SDG
+                        </span>
+                        {isPartial && (
+                          <span className="text-[10px] text-muted-foreground">of {basis.toLocaleString()}</span>
+                        )}
+                      </div>
                     </div>
-                    <span className="font-semibold tabular-nums shrink-0 ml-2">
-                      {(req.approvedAmount || req.requestedAmount).toLocaleString()} SDG
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Receipt upload — multiple allowed */}
@@ -5359,56 +5409,139 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 </div>
               </div>
 
-              {/* Partial payment (patches) toggle */}
-              <div className="space-y-2 border rounded-md p-3 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
+              {/* Partial payment controls */}
+              <div className="space-y-3 border rounded-md p-3 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="partial-payment-toggle"
                     checked={batchPayDialog.partialPercent !== null}
                     onCheckedChange={(checked) => {
-                      setBatchPayDialog(prev => ({ ...prev, partialPercent: checked ? 50 : null }));
+                      setBatchPayDialog(prev => ({
+                        ...prev,
+                        partialPercent: checked ? 50 : null,
+                        payMode: 'percent',
+                        amountInput: checked ? String(Math.round(fullTotal * 0.5)) : '',
+                      }));
                     }}
                     disabled={batchPayDialog.uploading}
                     data-testid="checkbox-partial-payment"
                   />
                   <Label htmlFor="partial-payment-toggle" className="text-sm font-medium cursor-pointer">
                     Partial Payment / دفع جزئي
-                    <span className="ml-2 text-xs text-muted-foreground font-normal">Pay a percentage now — leaves remainder as &quot;Partially Paid&quot;</span>
+                    <span className="ml-2 text-xs text-muted-foreground font-normal">Pay less than the full amount now — leaves remainder as &quot;Partially Paid&quot;</span>
                   </Label>
                 </div>
+
                 {batchPayDialog.partialPercent !== null && (
-                  <div className="flex items-center gap-3 mt-2">
-                    <Label className="text-sm text-muted-foreground min-w-fit">Pay %:</Label>
-                    <input
-                      type="range"
-                      min={5}
-                      max={95}
-                      step={5}
-                      value={batchPayDialog.partialPercent}
-                      onChange={(e) => setBatchPayDialog(prev => ({ ...prev, partialPercent: Number(e.target.value) }))}
-                      className="flex-1 accent-amber-600"
-                      disabled={batchPayDialog.uploading}
-                      data-testid="slider-partial-percent"
-                    />
-                    <span className="font-bold text-amber-700 dark:text-amber-400 min-w-[3rem] text-center">
-                      {batchPayDialog.partialPercent}%
-                    </span>
-                  </div>
-                )}
-                {batchPayDialog.partialPercent !== null && (
-                  <div className="mt-1 space-y-0.5">
-                    {batchPayDialog.requests.slice(0, 5).map(r => {
-                      const approved = r.approvedAmount || r.requestedAmount;
-                      const paying = Math.round(approved * (batchPayDialog.partialPercent! / 100));
-                      return (
-                        <p key={r.id} className="text-xs text-muted-foreground">
-                          {r.siteName}: pay <span className="font-semibold text-foreground">{paying.toLocaleString()} SDG</span> / leave {(approved - paying).toLocaleString()} SDG
+                  <div className="space-y-3">
+                    {/* Mode toggle: percent vs. absolute amount */}
+                    <div className="flex gap-1 bg-muted rounded-md p-0.5 w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setBatchPayDialog(prev => ({ ...prev, payMode: 'percent' }))}
+                        disabled={batchPayDialog.uploading}
+                        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${payMode === 'percent' ? 'bg-white dark:bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                        data-testid="button-mode-percent"
+                      >
+                        By % / نسبة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBatchPayDialog(prev => ({ ...prev, payMode: 'amount', amountInput: String(partialTotal ?? Math.round(fullTotal / 2)) }))}
+                        disabled={batchPayDialog.uploading}
+                        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${payMode === 'amount' ? 'bg-white dark:bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                        data-testid="button-mode-amount"
+                      >
+                        By Amount / مبلغ
+                      </button>
+                    </div>
+
+                    {payMode === 'percent' ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm text-muted-foreground min-w-fit">Pay %:</Label>
+                          <input
+                            type="range"
+                            min={1}
+                            max={99}
+                            step={1}
+                            value={Math.min(99, Math.max(1, Math.round(partialPct)))}
+                            onChange={(e) => setPercent(Number(e.target.value))}
+                            className="flex-1 accent-amber-600"
+                            disabled={batchPayDialog.uploading}
+                            data-testid="slider-partial-percent"
+                          />
+                          <div className="relative w-24 shrink-0">
+                            <Input
+                              type="number"
+                              min={0.01}
+                              max={100}
+                              step={0.01}
+                              value={partialPct}
+                              onChange={(e) => setPercent(Number(e.target.value))}
+                              disabled={batchPayDialog.uploading}
+                              className="h-8 text-sm text-right pr-6 tabular-nums"
+                              data-testid="input-partial-percent"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {[10, 25, 50, 75, 90].map(p => (
+                            <Button key={p} type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => setPercent(p)} disabled={batchPayDialog.uploading} data-testid={`button-preset-percent-${p}`}>
+                              {p}%
+                            </Button>
+                          ))}
+                          {[0.01, 0.02, 1].map(step => (
+                            <Button key={`nudge-${step}`} type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => setPercent(partialPct + step)} disabled={batchPayDialog.uploading} data-testid={`button-nudge-${step}`}>
+                              +{step}%
+                            </Button>
+                          ))}
+                          <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-[11px]" onClick={setFullRemaining} disabled={batchPayDialog.uploading} data-testid="button-full-remaining">
+                            Full Remaining / كامل المتبقي
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm text-muted-foreground min-w-fit">Amount:</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={batchPayDialog.amountInput ?? ''}
+                            onChange={(e) => setAmount(e.target.value)}
+                            disabled={batchPayDialog.uploading}
+                            className="h-8 text-sm tabular-nums flex-1"
+                            placeholder="e.g. 150000"
+                            data-testid="input-partial-amount"
+                          />
+                          <span className="text-xs text-muted-foreground shrink-0">SDG</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          = {pctLabel(partialPct)}% of total, split proportionally across all {batchPayDialog.requests.length} request{batchPayDialog.requests.length > 1 ? 's' : ''} by their outstanding balance.
                         </p>
-                      );
-                    })}
-                    {batchPayDialog.requests.length > 5 && (
-                      <p className="text-xs text-muted-foreground">…and {batchPayDialog.requests.length - 5} more</p>
+                        <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-[11px]" onClick={setFullRemaining} disabled={batchPayDialog.uploading} data-testid="button-full-remaining-amount">
+                          Full Remaining / كامل المتبقي ({fullTotal.toLocaleString()} SDG)
+                        </Button>
+                      </div>
                     )}
+
+                    <div className="space-y-0.5 pt-1 border-t border-amber-200 dark:border-amber-800">
+                      {batchPayDialog.requests.slice(0, 5).map(r => {
+                        const basis = getBatchPayBasis(r);
+                        const paying = Math.round(basis * partialPct / 100);
+                        return (
+                          <p key={r.id} className="text-xs text-muted-foreground">
+                            {r.siteName}: pay <span className="font-semibold text-foreground">{paying.toLocaleString()} SDG</span> / leave {(basis - paying).toLocaleString()} SDG
+                          </p>
+                        );
+                      })}
+                      {batchPayDialog.requests.length > 5 && (
+                        <p className="text-xs text-muted-foreground">…and {batchPayDialog.requests.length - 5} more</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -5442,9 +5575,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   </Select>
                   {batchPayDialog.preFundId && (() => {
                     const f = batchPayDialog.preFunds.find(x => x.id === batchPayDialog.preFundId);
-                    const total = batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
-                    const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
-                    const paying = isPartial ? Math.round(total * (batchPayDialog.partialPercent! / 100)) : total;
+                    const paying = isPartial ? Math.round(fullTotal * (partialPct / 100)) : fullTotal;
                     const afterBalance = (f?.available_balance ?? 0) - paying;
                     return (
                       <p className={`text-xs ${afterBalance < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
@@ -5474,7 +5605,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 Each requester will receive a single consolidated payment notification listing all their paid advances.
               </p>
             </div>
-          )}
+            );
+          })()}
 
           <DialogFooter className="gap-2">
             <Button
@@ -5498,8 +5630,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             >
               {batchPayDialog.uploading ? (
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Processing...</>
-              ) : batchPayDialog.partialPercent !== null ? (
-                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.partialPercent}% of {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
+              ) : batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent < 100 ? (
+                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.partialPercent % 1 === 0 ? batchPayDialog.partialPercent : batchPayDialog.partialPercent.toFixed(2)}% of {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               ) : (
                 <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               )}

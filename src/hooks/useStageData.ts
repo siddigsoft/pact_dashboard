@@ -27,6 +27,16 @@ export interface StageChecklistItem {
   sortOrder: number;
 }
 
+export interface DeliverableChecklistItem {
+  id: string;
+  deliverableId: string;
+  stageId: string;
+  stageLabel: string;
+  phase: string;
+  label: string;
+  completed: boolean;
+}
+
 export interface StageAttachment {
   id: string;
   fileName: string;
@@ -226,6 +236,100 @@ export function useStageChecklist(projectId: string, stageId: string) {
       toggleMutation.mutateAsync({ id, completed, userId }),
     deleteItem: (id: string) => deleteMutation.mutateAsync(id),
     isAdding: addMutation.isPending,
+  };
+}
+
+// ── Deliverables (Overview tab) ─────────────────────────────────────────────
+// The "Required Deliverables" list on the Overview tab is backed by the same
+// project_stage_checklist table used by the Stages tab, so ticking a
+// deliverable there is the same as ticking it in the stage checklist.
+
+export function useProjectDeliverablesChecklist(
+  projectId: string,
+  deliverableDefs: { id: string; label: string; phase: string; stageId: string; stageLabel: string }[],
+) {
+  const qc = useQueryClient();
+  const key = ['deliverables_checklist', projectId];
+
+  const query = useQuery({
+    queryKey: key,
+    queryFn: async (): Promise<DeliverableChecklistItem[]> => {
+      const { data: existing, error } = await supabase
+        .from('project_stage_checklist')
+        .select('id, stage_id, item_text, completed, deliverable_id')
+        .eq('project_id', projectId)
+        .eq('source', 'deliverable');
+      if (error) throw error;
+
+      const existingByDeliverableId = new Map((existing ?? []).map((r: any) => [r.deliverable_id, r]));
+      const missing = deliverableDefs.filter(d => !existingByDeliverableId.has(d.id));
+
+      if (missing.length > 0) {
+        const { data: inserted, error: insertError } = await supabase
+          .from('project_stage_checklist')
+          .insert(
+            missing.map((d, i) => ({
+              project_id: projectId,
+              stage_id: d.stageId,
+              item_text: d.label,
+              source: 'deliverable',
+              deliverable_id: d.id,
+              sort_order: i,
+            })),
+          )
+          .select('id, stage_id, item_text, completed, deliverable_id');
+        if (insertError) throw insertError;
+        for (const r of inserted ?? []) {
+          existingByDeliverableId.set((r as any).deliverable_id, r);
+        }
+      }
+
+      return deliverableDefs.map(d => {
+        const row: any = existingByDeliverableId.get(d.id);
+        return {
+          id: row?.id ?? d.id,
+          deliverableId: d.id,
+          stageId: d.stageId,
+          stageLabel: d.stageLabel,
+          phase: d.phase,
+          label: d.label,
+          completed: row?.completed ?? false,
+        };
+      });
+    },
+    staleTime: 15_000,
+    enabled: !!projectId && deliverableDefs.length > 0,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, completed, userId }: { id: string; completed: boolean; userId?: string }) => {
+      const { error } = await supabase
+        .from('project_stage_checklist')
+        .update({
+          completed,
+          completed_by: completed ? userId : null,
+          completed_at: completed ? new Date().toISOString() : null,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: key });
+      const item = (query.data ?? []).find(i => i.id === variables.id);
+      if (item) {
+        qc.invalidateQueries({ queryKey: ['stage_checklist', projectId, item.stageId] });
+      }
+    },
+  });
+
+  const items = query.data ?? [];
+
+  return {
+    items,
+    isLoading: query.isLoading,
+    toggleItem: (id: string, completed: boolean, userId?: string) =>
+      toggleMutation.mutateAsync({ id, completed, userId }),
+    isToggling: toggleMutation.isPending,
   };
 }
 

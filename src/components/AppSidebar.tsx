@@ -453,6 +453,9 @@
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Tracker", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
+    if (!isHidden('/enumerator-fees-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+      approvalItems.push({ id: 'enumerator-fees-report', title: "Enumerator Fees Report", url: "/enumerator-fees-report", icon: Receipt, priority: 3.5, isPinned: isPinned('/enumerator-fees-report') });
+    }
     if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
       approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
     }

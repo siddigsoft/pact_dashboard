@@ -4,7 +4,7 @@ import {
   Loader2, TrendingUp, FileText, Info,
   DollarSign, CreditCard, BarChart3, ArrowLeftRight,
   RefreshCw, Layers, ClipboardList, CalendarCheck,
-  Activity, Users,
+  Activity, Users, Receipt,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -21,12 +21,13 @@ const CostPredictionsPanel     = lazy(() => import('./CostPredictions'));
 const ExchangeRatesPanel       = lazy(() => import('./ExchangeRates'));
 const SalaryRetainerPanel      = lazy(() => import('./SalaryRetainerReport'));
 const MonthEndPanel            = lazy(() => import('./MonthEndFinancialSummary'));
+const EnumeratorFeesPanel      = lazy(() => import('./EnumeratorFeesReport'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type FinSection = 'operations' | 'reports';
 type FinTab =
   | 'budget' | 'financial-ops' | 'admin-wallets' | 'reconciliation' | 'subscriptions'
-  | 'wallet-reports' | 'advance-report' | 'cost-predictions' | 'exchange-rates' | 'salary-retainer' | 'month-end';
+  | 'wallet-reports' | 'advance-report' | 'cost-predictions' | 'exchange-rates' | 'salary-retainer' | 'month-end' | 'enumerator-fees';
 
 interface TabDef { id: FinTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: FinSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -85,6 +86,10 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'month-end', label: 'Month-End Summary', icon: CalendarCheck,
         description: 'End-of-month financial summary showing closing balances, reconciliation status, and a snapshot of all financial activity for sign-off and archiving.',
+      },
+      {
+        id: 'enumerator-fees', label: 'Enumerator Fees Report', icon: Receipt,
+        description: 'Track enumerator and transport fees across all MMP site visits, and mark fees as paid for visits completed outside the app.',
       },
     ],
   },
@@ -154,6 +159,7 @@ export default function FinanceHub() {
         {tab === 'exchange-rates'   && <Suspense fallback={<PanelLoader />}><ExchangeRatesPanel /></Suspense>}
         {tab === 'salary-retainer'  && <Suspense fallback={<PanelLoader />}><SalaryRetainerPanel /></Suspense>}
         {tab === 'month-end'        && <Suspense fallback={<PanelLoader />}><MonthEndPanel /></Suspense>}
+        {tab === 'enumerator-fees'  && <Suspense fallback={<PanelLoader />}><EnumeratorFeesPanel /></Suspense>}
       </div>
     </HubLayout>
   );
