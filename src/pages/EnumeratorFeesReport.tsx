@@ -131,14 +131,21 @@ export default function EnumeratorFeesReport() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Site entries
-      const { data: entries, error: entErr } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
-        .order('site_name');
-      if (entErr) throw entErr;
-
-      const entryList = entries || [];
+      // 1. Site entries — paginate past Supabase/PostgREST's default 1000-row cap
+      const PAGE_SIZE = 1000;
+      const entryList: any[] = [];
+      for (let page = 0; ; page++) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        const { data: entryPage, error: entErr } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
+          .order('site_name')
+          .range(from, to);
+        if (entErr) throw entErr;
+        entryList.push(...(entryPage || []));
+        if (!entryPage || entryPage.length < PAGE_SIZE) break;
+      }
 
       // 2. MMP files
       const mmpIds = [...new Set(entryList.map((e: any) => e.mmp_file_id).filter(Boolean))];
