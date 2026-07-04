@@ -335,10 +335,26 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
 
   // Find which group is currently active
   const currentStageId = project.currentFlowStage ?? effectiveStages[0]?.id;
-  const currentGroupIdx = Math.max(
+  const storedGroupIdx = Math.max(
     0,
     groups.findIndex(g => g.some(s => s.id === currentStageId)),
   );
+
+  // Self-healing: the stored `current_flow_stage` pointer can lag behind
+  // reality — e.g. a stage was finished via the per-stage "Mark Complete"
+  // override (setStageStatusMutation), which logs completion but doesn't
+  // move the pointer. Rather than trust the stored value blindly, walk
+  // forward past any groups that are already fully completed so the
+  // "Active Stage" / "Stage X/N" display always matches the actual
+  // completion log.
+  let currentGroupIdx = storedGroupIdx;
+  while (
+    currentGroupIdx < groups.length - 1 &&
+    groups[currentGroupIdx].every(s => completedStageIds.has(s.id))
+  ) {
+    currentGroupIdx += 1;
+  }
+
   const currentGroupSafe = groups[currentGroupIdx] ?? [];
   const currentStages = currentGroupSafe;
   const currentStage = currentGroupSafe[0] ?? null;
@@ -537,6 +553,27 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           notes: 'Marked complete via status override',
         });
         if (error) throw new Error(error.message);
+
+        // Keep the `current_flow_stage` pointer in sync: if marking this
+        // stage complete finishes its whole group, advance the pointer to
+        // the next group's first stage — same as the normal complete flow.
+        // Without this, the DB pointer silently lags behind the completion
+        // log (the UI self-heals visually, but the stored value stays stale
+        // for anything reading `current_flow_stage` directly, e.g. lists).
+        const nowCompletedIds = new Set([...completedStageIds, stageId]);
+        const groupIdx = groups.findIndex(g => g.some(s => s.id === stageId));
+        const group = groups[groupIdx] ?? [];
+        const groupNowDone = group.every(s => nowCompletedIds.has(s.id));
+        const nextGroup = groupIdx >= 0 ? groups[groupIdx + 1] : undefined;
+
+        if (groupNowDone && nextGroup?.[0]) {
+          const { error: advanceError } = await supabase.rpc('update_project_flow_stage', {
+            p_id: project.id,
+            p_stage: nextGroup[0].id,
+            p_custom_stages: project.customFlowStages ?? null,
+          });
+          if (advanceError) throw new Error(advanceError.message);
+        }
         return;
       }
 
