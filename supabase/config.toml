@@ -34,6 +34,11 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 verify_jwt = false
 
+# project-stage-deadline-reminder is invoked by pg_cron scheduler.
+# Auth is enforced via CRON_SECRET shared-secret header (see edge function).
+[functions.project-stage-deadline-reminder]
+verify_jwt = false
+
 # send-whatsapp is called by dispatch-notification (service-role key) and by
 # the browser (user JWT). Both are valid Supabase credentials, so verify_jwt
 # stays at the default (true). No change needed here — left as comment for docs.
