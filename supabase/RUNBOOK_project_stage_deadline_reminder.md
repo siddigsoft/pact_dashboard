@@ -30,24 +30,29 @@ send an email, exactly like other project notifications.
    `project-stage-deadline-reminder` function (same `CRON_SECRET` used by the
    other cron functions, e.g. `task-daily-digest`).
 
-## Step 1 — Set the required PostgreSQL runtime settings
-Skip this step if you've already run it for another cron job (e.g.
-`task-daily-digest`) on this database — the same GUCs are reused.
+## Step 1 — Store the cron secret in Supabase Vault
+Hosted Supabase projects reject `ALTER DATABASE ... SET` for custom settings
+(you'll see `permission denied to set parameter`), even from the SQL Editor.
+Use Supabase Vault instead — it's built for exactly this.
 
-Run the following in **Supabase Dashboard → SQL Editor**, replacing the values
-with your actual project URL and cron secret:
+Run the following in **Supabase Dashboard → SQL Editor**, replacing the value
+with your actual cron secret (the same value the edge function's
+`CRON_SECRET` environment variable is set to):
 
 ```sql
-ALTER DATABASE postgres
-  SET "app.supabase_url" = 'https://abznugnirnlrqnnfkein.supabase.co';
-
-ALTER DATABASE postgres
-  SET "app.cron_secret" = 'YOUR_CRON_SECRET_VALUE';
+SELECT vault.create_secret('YOUR_CRON_SECRET_VALUE', 'cron_secret');
 ```
 
-> **Security note:** Treat `app.cron_secret` like a password — it is only
-> readable by database superusers and functions with `SECURITY DEFINER`.
-> Never expose it in client-side code or logs.
+Skip this step if a secret named `cron_secret` already exists from another
+cron job (e.g. `task-daily-digest`) — it will be reused automatically.
+
+The project URL isn't sensitive, so it's hardcoded directly in the migration
+SQL — no setup needed for that part.
+
+> **Security note:** Vault secrets are encrypted at rest and only readable
+> via `vault.decrypted_secrets` by database roles with the right grants
+> (the default `postgres`/service role has access). Never expose the secret
+> value in client-side code or logs.
 
 ## Step 2 — Apply the cron schedule
 After setting the runtime settings above, run the migration in the SQL Editor:
@@ -107,7 +112,8 @@ SELECT cron.unschedule('project-stage-deadline-reminder');
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `ERROR: unrecognized configuration parameter "app.supabase_url"` | Step 1 not run | Run the `ALTER DATABASE` commands first |
+| `ERROR: 42501: permission denied to set parameter "app.supabase_url"` | You tried `ALTER DATABASE ... SET` — hosted Supabase blocks this | Not needed with this migration — it uses Vault + a hardcoded URL instead. Just run Step 1 (`vault.create_secret`) and Step 2 |
+| `ERROR: relation "vault.decrypted_secrets" does not exist` or similar Vault error | Vault extension not enabled | Enable it in Dashboard → Database → Extensions → search "supabase_vault" |
 | Job registered but no notifications appear | Edge function not deployed, or no stages have a `dueDate` | Deploy the function; confirm stages have `dueDate`/`plannedEnd` set in Project Flow |
 | Reminder repeats every run instead of once/day | `audit_logs` dedup window (22h) not being written | Check the function has insert permission on `audit_logs` |
 | No email received | `email_notify_project_milestones` preference disabled for the recipient, or `send_email` not reaching `dispatch-notification` | Check user notification preferences; confirm `SUPABASE_SERVICE_ROLE_KEY` is set on the reminder function |

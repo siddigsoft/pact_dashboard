@@ -5,9 +5,19 @@
 -- and once per day while overdue.
 -- Requires: pg_cron + pg_net extensions enabled, and the
 -- project-stage-deadline-reminder edge function deployed.
--- Requires the same "app.supabase_url" / "app.cron_secret" GUCs already used
--- by task-daily-digest (see supabase/RUNBOOK_project_stage_deadline_reminder.md
--- if they are not yet set on this database).
+--
+-- NOTE: This uses Supabase Vault to store the cron secret instead of
+-- `ALTER DATABASE ... SET`, because hosted Supabase projects reject custom
+-- GUCs with "permission denied to set parameter" even for the postgres role.
+-- The project URL is not sensitive, so it is hardcoded directly below.
+--
+-- BEFORE running this file, store the cron secret in Vault (run once, in the
+-- Supabase Dashboard → SQL Editor):
+--
+--   SELECT vault.create_secret('YOUR_CRON_SECRET_VALUE', 'cron_secret');
+--
+-- (If a secret named 'cron_secret' already exists from another cron job,
+-- e.g. task-daily-digest, you can reuse it — skip this step.)
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
@@ -25,18 +35,17 @@ SELECT cron.schedule(
   '30 6 * * *',
   $$
     SELECT net.http_post(
-      url := current_setting('app.supabase_url') || '/functions/v1/project-stage-deadline-reminder',
+      url := 'https://abznugnirnlrqnnfkein.supabase.co/functions/v1/project-stage-deadline-reminder',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.cron_secret', true)
+        'Authorization', 'Bearer ' || (
+          SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret'
+        )
       ),
       body := '{}'::jsonb
     );
   $$
 );
 
--- Setup instructions for DB GUCs (run once, not part of migration, skip if
--- already set for another cron job on this database):
---   ALTER DATABASE postgres SET "app.supabase_url" = 'https://abznugnirnlrqnnfkein.supabase.co';
---   ALTER DATABASE postgres SET "app.cron_secret" = '<CRON_SECRET_VALUE>';
--- Alternatively, schedule via Supabase Dashboard → Edge Functions → Schedules.
+-- Alternatively, schedule via Supabase Dashboard → Edge Functions → Schedules,
+-- which handles auth for you without any of the above SQL.
