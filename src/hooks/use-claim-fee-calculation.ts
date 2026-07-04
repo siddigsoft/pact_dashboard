@@ -4,26 +4,26 @@ import type { ClassificationLevel, ClassificationRoleScope } from '@/types/class
 
 /**
  * Maps app/UI role names to the database enum classification_role_scope.
- * Valid enum values: field_officer, team_leader, supervisor, coordinator.
- * Use this when sending p_role_scope to claim_site_visit RPC.
+ * Valid enum values: coordinator | dataCollector | supervisor
  * Matches mobile logic in PACT_mobile/lib/services/claim_fee_service.dart
  */
 export function normalizeRoleScopeForEnum(roleScope: string | null | undefined): string | null {
   if (!roleScope) return null;
-  const lower = roleScope.toLowerCase();
+  const lower = roleScope.toLowerCase().replace(/ /g, '_');
   switch (lower) {
     case 'enumerator':
     case 'datacollector':
     case 'data_collector':
     case 'dc':
-      return 'field_officer';
-    case 'field_officer':
-    case 'team_leader':
+    case 'field_officer': // legacy name — maps to dataCollector in DB enum
+      return 'dataCollector';
     case 'supervisor':
+    case 'team_leader': // no exact match — treated as supervisor
+      return 'supervisor';
     case 'coordinator':
-      return lower;
+      return 'coordinator';
     default:
-      return roleScope;
+      return null; // don't send an invalid value to the DB
   }
 }
 
