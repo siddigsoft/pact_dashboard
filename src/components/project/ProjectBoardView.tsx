@@ -5,7 +5,7 @@ import { AlertTriangle, GitBranch, User, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Project } from '@/types/project';
-import { getProjectFlow, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
+import { getProjectStageProgress, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
 
 interface BoardFilters {
   type: string;
@@ -60,16 +60,13 @@ function isStalled(project: Project): boolean {
 }
 
 function getStageProgress(project: Project): { stageName: string; pct: number; stageIdx: number; totalStages: number } | null {
-  const flowDef = getProjectFlow(project.projectType);
-  const stages = flowDef.stages;
-  const currentStageId = project.currentFlowStage ?? stages[0]?.id;
-  const idx = stages.findIndex(s => s.id === currentStageId);
-  if (idx === -1 || !stages[idx]) return null;
+  const progress = getProjectStageProgress(project.projectType, project.currentFlowStage, project.customFlowStages);
+  if (!progress) return null;
   return {
-    stageName: stages[idx].label,
-    pct: Math.round(((idx + 1) / stages.length) * 100),
-    stageIdx: idx + 1,
-    totalStages: stages.length,
+    stageName: progress.stageName,
+    pct: progress.pct,
+    stageIdx: progress.stageIdx + 1,
+    totalStages: progress.totalStages,
   };
 }
 

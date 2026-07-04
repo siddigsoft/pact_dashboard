@@ -4,7 +4,7 @@ import { differenceInDays, parseISO, isValid, format, addDays, startOfMonth, end
 import { AlertTriangle, Calendar, GitBranch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Project } from '@/types/project';
-import { getProjectFlow, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
+import { getProjectStageProgress, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
 
 interface BoardFilters {
   type: string;
@@ -196,11 +196,8 @@ const ProjectTimelineView: React.FC<ProjectTimelineViewProps> = ({ projects, fil
                 ? 60
                 : 60;
 
-              const flowDef = getProjectFlow(project.projectType);
-              const stages = flowDef.stages;
-              const currentStageId = project.currentFlowStage ?? stages[0]?.id;
-              const stageIdx = stages.findIndex(s => s.id === currentStageId);
-              const pct = stageIdx >= 0 ? ((stageIdx + 1) / stages.length) : 0;
+              const stageProgress = getProjectStageProgress(project.projectType, project.currentFlowStage, project.customFlowStages);
+              const pct = stageProgress ? stageProgress.pct / 100 : 0;
 
               return (
                 <div

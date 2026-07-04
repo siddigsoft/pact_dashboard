@@ -933,6 +933,69 @@ export function getFirstStageId(projectType: string): string {
   return flow.stages[0]?.id ?? 'planning';
 }
 
+export interface MinimalCustomStageEntry {
+  id: string;
+  skipped?: boolean;
+  customLabel?: string;
+}
+
+export interface ProjectStageProgress {
+  stageName: string;
+  stageIdx: number;
+  totalStages: number;
+  pct: number;
+}
+
+/**
+ * Resolve the effective (non-skipped) stage list for a project, honoring any
+ * `customFlowStages` overrides (renames via customLabel, skips, added/reordered
+ * stages). Falls back to the raw default flow when there are no custom entries.
+ *
+ * Keep this in sync with the equivalent logic in `useProjectFlow.ts`
+ * (`resolveStageForEntry` / `effectiveStages`) — list/board/timeline views use
+ * this lightweight version instead of the full hook since they render many
+ * projects at once and don't need admin stage-overrides or live mutations.
+ */
+export function getEffectiveStages(
+  projectType: string,
+  customFlowStages?: MinimalCustomStageEntry[] | null,
+): FlowStage[] {
+  const defaultStages = getProjectFlow(projectType).stages;
+  const entries = customFlowStages ?? [];
+  if (!entries.length) return defaultStages;
+
+  return entries
+    .filter(e => !e.skipped)
+    .map(entry => {
+      const base = defaultStages.find(s => s.id === entry.id);
+      if (!base) {
+        return { id: entry.id, label: entry.customLabel?.trim() || 'New Stage', description: '', keyOutputs: [] };
+      }
+      return { ...base, label: entry.customLabel?.trim() || base.label };
+    });
+}
+
+/** Compute current-stage label / index / progress %, honoring custom overrides. */
+export function getProjectStageProgress(
+  projectType: string,
+  currentFlowStage: string | null | undefined,
+  customFlowStages?: MinimalCustomStageEntry[] | null,
+): ProjectStageProgress | null {
+  const stages = getEffectiveStages(projectType, customFlowStages);
+  if (!stages.length) return null;
+  const currentStageId = currentFlowStage ?? stages[0]?.id;
+  const idx = stages.findIndex(s => s.id === currentStageId);
+  const safeIdx = idx === -1 ? 0 : idx;
+  const stage = stages[safeIdx];
+  if (!stage) return null;
+  return {
+    stageName: stage.label,
+    stageIdx: safeIdx,
+    totalStages: stages.length,
+    pct: Math.round(((safeIdx + 1) / stages.length) * 100),
+  };
+}
+
 export const PROJECT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'tpm', label: 'Third Party Monitoring (TPM)' },
   { value: 'baseline_survey', label: 'Baseline Survey' },

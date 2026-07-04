@@ -4,3 +4,4 @@
 - [pre-fund-spend-attribution](pre-fund-spend-attribution.md) — Allocation Dashboard "spent=0" while Total Paid Out is correct: user_id may be NULL, or txn.created_by (disbursing officer) is the true allocation holder, not user_id (recipient).
 - [down-payment-batch-pay-basis](down-payment-batch-pay-basis.md) — batch-pay bulk actions must compute basis from remaining_amount for partially_paid rows, not full approved amount, or reused "approved"-only filters silently disable the action.
 - [project-flow-deliverables-sync](project-flow-deliverables-sync.md) — Overview deliverables checklist and Stage checklist share one table now; project_stage_assignees/attachments tables may still be missing in dev DB.
+- [project-flow-stage-label-duplication](project-flow-stage-label-duplication.md) — Any view showing a project's stage label/progress must use getEffectiveStages/getProjectStageProgress, not raw getProjectFlow(...).stages, or renamed/skipped stages show stale data.

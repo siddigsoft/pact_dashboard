@@ -37,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProjectFlow, getFirstStageId, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
+import { getFirstStageId, getProjectStageProgress, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
 
 interface ProjectListProps {
   projects: Project[];
@@ -431,13 +431,9 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
                 {/* Flow stage indicator */}
                 {(() => {
-                  const flowDef = getProjectFlow(project.projectType);
-                  const currentStageId = project.currentFlowStage ?? flowDef.stages[0]?.id;
-                  const stageIdx = flowDef.stages.findIndex(s => s.id === currentStageId);
-                  const stageName = flowDef.stages[stageIdx]?.label;
-                  const total = flowDef.stages.length;
-                  if (!stageName) return null;
-                  const pct = Math.round(((stageIdx + 1) / total) * 100);
+                  const progress = getProjectStageProgress(project.projectType, project.currentFlowStage, project.customFlowStages);
+                  if (!progress) return null;
+                  const { stageName, stageIdx, totalStages: total, pct } = progress;
                   return (
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
