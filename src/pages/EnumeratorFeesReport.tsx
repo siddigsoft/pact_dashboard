@@ -86,6 +86,35 @@ function statusBadge(status: string) {
   return <Badge className={`text-[10px] ${cls}`}>{label}</Badge>;
 }
 
+function normalizeForCompare(v: string) {
+  return v.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function looksLikeEmail(v: string) {
+  return /\S+@\S+\.\S+/.test(v);
+}
+
+function resolveEnumeratorName(
+  e: any,
+  profileMap: Record<string, string>,
+  emailMap: Record<string, string>
+): string {
+  if (profileMap[e.accepted_by]) return profileMap[e.accepted_by];
+  if (profileMap[e.forwarded_to_user_id]) return `${profileMap[e.forwarded_to_user_id]} (assigned)`;
+  const raw = (e.monitoring_by || '').trim();
+  if (!raw) return 'Unassigned';
+  if (emailMap[raw]) return emailMap[raw];
+  if (looksLikeEmail(raw)) return raw; // email with no matching profile — still a real identifier, show it
+  // guard against legacy uploads where "Monitoring By" was mistakenly filled with the
+  // site name / site code instead of a person's name — treat those as Unassigned
+  const normRaw = normalizeForCompare(raw);
+  const normSiteName = normalizeForCompare(e.site_name || '');
+  const normSiteCode = normalizeForCompare(e.site_code || '');
+  if (normRaw && (normRaw === normSiteName || normRaw === normSiteCode)) return 'Unassigned';
+  if (/^[a-z0-9]{6,}$/i.test(raw) && !/\s/.test(raw)) return 'Unassigned'; // looks like a bare site code, not a name
+  return raw;
+}
+
 function advanceBadge(status: FeeRow['advanceStatus'], paid: number | null, requested: number | null) {
   if (status === 'fully_paid') {
     return <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">✓ Advance Paid{paid ? ` (${paid.toLocaleString()})` : ''}</Badge>;
@@ -136,6 +165,8 @@ export default function EnumeratorFeesReport() {
   const [filterMmp, setFilterMmp] = useState('all');
   const [filterHub, setFilterHub] = useState('all');
   const [filterState, setFilterState] = useState('all');
+  const [filterLocality, setFilterLocality] = useState('all');
+  const [filterEnumerator, setFilterEnumerator] = useState('all');
   const [filterAck, setFilterAck] = useState('all');
   const [filterCycle, setFilterCycle] = useState('all');
   const [filterSiteStatus, setFilterSiteStatus] = useState('all');
@@ -163,7 +194,7 @@ export default function EnumeratorFeesReport() {
         const to = from + PAGE_SIZE - 1;
         const { data: entryPage, error: entErr } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
+          .select('id, site_name, site_code, state, locality, status, accepted_by, forwarded_to_user_id, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
           .order('site_name')
           .range(from, to);
         if (entErr) throw entErr;
@@ -184,8 +215,8 @@ export default function EnumeratorFeesReport() {
         });
       }
 
-      // 3. Profiles by UUID (accepted_by)
-      const profileIds = [...new Set(entryList.map((e: any) => e.accepted_by).filter(Boolean))];
+      // 3. Profiles by UUID (accepted_by, falling back to forwarded_to_user_id)
+      const profileIds = [...new Set(entryList.flatMap((e: any) => [e.accepted_by, e.forwarded_to_user_id]).filter(Boolean))];
       const profileMap: Record<string, string> = {};
       if (profileIds.length > 0) {
         const { data: profs } = await supabase
@@ -261,11 +292,7 @@ export default function EnumeratorFeesReport() {
           state: e.state || '—',
           locality: e.locality || '—',
           siteStatus: e.status || 'pending',
-          enumeratorName:
-            profileMap[e.accepted_by] ||
-            emailMap[e.monitoring_by] ||
-            e.monitoring_by ||
-            'Unassigned',
+          enumeratorName: resolveEnumeratorName(e, profileMap, emailMap),
           enumeratorFee: enumFee,
           transportFee: transFee,
           totalFee: total,
@@ -298,10 +325,24 @@ export default function EnumeratorFeesReport() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ── derived lists for filter dropdowns ────────────────────────────────────
+  // ── derived lists for filter dropdowns (Hub → State → Locality cascade, like Down-Payment Tracker) ──
   const mmps   = useMemo(() => [...new Map(rows.map(r => [r.mmpId, r.mmpName])).entries()].sort((a,b) => a[1].localeCompare(b[1])), [rows]);
   const hubs   = useMemo(() => [...new Set(rows.map(r => r.mmpHub))].filter(Boolean).sort(), [rows]);
-  const states = useMemo(() => [...new Set(rows.map(r => r.state))].filter(h => h !== '—').sort(), [rows]);
+  const states = useMemo(() => {
+    const base = filterHub !== 'all' ? rows.filter(r => r.mmpHub === filterHub) : rows;
+    return [...new Set(base.map(r => r.state))].filter(h => h !== '—').sort();
+  }, [rows, filterHub]);
+  const localities = useMemo(() => {
+    let base = filterHub !== 'all' ? rows.filter(r => r.mmpHub === filterHub) : rows;
+    if (filterState !== 'all') base = base.filter(r => r.state === filterState);
+    return [...new Set(base.map(r => r.locality))].filter(l => l !== '—').sort();
+  }, [rows, filterHub, filterState]);
+  const enumerators = useMemo(() => {
+    let base = filterHub !== 'all' ? rows.filter(r => r.mmpHub === filterHub) : rows;
+    if (filterState !== 'all') base = base.filter(r => r.state === filterState);
+    if (filterLocality !== 'all') base = base.filter(r => r.locality === filterLocality);
+    return [...new Set(base.map(r => r.enumeratorName))].filter(n => n && n !== 'Unassigned').sort();
+  }, [rows, filterHub, filterState, filterLocality]);
   const siteStatuses = useMemo(() => [...new Set(rows.map(r => r.siteStatus))].filter(Boolean).sort(), [rows]);
 
   // ── filtered rows ─────────────────────────────────────────────────────────
@@ -311,6 +352,8 @@ export default function EnumeratorFeesReport() {
       if (filterMmp !== 'all' && r.mmpId !== filterMmp) return false;
       if (filterHub !== 'all' && r.mmpHub !== filterHub) return false;
       if (filterState !== 'all' && r.state !== filterState) return false;
+      if (filterLocality !== 'all' && r.locality !== filterLocality) return false;
+      if (filterEnumerator !== 'all' && r.enumeratorName !== filterEnumerator) return false;
       if (filterCycle !== 'all' && r.cycleStatus !== filterCycle) return false;
       if (filterSiteStatus !== 'all' && r.siteStatus !== filterSiteStatus) return false;
       if (filterAck === 'acknowledged' && !r.costAcknowledged) return false;
@@ -328,7 +371,7 @@ export default function EnumeratorFeesReport() {
       }
       return true;
     });
-  }, [rows, search, filterMmp, filterHub, filterState, filterCycle, filterSiteStatus, filterAck, filterPaid, filterAdvance]);
+  }, [rows, search, filterMmp, filterHub, filterState, filterLocality, filterEnumerator, filterCycle, filterSiteStatus, filterAck, filterPaid, filterAdvance]);
 
   // ── KPI totals ────────────────────────────────────────────────────────────
   const kpi = useMemo(() => {
@@ -596,7 +639,7 @@ export default function EnumeratorFeesReport() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input placeholder="Search enumerator, site, MMP…" className="pl-8 h-8 text-xs" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-fee-search" />
             </div>
-            <Select value={filterHub} onValueChange={setFilterHub}>
+            <Select value={filterHub} onValueChange={v => { setFilterHub(v); setFilterState('all'); setFilterLocality('all'); setFilterEnumerator('all'); }}>
               <SelectTrigger className="w-[150px] h-8 text-xs" data-testid="select-fee-hub"><Building2 className="h-3 w-3 mr-1.5 shrink-0" /><SelectValue placeholder="All Hubs" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Hubs</SelectItem>
@@ -610,11 +653,25 @@ export default function EnumeratorFeesReport() {
                 {mmps.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filterState} onValueChange={setFilterState}>
+            <Select value={filterState} onValueChange={v => { setFilterState(v); setFilterLocality('all'); setFilterEnumerator('all'); }}>
               <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-fee-state"><MapPin className="h-3 w-3 mr-1.5 shrink-0" /><SelectValue placeholder="All States" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All States</SelectItem>
                 {states.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterLocality} onValueChange={v => { setFilterLocality(v); setFilterEnumerator('all'); }}>
+              <SelectTrigger className="w-[150px] h-8 text-xs" data-testid="select-fee-locality"><MapPin className="h-3 w-3 mr-1.5 shrink-0" /><SelectValue placeholder="All Localities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Localities</SelectItem>
+                {localities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterEnumerator} onValueChange={setFilterEnumerator}>
+              <SelectTrigger className="w-[170px] h-8 text-xs" data-testid="select-fee-enumerator"><Users className="h-3 w-3 mr-1.5 shrink-0" /><SelectValue placeholder="All Enumerators" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Enumerators</SelectItem>
+                {enumerators.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterCycle} onValueChange={setFilterCycle}>
