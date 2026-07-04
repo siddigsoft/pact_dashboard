@@ -188,6 +188,8 @@ const getWorkflowMenuGroups = (
     approvalItems.push({ id: "withdrawal-approval", title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2 });
   if (!isHidden("/down-payment-approval") && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor))
     approvalItems.push({ id: "down-payment-approval", title: "Down-Payment", url: "/down-payment-approval", icon: DollarSign, priority: 3 });
+  if (!isHidden("/enumerator-fees-report") && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor))
+    approvalItems.push({ id: "enumerator-fees-report", title: "Enumerator Fees Report", url: "/enumerator-fees-report", icon: Receipt, priority: 3.5 });
   if (!isHidden("/finance-approval") && canSeePath("/finance-approval", defaultRole))
     approvalItems.push({ id: "finance-approval", title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4 });
   if (approvalItems.length) groups.push({ id: "finance-approvals", label: "Approvals", order: 5.2, parentGroup: "finance", items: approvalItems });
