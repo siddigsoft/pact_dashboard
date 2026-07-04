@@ -420,7 +420,9 @@ function getDepRelations(
   };
 }
 
-function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = [], allTypedDeps = [] }: TaskFormProps) {
+const EMPTY_TYPED_DEPS: TaskDependency[] = [];
+
+function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -440,8 +442,23 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [deps,          setDeps]          = useState<string[]>(initial?.dependencies ?? []);
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
 
+  // Only reset the form when the dialog actually transitions from closed to
+  // open (or switches to editing a different task) — NOT on every re-render
+  // while it stays open. `initial`/`existingTypedDeps` are frequently new
+  // object/array references on parent re-renders (e.g. from realtime data
+  // refetches or the user's own typing triggering a parent re-render), and
+  // depending on their identity here would silently wipe out whatever the
+  // user just typed or selected.
+  const wasOpenRef = useRef(false);
+  const openedForIdRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !wasOpenRef.current;
+    const switchedTarget = open && openedForIdRef.current !== (initial?.id ?? null);
+    wasOpenRef.current = open;
+
+    if (open && (justOpened || switchedTarget)) {
+      openedForIdRef.current = initial?.id ?? null;
       setTitle(initial?.title ?? '');
       setDescription(initial?.description ?? '');
       setPriority(initial?.priority ?? 'medium');
