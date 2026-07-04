@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { insertNotificationsToDb } from "@/services/notification-insert";
 import { useSettings } from "@/context/settings/SettingsContext";
 import UserClassificationBadge from "@/components/user/UserClassificationBadge";
 import ClassificationBadge from "@/components/user/ClassificationBadge";
@@ -337,7 +338,7 @@ const UserDetail: FC = () => {
       if (newDeptId !== prevDepartmentId) {
         const newDept = departments.find(d => d.id === newDeptId);
         const deptNameEn = newDept ? newDept.name : null;
-        const { error: notifErr } = await supabase.from("notifications").insert({
+        await insertNotificationsToDb([{
           event_type: "department_update",
           entity_type: "profile",
           entity_id: user.id,
@@ -349,8 +350,7 @@ const UserDetail: FC = () => {
           message_ar: deptNameEn ? `تم تحديث قسمك إلى "${deptNameEn}".` : "تمت إزالتك من قسمك الحالي.",
           priority: "medium",
           action_url: `/users/${user.id}`,
-        });
-        if (notifErr) console.error("[UserDetail] dept notification insert failed:", notifErr.message);
+        }]);
         if (user.email) {
           const { error: emailErr } = await supabase.functions.invoke("send-email", {
             body: {

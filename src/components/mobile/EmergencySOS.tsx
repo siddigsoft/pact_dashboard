@@ -4,6 +4,7 @@ import { AlertTriangle, Phone, X, MapPin, Loader2, Send, Shield, Users, User, Ch
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
 import { triggerHaptic } from '@/lib/haptics';
@@ -243,8 +244,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
         priority: 'urgent',
       }));
 
-      const { error } = await supabase.from('notifications').insert(notifications);
-      if (error) throw error;
+      await insertNotificationsToDb(notifications);
 
       // Broadcast to realtime channel
       const channel = supabase.channel('emergency-alerts');

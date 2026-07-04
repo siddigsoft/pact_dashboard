@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConnectedPagesBar } from "@/components/ui/connected-pages-bar";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { insertNotificationsToDb } from "@/services/notification-insert";
 import { useUser } from "@/context/user/UserContext";
 import { usePageManageOverride } from "@/hooks/usePageManageOverride";
 import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
@@ -106,7 +107,7 @@ async function sendDeptNotification(opts: {
   entityId: string;
   triggeredBy: string | null;
 }) {
-  const { error: notifError } = await supabase.from("notifications").insert({
+  await insertNotificationsToDb([{
     event_type: "department_update",
     entity_type: "department",
     entity_id: opts.entityId,
@@ -118,10 +119,8 @@ async function sendDeptNotification(opts: {
     message_ar: opts.messageAr,
     priority: "medium",
     action_url: "/departments",
-  });
-  if (notifError) {
-    console.error("[sendDeptNotification] notification insert failed:", notifError.message);
-  }
+  }]);
+
   if (opts.recipientEmail) {
     const { error: emailError } = await supabase.functions.invoke("send-email", {
       body: {

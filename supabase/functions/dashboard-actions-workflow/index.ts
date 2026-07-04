@@ -423,9 +423,11 @@ serve(async (req) => {
     const notifBody = `Action: ${workflow_action}. New status: ${targetStatus}.${notes ? ` Notes: ${notes}` : ''}`
 
     svc.from('notifications').insert({
+      recipient_id: senderId,
       user_id: senderId,
-      title: notifTitle,
-      message: notifBody,
+      title_en: notifTitle,
+      message_en: notifBody,
+      event_type: `workflow_${workflow_action}`,
       type: workflow_action === 'reject' || workflow_action === 'cancel' ? 'warning' : 'info',
       is_read: false,
       created_at: now,

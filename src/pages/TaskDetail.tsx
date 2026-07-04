@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import {
   ArrowLeft, Calendar, Clock, User as UserIcon, Users, Tag, MessageSquare, FileText,
@@ -1770,7 +1771,7 @@ export default function TaskDetail() {
                                 type="button"
                                 onClick={async () => {
                                   try {
-                                    await supabase.from('notifications').insert({
+                                    await insertNotificationsToDb([{
                                       recipient_id: d.userId,
                                       event_type: 'task_dependency_reminder',
                                       entity_type: 'personal_task',
@@ -1782,7 +1783,7 @@ export default function TaskDetail() {
                                       message_ar: `${currentUser?.fullName ?? 'زميل'} ينتظر "${d.label}" لإكمال مهمة "${task.title}".`,
                                       priority: 'normal',
                                       action_url: `/tasks/${id}`,
-                                    });
+                                    }]);
                                     toast({ title: 'Reminder sent', description: `Pinged ${d.userName ?? 'user'} about "${d.label}".` });
                                   } catch {
                                     toast({ title: 'Could not send reminder', variant: 'destructive' });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -186,7 +187,7 @@ function MyAlertsTab() {
     setTestingType(eventType);
     try {
       const ev = FD_EVENTS.find(e => e.type === eventType);
-      const { error } = await supabase.from('notifications').insert({
+      await insertNotificationsToDb([{
         recipient_id: user?.id,
         title_en: `[Test] ${ev?.label}`,
         title_ar: `[اختبار] ${ev?.label}`,
@@ -197,8 +198,7 @@ function MyAlertsTab() {
         priority: 'normal',
         status: 'unread',
         is_read: false,
-      });
-      if (error) throw error;
+      }]);
       toast({ title: 'Test notification sent', description: 'Check your notification bell.' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });

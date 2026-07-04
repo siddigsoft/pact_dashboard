@@ -37,6 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
@@ -773,13 +774,15 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         const { data: profs } = await supabase.from('profiles').select('id, full_name').neq('id', currentUserId);
         const mentioned = (profs ?? []).filter(p => names.some(n => p.full_name?.toLowerCase().includes(n)));
         if (mentioned.length > 0) {
-          await supabase.from('notifications').insert(
+          await insertNotificationsToDb(
             mentioned.map(p => ({
+              recipient_id: p.id,
               user_id: p.id,
-              title: 'You were mentioned in a file comment',
-              message: `Someone mentioned you in a comment on "${file.name}": ${content.substring(0, 100)}`,
+              title_en: 'You were mentioned in a file comment',
+              message_en: `Someone mentioned you in a comment on "${file.name}": ${content.substring(0, 100)}`,
+              event_type: 'mention',
               type: 'mention',
-              link: '/workspace',
+              action_url: '/workspace',
               is_read: false,
             }))
           );

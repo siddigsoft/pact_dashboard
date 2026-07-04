@@ -23,6 +23,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
@@ -42,6 +43,7 @@ function effectiveCompletionTs(e: {
   updated_at?: string | null;
 }): string | null {
   return (
+    e.visit_completed_at ??
     e.completed_at ??
     e.verified_at ??
     (isTerminalCompletionRawStatus(e.status) ? e.updated_at ?? null : null)
@@ -475,10 +477,10 @@ async function fetchWeeklyStats(): Promise<WeeklyStats | null> {
     // silently dropped from the weekly tally.
     const [verifData, dpRes] = await Promise.all([
       supabase.from('mmp_site_entries')
-        .select('id, status, completed_at, verified_at, updated_at')
+        .select('id, status, visit_completed_at, verified_at, updated_at')
         .in('status', ['verified', 'completed'])
         .or(
-          `completed_at.gte.${weekStart},verified_at.gte.${weekStart},updated_at.gte.${weekStart}`,
+          `visit_completed_at.gte.${weekStart},verified_at.gte.${weekStart},updated_at.gte.${weekStart}`,
         ),
       supabase.from('down_payment_requests')
         .select('id', { count: 'exact', head: true })
@@ -889,14 +891,17 @@ async function sendDigest(recipientId: string, msg: Msg) {
     .limit(1);
   if (existing && existing.length > 0) return;
 
-  const { data: inserted } = await supabase.from('notifications').insert({
+  const insertedIds = await insertNotificationsToDb([{
     recipient_id: recipientId, user_id: recipientId,
     title_en: msg.title_en, title_ar: msg.title_ar,
     message_en: msg.en, message_ar: msg.ar,
-    type: 'daily_digest', entity_type: 'mmp',
+    event_type: 'daily_digest',
+    type: 'daily_digest',
+    entity_type: 'mmp',
     action_url: msg.action_url,
     is_read: false, created_at: new Date().toISOString(),
-  }).select('id').single();
+  }]);
+  const inserted = insertedIds[0] ? { id: insertedIds[0] } : null;
 
   // FCM push for critical items (escalated coordinators or urgent approvals)
   if (msg.isCritical) {
@@ -961,15 +966,17 @@ async function sendWeeklySummary(recipientId: string, data: DigestData, scopeLab
     `⏳ دفعات مقدمة لا تزال معلّقة: ${ws.dpPendingTotal}`,
   ].filter(Boolean).join('\n');
 
-  await supabase.from('notifications').insert({
+  await insertNotificationsToDb([{
     recipient_id: recipientId, user_id: recipientId,
     title_en: `📅 Weekly Summary — ${scopeLabel}`,
     title_ar: `📅 الملخص الأسبوعي — ${scopeLabelAr}`,
     message_en: msgEn, message_ar: msgAr,
-    type: 'weekly_digest', entity_type: 'mmp',
+    event_type: 'weekly_digest',
+    type: 'weekly_digest',
+    entity_type: 'mmp',
     action_url: '/mmp',
     is_read: false, created_at: new Date().toISOString(),
-  });
+  }]);
 }
 
 // Attach escalated count to DigestData for weekly summary use

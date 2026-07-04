@@ -70,9 +70,11 @@ async function dispatchNotification(
   const body = `Status updated to "${statusLabel}"${notes ? `. Notes: ${notes}` : '.'}`
 
   await svc.from('notifications').insert({
+    recipient_id: senderId,
     user_id: senderId,
-    title,
-    message: body,
+    title_en: title,
+    message_en: body,
+    event_type: 'monitoring_status_update',
     type: 'info',
     is_read: false,
     created_at: new Date().toISOString(),

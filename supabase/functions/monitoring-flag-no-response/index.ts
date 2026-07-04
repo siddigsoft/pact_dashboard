@@ -238,9 +238,11 @@ serve(async (req) => {
 
     // DB notification
     svc.from('notifications').insert({
+      recipient_id: senderId,
       user_id: senderId,
-      title: `Follow-up needed on your ${row.action_type.replace(/_/g, ' ')}`,
-      message: `Your submission has received no response for ${THRESHOLD_HOURS} hours. Please follow up with your supervisor.`,
+      title_en: `Follow-up needed on your ${row.action_type.replace(/_/g, ' ')}`,
+      message_en: `Your submission has received no response for ${THRESHOLD_HOURS} hours. Please follow up with your supervisor.`,
+      event_type: 'monitoring_no_response',
       type: 'warning',
       is_read: false,
       created_at: new Date().toISOString(),

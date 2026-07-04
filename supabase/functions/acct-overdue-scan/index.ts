@@ -68,11 +68,13 @@ async function createNotifications(
 ) {
   if (!userIds.length) return
   const rows = userIds.map(uid => ({
+    recipient_id: uid,
     user_id: uid,
+    event_type: payload.type,
     type: payload.type,
-    title: payload.title,
-    message: payload.message,
-    link: payload.link,
+    title_en: payload.title,
+    message_en: payload.message,
+    action_url: payload.link,
     metadata: payload.metadata,
     is_read: false,
     created_at: new Date().toISOString(),

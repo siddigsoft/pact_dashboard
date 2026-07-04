@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
+import { ensureValidSession } from '@/lib/session-health';
 
 export type ActivityType = 
   | 'button_click'
@@ -548,6 +549,11 @@ class ActivityTrackingService {
       return;
     }
 
+    const session = await ensureValidSession();
+    if (!session.success || !session.user?.id) {
+      return;
+    }
+
     const toSync = [...this.pendingSync];
     this.pendingSync = [];
 
@@ -577,9 +583,9 @@ class ActivityTrackingService {
         device_info: activity.deviceInfo,
       }));
 
-      const { error } = await supabase
-        .from('user_activity_logs')
-        .insert(dbRecords);
+      const { error } = await supabase.rpc('insert_user_activity_logs_secure', {
+        p_rows: dbRecords,
+      });
 
       if (error) {
         console.error('[ActivityTracking] Error syncing to database:', error);

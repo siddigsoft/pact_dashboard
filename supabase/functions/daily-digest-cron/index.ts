@@ -117,7 +117,7 @@ interface Msg { title_en: string; title_ar: string; en: string; ar: string; acti
 // ─── fetchers ─────────────────────────────────────────────────────────────────
 async function fetchCoordinators(sb: ReturnType<typeof createClient>): Promise<CoordRow[]> {
   const { data } = await sb.from('mmp_site_entries')
-    .select('id, accepted_by, status, hub_office, verified_at, completed_at, dispatched_at')
+    .select('id, accepted_by, status, hub_office, verified_at, visit_completed_at, dispatched_at')
     .not('accepted_by', 'is', null).limit(8000)
 
   const map = new Map<string, CoordRow>()
@@ -136,7 +136,7 @@ async function fetchCoordinators(sb: ReturnType<typeof createClient>): Promise<C
     const verified = ['verified', 'completed', 'accepted'].includes(st)
     const returned = st === 'returned'
     const pending = !verified && !returned
-    if (verified) { r.totalVerified++; const ts = (e.completed_at ?? e.verified_at) as string | null; if (ts && (!r.lastVerifiedAt || ts > r.lastVerifiedAt)) r.lastVerifiedAt = ts }
+    if (verified) { r.totalVerified++; const ts = (e.visit_completed_at ?? e.verified_at) as string | null; if (ts && (!r.lastVerifiedAt || ts > r.lastVerifiedAt)) r.lastVerifiedAt = ts }
     if (returned) r.totalReturned++
     if (pending) { r.pendingVerification++; if (e.dispatched_at && (!r.oldestPendingAt || e.dispatched_at < r.oldestPendingAt)) r.oldestPendingAt = e.dispatched_at }
   }
@@ -241,7 +241,7 @@ async function fetchWeeklyStats(sb: ReturnType<typeof createClient>): Promise<We
   try {
     const weekStart = startOfWeekIso()
     const [a, b, c, d] = await Promise.all([
-      sb.from('mmp_site_entries').select('id', { count: 'exact', head: true }).in('status', ['verified', 'completed']).or(`verified_at.gte.${weekStart},completed_at.gte.${weekStart}`),
+      sb.from('mmp_site_entries').select('id', { count: 'exact', head: true }).in('status', ['verified', 'completed']).or(`verified_at.gte.${weekStart},visit_completed_at.gte.${weekStart}`),
       sb.from('down_payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'approved').gte('updated_at', weekStart),
       sb.from('mmp_site_entries').select('id', { count: 'exact', head: true }).not('status', 'in', '("verified","completed","returned","accepted")'),
       sb.from('down_payment_requests').select('id', { count: 'exact', head: true }).in('status', ['pending_supervisor', 'pending_admin']),
@@ -441,7 +441,7 @@ async function sendDigest(sb: ReturnType<typeof createClient>, recipientId: stri
     recipient_id: recipientId, user_id: recipientId,
     title_en: msg.title_en, title_ar: msg.title_ar,
     message_en: msg.en, message_ar: msg.ar,
-    type: 'daily_digest', entity_type: 'mmp',
+    event_type: 'daily_digest', type: 'daily_digest', entity_type: 'mmp',
     action_url: msg.action_url,
     is_read: false, created_at: new Date().toISOString(),
   }).select('id').single()
@@ -480,7 +480,7 @@ async function sendWeeklySummary(sb: ReturnType<typeof createClient>, recipientI
     title_en: `📅 Weekly Summary — ${scopeLabel}`, title_ar: `📅 الملخص الأسبوعي — ${scopeLabelAr}`,
     message_en: `📅 Weekly Summary — ${scopeLabel}\n\n✅ Verified this week: ${ws.verifiedThisWeek.toLocaleString()}\n⏳ Still pending: ${ws.totalPendingVerif.toLocaleString()}\n📊 Coverage: ${cr}%\n💳 DPs approved: ${ws.dpApprovedThisWeek} | pending: ${ws.dpPendingTotal}`,
     message_ar: `📅 الملخص الأسبوعي — ${scopeLabelAr}\n\n✅ محقَّق هذا الأسبوع: ${ws.verifiedThisWeek.toLocaleString()}\n⏳ معلّق: ${ws.totalPendingVerif.toLocaleString()}\n📊 التغطية: ${cr}%\n💳 دفعات معتمدة: ${ws.dpApprovedThisWeek} | معلّقة: ${ws.dpPendingTotal}`,
-    type: 'weekly_digest', entity_type: 'mmp', action_url: '/mmp',
+    event_type: 'weekly_digest', type: 'weekly_digest', entity_type: 'mmp', action_url: '/mmp',
     is_read: false, created_at: new Date().toISOString(),
   })
 }
@@ -534,6 +534,7 @@ async function sendVisitReminders(sb: ReturnType<typeof createClient>): Promise<
         title_ar: `${urgencyAr} — تذكير بزيارة`,
         message_en: `${urgencyEn}: Your site visit to "${siteName}" is scheduled for ${dateFormatted}. Please confirm you are prepared.`,
         message_ar: `${urgencyAr}: زيارتك لموقع "${siteName}" مقررة في ${dateFormatted}. يرجى التأكد من جاهزيتك.`,
+        event_type: 'reminder',
         type: 'reminder',
         entity_id: site.id,
         entity_type: 'siteVisit',
