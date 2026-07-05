@@ -163,6 +163,12 @@ export default function SalaryIncrements() {
     const prevSal = form.previous_salary ? parseFloat(form.previous_salary) : null;
     const newSal = parseFloat(form.new_salary);
     const pct = calcPct(prevSal, newSal);
+    // Bug fix (increment auto-sync): this form has no separate pending-approval
+    // step — `approved_by` is already stamped at creation time, so the increment
+    // is meant to take effect immediately. Previously the row was saved with the
+    // DB default status='pending' and employee_salary_config.base_salary was
+    // never touched, so the employee kept being paid their OLD salary on every
+    // subsequent payroll run even though HR recorded a "new" salary here.
     const payload: any = {
       user_id: form.user_id,
       effective_date: form.effective_date,
@@ -174,15 +180,44 @@ export default function SalaryIncrements() {
       reason: form.reason || null,
       approved_by: currentUser?.id ?? null,
       notes: form.notes || null,
+      status: 'approved',
+      approved_at: new Date().toISOString(),
     };
+
+    // Sync the new base salary + currency into employee_salary_config so the
+    // change is actually reflected in the next payroll run. Only applied when
+    // the increment's effective date is today or in the past — a future-dated
+    // increment is recorded but not yet applied to live pay.
+    const syncLiveSalary = async () => {
+      const effectiveToday = form.effective_date <= format(new Date(), 'yyyy-MM-dd');
+      if (!effectiveToday) return;
+      const { data: existingCfg } = await supabase
+        .from('employee_salary_config')
+        .select('id')
+        .eq('user_id', form.user_id)
+        .maybeSingle();
+      if (existingCfg) {
+        await supabase.from('employee_salary_config')
+          .update({ base_salary: newSal, currency: form.currency })
+          .eq('id', existingCfg.id);
+      } else {
+        await supabase.from('employee_salary_config').insert({
+          user_id: form.user_id, base_salary: newSal, currency: form.currency,
+          allowances: [], deductions: [], effective_date: form.effective_date,
+          created_by: currentUser?.id ?? null,
+        });
+      }
+    };
+
     if (editing) {
       const { error } = await supabase.from('salary_increments').update(payload).eq('id', editing.id);
       if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-      else { toast({ title: 'Increment updated' }); setDialogOpen(false); fetchAll(); }
+      else { await syncLiveSalary(); toast({ title: 'Increment updated' }); setDialogOpen(false); fetchAll(); }
     } else {
       const { data: inserted, error } = await supabase.from('salary_increments').insert({ ...payload, created_at: new Date().toISOString() }).select().single();
       if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
       else {
+        await syncLiveSalary();
         // Notify the employee about their salary increment
         if (form.user_id && form.user_id !== currentUser?.id) {
           const incTypeLabel = (form.increment_type ?? 'increment').replace(/_/g, ' ');

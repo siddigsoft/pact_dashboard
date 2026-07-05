@@ -35,6 +35,15 @@ const corsHeaders = {
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://app.pactorg.com'
 const WARN_DAYS = 30
 
+// Bug fix (contract renewal visibility): the previous version fired a
+// notification on EVERY single day of the 30-day pre-expiry window (spam —
+// 30 emails per contract) and sent nothing at all once a contract was already
+// expired, even though an overdue/unresolved contract is the most urgent case.
+// Now: only notify on these specific milestones before expiry...
+const MILESTONE_DAYS = new Set([30, 15, 7, 3, 1, 0])
+// ...and once expired, escalate daily until HR resolves it (renewed/ended).
+const OVERDUE_ESCALATION_ENABLED = true
+
 function isAuthorized(req: Request): boolean {
   const cronSecret = Deno.env.get('CRON_SECRET')
   // If CRON_SECRET is not configured, only allow requests from Supabase internal network
@@ -78,12 +87,16 @@ serve(async (req) => {
     const cutoff = new Date(today)
     cutoff.setDate(cutoff.getDate() + WARN_DAYS)
 
+    // Widen the lower bound to capture overdue/unresolved contracts too (no
+    // fixed floor — an unresolved contract stays in scope until HR marks it
+    // 'renewed' or 'ended'). renewal_status is filtered in JS below since
+    // NULL/'pending'/'contacted' should all still escalate.
     const { data: expiringProfiles, error: fetchError } = await supabase
       .from('profiles')
-      .select('id, full_name, email, contract_end_date, reports_to')
+      .select('id, full_name, email, contract_end_date, reports_to, renewal_status')
       .not('contract_end_date', 'is', null)
-      .gte('contract_end_date', today.toISOString().slice(0, 10))
       .lte('contract_end_date', cutoff.toISOString().slice(0, 10))
+      .or('renewal_status.is.null,renewal_status.in.(pending,contacted)')
 
     if (fetchError) throw fetchError
 
@@ -117,6 +130,13 @@ serve(async (req) => {
     for (const profile of expiringProfiles) {
       const contractEnd = new Date(profile.contract_end_date!)
       const daysLeft = Math.ceil((contractEnd.getTime() - today.getTime()) / 86_400_000)
+      const isOverdue = daysLeft < 0
+
+      // Only fire on a defined pre-expiry milestone, or daily once overdue
+      // (overdue = most urgent, keep nagging until HR resolves it).
+      if (!isOverdue && !MILESTONE_DAYS.has(daysLeft)) continue
+      if (isOverdue && !OVERDUE_ESCALATION_ENABLED) continue
+
       const dedupeKey = `${profile.id}:${todayStr}`
 
       const { data: existing } = await supabase
@@ -130,8 +150,18 @@ serve(async (req) => {
       if (existing) continue
 
       const employeeName = profile.full_name || profile.email || 'Employee'
-      const urgency = daysLeft <= 7 ? 'high' : 'medium'
+      const urgency = isOverdue || daysLeft <= 7 ? 'high' : 'medium'
       const expiryDate = contractEnd.toISOString().slice(0, 10)
+      const overdueDays = Math.abs(daysLeft)
+
+      const titleEn = isOverdue ? `Contract OVERDUE — Renewal Not Resolved` : `Contract Expiry Reminder`
+      const titleAr = isOverdue ? `العقد متأخر — لم يتم حل التجديد` : `تذكير بانتهاء العقد`
+      const messageEn = isOverdue
+        ? `Your contract expired ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago (${expiryDate}) and has not been marked renewed. Please contact HR urgently.`
+        : `Your contract expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} (${expiryDate}). Please contact HR to discuss renewal.`
+      const messageAr = isOverdue
+        ? `عقدك انتهى منذ ${overdueDays} يوم (${expiryDate}) ولم يتم تحديد حالة التجديد. يرجى التواصل الفوري مع الموارد البشرية.`
+        : `عقدك ينتهي خلال ${daysLeft} يوم (${expiryDate}). يرجى التواصل مع الموارد البشرية.`
 
       await supabase.from('notifications').insert({
         event_type: 'contract_expiry',
@@ -140,10 +170,10 @@ serve(async (req) => {
         recipient_id: profile.id,
         user_id: profile.id,
         triggered_by: null,
-        title_en: `Contract Expiry Reminder`,
-        title_ar: `تذكير بانتهاء العقد`,
-        message_en: `Your contract expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} (${expiryDate}). Please contact HR to discuss renewal.`,
-        message_ar: `عقدك ينتهي خلال ${daysLeft} يوم (${expiryDate}). يرجى التواصل مع الموارد البشرية.`,
+        title_en: titleEn,
+        title_ar: titleAr,
+        message_en: messageEn,
+        message_ar: messageAr,
         priority: urgency,
         action_url: `${APP_URL}/users/${profile.id}`,
       })
@@ -152,20 +182,23 @@ serve(async (req) => {
         await supabase.functions.invoke('send-email', {
           body: {
             to: profile.email,
-            subject: `Contract Expiry Reminder — ${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`,
+            subject: isOverdue
+              ? `URGENT: Contract Overdue — ${overdueDays} day${overdueDays === 1 ? '' : 's'} past expiry`
+              : `Contract Expiry Reminder — ${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`,
             html: `
               <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-                <div style="background:#0F2041;padding:20px;border-radius:8px 8px 0 0">
+                <div style="background:${isOverdue ? '#7f1d1d' : '#0F2041'};padding:20px;border-radius:8px 8px 0 0">
                   <h1 style="color:#fff;margin:0;font-size:20px">PACT Command Center</h1>
                 </div>
                 <div style="background:#f9fafb;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e5e7eb;border-top:none">
-                  <h2 style="color:#1D3461;margin-top:0">Contract Expiry Reminder</h2>
+                  <h2 style="color:#1D3461;margin-top:0">${isOverdue ? 'Contract Overdue — Renewal Not Resolved' : 'Contract Expiry Reminder'}</h2>
                   <p style="color:#374151">Dear ${employeeName},</p>
                   <p style="color:#374151">
-                    This is a reminder that your employment contract is set to expire in
-                    <strong>${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> on <strong>${expiryDate}</strong>.
+                    ${isOverdue
+                      ? `Your employment contract <strong>expired ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago</strong> on <strong>${expiryDate}</strong> and has not yet been marked renewed.`
+                      : `This is a reminder that your employment contract is set to expire in <strong>${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> on <strong>${expiryDate}</strong>.`}
                   </p>
-                  <p style="color:#374151">Please contact your HR department or manager to discuss contract renewal.</p>
+                  <p style="color:#374151">Please contact your HR department or manager ${isOverdue ? 'urgently ' : ''}to discuss contract renewal.</p>
                   <a href="${APP_URL}/users/${profile.id}"
                      style="display:inline-block;background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:12px">
                     View My Profile
@@ -196,10 +229,14 @@ serve(async (req) => {
             recipient_id: profile.reports_to,
             user_id: profile.reports_to,
             triggered_by: null,
-            title_en: `Team Member Contract Expiry: ${employeeName}`,
-            title_ar: `انتهاء عقد عضو الفريق: ${employeeName}`,
-            message_en: `${employeeName}'s contract expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} (${expiryDate}).`,
-            message_ar: `عقد ${employeeName} ينتهي خلال ${daysLeft} يوم (${expiryDate}).`,
+            title_en: isOverdue ? `OVERDUE Contract: ${employeeName}` : `Team Member Contract Expiry: ${employeeName}`,
+            title_ar: isOverdue ? `عقد متأخر: ${employeeName}` : `انتهاء عقد عضو الفريق: ${employeeName}`,
+            message_en: isOverdue
+              ? `${employeeName}'s contract expired ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago (${expiryDate}) and has not been resolved.`
+              : `${employeeName}'s contract expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} (${expiryDate}).`,
+            message_ar: isOverdue
+              ? `عقد ${employeeName} انتهى منذ ${overdueDays} يوم (${expiryDate}) ولم يتم حله.`
+              : `عقد ${employeeName} ينتهي خلال ${daysLeft} يوم (${expiryDate}).`,
             priority: urgency,
             action_url: `${APP_URL}/users/${profile.id}`,
           })
@@ -208,20 +245,21 @@ serve(async (req) => {
             await supabase.functions.invoke('send-email', {
               body: {
                 to: mgr.email,
-                subject: `Team Member Contract Expiry — ${employeeName}`,
+                subject: isOverdue ? `URGENT: Overdue Contract — ${employeeName}` : `Team Member Contract Expiry — ${employeeName}`,
                 html: `
                   <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-                    <div style="background:#0F2041;padding:20px;border-radius:8px 8px 0 0">
+                    <div style="background:${isOverdue ? '#7f1d1d' : '#0F2041'};padding:20px;border-radius:8px 8px 0 0">
                       <h1 style="color:#fff;margin:0;font-size:20px">PACT Command Center</h1>
                     </div>
                     <div style="background:#f9fafb;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e5e7eb;border-top:none">
-                      <h2 style="color:#1D3461;margin-top:0">Team Member Contract Expiry</h2>
+                      <h2 style="color:#1D3461;margin-top:0">${isOverdue ? 'Overdue Contract — Not Yet Resolved' : 'Team Member Contract Expiry'}</h2>
                       <p style="color:#374151">Dear ${mgr.full_name || 'Manager'},</p>
                       <p style="color:#374151">
-                        This is to inform you that <strong>${employeeName}</strong>'s employment contract
-                        expires in <strong>${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> on <strong>${expiryDate}</strong>.
+                        ${isOverdue
+                          ? `<strong>${employeeName}</strong>'s employment contract <strong>expired ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago</strong> on <strong>${expiryDate}</strong> and has not yet been marked renewed.`
+                          : `This is to inform you that <strong>${employeeName}</strong>'s employment contract expires in <strong>${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> on <strong>${expiryDate}</strong>.`}
                       </p>
-                      <p style="color:#374151">Please follow up with HR regarding contract renewal.</p>
+                      <p style="color:#374151">Please follow up with HR ${isOverdue ? 'urgently ' : ''}regarding contract renewal.</p>
                       <a href="${APP_URL}/users/${profile.id}"
                          style="display:inline-block;background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:12px">
                         View Employee Profile

@@ -93,6 +93,15 @@ interface PreFundSummary {
   currency: string | null;
   status: string | null;
 }
+interface OperationalCostSubmission {
+  id: string;
+  expense_category: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  expense_date: string | null;
+  status: string | null;
+  description: string | null;
+}
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function MonthEndFinancialSummary() {
@@ -265,9 +274,35 @@ export default function MonthEndFinancialSummary() {
     [activeFunds]);
   const preFundVariance = preFundReceived - preFundPaid - preFundCommitted;
 
+  // ── 5. Operational expenses (permits, incentives, training, etc.) ─────────
+  // Bug fix (Month-End Summary completeness): approved operational cost
+  // submissions were never included in this report, so the "Net Position"
+  // silently overstated cash on hand by the full amount of any approved
+  // operational spend for the month (permits, incentives, training, etc.).
+  const { data: operationalCosts = [], isLoading: loadingOpCosts } = useQuery<OperationalCostSubmission[]>({
+    queryKey: ['month-end-operational-costs', periodLabel],
+    ...CACHE,
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('id, expense_category, amount_cents, currency, expense_date, status, description')
+          .eq('status', 'approved')
+          .gte('expense_date', format(periodStart, 'yyyy-MM-dd'))
+          .lte('expense_date', format(periodEnd, 'yyyy-MM-dd'));
+        if (error) return [];
+        return (data ?? []) as OperationalCostSubmission[];
+      } catch { return []; }
+    },
+  });
+
+  const totalOperationalExpenses = useMemo(() =>
+    operationalCosts.reduce((s, c) => s + (Number(c.amount_cents) || 0) / 100, 0),
+    [operationalCosts]);
+
   // ── Derived ────────────────────────────────────────────────────────────────
-  const netPosition = totalReceivables - totalPayroll - totalSubscriptions;
-  const isLoading = loadingPayroll || loadingPayrollItems || loadingMilestones || loadingRetainerInvoices || loadingSubs || loadingPFTxns || loadingActiveFunds;
+  const netPosition = totalReceivables - totalPayroll - totalSubscriptions - totalOperationalExpenses;
+  const isLoading = loadingPayroll || loadingPayrollItems || loadingMilestones || loadingRetainerInvoices || loadingSubs || loadingPFTxns || loadingActiveFunds || loadingOpCosts;
 
   // ── Export PDF ─────────────────────────────────────────────────────────────
   function exportPDF() {
@@ -292,20 +327,21 @@ export default function MonthEndFinancialSummary() {
       ['Retainer Invoices Receivable', fmt(retainerInvoices.reduce((s, r) => s + (Number(r.amount) || 0), 0)), 'Outstanding'],
       ['Total Receivables', fmt(totalReceivables), 'Milestones + Retainer'],
       ['Subscription Costs (Monthly Est.)', fmt(totalSubscriptions), `${subscriptions.length} active subscriptions`],
+      ['Operational Expenses (Approved)', fmt(totalOperationalExpenses), `${operationalCosts.length} approved submissions`],
       ...(preFundTxns.length > 0 || activeFunds.length > 0 ? [
         ['Pre-Fund Received', fmt(preFundReceived), `${preFundTxns.filter(t=>t.transaction_type==='receipt').length} receipts`],
         ['Pre-Fund Paid Out', fmt(preFundPaid), `${preFundTxns.filter(t=>t.transaction_type==='payment').length} payments`],
         ['Pre-Fund Committed', fmt(preFundCommitted), `${preFundTxns.filter(t=>t.transaction_type==='commitment').length} commitments`],
         ['Pre-Fund Available Balance', fmt(preFundAvailable), `${activeFunds.length} active funds`],
       ] : []),
-      ['NET POSITION', fmt(netPosition), `Receivable − Payroll − Subscriptions`],
+      ['NET POSITION', fmt(netPosition), `Receivable − Payroll − Subscriptions − Operational Expenses`],
     ];
 
     autoTable(doc, {
       startY: y,
       head: [['Item', 'Amount (SDG)', 'Notes']],
       body: summaryRows.slice(0, -1),
-      foot: [[{ content: 'NET POSITION', styles: { fontStyle: 'bold', fillColor: netPosition >= 0 ? [220, 255, 235] : [255, 235, 235], textColor: netPosition >= 0 ? [20, 120, 60] : [160, 30, 30] } }, { content: fmt(netPosition), styles: { fontStyle: 'bold', fillColor: netPosition >= 0 ? [220, 255, 235] : [255, 235, 235], textColor: netPosition >= 0 ? [20, 120, 60] : [160, 30, 30], halign: 'right' } }, { content: 'Receivable − Payroll − Subscriptions', styles: { fillColor: netPosition >= 0 ? [220, 255, 235] : [255, 235, 235] } }]],
+      foot: [[{ content: 'NET POSITION', styles: { fontStyle: 'bold', fillColor: netPosition >= 0 ? [220, 255, 235] : [255, 235, 235], textColor: netPosition >= 0 ? [20, 120, 60] : [160, 30, 30] } }, { content: fmt(netPosition), styles: { fontStyle: 'bold', fillColor: netPosition >= 0 ? [220, 255, 235] : [255, 235, 235], textColor: netPosition >= 0 ? [20, 120, 60] : [160, 30, 30], halign: 'right' } }, { content: 'Receivable − Payroll − Subscriptions − Op. Expenses', styles: { fillColor: netPosition >= 0 ? [220, 255, 235] : [255, 235, 235] } }]],
       headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
       bodyStyles: { fontSize: 9 },
       columnStyles: { 1: { halign: 'right' } },
@@ -354,6 +390,7 @@ export default function MonthEndFinancialSummary() {
       ['Retainer Invoices Receivable', retainerInvoices.reduce((s, r) => s + (Number(r.amount) || 0), 0), 'Outstanding'],
       ['Total Receivables', totalReceivables, 'Milestones + Retainer'],
       ['Subscription Costs (Monthly Est.)', totalSubscriptions, `${subscriptions.length} active subscriptions`],
+      ['Operational Expenses (Approved)', totalOperationalExpenses, `${operationalCosts.length} approved submissions`],
       ...(preFundTxns.length > 0 || activeFunds.length > 0 ? [
         [],
         ['PRE-FUND ACTIVITY', '', ''],
@@ -364,7 +401,7 @@ export default function MonthEndFinancialSummary() {
         ['Pre-Fund Variance (Received−Paid−Committed)', preFundVariance, ''],
       ] : []),
       [],
-      ['NET POSITION', netPosition, 'Receivable − Payroll − Subscriptions'],
+      ['NET POSITION', netPosition, 'Receivable − Payroll − Subscriptions − Operational Expenses'],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summary);
     XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
@@ -379,6 +416,12 @@ export default function MonthEndFinancialSummary() {
       const sData = [['Name', 'Amount', 'Currency', 'Billing Cycle', 'Monthly Est.'],
         ...subscriptions.map(s => [s.name, s.amount, s.currency, s.billing_cycle, monthlyEquivalent(Number(s.amount), s.billing_cycle)])];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sData), 'Subscriptions');
+    }
+
+    if (operationalCosts.length > 0) {
+      const oData = [['Category', 'Description', 'Amount', 'Currency', 'Expense Date', 'Status'],
+        ...operationalCosts.map(c => [c.expense_category, c.description, (Number(c.amount_cents) || 0) / 100, c.currency, c.expense_date, c.status])];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(oData), 'Operational Expenses');
     }
 
     XLSX.writeFile(wb, `month-end-summary-${format(periodStart, 'yyyy-MM')}.xlsx`);
@@ -425,7 +468,7 @@ export default function MonthEndFinancialSummary() {
         </div>
 
         {/* KPI Banner */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <SummaryCard
             icon={<Users className="h-5 w-5 text-red-500" />}
             label="Total Payroll (Net)"
@@ -448,12 +491,19 @@ export default function MonthEndFinancialSummary() {
             accent="text-indigo-600"
           />
           <SummaryCard
+            icon={<Banknote className="h-5 w-5 text-amber-500" />}
+            label="Operational Expenses"
+            value={isLoading ? '…' : fmt(totalOperationalExpenses)}
+            sub={`${operationalCosts.length} approved submissions`}
+            accent="text-amber-600"
+          />
+          <SummaryCard
             icon={netPosition >= 0
               ? <CheckCircle2 className="h-5 w-5 text-emerald-500" />
               : <AlertCircle className="h-5 w-5 text-red-500" />}
             label="Net Position"
             value={isLoading ? '…' : fmt(netPosition)}
-            sub="Receivable − Payroll − Subscriptions"
+            sub="Receivable − Payroll − Subs. − Op. Exp."
             accent={netPosition >= 0 ? 'text-emerald-700' : 'text-red-700'}
           />
         </div>
@@ -474,7 +524,7 @@ export default function MonthEndFinancialSummary() {
                 Net Position for {periodLabel}: {fmt(netPosition)}
               </p>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Receivables ({fmt(totalReceivables)}) − Payroll ({fmt(totalPayroll)}) − Subscriptions ({fmt(totalSubscriptions)})
+                Receivables ({fmt(totalReceivables)}) − Payroll ({fmt(totalPayroll)}) − Subscriptions ({fmt(totalSubscriptions)}) − Operational Expenses ({fmt(totalOperationalExpenses)})
               </p>
             </div>
           </div>
@@ -647,6 +697,39 @@ export default function MonthEndFinancialSummary() {
               )}
             </CardContent>
           </Card>
+
+          {/* Operational Expenses */}
+          <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-amber-500" />Operational Expenses
+              </CardTitle>
+              <CardDescription className="text-xs">Approved cost submissions for {periodLabel}</CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-4">
+              {loadingOpCosts ? (
+                <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin opacity-30" /></div>
+              ) : operationalCosts.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic text-center py-4">No approved operational expenses</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {operationalCosts.slice(0, 5).map((c) => (
+                    <div key={c.id} className="flex items-center justify-between text-xs border rounded-lg px-3 py-2" data-testid={`row-opcost-${c.id}`}>
+                      <span className="truncate font-medium capitalize">{c.expense_category ?? c.description ?? 'Expense'}</span>
+                      <span className="ml-2 text-amber-700 font-semibold">{fmt((Number(c.amount_cents) || 0) / 100, c.currency ?? 'SDG')}</span>
+                    </div>
+                  ))}
+                  {operationalCosts.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center">+{operationalCosts.length - 5} more</p>
+                  )}
+                  <div className="pt-2 border-t flex justify-between text-sm font-bold">
+                    <span className="text-muted-foreground">Total Approved</span>
+                    <span className="text-amber-700">{fmt(totalOperationalExpenses)}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Full summary table */}
@@ -663,6 +746,7 @@ export default function MonthEndFinancialSummary() {
                 <SummaryRow label="Retainer Invoices" value={fmt(retainerInvoices.reduce((s, r) => s + (Number(r.amount) || 0), 0))} note={`${retainerInvoices.length} outstanding`} variant="credit" />
                 <SummaryRow label="Total Receivables" value={fmt(totalReceivables)} note="Milestones + Retainers" variant="credit-bold" />
                 <SummaryRow label="Subscription Costs (Est.)" value={fmt(totalSubscriptions)} note={`${subscriptions.length} active`} variant="debit" />
+                <SummaryRow label="Operational Expenses (Approved)" value={fmt(totalOperationalExpenses)} note={`${operationalCosts.length} approved submissions`} variant="debit" />
                 {preFundTxns.length > 0 || activeFunds.length > 0 ? (
                   <>
                     <tr><td colSpan={3} className="pt-3 pb-1 text-xs font-semibold text-violet-700 uppercase tracking-wide">Pre-Fund Activity</td></tr>
@@ -677,7 +761,7 @@ export default function MonthEndFinancialSummary() {
                   <td className="py-3 text-right font-bold text-xl" style={{ color: netPosition >= 0 ? '#059669' : '#dc2626' }}>
                     {fmt(netPosition)}
                   </td>
-                  <td className="py-3 pl-4 text-xs text-muted-foreground">Receivable − Payroll − Subscriptions</td>
+                  <td className="py-3 pl-4 text-xs text-muted-foreground">Receivable − Payroll − Subscriptions − Op. Expenses</td>
                 </tr>
               </tbody>
             </table>

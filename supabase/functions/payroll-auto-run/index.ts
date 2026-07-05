@@ -81,6 +81,13 @@ function periodLabel(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
+// Statutory brackets are denominated in the country's local currency (SDG for
+// Sudan). Bug fix (H10-currency): employees paid in another currency must have
+// their gross converted to SDG before brackets are applied, then the resulting
+// tax lines converted back — otherwise a USD gross was taxed as if it were the
+// same numeric amount in SDG.
+const STATUTORY_CURRENCY_BY_COUNTRY: Record<string, string> = { SD: 'SDG' }
+
 // H10: statutory deductions (PIT progressive + social-insurance employee + optional Zakat).
 // Mirrors src/pages/PayrollAdmin.tsx::computeStatutoryDeductions so payroll_run_items
 // produced by the cron carry the same bracket-by-bracket snapshot shape that powers
@@ -90,8 +97,19 @@ function computeStatutoryDeductions(
   brackets: StatutoryBracket[],
   country: string,
   applyZakat: boolean,
-): DeductionLine[] {
-  if (!gross || gross <= 0) return []
+  currency: string,
+  ratesToLocal: Record<string, number>,
+): { lines: DeductionLine[]; skipped: boolean } {
+  if (!gross || gross <= 0) return { lines: [], skipped: false }
+
+  const localCurrency = STATUTORY_CURRENCY_BY_COUNTRY[country] ?? 'SDG'
+  let rate = 1
+  if (currency !== localCurrency) {
+    rate = ratesToLocal[currency]
+    if (!rate) return { lines: [], skipped: true }
+  }
+  const grossLocal = gross * rate
+
   const today = new Date().toISOString().slice(0, 10)
   const active = brackets.filter(b =>
     b.country === country
@@ -101,22 +119,24 @@ function computeStatutoryDeductions(
 
   let pit = 0
   active.filter(b => b.type === 'pit').sort((a, b) => a.min_amount - b.min_amount).forEach(b => {
-    if (gross > b.min_amount) {
-      const slice = Math.min(gross, b.max_amount ?? gross) - b.min_amount
+    if (grossLocal > b.min_amount) {
+      const slice = Math.min(grossLocal, b.max_amount ?? grossLocal) - b.min_amount
       pit += slice * b.rate_percent / 100 + b.fixed_amount
     }
   })
 
   const social = active.filter(b => b.type === 'social_employee')
-    .reduce((s, b) => s + (gross * b.rate_percent / 100 + b.fixed_amount), 0)
+    .reduce((s, b) => s + (grossLocal * b.rate_percent / 100 + b.fixed_amount), 0)
 
-  const zakat = applyZakat ? Math.max(0, gross - pit - social) * 0.025 : 0
+  const zakat = applyZakat ? Math.max(0, grossLocal - pit - social) * 0.025 : 0
+
+  const toEmployeeCcy = (n: number) => rate === 1 ? n : n / rate
 
   const lines: DeductionLine[] = []
-  if (pit    > 0) lines.push({ name: 'Income Tax (PIT)',     amount: Math.round(pit    * 100) / 100, type: 'fixed' })
-  if (social > 0) lines.push({ name: 'Social Insurance (NPF)', amount: Math.round(social * 100) / 100, type: 'fixed' })
-  if (zakat  > 0) lines.push({ name: 'Zakat',                amount: Math.round(zakat  * 100) / 100, type: 'fixed' })
-  return lines
+  if (pit    > 0) lines.push({ name: 'Income Tax (PIT)',     amount: Math.round(toEmployeeCcy(pit)    * 100) / 100, type: 'fixed' })
+  if (social > 0) lines.push({ name: 'Social Insurance (NPF)', amount: Math.round(toEmployeeCcy(social) * 100) / 100, type: 'fixed' })
+  if (zakat  > 0) lines.push({ name: 'Zakat',                amount: Math.round(toEmployeeCcy(zakat)  * 100) / 100, type: 'fixed' })
+  return { lines, skipped: false }
 }
 
 // Compute salary components from config (H10: includes statutory deductions).
@@ -125,9 +145,10 @@ function computePayroll(
   brackets: StatutoryBracket[],
   country: string,
   applyZakat: boolean,
+  ratesToLocal: Record<string, number>,
 ): {
   base: number; allowTotal: number; gross: number; dedTotal: number; net: number;
-  statutoryLines: DeductionLine[]; combinedDeductions: DeductionLine[];
+  statutoryLines: DeductionLine[]; statutorySkipped: boolean; combinedDeductions: DeductionLine[];
 } {
   const base = Number(cfg.base_salary ?? 0)
   const allowances = cfg.allowances ?? []
@@ -138,7 +159,8 @@ function computePayroll(
   }, 0)
   const gross = base + allowTotal
 
-  const statutoryLines = computeStatutoryDeductions(gross, brackets, country, applyZakat)
+  const { lines: statutoryLines, skipped: statutorySkipped } =
+    computeStatutoryDeductions(gross, brackets, country, applyZakat, cfg.currency ?? 'SDG', ratesToLocal)
   const statutorySum = statutoryLines.reduce((s, l) => s + l.amount, 0)
 
   const manualDed = manualDeductions.reduce((s, d) => {
@@ -146,7 +168,7 @@ function computePayroll(
   }, 0)
   const dedTotal = manualDed + statutorySum
   const combinedDeductions: DeductionLine[] = [...manualDeductions, ...statutoryLines]
-  return { base, allowTotal, gross, dedTotal, net: gross - dedTotal, statutoryLines, combinedDeductions }
+  return { base, allowTotal, gross, dedTotal, net: gross - dedTotal, statutoryLines, statutorySkipped, combinedDeductions }
 }
 
 serve(async (req) => {
@@ -352,9 +374,64 @@ serve(async (req) => {
       console.warn('[payroll-auto-run] Could not load statutory brackets — proceeding with manual deductions only:', (e as Error).message)
     }
 
+    // H10-currency fix: load SDG exchange rates so non-SDG salaries are converted
+    // correctly before statutory brackets are applied (see computeStatutoryDeductions).
+    const ratesToLocal: Record<string, number> = { SDG: 1 }
+    try {
+      const { data: rateRows } = await supabase
+        .from('acct_exchange_rates')
+        .select('from_currency, rate, effective_date')
+        .eq('to_currency', 'SDG')
+        .order('effective_date', { ascending: false })
+      for (const row of (rateRows ?? []) as { from_currency: string; rate: number }[]) {
+        if (!(row.from_currency in ratesToLocal)) ratesToLocal[row.from_currency] = Number(row.rate)
+      }
+    } catch (e) {
+      console.warn('[payroll-auto-run] Could not load exchange rates — non-SDG statutory deductions will be skipped:', (e as Error).message)
+    }
+
+    // Bug fix (salary-advance auto-deduction): pull active advances for these
+    // employees and deduct the monthly instalment automatically. Skip advances
+    // already recovered for this exact payroll period so re-running the cron
+    // for the same month never double-deducts.
+    const advanceDeductionByUser = new Map<string, { amount: number; ids: string[] }>()
+    try {
+      const { data: advances } = await supabase
+        .from('hr_salary_advances')
+        .select('id, user_id, amount, monthly_recovery')
+        .in('user_id', userIds)
+        .eq('status', 'active')
+      const activeAdvances = (advances ?? []) as { id: string; user_id: string; amount: number; monthly_recovery: number | null }[]
+      if (activeAdvances.length > 0) {
+        const advIds = activeAdvances.map(a => a.id)
+        const { data: recoveries } = await supabase
+          .from('hr_salary_advance_recoveries')
+          .select('advance_id, amount, payroll_period')
+          .in('advance_id', advIds)
+        const allRecoveries = (recoveries ?? []) as { advance_id: string; amount: number; payroll_period: string | null }[]
+        const recoveredThisPeriod = new Set(allRecoveries.filter(r => r.payroll_period === thisMonthLabel).map(r => r.advance_id))
+        const totalRecoveredByAdvance = new Map<string, number>()
+        allRecoveries.forEach(r => totalRecoveredByAdvance.set(r.advance_id, (totalRecoveredByAdvance.get(r.advance_id) ?? 0) + Number(r.amount)))
+
+        activeAdvances.forEach(adv => {
+          if (recoveredThisPeriod.has(adv.id)) return
+          const remaining = Number(adv.amount) - (totalRecoveredByAdvance.get(adv.id) ?? 0)
+          if (remaining <= 0) return
+          const instalment = Math.min(Number(adv.monthly_recovery ?? adv.amount), remaining)
+          if (instalment <= 0) return
+          const bucket = advanceDeductionByUser.get(adv.user_id) ?? { amount: 0, ids: [] }
+          bucket.amount += instalment
+          bucket.ids.push(adv.id)
+          advanceDeductionByUser.set(adv.user_id, bucket)
+        })
+      }
+    } catch (e) {
+      console.warn('[payroll-auto-run] Could not load salary advances — advance deductions skipped:', (e as Error).message)
+    }
+
     const items = configs.map(config => {
       const { base, allowTotal, gross, dedTotal, net, combinedDeductions } =
-        computePayroll(config, brackets, country, applyZakat)
+        computePayroll(config, brackets, country, applyZakat, ratesToLocal)
       const userId = config.user_id
       const profile = profileMap.get(userId)
 
@@ -367,6 +444,12 @@ serve(async (req) => {
         ? [{ type: 'bonus', label: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
         : []
 
+      const advance = advanceDeductionByUser.get(userId)
+      const advanceAmount = Math.round((advance?.amount ?? 0) * 100) / 100
+      const advanceLine = advanceAmount > 0
+        ? [{ name: 'Salary Advance Recovery', amount: advanceAmount, type: 'fixed' as const }]
+        : []
+
       return {
         run_id: runId,
         user_id: userId,
@@ -375,14 +458,16 @@ serve(async (req) => {
         base_salary: base,
         allowances_total: allowTotal,
         gross_salary: gross,
-        deductions_total: dedTotal,
-        net_salary: net + rewards + hourlyPay,
+        deductions_total: dedTotal + advanceAmount,
+        net_salary: net + rewards + hourlyPay - advanceAmount,
         task_rewards: rewards,
         retainer_amount: 0,
         currency: config.currency ?? 'SDG',
         allowances_snapshot: config.allowances,
-        deductions_snapshot: combinedDeductions,
+        deductions_snapshot: [...combinedDeductions, ...advanceLine],
         adjustments,
+        salary_advance_deduction: advanceAmount,
+        salary_advance_ids: advance?.ids ?? [],
       }
     })
 

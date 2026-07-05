@@ -38,7 +38,17 @@ export default function ContractRenewal() {
         .eq('is_employee', true)
         .lte('contract_end_date', future)
         .order('contract_end_date');
-      return (data ?? []).filter((p: any) => p.contract_end_date >= today || differenceInDays(new Date(), parseISO(p.contract_end_date)) <= 14);
+      // Bug fix (contract renewal visibility): a hard 14-day post-expiry cutoff
+      // used to drop any contract off this list once it had been expired for
+      // more than 2 weeks, even if HR never resolved it (no 'renewed'/'ended'
+      // status set). That silently hid unresolved overdue contracts from the
+      // dashboard. Now: keep every contract visible indefinitely unless HR has
+      // explicitly marked it 'renewed' or 'ended'.
+      return (data ?? []).filter((p: any) => {
+        const status = p.renewal_status ?? 'pending';
+        if (status === 'renewed' || status === 'ended') return p.contract_end_date >= today;
+        return true;
+      });
     },
     staleTime: 60_000,
   });
