@@ -35,13 +35,16 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'pre_fund_settings' AND column_name = 'default_matching_scope'
   ) THEN
-    -- Remap legacy values that no longer satisfy the new CHECK before altering it.
+    -- Drop (or widen) the CHECK constraint FIRST — the old constraint only
+    -- allowed ('global','project','country'), so remapping legacy values to
+    -- 'country_project' before this would itself violate it.
+    ALTER TABLE pre_fund_settings
+      DROP CONSTRAINT IF EXISTS pre_fund_settings_default_matching_scope_check;
+
+    -- Now safe to remap legacy values that don't satisfy the new CHECK.
     UPDATE pre_fund_settings
     SET default_matching_scope = 'country_project'
     WHERE default_matching_scope NOT IN ('country','project','country_project','country_project_category');
-
-    ALTER TABLE pre_fund_settings
-      DROP CONSTRAINT IF EXISTS pre_fund_settings_default_matching_scope_check;
 
     ALTER TABLE pre_fund_settings
       ADD CONSTRAINT pre_fund_settings_default_matching_scope_check
@@ -51,6 +54,13 @@ BEGIN
       ALTER COLUMN default_matching_scope SET DEFAULT 'country_project';
   END IF;
 END $$;
+
+-- ── Fix 0: drop store_pre_fund_bank_key if it exists with a different
+--           return type (e.g. VOID from an earlier bundle) so the
+--           canonical migration's CREATE OR REPLACE (RETURNS jsonb) below
+--           and in 20260627_pre_fund_rpcs_canonical.sql doesn't fail with
+--           "cannot change return type of existing function".
+DROP FUNCTION IF EXISTS store_pre_fund_bank_key(uuid, text, text);
 
 -- ── Fix 1: run_pre_fund_renewal_check() — route non-bypass renewals through
 --           the approval chain instead of a silent grace-window auto-promote.
