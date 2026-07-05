@@ -878,7 +878,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <p className="text-sm font-semibold text-red-700">Data load failed</p>
             <p className="text-xs text-red-600 font-mono break-words mt-0.5">{(error as Error).message}</p>
             <p className="text-xs text-red-500 mt-1">
-              Run the migration <code className="bg-red-100 px-1 rounded">20260328_monitoring_grants_and_rpc.sql</code> in your Supabase SQL editor, then refresh.
+              Run the setup migration <code className="bg-red-100 px-1 rounded">20260328_monitoring_grants_and_rpc.sql</code> (RPC helpers + permission grants for this view — unrelated to financial Grant Tracking) in your Supabase SQL editor, then refresh.
             </p>
           </div>
           <Button variant="ghost" size="sm" className="text-red-600 shrink-0" onClick={() => refetch()}>Retry</Button>
@@ -1255,12 +1255,14 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <div>
               <p className="text-sm font-semibold text-amber-800">No data found</p>
               <p className="text-xs text-amber-600 mt-1 max-w-md">
-                If you just set up the monitoring dashboard, make sure you have run the latest migration in your Supabase SQL editor:
+                If you just set up this dashboard, make sure the setup migration (RPC helpers and
+                permission grants for this view) has been run in your Supabase SQL editor:
               </p>
               <code className="text-xs bg-amber-100 border border-amber-200 rounded px-2 py-1 mt-2 inline-block font-mono text-amber-700">
                 20260328_monitoring_grants_and_rpc.sql
               </code>
               <p className="text-xs text-amber-600 mt-2">
+                This is unrelated to financial Grant Tracking (see Accounting → Grants for that).
                 Then refresh the page. If you have data in the system tables it will appear here.
               </p>
             </div>
