@@ -74,9 +74,10 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   default_gl_cf_account       TEXT NOT NULL DEFAULT '2401',
   -- Default notification recipients (array of profile UUIDs for alerts)
   default_notification_recipients JSONB NOT NULL DEFAULT '[]'::JSONB,
-  -- Default matching scope for bank feed matching
-  default_matching_scope      TEXT NOT NULL DEFAULT 'global'
-                              CHECK (default_matching_scope IN ('global','project','country')),
+  -- Default matching scope for bank feed matching — MUST stay in sync with the
+  -- fund-level matching_scope enum used in pre_fund_requests / PreFundingRegistry.tsx.
+  default_matching_scope      TEXT NOT NULL DEFAULT 'country_project'
+                              CHECK (default_matching_scope IN ('country','project','country_project','country_project_category')),
   -- Reconciliation action toggles
   reconciliation_action_return         BOOLEAN NOT NULL DEFAULT true,
   reconciliation_action_return_bank    BOOLEAN NOT NULL DEFAULT true,
@@ -703,48 +704,25 @@ BEGIN
   END LOOP;
 
   -- ── Auto-activate renewal for eligible funds (auto_renewal_mode = 'auto_activate') ──
-  -- When auto_renewal_bypass_approvals = TRUE  → create directly as 'active' (no grace window).
-  -- When auto_renewal_bypass_approvals = FALSE → create as 'pending_grace'; Finance can cancel
-  --   within the configured grace window before it goes live.
+  -- When auto_renewal_bypass_approvals = TRUE  → create directly as 'active' (no approval gate).
+  -- When auto_renewal_bypass_approvals = FALSE → create as 'pending_approval' and clone the
+  --   parent fund's approval steps, so the renewal enters the SAME approval chain as any
+  --   manually-created fund. It is activated ONLY after all required steps are approved via
+  --   process_pf_step_action() (→ 'awaiting_receipt') and then manually activated through
+  --   activate_pre_fund_rpc (receipt upload / bank match) — never auto-promoted by a timer.
   --
   -- GL side-effect: for funds inserted as 'active' (bypass=true), we post the same
   -- pre_fund_received JE + bridge log that activate_pre_fund_rpc posts on manual activation.
   -- Idempotency key suffix '-autorenewal' prevents double-posting on scheduler re-runs.
   FOR r IN
-    INSERT INTO pre_fund_requests (
+    SELECT
+      id AS src_id,
       name, source, amount, currency, period_type_id, period_type_name,
       country_id, project_id, grant_id, matching_scope,
-      threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
-      auto_renewal_bypass_approvals,
+      threshold_pct, threshold_amount, warning_days,
+      auto_renewal_mode, auto_renewal_days_before, auto_renewal_bypass_approvals,
       gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-      notification_recipients, notes,
-      status, available_balance, committed_amount, paid_amount,
-      activated_at,
-      start_date, end_date, grace_expires_at
-    )
-    SELECT
-      name || ' (Auto-Renewal)', source, amount, currency, period_type_id, period_type_name,
-      country_id, project_id, grant_id, matching_scope,
-      threshold_pct, threshold_amount, warning_days, auto_renewal_mode, auto_renewal_days_before,
-      auto_renewal_bypass_approvals,
-      gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
-      notification_recipients,
-      'Auto-activated from fund id: ' || id::text || '; actor=system',
-      -- Status: bypass=true → active immediately; bypass=false → pending_grace
-      CASE WHEN auto_renewal_bypass_approvals THEN 'active' ELSE 'pending_grace' END,
-      -- available_balance: pre-set only when activating immediately
-      CASE WHEN auto_renewal_bypass_approvals THEN amount ELSE 0 END,
-      0, 0,
-      -- activated_at: set now only for immediate activation
-      CASE WHEN auto_renewal_bypass_approvals THEN now() ELSE NULL END,
-      end_date + 1,
-      end_date + 1 + COALESCE(
-        (SELECT day_count FROM pre_fund_period_types WHERE id = period_type_id), 30
-      ),
-      -- grace_expires_at: only meaningful for pending_grace path
-      CASE WHEN auto_renewal_bypass_approvals THEN NULL
-           ELSE now() + ((SELECT COALESCE(auto_renewal_grace_hours, 24) FROM pre_fund_settings LIMIT 1) || ' hours')::INTERVAL
-      END
+      notification_recipients, end_date
     FROM pre_fund_requests
     WHERE status IN ('active','low_balance')
       AND auto_renewal_mode = 'auto_activate'
@@ -753,17 +731,55 @@ BEGIN
       AND NOT EXISTS (
         SELECT 1 FROM pre_fund_requests r2
         WHERE r2.notes LIKE '%Auto-activated from fund id: ' || pre_fund_requests.id::text || '%'
-          AND r2.status IN ('draft','pending_grace','active')
+          AND r2.status IN ('draft','pending_approval','pending_grace','active','awaiting_receipt')
       )
-    RETURNING id, name, amount, currency, gl_receipt_account, gl_liability_account, status
   LOOP
-    -- Post GL only for funds that were inserted as immediately active (bypass=true)
-    IF r.status = 'active' THEN
+    -- Insert the renewal fund in the appropriate starting status
+    INSERT INTO pre_fund_requests (
+      name, source, amount, currency, period_type_id, period_type_name,
+      country_id, project_id, grant_id, matching_scope,
+      threshold_pct, threshold_amount, warning_days,
+      auto_renewal_mode, auto_renewal_days_before, auto_renewal_bypass_approvals,
+      gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account,
+      notification_recipients, notes,
+      status, available_balance, committed_amount, paid_amount,
+      activated_at, start_date, end_date, grace_expires_at
+    )
+    VALUES (
+      r.name || ' (Auto-Renewal)',
+      r.source,
+      r.amount, r.currency,
+      r.period_type_id, r.period_type_name,
+      r.country_id, r.project_id, r.grant_id, r.matching_scope,
+      r.threshold_pct, r.threshold_amount, r.warning_days,
+      r.auto_renewal_mode, r.auto_renewal_days_before, r.auto_renewal_bypass_approvals,
+      r.gl_receipt_account, r.gl_liability_account,
+      r.gl_expense_account, r.gl_cf_account,
+      r.notification_recipients,
+      'Auto-activated from fund id: ' || r.src_id::text || '; actor=system',
+      -- Status: bypass=true → active immediately; bypass=false → pending_approval (approval chain)
+      CASE WHEN r.auto_renewal_bypass_approvals THEN 'active' ELSE 'pending_approval' END,
+      -- available_balance: pre-set only when activating immediately
+      CASE WHEN r.auto_renewal_bypass_approvals THEN r.amount ELSE 0 END,
+      0, 0,
+      -- activated_at: set now only for immediate activation
+      CASE WHEN r.auto_renewal_bypass_approvals THEN now() ELSE NULL END,
+      r.end_date + 1,
+      r.end_date + 1 + COALESCE(
+        (SELECT day_count FROM pre_fund_period_types WHERE id = r.period_type_id), 30
+      ),
+      -- grace_expires_at: unused; bypass path activates immediately, non-bypass waits for approvals
+      NULL
+    )
+    RETURNING id INTO v_new_id;
+
+    IF r.auto_renewal_bypass_approvals THEN
+      -- ── Bypass path: fund is already active → post GL JE immediately ───────
       SELECT id INTO v_receipt_acct_id FROM acct_accounts WHERE code = r.gl_receipt_account LIMIT 1;
       SELECT id INTO v_liab_acct_id    FROM acct_accounts WHERE code = r.gl_liability_account LIMIT 1;
 
       IF v_receipt_acct_id IS NOT NULL AND v_liab_acct_id IS NOT NULL THEN
-        v_ik := 'pf-received-' || r.id::TEXT || '-autorenewal';
+        v_ik := 'pf-received-' || v_new_id::TEXT || '-autorenewal';
 
         -- Idempotency guard: skip if already posted (scheduler re-run safety)
         IF NOT EXISTS (SELECT 1 FROM acct_journal_entries WHERE idempotency_key = v_ik) THEN
@@ -774,7 +790,7 @@ BEGIN
             'Pre-Fund Auto-Renewed — ' || r.name,
             'تجديد التمويل المسبق تلقائياً — ' || r.name,
             CURRENT_DATE, 'draft',
-            'pre_fund_requests', r.id, v_ik, NULL
+            'pre_fund_requests', v_new_id, v_ik, NULL
           ) RETURNING id INTO v_je_id;
 
           INSERT INTO acct_journal_lines (entry_id, line_no, account_id, debit_credit,
@@ -789,13 +805,45 @@ BEGIN
              'Pre-fund auto-renewal liability — ' || r.name, 'program');
 
           INSERT INTO acct_gl_bridge_log (source_table, source_id, event_type, status, journal_entry_id)
-          VALUES ('pre_fund_requests', r.id, 'pre_fund_received', 'success', v_je_id);
+          VALUES ('pre_fund_requests', v_new_id, 'pre_fund_received', 'success', v_je_id);
         END IF;
+      END IF;
+    ELSE
+      -- ── Approval path: copy approval steps from parent fund ───────────────
+      -- The renewal fund sits at 'pending_approval' until all required steps are
+      -- resolved via process_pf_step_action() (→ 'awaiting_receipt'), then manually
+      -- activated via activate_pre_fund_rpc. The scheduler NEVER auto-promotes it.
+      INSERT INTO pre_fund_approval_steps (
+        pre_fund_request_id, step_order, step_label,
+        assigned_user_id, assigned_user_ids, is_required, required_approvals, status
+      )
+      SELECT
+        v_new_id, step_order, step_label,
+        assigned_user_id, assigned_user_ids, is_required,
+        COALESCE(required_approvals, 1), 'pending'
+      FROM pre_fund_approval_steps
+      WHERE pre_fund_request_id = r.src_id
+      ORDER BY step_order;
+
+      -- If parent fund had NO approval steps configured, seed a default Finance
+      -- approval step so the renewal is not stranded with no one to approve it.
+      IF NOT FOUND THEN
+        INSERT INTO pre_fund_approval_steps (
+          pre_fund_request_id, step_order, step_label,
+          assigned_user_ids, is_required, required_approvals, status
+        ) VALUES (
+          v_new_id, 1, 'Finance Review (Auto-Renewal)',
+          '{}', true, 1, 'pending'
+        );
       END IF;
     END IF;
   END LOOP;
 
-  -- Step 2: Activate any pending_grace renewals whose grace window has expired
+  -- Step 2 (LEGACY): Activate any pre-existing pending_grace renewals whose grace window has
+  --         already expired. New auto_activate renewals no longer enter pending_grace (see
+  --         fix above) — this block is retained only for backward compatibility with rows
+  --         created before the approval-routing fix, and is safe to keep indefinitely: it
+  --         simply activates old rows if any exist; new rows skip this path entirely.
   --         (grace_expires_at < now() means Finance did not cancel in time).
   -- GL side-effect: post pre_fund_received JE + bridge log for each newly activated fund.
   -- Idempotency key suffix '-grace-activated' prevents double-posting on re-runs.

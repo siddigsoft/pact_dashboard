@@ -75,8 +75,8 @@ CREATE TABLE IF NOT EXISTS pre_fund_settings (
   -- Default notification recipients (array of profile UUIDs for alerts)
   default_notification_recipients JSONB NOT NULL DEFAULT '[]'::JSONB,
   -- Default matching scope for bank feed matching
-  default_matching_scope      TEXT NOT NULL DEFAULT 'global'
-                              CHECK (default_matching_scope IN ('global','project','country')),
+  default_matching_scope      TEXT NOT NULL DEFAULT 'country_project'
+                              CHECK (default_matching_scope IN ('country','project','country_project','country_project_category')),
   -- Reconciliation action toggles
   reconciliation_action_return         BOOLEAN NOT NULL DEFAULT true,
   reconciliation_action_return_bank    BOOLEAN NOT NULL DEFAULT true,

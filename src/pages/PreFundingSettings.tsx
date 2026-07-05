@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS: Settings = {
   default_gl_liability_account: '',
   default_gl_expense_account: '',
   default_gl_cf_account: '',
-  default_matching_scope: 'global',
+  default_matching_scope: 'country_project',
   reconciliation_action_return: true,
   reconciliation_action_return_bank: true,
   reconciliation_action_return_finance: true,
@@ -614,9 +614,10 @@ export default function PreFundingSettings() {
                   <Select value={settings.default_matching_scope} onValueChange={v => set('default_matching_scope', v)}>
                     <SelectTrigger data-testid="select-matching-scope"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="global">Global (all unmatched feed entries)</SelectItem>
-                      <SelectItem value="project">Project-scoped</SelectItem>
-                      <SelectItem value="country">Country-scoped</SelectItem>
+                      <SelectItem value="country">Country Only</SelectItem>
+                      <SelectItem value="project">Project Only</SelectItem>
+                      <SelectItem value="country_project">Country + Project</SelectItem>
+                      <SelectItem value="country_project_category">Country + Project + Cost Category</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
