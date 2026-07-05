@@ -158,9 +158,6 @@ export default function HRHub() {
   const currentSection = visibleSections.find(s => s.id === section) ?? visibleSections[0];
   const visibleTabsInSection = currentSection.tabs.filter(t => !t.adminOnly || isAdmin);
 
-  const activeSectionFirstTab = (s: SectionDef) =>
-    (s.tabs.find(t => !t.adminOnly || isAdmin))?.id ?? 'payroll';
-
   const activeTabDef = allTabs.find(t => t.id === tab) ?? allTabs[0];
 
   // Section accent colours
@@ -188,7 +185,7 @@ export default function HRHub() {
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'my-tasks', 'accounting', 'admin']}
-      onSectionClick={id => setTab(activeSectionFirstTab(SECTIONS.find(s => s.id === id)!))}
+      onSectionClick={id => setTab(id as HRTab)}
       onTabClick={id => setTab(id as HRTab)}
     >
       <div className="min-h-[calc(100vh-160px)]">

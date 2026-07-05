@@ -284,8 +284,6 @@ export default function AccountingHub() {
   const activeTabDef = allTabs.find(t => t.id === tab)!;
   const accent = currentSection.color;
 
-  const activeSectionFirstTab = (s: SectionDef) => s.tabs[0].id;
-
   return (
     <HubLayout
       title="Accounting"
@@ -296,7 +294,7 @@ export default function AccountingHub() {
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'finance', 'reports', 'my-tasks']}
-      onSectionClick={id => setTab(activeSectionFirstTab(SECTIONS.find(s => s.id === id)!))}
+      onSectionClick={id => setTab(id as AcctTab)}
       onTabClick={id => setTab(id as AcctTab)}
     >
       <div className="min-h-[calc(100vh-160px)]">
