@@ -12,9 +12,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, Plus, Loader2, Users, Star, Trash2, Edit2, Search } from 'lucide-react';
+import { Briefcase, Plus, Loader2, Users, Star, Trash2, Edit2, Search, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import * as XLSX from 'xlsx';
 
 interface JobPosting {
   id: string; title: string; department_id: string | null; employment_type: string;
@@ -147,8 +149,23 @@ export default function Recruitment() {
       ? await supabase.from('hr_candidates' as any).update(payload).eq('id', editingCand.id)
       : await supabase.from('hr_candidates' as any).insert({ ...payload, created_by: currentUser?.id ?? null });
     setSaving(false);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: editingCand ? 'Candidate updated' : 'Candidate added' }); setCandDialogOpen(false); fetchAll(); }
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: editingCand ? 'Candidate updated' : 'Candidate added' });
+    setCandDialogOpen(false);
+    if (payload.interviewer_id && payload.interview_date && payload.interviewer_id !== editingCand?.interviewer_id) {
+      try {
+        await NotificationTriggerService.send({
+          userId: payload.interviewer_id,
+          title: 'Interview Scheduled',
+          message: `You have been scheduled to interview ${payload.full_name} on ${format(new Date(payload.interview_date), 'MMM d, yyyy HH:mm')}.`,
+          type: 'info',
+          category: 'assignments',
+          priority: 'high',
+          link: '/recruitment',
+        });
+      } catch (e) { console.warn('[Recruitment] interview notification failed:', e); }
+    }
+    fetchAll();
   }
 
   async function deleteCandidate(c: Candidate) {
@@ -160,8 +177,33 @@ export default function Recruitment() {
 
   async function quickSetStage(c: Candidate, stage: Candidate['stage']) {
     const { error } = await supabase.from('hr_candidates' as any).update({ stage }).eq('id', c.id);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else fetchAll();
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    if (stage === 'hired') {
+      try {
+        await NotificationTriggerService.sendToRoles(['super_admin', 'admin', 'hr', 'hr_manager'], {
+          title: 'Candidate Hired',
+          message: `${c.full_name} has been marked as hired for "${postings.find(p => p.id === c.job_posting_id)?.title ?? 'a role'}". Start onboarding.`,
+          type: 'success',
+          category: 'team',
+          priority: 'normal',
+          link: '/recruitment',
+        });
+      } catch (e) { console.warn('[Recruitment] hired notification failed:', e); }
+    }
+    fetchAll();
+  }
+
+  function exportToExcel() {
+    const rows = candidates.map(c => ({
+      'Job Posting': postings.find(p => p.id === c.job_posting_id)?.title ?? '',
+      'Candidate': c.full_name, Email: c.email ?? '', Phone: c.phone ?? '', Source: c.source ?? '',
+      Stage: STAGE_CFG[c.stage].label, Rating: c.rating ?? '',
+      'Interview Date': c.interview_date ? format(new Date(c.interview_date), 'yyyy-MM-dd HH:mm') : '',
+      'Applied At': format(new Date(c.applied_at), 'yyyy-MM-dd'),
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Candidates');
+    XLSX.writeFile(wb, `Recruitment_Candidates_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -185,7 +227,10 @@ export default function Recruitment() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search postings..." className="pl-8" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-postings" />
         </div>
-        {isAdmin && <Button onClick={openNewJob} data-testid="button-new-posting"><Plus className="h-4 w-4 mr-1" />New Job Posting</Button>}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-candidates"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          {isAdmin && <Button onClick={openNewJob} data-testid="button-new-posting"><Plus className="h-4 w-4 mr-1" />New Job Posting</Button>}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">

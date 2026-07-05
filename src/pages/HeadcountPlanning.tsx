@@ -11,8 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Loader2, Edit2, Trash2, TrendingUp, Users } from 'lucide-react';
+import { Plus, Loader2, Edit2, Trash2, TrendingUp, Users, FileDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 
 interface Plan {
   id: string; department_id: string | null; position_title: string; fiscal_year: number; quarter: number | null;
@@ -93,8 +96,33 @@ export default function HeadcountPlanning() {
       ? await supabase.from('hr_headcount_plans' as any).update(payload).eq('id', editing.id)
       : await supabase.from('hr_headcount_plans' as any).insert({ ...payload, created_by: currentUser?.id ?? null });
     setSaving(false);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: editing ? 'Plan updated' : 'Plan created' }); setDialogOpen(false); fetchAll(); }
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: editing ? 'Plan updated' : 'Plan created' });
+    setDialogOpen(false);
+    if (payload.status === 'approved' && editing?.status !== 'approved') {
+      try {
+        await NotificationTriggerService.sendToRoles(['super_admin', 'admin', 'finance'], {
+          title: 'Headcount Plan Approved',
+          message: `Headcount plan for "${payload.position_title}" (FY${payload.fiscal_year}${payload.quarter ? ` Q${payload.quarter}` : ''}) was approved — ${payload.planned_hires} planned hire(s), ${payload.planned_salary_cost.toLocaleString()} ${payload.currency} budgeted.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'normal',
+          link: '/headcount-planning',
+        });
+      } catch (e) { console.warn('[Headcount] approval notification failed:', e); }
+    }
+    fetchAll();
+  }
+
+  function exportToExcel() {
+    const rows = filtered.map(p => ({
+      Position: p.position_title, Department: depts.find(d => d.id === p.department_id)?.name ?? '',
+      'Fiscal Year': p.fiscal_year, Quarter: p.quarter ?? '', Current: p.current_count, Budgeted: p.budgeted_count,
+      'Planned Hires': p.planned_hires, 'Planned Cost': p.planned_salary_cost, Currency: p.currency, Status: p.status,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Headcount Plan');
+    XLSX.writeFile(wb, `Headcount_Plan_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   async function remove(p: Plan) {
@@ -127,7 +155,10 @@ export default function HeadcountPlanning() {
             {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
           </SelectContent>
         </Select>
-        {canEdit && <Button onClick={openNew} data-testid="button-new-headcount-plan"><Plus className="h-4 w-4 mr-1" />New Plan Row</Button>}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-headcount"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          {canEdit && <Button onClick={openNew} data-testid="button-new-headcount-plan"><Plus className="h-4 w-4 mr-1" />New Plan Row</Button>}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -11,9 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Plus, Loader2, Edit2, Trash2, ShieldAlert, Lock } from 'lucide-react';
+import { AlertTriangle, Plus, Loader2, Edit2, Trash2, ShieldAlert, Lock, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import * as XLSX from 'xlsx';
 
 interface Case {
   id: string; user_id: string; case_type: 'disciplinary' | 'grievance'; category: string | null;
@@ -105,8 +107,34 @@ export default function DisciplinaryTracking() {
       ? await supabase.from('hr_disciplinary_cases' as any).update(payload).eq('id', editing.id)
       : await supabase.from('hr_disciplinary_cases' as any).insert({ ...payload, raised_by: currentUser?.id ?? null });
     setSaving(false);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: editing ? 'Case updated' : 'Case logged' }); setDialogOpen(false); fetchAll(); }
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: editing ? 'Case updated' : 'Case logged' });
+    setDialogOpen(false);
+    if (payload.assigned_to && payload.assigned_to !== editing?.assigned_to) {
+      try {
+        await NotificationTriggerService.send({
+          userId: payload.assigned_to,
+          title: payload.case_type === 'grievance' ? 'Grievance Case Assigned' : 'Disciplinary Case Assigned',
+          message: `A ${payload.severity} severity ${payload.case_type} case has been assigned to you for review.`,
+          type: 'warning',
+          category: 'approvals',
+          priority: payload.severity === 'critical' || payload.severity === 'high' ? 'urgent' : 'high',
+          link: '/disciplinary-tracking',
+        });
+      } catch (e) { console.warn('[Disciplinary] assignment notification failed:', e); }
+    }
+    fetchAll();
+  }
+
+  function exportToExcel() {
+    const rows = cases.map(c => ({
+      'Staff Member': nameOf(c.user_id), Type: c.case_type, Category: c.category ?? '', Severity: c.severity,
+      Status: c.status, 'Incident Date': c.incident_date, 'Assigned To': nameOf(c.assigned_to),
+      Description: c.description, 'Resolution Notes': c.resolution_notes ?? '',
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Cases');
+    XLSX.writeFile(wb, `Disciplinary_Cases_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   async function remove(c: Case) {
@@ -151,7 +179,10 @@ export default function DisciplinaryTracking() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={openNew} data-testid="button-new-case"><Plus className="h-4 w-4 mr-1" />Log Case</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-cases"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          <Button onClick={openNew} data-testid="button-new-case"><Plus className="h-4 w-4 mr-1" />Log Case</Button>
+        </div>
       </div>
 
       <div className="space-y-2">
