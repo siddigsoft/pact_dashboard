@@ -108,6 +108,7 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'project_completed':          { title_en: 'Project Completed',                    title_ar: 'اكتمل المشروع',                              category: 'system',       priority: 'normal' },
   'project_archived':           { title_en: 'Project Archived',                     title_ar: 'تم أرشفة المشروع',                           category: 'system',       priority: 'normal' },
   'project_member_added':       { title_en: 'Added to Project',                     title_ar: 'تمت إضافتك إلى مشروع',                      category: 'assignments',  priority: 'normal' },
+  'project_member_removed':     { title_en: 'Removed from Project',                 title_ar: 'تمت إزالتك من مشروع',                       category: 'assignments',  priority: 'normal' },
   'project_stage_deadline_reminder': { title_en: 'Stage Deadline Reminder',         title_ar: 'تذكير بموعد المرحلة',                        category: 'assignments',  priority: 'high'   },
   'project_task_assigned':      { title_en: 'Project Task Assigned',                title_ar: 'تم تعيين مهمة مشروع',                        category: 'assignments',  priority: 'normal' },
   'project_task_completed':     { title_en: 'Project Task Completed',               title_ar: 'اكتملت مهمة المشروع',                        category: 'system',       priority: 'normal' },
@@ -202,6 +203,7 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'project_completed':           'email_notify_project_milestones',
   'project_archived':            'email_notify_project_milestones',
   'project_member_added':        'email_notify_project_milestones',
+  'project_member_removed':      'email_notify_project_milestones',
   'project_stage_deadline_reminder': 'email_notify_project_milestones',
   'project_task_assigned':       'email_notify_task_assigned',
   'project_task_completed':      'email_notify_project_milestones',
@@ -280,6 +282,7 @@ function getEventAccentColor(eventType: string, priority?: string): string {
     'project_completed':        '#059669',
     'project_archived':         '#6b7280',
     'project_member_added':     '#2563eb',
+    'project_member_removed':   '#6b7280',
     'project_stage_assigned':   '#2563eb',
     'project_stage_deadline_reminder': '#d97706',
     'project_task_assigned':    '#2563eb',
@@ -321,7 +324,7 @@ function getEventIconSvg(eventType: string): string {
     'task_delayed': '⚠️', 'task_rejected': '❌', 'task_cancelled': '🚫', 'task_status_changed': '🔄',
     'task_reminder_1day': '⏰', 'task_reminder_3day': '🔔', 'task_comment_added': '💬',
     'project_created': '🚀', 'project_completed': '🏁', 'project_archived': '📦',
-    'project_member_added': '👤', 'project_task_assigned': '📋', 'project_task_completed': '✅',
+    'project_member_added': '👤', 'project_member_removed': '🚪', 'project_task_assigned': '📋', 'project_task_completed': '✅',
     'project_stage_assigned': '📌', 'project_stage_deadline_reminder': '⏰',
     'project_task_overdue': '🔴', 'project_health_changed': '📊', 'project_budget_exceeded': '🚨',
     'crm_partner_created': '🤝', 'crm_engagement_created': '📞', 'crm_contact_added': '👥',
@@ -379,7 +382,7 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
   }
   if ([
     'project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
-    'project_created', 'project_completed', 'project_archived', 'project_member_added',
+    'project_created', 'project_completed', 'project_archived', 'project_member_added', 'project_member_removed',
     'project_health_changed', 'project_budget_exceeded', 'project_stage_deadline_reminder',
   ].includes(eventType)) {
     if (metadata.project_name)  items.push({ label_en: 'Project',         label_ar: 'المشروع',          value: metadata.project_name })
@@ -390,6 +393,7 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.days_stalled)  items.push({ label_en: 'Days Stalled',    label_ar: 'أيام التوقف',      value: `${metadata.days_stalled} days` })
     if (metadata.due_date)      items.push({ label_en: 'Due Date',        label_ar: 'تاريخ الاستحقاق',  value: metadata.due_date })
     if (metadata.days_label)    items.push({ label_en: 'Timeline',        label_ar: 'الجدول الزمني',    value: metadata.days_label })
+    if (metadata.role)          items.push({ label_en: 'Role',           label_ar: 'الدور',            value: metadata.role })
   }
   if (['mmp_assigned', 'mmp_recall_initiated', 'mmp_cycle_closed', 'mmp_completed'].includes(eventType)) {
     if (metadata.mmp_code)   items.push({ label_en: 'MMP Code',        label_ar: 'رمز الخطة',       value: metadata.mmp_code })

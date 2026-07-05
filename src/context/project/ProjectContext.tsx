@@ -54,6 +54,27 @@ function extractTeamMemberIds(team: Project['team'] | undefined | null): Set<str
   return ids;
 }
 
+const PROJECT_ROLE_LABELS: Record<string, string> = {
+  projectManager: 'Project Manager',
+  fieldAssistant: 'Field Assistant',
+  dataCollector: 'Data Collector',
+  supervisor: 'Supervisor',
+  coordinator: 'Coordinator',
+  analyst: 'Analyst',
+  reviewer: 'Reviewer',
+  other: 'Team Member',
+};
+
+/** Resolve a human-readable role label for a user within a project's team object. */
+function resolveTeamMemberRoleLabel(team: Project['team'] | undefined | null, userId: string): string {
+  const t = team ?? {};
+  if (t.projectManager === userId) return PROJECT_ROLE_LABELS.projectManager;
+  const composition = Array.isArray((t as any).teamComposition) ? (t as any).teamComposition : [];
+  const match = composition.find((m: any) => m?.userId === userId);
+  if (match?.role) return PROJECT_ROLE_LABELS[match.role] ?? match.role;
+  return 'Team Member';
+}
+
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
@@ -408,19 +429,46 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
       if (newMemberIds.length > 0) {
         const projectName = existingProject?.name ?? 'a project';
+        newMemberIds.forEach(memberId => {
+          const roleLabel = resolveTeamMemberRoleLabel(team, memberId);
+          dispatchNotification({
+            event: 'project_member_added',
+            recipientIds: [memberId],
+            titleEn: `Added to project: ${projectName}`,
+            titleAr: `تمت إضافتك إلى مشروع: ${projectName}`,
+            messageEn: `You have been added to this project as ${roleLabel} by ${currentUser?.fullName ?? 'a team member'} — project "${projectName}".`,
+            messageAr: `تمت إضافتك إلى هذا المشروع بصفة ${roleLabel} بواسطة ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} — مشروع "${projectName}".`,
+            entityType: 'project',
+            entityId: projectId,
+            actionUrl: `/projects/${projectId}`,
+            priority: 'normal',
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+            metadata: { project_name: projectName, role: roleLabel },
+          }).catch(() => {});
+        });
+      }
+
+      // ── Notify removed team members (in-app + email) ───────────────────────
+      const removedMemberIds = Array.from(previousMemberIds).filter(
+        id => !extractTeamMemberIds(team).has(id) && id !== currentUser?.id
+      );
+      if (removedMemberIds.length > 0) {
+        const projectName = existingProject?.name ?? 'a project';
         dispatchNotification({
-          event: 'project_member_added',
-          recipientIds: newMemberIds,
-          titleEn: `Added to project: ${projectName}`,
-          titleAr: `تمت إضافتك إلى مشروع: ${projectName}`,
-          messageEn: `${currentUser?.fullName ?? 'A team member'} added you to the team for project "${projectName}".`,
-          messageAr: `أضافك ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} إلى فريق مشروع "${projectName}".`,
+          event: 'project_member_removed',
+          recipientIds: removedMemberIds,
+          titleEn: `Removed from project: ${projectName}`,
+          titleAr: `تمت إزالتك من مشروع: ${projectName}`,
+          messageEn: `${currentUser?.fullName ?? 'A team member'} removed you from the team for project "${projectName}".`,
+          messageAr: `أزالك ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} من فريق مشروع "${projectName}".`,
           entityType: 'project',
           entityId: projectId,
           actionUrl: `/projects/${projectId}`,
           priority: 'normal',
           triggeredBy: currentUser?.id,
           triggeredByName: currentUser?.fullName ?? undefined,
+          metadata: { project_name: projectName },
         }).catch(() => {});
       }
     } catch (err) {
