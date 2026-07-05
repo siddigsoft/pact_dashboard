@@ -6,3 +6,5 @@
 - [project-flow-deliverables-sync](project-flow-deliverables-sync.md) — Overview deliverables checklist and Stage checklist share one table now; project_stage_assignees/attachments tables may still be missing in dev DB.
 - [project-flow-stage-label-duplication](project-flow-stage-label-duplication.md) — Any view showing a project's stage label/progress must use getEffectiveStages/getProjectStageProgress, not raw getProjectFlow(...).stages, or renamed/skipped stages show stale data.
 - [notification-email-coverage](notification-email-coverage.md) — Raw DB-insert notification helpers with unmapped event_type bypass dispatch-notification entirely, so email is silently never sent.
+- [eosb-tiered-accrual](eosb-tiered-accrual.md) — EOSB day-rate must blend tiers (21d/yr ≤5yrs + 30d/yr >5yrs) per year of service, not apply one flat rate to the whole tenure.
+- [multi-currency-wallet-aggregation](multi-currency-wallet-aggregation.md) — Wallet balances are a per-currency jsonb map; summing only `balances.SDG` silently drops other currencies from financial totals.

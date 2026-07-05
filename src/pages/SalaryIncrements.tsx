@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, differenceInCalendarMonths } from 'date-fns';
 import {
   TrendingUp, Plus, Edit2, Trash2, Loader2, User, Calendar,
   DollarSign, BarChart2, Search, ChevronUp, ChevronDown,
@@ -129,9 +129,55 @@ export default function SalaryIncrements() {
         user_name: pm[r.user_id] ?? 'Unknown',
         approver_name: r.approved_by ? (pm[r.approved_by] ?? 'Unknown') : null,
       })));
+      await syncDueIncrements(incRes.data as Increment[]);
     }
     setProfiles((profRes.data ?? []) as Profile[]);
     setLoading(false);
+  }
+
+  // T011: increments recorded with a future effective_date were correctly
+  // *not* applied to employee_salary_config at save time (see syncLiveSalary),
+  // but nothing ever came back to apply them once that date arrived — the
+  // employee kept being paid the old salary indefinitely. On every page load,
+  // find each employee's latest increment whose effective_date has now passed
+  // and make sure employee_salary_config actually reflects it.
+  async function syncDueIncrements(all: Increment[]) {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const dueByUser = new Map<string, Increment>();
+    for (const inc of all) {
+      if (inc.effective_date > today) continue;
+      const current = dueByUser.get(inc.user_id);
+      if (!current || inc.effective_date > current.effective_date) dueByUser.set(inc.user_id, inc);
+    }
+    if (dueByUser.size === 0) return;
+    const userIds = [...dueByUser.keys()];
+    const { data: configs } = await supabase
+      .from('employee_salary_config')
+      .select('id, user_id, base_salary, currency')
+      .in('user_id', userIds);
+    const cfgByUser = new Map<string, { id: string; base_salary: number; currency: string }>();
+    for (const c of (configs ?? []) as any[]) cfgByUser.set(c.user_id, c);
+
+    let syncedCount = 0;
+    for (const [userId, inc] of dueByUser.entries()) {
+      const cfg = cfgByUser.get(userId);
+      const needsSync = !cfg || Number(cfg.base_salary) !== Number(inc.new_salary) || cfg.currency !== inc.currency;
+      if (!needsSync) continue;
+      if (cfg) {
+        await supabase.from('employee_salary_config')
+          .update({ base_salary: inc.new_salary, currency: inc.currency })
+          .eq('id', cfg.id);
+      } else {
+        await supabase.from('employee_salary_config').insert({
+          user_id: userId, base_salary: inc.new_salary, currency: inc.currency,
+          allowances: [], deductions: [], effective_date: inc.effective_date,
+        });
+      }
+      syncedCount++;
+    }
+    if (syncedCount > 0) {
+      toast({ title: `${syncedCount} future-dated increment(s) auto-applied`, description: 'Their effective date has now passed, so live salary was synced automatically.' });
+    }
   }
 
   function openNew() {
@@ -209,10 +255,37 @@ export default function SalaryIncrements() {
       }
     };
 
+    // T012: a retroactive increment (effective_date in the past) means the
+    // employee was underpaid for every payroll period between the effective
+    // date and today at the OLD salary. Nothing previously surfaced this —
+    // HR would record the increment and the shortfall would just be silently
+    // absorbed. Compute an estimated backpay figure so it can be processed
+    // as a manual one-off payment, and record it in the increment's notes.
+    let backpayNote = '';
+    let backpayAmount = 0;
+    let monthsElapsed = 0;
+    if (prevSal != null && form.effective_date < format(new Date(), 'yyyy-MM-dd')) {
+      monthsElapsed = Math.max(0, differenceInCalendarMonths(new Date(), parseISO(form.effective_date)));
+      backpayAmount = (newSal - prevSal) * monthsElapsed;
+      if (monthsElapsed > 0 && backpayAmount !== 0) {
+        backpayNote = `[Auto] Estimated backpay owed: ${form.currency} ${backpayAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} for ${monthsElapsed} month(s) since effective date (retroactive increment). Process as a manual one-off payment.`;
+        payload.notes = payload.notes ? `${payload.notes}\n${backpayNote}` : backpayNote;
+      }
+    }
+
     if (editing) {
       const { error } = await supabase.from('salary_increments').update(payload).eq('id', editing.id);
       if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-      else { await syncLiveSalary(); toast({ title: 'Increment updated' }); setDialogOpen(false); fetchAll(); }
+      else {
+        await syncLiveSalary();
+        if (backpayNote) {
+          toast({ title: 'Increment updated — backpay required', description: backpayNote, variant: 'destructive' });
+        } else {
+          toast({ title: 'Increment updated' });
+        }
+        setDialogOpen(false);
+        fetchAll();
+      }
     } else {
       const { data: inserted, error } = await supabase.from('salary_increments').insert({ ...payload, created_at: new Date().toISOString() }).select().single();
       if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -222,10 +295,11 @@ export default function SalaryIncrements() {
         if (form.user_id && form.user_id !== currentUser?.id) {
           const incTypeLabel = (form.increment_type ?? 'increment').replace(/_/g, ' ');
           const pctText = pct != null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)` : '';
+          const backpayText = backpayNote ? ` A retroactive backpay of ${form.currency} ${backpayAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} for ${monthsElapsed} month(s) will be processed separately.` : '';
           await NotificationTriggerService.send({
             userId: form.user_id,
             title: 'Salary Increment Recorded',
-            message: `A ${incTypeLabel}${pctText} has been recorded for you, effective ${form.effective_date}. New salary: ${form.currency} ${parseFloat(form.new_salary).toLocaleString()}.`,
+            message: `A ${incTypeLabel}${pctText} has been recorded for you, effective ${form.effective_date}. New salary: ${form.currency} ${parseFloat(form.new_salary).toLocaleString()}.${backpayText}`,
             titleAr: 'تم تسجيل زيادة الراتب',
             messageAr: `تم تسجيل ${incTypeLabel}${pctText} لك، اعتبارًا من ${form.effective_date}. الراتب الجديد: ${form.currency} ${parseFloat(form.new_salary).toLocaleString()}.`,
             type: 'success',
@@ -238,7 +312,11 @@ export default function SalaryIncrements() {
             emailActionLabel: 'View Increment Details',
           });
         }
-        toast({ title: 'Increment recorded' });
+        if (backpayNote) {
+          toast({ title: 'Increment recorded — backpay required', description: backpayNote, variant: 'destructive' });
+        } else {
+          toast({ title: 'Increment recorded' });
+        }
         setDialogOpen(false);
         fetchAll();
       }

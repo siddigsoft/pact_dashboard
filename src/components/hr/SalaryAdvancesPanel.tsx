@@ -13,7 +13,7 @@ import {
   Loader2, RefreshCw, Download, Plus, CreditCard,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, XCircle,
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
@@ -35,10 +35,31 @@ interface GlBridgeEntry {
 }
 
 const STATUS_CFG: Record<string, { label: string; class: string }> = {
-  active:           { label: 'Active',          class: 'bg-amber-100 text-amber-700 border-amber-300' },
-  fully_recovered:  { label: 'Fully Recovered', class: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
-  written_off:      { label: 'Written Off',     class: 'bg-rose-100 text-rose-700 border-rose-300' },
+  active:               { label: 'Active',              class: 'bg-amber-100 text-amber-700 border-amber-300' },
+  partially_recovered:  { label: 'Partially Recovered',  class: 'bg-sky-100 text-sky-700 border-sky-300' },
+  overdue:              { label: 'Overdue',              class: 'bg-red-100 text-red-700 border-red-300' },
+  fully_recovered:      { label: 'Fully Recovered',      class: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+  written_off:          { label: 'Written Off',          class: 'bg-rose-100 text-rose-700 border-rose-300' },
 };
+
+// T009: `status` on hr_salary_advances is only ever active/fully_recovered/written_off
+// in the DB (there's no migration for finer-grained states). Derive a richer
+// display status client-side instead of silently showing every unpaid advance
+// as a flat "Active" regardless of how overdue or partially paid it is.
+const OVERDUE_AFTER_DAYS = 45;
+function getEffectiveStatus(a: Advance, outstanding: number, recoveries: Recovery[]): string {
+  if (a.status !== 'active') return a.status;
+  if (outstanding <= 0) return 'fully_recovered';
+  const advRecoveries = recoveries.filter(r => r.advance_id === a.id);
+  const totalRecovered = a.amount - outstanding;
+  const lastActivityDate = advRecoveries.length > 0
+    ? advRecoveries.reduce((latest, r) => (r.recovery_date > latest ? r.recovery_date : latest), advRecoveries[0].recovery_date)
+    : a.issue_date;
+  const daysSinceActivity = differenceInDays(new Date(), parseISO(lastActivityDate));
+  if (a.monthly_recovery && daysSinceActivity > OVERDUE_AFTER_DAYS) return 'overdue';
+  if (totalRecovered > 0.01) return 'partially_recovered';
+  return 'active';
+}
 
 const BLANK_ADVANCE  = { user_id: '', amount: '', currency: 'USD', issue_date: '', reason: '', monthly_recovery: '', notes: '' };
 const BLANK_RECOVERY = { recovery_date: '', amount: '', payroll_period: '', notes: '' };
@@ -95,8 +116,8 @@ export default function SalaryAdvancesPanel() {
         .select('*')
         .order('recovery_date', { ascending: false })
         .limit(2000)
-        .catch(() => ({ data: [] }));
-      return ((data as any)?.data ?? data ?? []) as Recovery[];
+        .catch(() => ({ data: [] as Recovery[] }));
+      return (data ?? []) as Recovery[];
     },
     staleTime: 30_000,
   });
@@ -123,19 +144,20 @@ export default function SalaryAdvancesPanel() {
     staleTime: 30_000,
   });
 
+  const getOutstanding = useCallback((advId: string, principal: number) => {
+    const recovered = (recoveries ?? []).filter(r => r.advance_id === advId).reduce((s, r) => s + r.amount, 0);
+    return Math.max(0, principal - recovered);
+  }, [recoveries]);
+
   const filtered = (advances ?? []).filter(a => {
-    if (statusFilter !== 'all' && a.status !== statusFilter) return false;
+    const effStatus = getEffectiveStatus(a, getOutstanding(a.id, a.amount), recoveries ?? []);
+    if (statusFilter !== 'all' && effStatus !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (a.staff_name ?? '').toLowerCase().includes(q) || (a.reason ?? '').toLowerCase().includes(q);
     }
     return true;
   });
-
-  const getOutstanding = useCallback((advId: string, principal: number) => {
-    const recovered = (recoveries ?? []).filter(r => r.advance_id === advId).reduce((s, r) => s + r.amount, 0);
-    return Math.max(0, principal - recovered);
-  }, [recoveries]);
 
   const totals = filtered.reduce((acc, a) => ({
     principal:   acc.principal + a.amount,
@@ -145,6 +167,19 @@ export default function SalaryAdvancesPanel() {
   const saveAdvance = async () => {
     if (!form.user_id || !form.amount || !form.issue_date) {
       toast({ title: 'Staff, amount, and issue date are required', variant: 'destructive' }); return;
+    }
+    // T010: block issuing a second advance while the employee already has an
+    // active (not fully recovered / written off) advance outstanding — this
+    // previously wasn't checked, letting HR stack multiple simultaneous
+    // advances against the same employee's future payroll deductions.
+    const existingActive = (advances ?? []).find(a => a.user_id === form.user_id && a.status === 'active' && getOutstanding(a.id, a.amount) > 0.01);
+    if (existingActive) {
+      toast({
+        title: 'Employee already has an active advance',
+        description: `Outstanding balance of ${existingActive.currency} ${getOutstanding(existingActive.id, existingActive.amount).toLocaleString('en-US', { maximumFractionDigits: 2 })} must be fully recovered or written off before issuing a new advance.`,
+        variant: 'destructive',
+      });
+      return;
     }
     setSaving(true);
     const { error } = await supabase.from('hr_salary_advances' as any).insert({
@@ -204,7 +239,7 @@ export default function SalaryAdvancesPanel() {
       'Amount':          a.amount,
       'Currency':        a.currency,
       'Outstanding':     getOutstanding(a.id, a.amount),
-      'Status':          STATUS_CFG[a.status]?.label ?? a.status,
+      'Status':          STATUS_CFG[getEffectiveStatus(a, getOutstanding(a.id, a.amount), recoveries ?? [])]?.label ?? a.status,
       'GL Posted':       glLog?.[a.id]?.status === 'success' ? 'Yes' : glLog?.[a.id]?.status === 'error' ? 'Error' : 'Pending',
       'Reason':          a.reason ?? '',
       'Monthly Recovery Plan': a.monthly_recovery ?? '',
@@ -302,7 +337,8 @@ export default function SalaryAdvancesPanel() {
                 const pct = a.amount > 0 ? Math.round(((a.amount - outstanding) / a.amount) * 100) : 0;
                 const advRecoveries = (recoveries ?? []).filter(r => r.advance_id === a.id);
                 const expanded = expandedId === a.id;
-                const cfg = STATUS_CFG[a.status] ?? STATUS_CFG['active'];
+                const effStatus = getEffectiveStatus(a, outstanding, recoveries ?? []);
+                const cfg = STATUS_CFG[effStatus] ?? STATUS_CFG['active'];
                 const gl = glLog?.[a.id];
 
                 return (

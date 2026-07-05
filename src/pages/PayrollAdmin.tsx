@@ -128,6 +128,20 @@ let __statutoryApplyZakat: boolean = false;
 // useExchangeRates()) so computePayroll can stay synchronous.
 const STATUTORY_CURRENCY_BY_COUNTRY: Record<string, string> = { SD: 'SDG' };
 let __exchangeRatesToLocal: Record<string, number> = {}; // currency -> rate to statutory currency
+// (stale-rate check): most-recent effective_date on file per currency, used to
+// warn admins when a statutory conversion is relying on an old rate instead of
+// silently trusting a rate that may no longer reflect reality.
+let __exchangeRateDates: Record<string, string> = {};
+export const EXCHANGE_RATE_STALE_DAYS = 45;
+export function getStaleExchangeRateCurrencies(asOf: Date = new Date()): { currency: string; effective_date: string; daysOld: number }[] {
+  const out: { currency: string; effective_date: string; daysOld: number }[] = [];
+  for (const [currency, dateStr] of Object.entries(__exchangeRateDates)) {
+    if (currency === 'SDG') continue;
+    const days = Math.floor((asOf.getTime() - new Date(dateStr).getTime()) / 86400000);
+    if (days > EXCHANGE_RATE_STALE_DAYS) out.push({ currency, effective_date: dateStr, daysOld: days });
+  }
+  return out;
+}
 
 export function computeStatutoryDeductions(
   gross: number,
@@ -196,13 +210,18 @@ export function useExchangeRates(localCurrency: string = 'SDG') {
         .eq('to_currency', localCurrency)
         .order('effective_date', { ascending: false });
       const map: Record<string, number> = { [localCurrency]: 1 };
+      const dates: Record<string, string> = {};
       if (!error && data) {
         // Rows are newest-first per pair; only keep the first (latest) rate seen per currency.
-        for (const row of data as { from_currency: string; rate: number }[]) {
-          if (!(row.from_currency in map)) map[row.from_currency] = Number(row.rate);
+        for (const row of data as { from_currency: string; rate: number; effective_date: string }[]) {
+          if (!(row.from_currency in map)) {
+            map[row.from_currency] = Number(row.rate);
+            dates[row.from_currency] = row.effective_date;
+          }
         }
       }
       __exchangeRatesToLocal = map;
+      __exchangeRateDates = dates;
       return map;
     },
   });
@@ -3658,6 +3677,13 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   // so admins don't assume "Run Payroll" already covers everyone.
   const retainerEmployees = employees.filter(e => e.contract_type === 'retainer' || e.retainer?.is_active);
   const statutorySkippedCount = preview.filter(r => (r.deductions_snapshot ?? []).length === 0 && r.currency !== 'SDG' && r.gross_salary > 0).length;
+  // T007: block finalizing a run while statutory deductions were silently skipped
+  // for any employee — forces the admin to add the missing exchange rate first
+  // instead of locking in a payroll that under-withholds tax/NPF.
+  const blockFinalize = statutorySkippedCount > 0;
+  // T008: warn (non-blocking) when the SDG conversion used for statutory tax is
+  // based on an exchange rate older than EXCHANGE_RATE_STALE_DAYS days.
+  const staleRates = preview.some(r => r.currency !== 'SDG') ? getStaleExchangeRateCurrencies() : [];
 
   return (
     <div className="space-y-5">
@@ -3676,6 +3702,18 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
           <div>
             <p className="font-semibold">{statutorySkippedCount} employee(s) had statutory deductions (tax/NPF) skipped.</p>
             <p className="mt-0.5 text-red-700 dark:text-red-400">Their salary currency has no SDG exchange rate on file, so PIT/social insurance could not be calculated safely. Add a rate under Accounting → Exchange Rates, then recompute.</p>
+            <p className="mt-1 font-semibold">Locking &amp; Finalizing this run is disabled until this is resolved.</p>
+          </div>
+        </div>
+      )}
+      {statutorySkippedCount === 0 && staleRates.length > 0 && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-3 text-xs text-amber-800 dark:text-amber-300" data-testid="banner-stale-rate-warning">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">Exchange rate used for statutory tax conversion is outdated.</p>
+            <p className="mt-0.5 text-amber-700 dark:text-amber-400">
+              {staleRates.map(r => `${r.currency}→SDG rate is ${r.daysOld} days old (as of ${r.effective_date})`).join('; ')}. Consider updating it under Accounting → Exchange Rates before finalizing.
+            </p>
           </div>
         </div>
       )}
@@ -3726,13 +3764,13 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
               {(isSubmitted || isApproved) && canApprove && !isLocked && (
                 <>
                   {isSubmitted && (
-                    <Button onClick={() => saveRun('approved')} disabled={approving} variant="outline" className="h-9 gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                    <Button onClick={() => saveRun('approved')} disabled={approving || blockFinalize} title={blockFinalize ? `Resolve ${statutorySkippedCount} skipped statutory deduction(s) before approving` : undefined} variant="outline" className="h-9 gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                       {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                       Approve
                     </Button>
                   )}
                   {isApproved && (
-                    <Button onClick={() => saveRun('locked')} disabled={locking} className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 gap-2">
+                    <Button onClick={() => saveRun('locked')} disabled={locking || blockFinalize} title={blockFinalize ? `Resolve ${statutorySkippedCount} skipped statutory deduction(s) before finalizing` : undefined} className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 gap-2">
                       {locking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
                       Lock &amp; Finalize
                     </Button>

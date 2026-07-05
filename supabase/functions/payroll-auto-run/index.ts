@@ -377,17 +377,31 @@ serve(async (req) => {
     // H10-currency fix: load SDG exchange rates so non-SDG salaries are converted
     // correctly before statutory brackets are applied (see computeStatutoryDeductions).
     const ratesToLocal: Record<string, number> = { SDG: 1 }
+    // T008: track how old each rate is so we can flag stale conversions in the
+    // audit log / admin notification instead of trusting them silently forever.
+    const rateDates: Record<string, string> = {}
+    const RATE_STALE_DAYS = 45
     try {
       const { data: rateRows } = await supabase
         .from('acct_exchange_rates')
         .select('from_currency, rate, effective_date')
         .eq('to_currency', 'SDG')
         .order('effective_date', { ascending: false })
-      for (const row of (rateRows ?? []) as { from_currency: string; rate: number }[]) {
-        if (!(row.from_currency in ratesToLocal)) ratesToLocal[row.from_currency] = Number(row.rate)
+      for (const row of (rateRows ?? []) as { from_currency: string; rate: number; effective_date: string }[]) {
+        if (!(row.from_currency in ratesToLocal)) {
+          ratesToLocal[row.from_currency] = Number(row.rate)
+          rateDates[row.from_currency] = row.effective_date
+        }
       }
     } catch (e) {
       console.warn('[payroll-auto-run] Could not load exchange rates — non-SDG statutory deductions will be skipped:', (e as Error).message)
+    }
+    const staleRateCurrencies = Object.entries(rateDates)
+      .filter(([ccy]) => ccy !== 'SDG')
+      .map(([ccy, dateStr]) => ({ currency: ccy, effective_date: dateStr, daysOld: Math.floor((now.getTime() - new Date(dateStr).getTime()) / 86400000) }))
+      .filter(r => r.daysOld > RATE_STALE_DAYS)
+    if (staleRateCurrencies.length > 0) {
+      console.warn('[payroll-auto-run] Stale exchange rate(s) used for statutory conversion:', JSON.stringify(staleRateCurrencies))
     }
 
     // Bug fix (salary-advance auto-deduction): pull active advances for these
@@ -429,9 +443,11 @@ serve(async (req) => {
       console.warn('[payroll-auto-run] Could not load salary advances — advance deductions skipped:', (e as Error).message)
     }
 
+    let statutorySkippedCount = 0
     const items = configs.map(config => {
-      const { base, allowTotal, gross, dedTotal, net, combinedDeductions } =
+      const { base, allowTotal, gross, dedTotal, net, combinedDeductions, statutorySkipped } =
         computePayroll(config, brackets, country, applyZakat, ratesToLocal)
+      if (statutorySkipped) statutorySkippedCount++
       const userId = config.user_id
       const profile = profileMap.get(userId)
 
@@ -486,14 +502,50 @@ serve(async (req) => {
       .from('audit_logs')
       .insert({
         action: 'payroll_auto_run',
-        details: JSON.stringify({ period: thisMonthLabel, run_id: runId, employee_count: items.length }),
+        details: JSON.stringify({
+          period: thisMonthLabel, run_id: runId, employee_count: items.length,
+          statutory_skipped_count: statutorySkippedCount,
+          stale_exchange_rates: staleRateCurrencies,
+        }),
         performed_by: null,
         entity_type: 'payroll_run',
         entity_id: runId,
       })
 
+    // T007/T008: warn admins in-app when the auto-run silently skipped statutory
+    // deductions for some employees or relied on a stale exchange rate, so it
+    // doesn't get discovered only after the run is already approved/locked.
+    if (statutorySkippedCount > 0 || staleRateCurrencies.length > 0) {
+      try {
+        const { data: admins } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .in('role', ['super_admin', 'admin', 'financialAdmin', 'financial_admin'])
+        const issues: string[] = []
+        if (statutorySkippedCount > 0) issues.push(`${statutorySkippedCount} employee(s) had statutory tax/NPF deductions skipped (missing exchange rate)`)
+        if (staleRateCurrencies.length > 0) issues.push(`Stale exchange rate(s): ${staleRateCurrencies.map(r => `${r.currency} (${r.daysOld}d old)`).join(', ')}`)
+        const message = `Auto-generated payroll run for ${thisMonthLabel} has issues: ${issues.join('; ')}. Review before approving.`
+        const rows = ((admins ?? []) as { id: string }[]).map(a => ({
+          user_id: a.id,
+          title: 'Payroll Auto-Run Needs Review',
+          message,
+          type: 'warning',
+          category: 'financial',
+          priority: 'high',
+          link: '/payroll-admin',
+          created_at: now.toISOString(),
+        }))
+        if (rows.length > 0) await supabase.from('notifications').insert(rows)
+      } catch (e) {
+        console.warn('[payroll-auto-run] Could not send admin warning notifications:', (e as Error).message)
+      }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, period: thisMonthLabel, run_id: runId, employee_count: items.length }),
+      JSON.stringify({
+        success: true, period: thisMonthLabel, run_id: runId, employee_count: items.length,
+        statutory_skipped_count: statutorySkippedCount, stale_exchange_rates: staleRateCurrencies,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {

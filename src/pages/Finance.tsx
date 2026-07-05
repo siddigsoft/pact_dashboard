@@ -47,17 +47,26 @@ import autoTable from "jspdf-autotable";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import * as XLSX from "xlsx";
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-SD', {
-    style: 'currency',
-    currency: 'SDG',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+// T016: this was hardcoded to SDG everywhere it was used, even for data that
+// carries its own `currency` field (e.g. wallets/advances that may be in
+// USD). Accept an optional currency so callers with multi-currency records
+// can format correctly instead of silently mislabeling non-SDG amounts as SDG.
+const formatCurrency = (amount: number, currency: string = 'SDG') => {
+  try {
+    return new Intl.NumberFormat(currency === 'SDG' ? 'en-SD' : 'en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Intl throws on unrecognized currency codes — fall back to a plain label.
+    return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
 };
 
-const formatCurrencyCents = (cents: number) => {
-  return formatCurrency(cents / 100);
+const formatCurrencyCents = (cents: number, currency: string = 'SDG') => {
+  return formatCurrency(cents / 100, currency);
 };
 
 const Finance: React.FC = () => {
@@ -113,6 +122,12 @@ const Finance: React.FC = () => {
   const [csIncludeOperational, setCsIncludeOperational] = useState(true);
   const [csIncludeWallet, setCsIncludeWallet] = useState(true);
   const [csIncludeAdvances, setCsIncludeAdvances] = useState(true);
+  // T015: the consolidated statement previously only pulled from
+  // wallets/down-payments/operational-costs/transport costs — the full
+  // Procure-to-Pay AP invoices (acct_invoices) and vendor payments
+  // (acct_payments) were completely absent, so outstanding vendor
+  // liabilities and vendor cash outflows never showed up here at all.
+  const [csIncludeVendor, setCsIncludeVendor] = useState(true);
   const [csCurrency] = useState('SDG');
   const [csLoading, setCsLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<{rate: number; fetchedAt: string; stale: boolean} | null>(null);
@@ -137,10 +152,28 @@ const Finance: React.FC = () => {
 
       const { data: walletsData } = await supabase.from('wallets').select('balances, total_earned, total_withdrawn, user_id');
       let walletBalances = 0;
+      let unconvertedOtherCurrency = 0;
       (walletsData || []).forEach((w: any) => {
-        const bal = typeof w.balances === 'object' ? (w.balances?.SDG || 0) : 0;
-        walletBalances += Number(bal) || 0;
+        if (typeof w.balances !== 'object' || !w.balances) return;
+        // T016: previously only the SDG key was ever read here — any balance
+        // held in another currency (e.g. USD) was silently dropped from the
+        // consolidated statement's total assets. Convert other currencies to
+        // SDG-equivalent using the live exchange rate when available.
+        Object.entries(w.balances as Record<string, number>).forEach(([ccy, amt]) => {
+          const val = Number(amt) || 0;
+          if (val === 0) return;
+          if (ccy === 'SDG') {
+            walletBalances += val;
+          } else if (ccy === 'USD' && exchangeRate?.rate) {
+            walletBalances += val * exchangeRate.rate;
+          } else {
+            unconvertedOtherCurrency += val;
+          }
+        });
       });
+      if (unconvertedOtherCurrency !== 0) {
+        console.warn(`Consolidated statement: ${unconvertedOtherCurrency} in non-SDG/USD wallet balances could not be converted and were excluded from Total Assets.`);
+      }
 
       const { data: advancesData } = await supabase
         .from('down_payment_requests')
@@ -255,6 +288,34 @@ const Finance: React.FC = () => {
         });
       }
 
+      // T015: pull in AP invoices (vendor liabilities) and vendor payments
+      // (vendor cash outflows) so the consolidated statement reflects the
+      // full Procure-to-Pay cycle, not just field-operations cost types.
+      if (csIncludeVendor) {
+        const { data: invoiceData } = await supabase
+          .from('acct_invoices' as any)
+          .select('id, total_amount, paid_amount, status, currency, invoice_date, vendor_id')
+          .gte('invoice_date', csStartDate || '1970-01-01')
+          .lte('invoice_date', csEndDate || '2999-12-31')
+          .catch(() => ({ data: [] } as any));
+        (invoiceData || []).forEach((inv: any) => {
+          const outstanding = Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+          if (['approved', 'partial_paid', 'disputed'].includes(inv.status) && outstanding > 0) {
+            totalLiabilities += outstanding;
+          }
+        });
+
+        let vpQuery = supabase.from('acct_payments' as any).select('id, amount, status, payment_date, vendor_id, currency');
+        if (fromDate) vpQuery = vpQuery.gte('payment_date', csStartDate || '1970-01-01');
+        if (toDate) vpQuery = vpQuery.lte('payment_date', csEndDate || '2999-12-31');
+        const { data: paymentData } = await vpQuery.catch(() => ({ data: [] } as any));
+        (paymentData || []).forEach((pmt: any) => {
+          if (pmt.status !== 'processed') return;
+          const amt = Math.abs(Number(pmt.amount) || 0);
+          expenseMap['Vendor Payments'] = (expenseMap['Vendor Payments'] || 0) + amt;
+        });
+      }
+
       const inflowCategories = Object.entries(inflowMap).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
       const expenseCats = Object.entries(expenseMap).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
       const totalInflow = inflowCategories.reduce((s, c) => s + c.amount, 0);
@@ -293,7 +354,7 @@ const Finance: React.FC = () => {
     } finally {
       setCsLoading(false);
     }
-  }, [csStartDate, csEndDate, csIncludeTransport, csIncludeOperational, csIncludeWallet, csIncludeAdvances, toast]);
+  }, [csStartDate, csEndDate, csIncludeTransport, csIncludeOperational, csIncludeWallet, csIncludeAdvances, csIncludeVendor, exchangeRate, toast]);
 
   const generateConsolidatedPdf = () => {
     if (!csData) return;
@@ -1689,6 +1750,15 @@ const Finance: React.FC = () => {
                       data-testid="switch-cs-advances"
                     />
                     <Label htmlFor="cs-advances" className="text-sm">Advances</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="cs-vendor"
+                      checked={csIncludeVendor}
+                      onCheckedChange={setCsIncludeVendor}
+                      data-testid="switch-cs-vendor"
+                    />
+                    <Label htmlFor="cs-vendor" className="text-sm">Vendor Payments (AP)</Label>
                   </div>
                 </div>
 

@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Award, Plus, Edit2, Trash2, Loader2, Search, AlertTriangle, Clock, ExternalLink } from 'lucide-react';
 import { format, parseISO, differenceInDays, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface Record_ {
   id: string;
@@ -29,6 +30,8 @@ interface Record_ {
   currency: string | null;
   evidence_url: string | null;
   notes: string | null;
+  last_expiry_notified_at?: string | null;
+  last_expiry_notified_state?: string | null;
 }
 interface Profile { id: string; full_name: string; }
 
@@ -78,9 +81,58 @@ export default function TrainingCertificationsPage() {
       supabase.from('training_records').select('*').order('issued_on', { ascending: false, nullsFirst: false }),
       supabase.from('profiles').select('id, full_name').order('full_name'),
     ]);
-    if (r.data) setRecords(r.data as Record_[]);
+    if (r.data) {
+      setRecords(r.data as Record_[]);
+      if (isAdmin) void dispatchExpiryAlerts(r.data as Record_[]);
+    }
     if (p.data) setProfiles(p.data as Profile[]);
     setLoading(false);
+  }
+
+  // T014: certifications/training records previously had no alerting at all —
+  // expiry was only visible if someone opened this page and looked at the
+  // "Expiring"/"Expired" tab. Dispatch a one-time in-app + email notification
+  // to the record owner as soon as it crosses into the "expiring soon"
+  // (<=30 days) or "expired" window, tracked via last_expiry_notified_state
+  // so we don't re-notify on every page load/state transition.
+  async function dispatchExpiryAlerts(list: Record_[]) {
+    const now = new Date();
+    for (const rec of list) {
+      if (!rec.expires_on || !rec.user_id) continue;
+      const exp = parseISO(rec.expires_on);
+      if (!exp || isNaN(exp.getTime())) continue;
+      const days = differenceInDays(exp, now);
+      const state = days < 0 ? 'expired' : (days <= 30 ? 'expiring' : null);
+      if (!state || rec.last_expiry_notified_state === state) continue;
+      const isExpired = state === 'expired';
+      const title = isExpired ? 'Certification Expired' : 'Certification Expiring Soon';
+      const message = isExpired
+        ? `Your ${rec.category} "${rec.title}" expired on ${rec.expires_on}. Please renew and upload updated evidence.`
+        : `Your ${rec.category} "${rec.title}" expires on ${rec.expires_on} (${days} day${days === 1 ? '' : 's'} left). Please plan renewal.`;
+      try {
+        await NotificationTriggerService.send({
+          userId: rec.user_id,
+          title,
+          message,
+          titleAr: isExpired ? 'انتهت صلاحية الشهادة' : 'الشهادة على وشك الانتهاء',
+          messageAr: message,
+          type: isExpired ? 'error' : 'warning',
+          category: 'team',
+          priority: isExpired ? 'high' : 'normal',
+          link: '/training-certifications',
+          relatedEntityId: rec.id,
+          sendEmail: true,
+          emailActionUrl: '/training-certifications',
+          emailActionLabel: 'View Certification',
+        });
+        await supabase.from('training_records')
+          .update({ last_expiry_notified_at: new Date().toISOString(), last_expiry_notified_state: state })
+          .eq('id', rec.id);
+      } catch {
+        // Non-fatal — will simply retry on next page load since the tracking
+        // column wasn't updated.
+      }
+    }
   }
 
   function openNew() {

@@ -40,17 +40,43 @@ interface EosbAccrual {
   gl_status?: 'success' | 'error' | 'skipped' | null;
 }
 
-function calcEOSB(monthlySalary: number, hireDate: string | null) {
+// T013: defaults mirror the previous hardcoded Sudan Labour Law rule
+// (21 days/yr for years 1-5, 30 days/yr beyond that). These are now
+// overridable via the `hr_eosb_settings` table (see supabase/migrations/
+// hr_eosb_settings.sql); this object is only the fallback when that table
+// is empty/unreachable.
+export interface EosbSettings {
+  tier1_years_threshold: number;
+  tier1_days_per_year: number;
+  tier2_days_per_year: number;
+  days_per_month: number;
+  min_service_months: number;
+}
+export const DEFAULT_EOSB_SETTINGS: EosbSettings = {
+  tier1_years_threshold: 5,
+  tier1_days_per_year: 21,
+  tier2_days_per_year: 30,
+  days_per_month: 30,
+  min_service_months: 12,
+};
+
+function calcEOSB(monthlySalary: number, hireDate: string | null, settings: EosbSettings = DEFAULT_EOSB_SETTINGS) {
   if (!hireDate) return { serviceMonths: 0, serviceYears: 0, accrualDays: 0, eosb: 0, label: '—' };
   const start = parseISO(hireDate);
   if (!isValid(start)) return { serviceMonths: 0, serviceYears: 0, accrualDays: 0, eosb: 0, label: 'Invalid date' };
   const now = new Date();
   const serviceMonths = differenceInMonths(now, start);
   const serviceYears  = differenceInYears(now, start);
-  if (serviceMonths < 12) return { serviceMonths, serviceYears: 0, accrualDays: 0, eosb: 0, label: '< 1 yr — no entitlement' };
-  const dailyRate   = monthlySalary / 30;
-  const accrualDays = serviceYears <= 5 ? 21 : 30;
-  const eosb        = dailyRate * accrualDays * serviceYears;
+  if (serviceMonths < settings.min_service_months) return { serviceMonths, serviceYears: 0, accrualDays: 0, eosb: 0, label: '< 1 yr — no entitlement' };
+  const dailyRate = monthlySalary / settings.days_per_month;
+  // Correctness fix: years above the tier1 threshold must be paid at the
+  // tier2 rate only for the years *beyond* the threshold, not retroactively
+  // for the whole tenure. Previously a 7-year employee was paid 30 days for
+  // ALL 7 years instead of 21 days for the first 5 + 30 days for the last 2.
+  const tier1Years = Math.min(serviceYears, settings.tier1_years_threshold);
+  const tier2Years = Math.max(0, serviceYears - settings.tier1_years_threshold);
+  const accrualDays = serviceYears <= settings.tier1_years_threshold ? settings.tier1_days_per_year : settings.tier2_days_per_year;
+  const eosb = dailyRate * (tier1Years * settings.tier1_days_per_year + tier2Years * settings.tier2_days_per_year);
   return { serviceMonths, serviceYears, accrualDays, eosb, label: `${serviceYears}y` };
 }
 
@@ -106,6 +132,30 @@ export default function EOSBPanel() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: eosbSettings } = useQuery({
+    queryKey: ['hr_eosb_settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hr_eosb_settings' as any)
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(r => r as any)
+        .catch(() => ({ data: null, error: null } as any));
+      if (error || !data) return DEFAULT_EOSB_SETTINGS;
+      return {
+        tier1_years_threshold: Number(data.tier1_years_threshold ?? DEFAULT_EOSB_SETTINGS.tier1_years_threshold),
+        tier1_days_per_year: Number(data.tier1_days_per_year ?? DEFAULT_EOSB_SETTINGS.tier1_days_per_year),
+        tier2_days_per_year: Number(data.tier2_days_per_year ?? DEFAULT_EOSB_SETTINGS.tier2_days_per_year),
+        days_per_month: Number(data.days_per_month ?? DEFAULT_EOSB_SETTINGS.days_per_month),
+        min_service_months: Number(data.min_service_months ?? DEFAULT_EOSB_SETTINGS.min_service_months),
+      } as EosbSettings;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const activeEosbSettings = eosbSettings ?? DEFAULT_EOSB_SETTINGS;
+
   const { data: accruals, isLoading: accrualsLoading, refetch: refetchAccruals } = useQuery({
     queryKey: ['eosb_accruals_history'],
     queryFn: async () => {
@@ -159,7 +209,7 @@ export default function EOSBPanel() {
   });
 
   const totals = filtered.reduce((acc, r) => {
-    const { eosb } = calcEOSB(r.salary, r.hire_date);
+    const { eosb } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
     return { eosb: acc.eosb + eosb, staff: acc.staff + 1 };
   }, { eosb: 0, staff: 0 });
 
@@ -199,7 +249,7 @@ export default function EOSBPanel() {
 
   const exportXlsx = useCallback(() => {
     const data = filtered.map(r => {
-      const { serviceYears, accrualDays, eosb } = calcEOSB(r.salary, r.hire_date);
+      const { serviceYears, accrualDays, eosb } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
       return {
         'Staff Name':      r.full_name ?? '—',
         'Hire Date':       r.hire_date ?? '—',
@@ -363,7 +413,7 @@ export default function EOSBPanel() {
                     </thead>
                     <tbody>
                       {filtered.map((r, i) => {
-                        const { serviceYears, accrualDays, eosb, label } = calcEOSB(r.salary, r.hire_date);
+                        const { serviceYears, accrualDays, eosb, label } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
                         const noSalary = r.salary === 0;
                         const isEditingDate = r.id in editingHireDate;
 
