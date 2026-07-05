@@ -579,7 +579,7 @@ function onboardingScore(emp: EmployeeRow): { score: number; items: { label: str
 
 function SalarySetupTab({ employees, loading, departments }: { employees: EmployeeRow[]; loading: boolean; departments: DeptOption[] }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'configured' | 'missing' | 'incomplete-onboarding'>('configured');
+  const [filter, setFilter] = useState<'all' | 'configured' | 'missing' | 'incomplete-onboarding'>('all');
   const [editEmp, setEditEmp] = useState<EmployeeRow | null>(null);
   const [showOnboardingFor, setShowOnboardingFor] = useState<string | null>(null);
 
@@ -599,7 +599,7 @@ function SalarySetupTab({ employees, loading, departments }: { employees: Employ
       {/* Notice */}
       <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/40 text-sm text-blue-800 dark:text-blue-200">
         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
-        <p>Showing only <strong>configured</strong> employees by default. Switch to <strong>Not configured</strong> or <strong>All employees</strong> using the filter to set up new salary packages.</p>
+        <p>Showing <strong>all employees</strong> by default. Switch to <strong>Configured</strong> or <strong>Not configured</strong> using the filter to focus on specific groups.</p>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
