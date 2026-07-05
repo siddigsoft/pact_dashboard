@@ -34,6 +34,11 @@ type CheckInMethod = 'gps' | 'office' | 'remote';
 
 const fmtTime = (iso?: string | null) => iso ? format(new Date(iso), 'HH:mm') : '—';
 const todayStr = () => format(new Date(), 'yyyy-MM-dd');
+// log_date is a date-only string (e.g. "2026-07-05"). `new Date(str)` parses
+// bare date strings as UTC midnight, which shifts to the previous calendar
+// day for anyone in a negative-UTC-offset timezone. Parse as local midnight
+// instead so month/week grouping always lines up with the intended day.
+const parseLogDate = (dateStr: string) => new Date(`${dateStr}T00:00:00`);
 const LATE_HOUR = 9; // anything after 09:00 local is "late"
 
 // Aligned with attendance_logs RLS: super_admin/admin/hr/manager only.
@@ -214,7 +219,7 @@ export default function Attendance() {
   const hoursThisMonth = useMemo(() => {
     const m = new Date().getMonth(), y = new Date().getFullYear();
     return myHistory.filter(l => {
-      const d = new Date(l.log_date);
+      const d = parseLogDate(l.log_date);
       return d.getMonth() === m && d.getFullYear() === y;
     }).reduce((s, l) => s + Number(l.hours_worked ?? 0), 0);
   }, [myHistory]);
@@ -225,7 +230,7 @@ export default function Attendance() {
   }, []);
 
   const weekTotals = useMemo(() => weekDays.map(d => {
-    const log = myHistory.find(l => isSameDay(new Date(l.log_date), d));
+    const log = myHistory.find(l => isSameDay(parseLogDate(l.log_date), d));
     return { date: d, log };
   }), [weekDays, myHistory]);
 
