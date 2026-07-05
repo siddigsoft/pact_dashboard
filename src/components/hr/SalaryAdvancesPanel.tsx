@@ -61,7 +61,9 @@ function getEffectiveStatus(a: Advance, outstanding: number, recoveries: Recover
   return 'active';
 }
 
-const BLANK_ADVANCE  = { user_id: '', amount: '', currency: 'USD', issue_date: '', reason: '', monthly_recovery: '', notes: '' };
+// Default to the org's operating currency (Sudan/SDG) rather than USD.
+const BLANK_ADVANCE  = { user_id: '', amount: '', currency: 'SDG', issue_date: '', reason: '', monthly_recovery: '', notes: '' };
+const ADVANCE_CURRENCIES = ['SDG', 'USD'];
 const BLANK_RECOVERY = { recovery_date: '', amount: '', payroll_period: '', notes: '' };
 
 export default function SalaryAdvancesPanel() {
@@ -464,7 +466,10 @@ export default function SalaryAdvancesPanel() {
               </div>
               <div>
                 <Label className="text-xs mb-1 block">Currency</Label>
-                <Input value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value }))} className="h-8 text-sm" />
+                <Select value={form.currency} onValueChange={v => setForm(p => ({ ...p, currency: v }))}>
+                  <SelectTrigger className="h-8 text-sm" data-testid="select-advance-currency"><SelectValue /></SelectTrigger>
+                  <SelectContent>{ADVANCE_CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
             </div>
             <div>

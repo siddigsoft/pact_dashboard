@@ -79,3 +79,42 @@ export interface AcctGlBridgeLogRow {
   event_type: string;
   created_at: string;
 }
+
+// Backs the `current_user_classifications` DB view (retainer eligibility +
+// amount/frequency), read by both PayrollAdmin.tsx and RetainerManagement.tsx.
+export interface CurrentUserClassificationRow {
+  id: string;
+  user_id: string;
+  classification_level: string | null;
+  role_scope: string | null;
+  has_retainer: boolean;
+  retainer_amount_cents: number | null;
+  retainer_currency: string | null;
+  retainer_frequency: string | null;
+  is_active: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
+}
+
+// Write-side of `current_user_classifications` — the underlying
+// `user_classifications` table (history of retainer assignments per user).
+export interface UserClassificationRow {
+  id: string;
+  user_id: string;
+  classification_level: string;
+  role_scope: string | null;
+  has_retainer: boolean;
+  retainer_amount_cents: number | null;
+  retainer_currency: string | null;
+  retainer_frequency: string | null;
+  is_active: boolean;
+  effective_from: string;
+  effective_until: string | null;
+  assigned_by: string | null;
+}
+
+// Return shape of the `credit_payroll_run_to_wallets` RPC.
+export interface CreditPayrollRunResult {
+  credited: number;
+  skipped: number;
+}

@@ -8,3 +8,4 @@
 - [notification-email-coverage](notification-email-coverage.md) — Raw DB-insert notification helpers with unmapped event_type bypass dispatch-notification entirely, so email is silently never sent.
 - [eosb-tiered-accrual](eosb-tiered-accrual.md) — EOSB day-rate must blend tiers (21d/yr ≤5yrs + 30d/yr >5yrs) per year of service, not apply one flat rate to the whole tenure.
 - [multi-currency-wallet-aggregation](multi-currency-wallet-aggregation.md) — Wallet balances are a per-currency jsonb map; summing only `balances.SDG` silently drops other currencies from financial totals.
+- [monitoring-grants-naming-collision](monitoring-grants-naming-collision.md) — MonitoringDashboard's "grants" migration hint is unrelated to financial Grant Tracking (AccountingGrants.tsx) — naming collision, not a real gap.

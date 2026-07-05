@@ -477,6 +477,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       if (!request) throw new Error('Request not found');
 
+      // Segregation of Duties: the person who requested the withdrawal must
+      // not be the same person releasing the funds, even if they hold a
+      // Finance/admin role that would otherwise let them process it.
+      if (request.userId === currentUser.id) {
+        throw new Error('Segregation of duties: you cannot approve your own withdrawal request.');
+      }
+
       // Verify the request is in supervisor_approved status
       if (request.status !== 'supervisor_approved') {
         throw new Error('Only supervisor-approved requests can be processed by Finance');
@@ -618,6 +625,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
       
       if (!request) throw new Error('Request not found');
+
+      // Segregation of Duties: same rule as approval — a requester acting as
+      // Finance/admin cannot process their own withdrawal request either way.
+      if (request.userId === currentUser.id) {
+        throw new Error('Segregation of duties: you cannot reject your own withdrawal request.');
+      }
 
       // Verify the request is in supervisor_approved status
       if (request.status !== 'supervisor_approved') {

@@ -100,7 +100,10 @@ const Finance: React.FC = () => {
           supabase.from('down_payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
         ]);
         setFinanceInbox({ pendingCosts: costs || 0, pendingWithdrawalCount: withdrawalCount || 0, stuckAdvances: advances || 0 });
-      } catch { /* non-critical */ }
+      } catch (err) {
+        // Non-fatal (badge counts only) but log so a persistent failure is visible in diagnostics.
+        console.warn('Failed to load finance inbox counts:', err);
+      }
     };
     if (isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin', 'fom', 'FOM'])) {
       fetchInbox();
@@ -297,7 +300,10 @@ const Finance: React.FC = () => {
           .select('id, total_amount, paid_amount, status, currency, invoice_date, vendor_id')
           .gte('invoice_date', csStartDate || '1970-01-01')
           .lte('invoice_date', csEndDate || '2999-12-31')
-          .catch(() => ({ data: [] } as any));
+          .catch((err: any) => {
+            console.warn('Consolidated statement: acct_invoices fetch failed (table may not be migrated yet):', err?.message || err);
+            return { data: [] } as any;
+          });
         (invoiceData || []).forEach((inv: any) => {
           const outstanding = Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
           if (['approved', 'partial_paid', 'disputed'].includes(inv.status) && outstanding > 0) {
@@ -308,7 +314,10 @@ const Finance: React.FC = () => {
         let vpQuery = supabase.from('acct_payments' as any).select('id, amount, status, payment_date, vendor_id, currency');
         if (fromDate) vpQuery = vpQuery.gte('payment_date', csStartDate || '1970-01-01');
         if (toDate) vpQuery = vpQuery.lte('payment_date', csEndDate || '2999-12-31');
-        const { data: paymentData } = await vpQuery.catch(() => ({ data: [] } as any));
+        const { data: paymentData } = await vpQuery.catch((err: any) => {
+          console.warn('Consolidated statement: acct_payments fetch failed (table may not be migrated yet):', err?.message || err);
+          return { data: [] } as any;
+        });
         (paymentData || []).forEach((pmt: any) => {
           if (pmt.status !== 'processed') return;
           const amt = Math.abs(Number(pmt.amount) || 0);
@@ -832,8 +841,8 @@ const Finance: React.FC = () => {
       }
       fetchWithdrawals();
       setPaymentActionDialog(null);
-    } catch {
-      toast({ title: "Error", description: `Failed to ${mode} payment.`, variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || `Failed to ${mode} payment.`, variant: "destructive" });
     } finally {
       setPaymentActionLoading(false);
     }

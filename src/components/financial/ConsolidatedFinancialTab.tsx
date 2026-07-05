@@ -153,7 +153,9 @@ export function ConsolidatedFinancialTab({
         const mKey = format(startOfMonth(d), 'MMM yyyy');
         const entry = months.find(m => m.label === mKey);
         if (entry) entry.transport += r.totalPaidAmount || 0;
-      } catch {}
+      } catch (err) {
+        console.warn('Skipping transport request with unparseable requestedAt date:', r.requestedAt, err);
+      }
     });
 
     opCosts.forEach(oc => {
@@ -167,7 +169,9 @@ export function ConsolidatedFinancialTab({
         const mKey = format(startOfMonth(d), 'MMM yyyy');
         const entry = months.find(m => m.label === mKey);
         if (entry) entry.operational += oc.amount_cents / 100;
-      } catch {}
+      } catch (err) {
+        console.warn('Skipping operational cost with unparseable paid/reconciled date:', dateStr, err);
+      }
     });
 
     return months;

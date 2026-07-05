@@ -58,6 +58,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
+import type { CurrentUserClassificationRow } from '@/types/hr-finance-tables';
 import { useNavigate } from 'react-router-dom';
 import { format, subMonths } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -175,14 +176,14 @@ const RetainerManagement = () => {
           .from('current_user_classifications' as any)
           .select('*')
           .eq('has_retainer', true)
-          .eq('is_active', true)
+          .eq('is_active', true) as unknown as Promise<{ data: CurrentUserClassificationRow[] | null }>,
       ]);
 
       if (txResult.data) {
         setTransactions(txResult.data as RetainerTransaction[]);
       }
       if (classResult.data) {
-        setEligibleUsers(classResult.data as EligibleUser[]);
+        setEligibleUsers(classResult.data as unknown as EligibleUser[]);
       }
     } catch (error) {
       console.error('Failed to fetch retainer data:', error);

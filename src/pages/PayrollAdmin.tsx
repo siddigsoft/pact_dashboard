@@ -21,6 +21,7 @@ import {
   Timer, Zap, Calendar,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import type { CurrentUserClassificationRow, UserClassificationRow, CreditPayrollRunResult } from '@/types/hr-finance-tables';
 import { dispatchNotification } from '@/lib/notify';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -502,14 +503,14 @@ export default function PayrollAdmin() {
         supabase
           .from('current_user_classifications' as any)
           .select('id, user_id, classification_level, role_scope, retainer_amount_cents, retainer_currency, retainer_frequency, is_active, effective_from, effective_to')
-          .then(r => r, () => ({ data: [] as any[] })),
+          .then(r => r, () => ({ data: [] as CurrentUserClassificationRow[] })) as unknown as Promise<{ data: CurrentUserClassificationRow[] | null }>,
       ]);
       const deptMap: Record<string, string> = {};
       (depts ?? []).forEach((d: any) => { deptMap[d.id] = d.name; });
       const cfgMap: Record<string, SalaryConfig> = {};
       (configs ?? []).forEach((c: any) => { cfgMap[c.user_id] = { ...c, allowances: Array.isArray(c.allowances) ? c.allowances : [], deductions: Array.isArray(c.deductions) ? c.deductions : [] }; });
       const retainerMap: Record<string, RetainerInfo> = {};
-      ((retainersResp?.data ?? []) as any[]).forEach((r: any) => {
+      (retainersResp?.data ?? []).forEach((r: CurrentUserClassificationRow) => {
         retainerMap[r.user_id] = {
           classification_id: r.id ?? null,
           classification_level: r.classification_level ?? null,
@@ -1014,7 +1015,9 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
           // Without this, an RLS denial / network blip on the close would
           // still let the new row insert and we'd end up with two active
           // overlapping retainers for the same user.
-          const { error: closeErr } = await (supabase as any).from('user_classifications').update({
+          const { error: closeErr } = await (supabase.from('user_classifications' as any) as unknown as {
+            update: (v: Partial<UserClassificationRow>) => { eq: (col: string, val: string) => Promise<{ error: { message: string } | null }> };
+          }).update({
             effective_until: closeAt,
             is_active: false,
           }).eq('id', existingRetainer.classification_id);
@@ -1038,7 +1041,9 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
           effective_until: rEffTo || null,
           assigned_by: authUser?.id ?? null,
         };
-        const { error: retErr } = await (supabase as any).from('user_classifications').insert(insertPayload);
+        const { error: retErr } = await (supabase.from('user_classifications' as any) as unknown as {
+          insert: (v: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
+        }).insert(insertPayload);
         if (retErr) failures.push(`retainer (${retErr.message})`);
         else successes.push('retainer');
       } catch (e: any) {
@@ -3581,8 +3586,9 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
                 });
               } else if (creditRes) {
                 creditOk = true;
-                creditedCount = (creditRes as any)?.credited ?? 0;
-                const skipped = (creditRes as any)?.skipped ?? 0;
+                const creditResult = creditRes as unknown as CreditPayrollRunResult;
+                creditedCount = creditResult?.credited ?? 0;
+                const skipped = creditResult?.skipped ?? 0;
                 if (creditedCount > 0) {
                   toast({
                     title: `💰 ${creditedCount} wallet${creditedCount === 1 ? '' : 's'} credited`,
