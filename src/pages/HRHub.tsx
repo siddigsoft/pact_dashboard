@@ -43,6 +43,11 @@ const AttendancePanel      = lazy(() => import('./Attendance'));
 const PositionsPanel       = lazy(() => import('./Positions'));
 const OnboardingPanel      = lazy(() => import('./StaffOnboarding'));
 const OffboardingPanel     = lazy(() => import('./Offboarding'));
+const RecruitmentPanel     = lazy(() => import('./Recruitment'));
+const DisciplinaryPanel    = lazy(() => import('./DisciplinaryTracking'));
+const OrgChartPanel        = lazy(() => import('./OrgChart'));
+const BenefitsPanel        = lazy(() => import('./BenefitsAdministration'));
+const HeadcountPanel       = lazy(() => import('./HeadcountPlanning'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type HRSection = 'pay' | 'time-leave' | 'people' | 'analytics';
@@ -50,6 +55,7 @@ type HRTab =
   | 'payroll' | 'payroll-admin' | 'retainer' | 'eosb' | 'salary-advances' | 'salary-increments' | 'field-wallet' | 'payroll-summary'
   | 'timesheet' | 'leave-requests' | 'leave-calendar' | 'attendance'
   | 'performance' | 'training' | 'contracts' | 'positions' | 'onboarding' | 'offboarding'
+  | 'recruitment' | 'disciplinary' | 'org-chart' | 'benefits' | 'headcount'
   | 'overview' | 'hr-analytics' | 'wa-broadcast'
   // legacy aliases kept for backwards-compat URL links
   | 'hr-tools';
@@ -89,6 +95,11 @@ const SECTIONS: SectionDef[] = [
       { id: 'positions',   label: 'Positions & Vacancies', icon: Briefcase,     adminOnly: false, description: 'Manage the approved position register, track open vacancies against the org structure, and link positions to departments and salary grades.' },
       { id: 'onboarding',  label: 'Onboarding',            icon: UserPlus,      adminOnly: true,  description: 'Manage new-hire onboarding checklists — documentation collection, equipment issue, system access setup, and orientation task sign-off.' },
       { id: 'offboarding', label: 'Offboarding',           icon: LogOut,        adminOnly: true,  description: 'Process staff departures — run clearance checklists, trigger final pay calculations, confirm equipment returns, and record exit interview notes.' },
+      { id: 'recruitment', label: 'Recruitment / ATS',     icon: Briefcase,     adminOnly: true,  description: 'Post open roles, track applicant pipelines from application through offer, schedule interviews, and record hiring decisions.' },
+      { id: 'disciplinary',label: 'Disciplinary & Grievance', icon: ShieldCheck, adminOnly: true, description: 'Log and manage disciplinary cases and staff grievances with severity, investigation status, and confidential resolution notes.' },
+      { id: 'org-chart',   label: 'Org Chart',             icon: GitBranch,     adminOnly: false, description: 'Visualise the reporting hierarchy across the organisation, expand or collapse teams, and search for any staff member.' },
+      { id: 'benefits',    label: 'Benefits Administration', icon: Wallet,      adminOnly: true,  description: 'Manage health insurance, pension, and other benefit plans, and track which staff are enrolled in each.' },
+      { id: 'headcount',   label: 'Headcount Planning',    icon: TrendingUp,    adminOnly: true,  description: 'Plan budgeted vs. current headcount by department and quarter, track planned hires, and forecast salary cost impact.' },
     ],
   },
   {
@@ -213,6 +224,11 @@ export default function HRHub() {
         {tab === 'positions' && <Suspense fallback={<PanelLoader />}><PositionsPanel /></Suspense>}
         {tab === 'onboarding' && isAdmin && <Suspense fallback={<PanelLoader />}><OnboardingPanel /></Suspense>}
         {tab === 'offboarding' && isAdmin && <Suspense fallback={<PanelLoader />}><OffboardingPanel /></Suspense>}
+        {tab === 'recruitment' && isAdmin && <Suspense fallback={<PanelLoader />}><RecruitmentPanel /></Suspense>}
+        {tab === 'disciplinary' && isAdmin && <Suspense fallback={<PanelLoader />}><DisciplinaryPanel /></Suspense>}
+        {tab === 'org-chart' && <Suspense fallback={<PanelLoader />}><OrgChartPanel /></Suspense>}
+        {tab === 'benefits' && isAdmin && <Suspense fallback={<PanelLoader />}><BenefitsPanel /></Suspense>}
+        {tab === 'headcount' && isAdmin && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
 
         {/* Analytics & Comms */}
         {tab === 'overview' && isAdmin && <HROverviewPanel />}

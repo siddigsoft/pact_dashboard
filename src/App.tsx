@@ -167,6 +167,11 @@ const PerformanceReviews = lazy(() => import('./pages/PerformanceReviews'));
 const SalaryIncrements = lazy(() => import('./pages/SalaryIncrements'));
 const PositionsPage = lazy(() => import('./pages/Positions'));
 const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertifications'));
+const RecruitmentPage = lazy(() => import('./pages/Recruitment'));
+const DisciplinaryTrackingPage = lazy(() => import('./pages/DisciplinaryTracking'));
+const OrgChartPage = lazy(() => import('./pages/OrgChart'));
+const BenefitsAdministrationPage = lazy(() => import('./pages/BenefitsAdministration'));
+const HeadcountPlanningPage = lazy(() => import('./pages/HeadcountPlanning'));
 const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
 const AccountingHub = lazy(() => import('./pages/AccountingHub'));
 const PreFundingHub = lazy(() => import('./pages/PreFundingHub'));
@@ -599,6 +604,11 @@ const AppRoutes = () => {
         <Route path="/salary-increments" element={<Navigate to="/hr?tab=salary-increments" replace />} />
         <Route path="/positions" element={<Navigate to="/hr?tab=positions" replace />} />
         <Route path="/training-certifications" element={<Navigate to="/hr?tab=training" replace />} />
+        <Route path="/recruitment" element={<Navigate to="/hr?tab=recruitment" replace />} />
+        <Route path="/disciplinary-tracking" element={<Navigate to="/hr?tab=disciplinary" replace />} />
+        <Route path="/org-chart" element={<Navigate to="/hr?tab=org-chart" replace />} />
+        <Route path="/benefits-administration" element={<Navigate to="/hr?tab=benefits" replace />} />
+        <Route path="/headcount-planning" element={<Navigate to="/hr?tab=headcount" replace />} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
