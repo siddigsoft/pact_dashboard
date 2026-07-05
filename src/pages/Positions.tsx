@@ -117,7 +117,10 @@ export default function PositionsPage() {
       level: form.level || null,
       employment_type: form.employment_type,
       current_holder_id: form.current_holder_id || null,
-      vacancy_status: form.current_holder_id ? 'filled' : form.vacancy_status,
+      // Respect the admin's explicit vacancy_status choice — don't force-override it
+      // to "filled" just because a holder is set (e.g. a planned handover where the
+      // admin deliberately wants to keep it "open" until the transition completes).
+      vacancy_status: form.vacancy_status,
       target_fill_date: form.target_fill_date || null,
       monthly_budget: form.monthly_budget ? parseFloat(form.monthly_budget) : null,
       currency: form.currency || 'USD',
@@ -150,7 +153,10 @@ export default function PositionsPage() {
       list = list.filter(p =>
         p.title.toLowerCase().includes(q) ||
         (p.level ?? '').toLowerCase().includes(q) ||
-        (p.current_holder_id ? (profileMap[p.current_holder_id] ?? '').toLowerCase().includes(q) : false));
+        (p.current_holder_id
+          ? (profileMap[p.current_holder_id] ?? '').toLowerCase().includes(q)
+          // No holder assigned — let "vacant"/"open"/"none" find these positions too.
+          : ['vacant', 'open', 'none'].some(kw => kw.includes(q) || q.includes(kw))));
     }
     return list;
   }, [positions, statusFilter, deptFilter, search, profileMap]);

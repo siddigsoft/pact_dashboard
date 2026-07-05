@@ -240,7 +240,7 @@ export default function HRHub() {
 }
 
 // ── Leave Entitlements Panel ──────────────────────────────────────────────────
-interface Entitlement { id?: string; user_id: string; year: number; annual_days: number; sick_days: number; emergency_days: number; maternity_days: number; paternity_days: number; unpaid_days: number; }
+interface Entitlement { id?: string; user_id: string; year: number; annual_days: number; sick_days: number; emergency_days: number; maternity_days: number; paternity_days: number; unpaid_days: number; carried_forward_days?: number; }
 interface StaffProfile { id: string; full_name: string | null; email: string | null; }
 
 interface CarryForwardPreviewRow { userId: string; name: string; annualEntitled: number; usedAnnual: number; remaining: number; carryForward: number; }
@@ -372,12 +372,25 @@ function LeaveEntitlementsPanel() {
 
       let updated = 0;
       let created = 0;
+      let skipped = 0;
       for (const row of cfPreview) {
         if (row.carryForward <= 0) continue;
         const existing = nextMap[row.userId];
+        // Idempotency guard: if this user's next-year record already has a
+        // carry-forward applied, skip instead of adding it again on top —
+        // otherwise re-running (or double-clicking) this tool double-counts
+        // the carried-over balance every time.
+        if (existing?.id && (existing.carried_forward_days ?? 0) > 0) {
+          skipped++;
+          continue;
+        }
         if (existing?.id) {
           const newAnnual = (existing.annual_days ?? 0) + row.carryForward;
-          await supabase.from('leave_entitlements').update({ annual_days: newAnnual, updated_at: new Date().toISOString() }).eq('id', existing.id);
+          await supabase.from('leave_entitlements').update({
+            annual_days: newAnnual,
+            carried_forward_days: row.carryForward,
+            updated_at: new Date().toISOString(),
+          }).eq('id', existing.id);
           updated++;
         } else {
           // Use same base as current year's entitlement
@@ -391,11 +404,12 @@ function LeaveEntitlementsPanel() {
             maternity_days: curEntData?.maternity_days ?? 90,
             paternity_days: curEntData?.paternity_days ?? 3,
             unpaid_days: curEntData?.unpaid_days ?? 0,
+            carried_forward_days: row.carryForward,
           });
           created++;
         }
       }
-      toast({ title: `Carry-forward complete`, description: `${updated} updated · ${created} created for ${nextYear}` });
+      toast({ title: `Carry-forward complete`, description: `${updated} updated · ${created} created${skipped ? ` · ${skipped} skipped (already applied)` : ''} for ${nextYear}` });
       setCfDialog(false);
       refetch();
     } catch (e: any) {
@@ -932,7 +946,7 @@ function LeaveBalanceSummaryCard() {
     queryFn: async () => {
       const { data } = await supabase
         .from('leave_requests')
-        .select('leave_type, start_date, end_date, status')
+        .select('leave_type, start_date, end_date, status, days_count')
         .eq('status', 'approved')
         .gte('start_date', `${currentYear}-01-01`)
         .lte('end_date', `${currentYear}-12-31`);
@@ -947,9 +961,14 @@ function LeaveBalanceSummaryCard() {
 
     const usedByType: Record<string, number> = {};
     for (const lr of usedLeaves as any[]) {
-      const days = lr.start_date && lr.end_date
-        ? Math.max(1, Math.round((new Date(lr.end_date).getTime() - new Date(lr.start_date).getTime()) / 86400000) + 1)
-        : 1;
+      // Prefer the request's own days_count (set when the leave was submitted,
+      // and typically business-day aware) over recomputing from calendar days,
+      // which would count weekends as "used" and inflate utilization.
+      const days = typeof lr.days_count === 'number' && lr.days_count > 0
+        ? lr.days_count
+        : (lr.start_date && lr.end_date
+          ? Math.max(1, Math.round((new Date(lr.end_date).getTime() - new Date(lr.start_date).getTime()) / 86400000) + 1)
+          : 1);
       usedByType[lr.leave_type] = (usedByType[lr.leave_type] ?? 0) + days;
     }
 

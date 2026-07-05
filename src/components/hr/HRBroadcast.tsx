@@ -76,12 +76,17 @@ export default function HRBroadcast() {
     setSending(true);
     setSentCount(null);
     let sent = 0;
+    let failed = 0;
     try {
-      // Fire in batches of 10 to avoid overwhelming the edge function
+      // Fire in batches of 10 to avoid overwhelming the edge function. Use
+      // allSettled (not all) so one failed send doesn't abort the whole batch —
+      // otherwise a single failure would make the "sent" count wrong (either
+      // undercounting successes already dispatched, or reporting total failure
+      // when most of the batch actually went through).
       const batches: any[][] = [];
       for (let i = 0; i < recipients.length; i += 10) batches.push(recipients.slice(i, i + 10));
       for (const batch of batches) {
-        await Promise.all(batch.map((p: any) =>
+        const results = await Promise.allSettled(batch.map((p: any) =>
           supabase.functions.invoke('dispatch-notification', {
             body: {
               user_id: p.id,
@@ -92,10 +97,21 @@ export default function HRBroadcast() {
             },
           })
         ));
-        sent += batch.length;
+        for (const r of results) {
+          if (r.status === 'fulfilled' && !(r.value as any)?.error) sent++;
+          else failed++;
+        }
       }
       setSentCount(sent);
-      toast({ title: 'Broadcast sent', description: `Message delivered to ${sent} staff members.` });
+      if (failed > 0) {
+        toast({
+          title: sent > 0 ? 'Broadcast partially sent' : 'Broadcast failed',
+          description: `${sent} delivered, ${failed} failed. Please retry for the failed recipients.`,
+          variant: sent > 0 ? 'default' : 'destructive',
+        });
+      } else {
+        toast({ title: 'Broadcast sent', description: `Message delivered to ${sent} staff members.` });
+      }
       setTitle('');
       setMessage('');
     } catch (e) {

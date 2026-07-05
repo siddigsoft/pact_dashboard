@@ -316,14 +316,19 @@ export default function Offboarding() {
             <div className="grid sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2 space-y-1.5">
                 <Label>Employee / الموظف *</Label>
-                <Select value={form.user_id} onValueChange={v => {
+                <Select value={form.user_id} onValueChange={async v => {
                   setForm(f => ({ ...f, user_id: v }));
-                  // Auto-populate EOSB hint = months_of_service / 12 * monthly salary (placeholder — admin can edit)
-                  const emp = employees.find(e => e.id === v);
-                  if (emp?.contract_start_date) {
-                    const months = differenceInMonths(new Date(), parseISO(emp.contract_start_date));
-                    setForm(f => ({ ...f, eosb_payout: Math.round(months / 12 * 0) })); // user fills monthly salary
-                  }
+                  // Auto-populate EOSB hint from the employee's latest accrued EOSB balance
+                  // (eosb_accruals.closing_balance), if one has been calculated. Admin can
+                  // still edit the value before submitting.
+                  const { data: accrual } = await supabase
+                    .from('eosb_accruals')
+                    .select('closing_balance')
+                    .eq('user_id', v)
+                    .order('period', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  setForm(f => ({ ...f, eosb_payout: Number((accrual as any)?.closing_balance ?? 0) }));
                 }}>
                   <SelectTrigger data-testid="select-employee"><SelectValue placeholder="Choose employee…" /></SelectTrigger>
                   <SelectContent>{employees.map(e => <SelectItem key={e.id} value={e.id}>{e.full_name} ({e.role ?? ''})</SelectItem>)}</SelectContent>

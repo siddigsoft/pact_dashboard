@@ -69,7 +69,9 @@ export default function TrainingCertifications() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
   const [users, setUsers] = useState<{ id: string; full_name: string }[]>([]);
-  const [targetUserId, setTargetUserId] = useState(currentUser?.id ?? '');
+  // Left blank for admins so they must explicitly pick a staff member instead of
+  // silently defaulting to their own profile and logging the record on themselves.
+  const [targetUserId, setTargetUserId] = useState(isAdmin ? '' : (currentUser?.id ?? ''));
 
   const load = async () => {
     setLoading(true);
@@ -125,6 +127,7 @@ export default function TrainingCertifications() {
 
   const submit = async () => {
     if (!form.title.trim()) { toast({ title: 'Title is required', variant: 'destructive' }); return; }
+    if (isAdmin && !targetUserId) { toast({ title: 'Please select a staff member', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       const payload: any = {

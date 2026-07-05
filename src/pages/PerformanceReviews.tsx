@@ -192,8 +192,11 @@ export default function PerformanceReviews() {
     if (!form.reviewee_id || !form.review_period) return;
     setSaving(true);
 
-    const avgRating = form.competencies.length
-      ? form.competencies.reduce((s, c) => s + (c.rating ?? 0), 0) / form.competencies.length
+    // Average only over competencies that were actually rated (rating > 0) so
+    // unrated ones (default 0) don't silently drag the overall score down.
+    const ratedCompetencies = form.competencies.filter(c => (c.rating ?? 0) > 0);
+    const avgRating = ratedCompetencies.length
+      ? ratedCompetencies.reduce((s, c) => s + (c.rating ?? 0), 0) / ratedCompetencies.length
       : form.overall_rating;
 
     const payload: any = {

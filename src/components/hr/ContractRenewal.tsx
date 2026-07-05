@@ -152,7 +152,7 @@ export default function ContractRenewal() {
                 <div className="px-5 py-4 flex items-center gap-4 cursor-pointer" onClick={() => setExpandedId(isOpen ? null : c.id)}>
                   {/* Avatar */}
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2041] to-[#2563eb] flex items-center justify-center text-white font-bold text-sm shrink-0">
-                    {(c.full_name ?? '?').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    {(c.full_name ?? '?').split(' ').filter(Boolean).map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">{c.full_name}</p>

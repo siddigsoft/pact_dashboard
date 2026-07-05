@@ -41,11 +41,15 @@ export default function LeaveCalendar() {
     queryFn: async () => {
       const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
       const lastDay  = new Date(year, month + 1, 0).toISOString().slice(0, 10);
+      // Catch any leave that overlaps this month, including requests that start
+      // before the month begins but end inside it (or vice versa) — filtering on
+      // start_date/end_date being individually within the month bounds would drop
+      // those cross-boundary requests entirely.
       const { data } = await supabase
         .from('leave_requests')
-        .select('id, user_id, leave_type, start_date, end_date, status, reason, duration_days, profiles:user_id(full_name, role)')
-        .gte('start_date', firstDay)
-        .lte('end_date',   lastDay)
+        .select('id, user_id, leave_type, start_date, end_date, status, reason, days_count, profiles:user_id(full_name, role)')
+        .lte('start_date', lastDay)
+        .gte('end_date',   firstDay)
         .in('status', ['approved', 'pending'])
         .order('start_date');
       return data ?? [];
@@ -228,7 +232,7 @@ export default function LeaveCalendar() {
                       r.status === 'approved' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
                         : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700',
                     )}>{r.status}</span>
-                    <span className="text-xs font-bold text-muted-foreground shrink-0">{r.duration_days ?? 1}d</span>
+                    <span className="text-xs font-bold text-muted-foreground shrink-0">{r.days_count ?? 1}d</span>
                   </div>
                 );
               })}

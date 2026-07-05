@@ -9,3 +9,5 @@
 - [eosb-tiered-accrual](eosb-tiered-accrual.md) — EOSB day-rate must blend tiers (21d/yr ≤5yrs + 30d/yr >5yrs) per year of service, not apply one flat rate to the whole tenure.
 - [multi-currency-wallet-aggregation](multi-currency-wallet-aggregation.md) — Wallet balances are a per-currency jsonb map; summing only `balances.SDG` silently drops other currencies from financial totals.
 - [monitoring-grants-naming-collision](monitoring-grants-naming-collision.md) — MonitoringDashboard's "grants" migration hint is unrelated to financial Grant Tracking (AccountingGrants.tsx) — naming collision, not a real gap.
+- [hr-idempotent-batch-tools](hr-idempotent-batch-tools.md) — HR admin batch tools (carry-forward, broadcast) that additively update or all-or-nothing on failure need a marker column / allSettled pattern, or re-runs double-count and partial failures misreport.
+- [bug-audit-verify-before-fix](bug-audit-verify-before-fix.md) — When auditing a hub for bugs from a subagent-generated list, always re-read the real code first; several flagged issues are often already-safe false positives.

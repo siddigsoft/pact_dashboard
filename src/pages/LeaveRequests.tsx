@@ -414,14 +414,21 @@ export default function LeaveRequests() {
         }
       }
       if (!usedRpc) {
-        const { error } = await supabase.from('leave_requests').update({
+        // Guard against two reviewers processing the same request at once: only
+        // update rows that are still pending, so a second reviewer's action after
+        // someone else already decided gets a clear "no rows updated" instead of
+        // silently overwriting the first decision.
+        const { data: updatedRows, error } = await supabase.from('leave_requests').update({
           status: reviewAction,
           reviewed_by: currentUser?.id,
           reviewed_at: new Date().toISOString(),
           reviewer_notes: reviewNotes.trim() || null,
           updated_at: new Date().toISOString(),
-        }).eq('id', reviewDialog.id);
+        }).eq('id', reviewDialog.id).eq('status', 'pending').select('id');
         if (error) throw error;
+        if (!updatedRows || updatedRows.length === 0) {
+          throw new Error('This request was already reviewed by someone else. Refresh to see the latest status.');
+        }
       }
       toast({
         title: nextTier ? `Approved — forwarded to ${nextTier === 'hr' ? 'HR' : nextTier}` : `Request ${reviewAction}`,

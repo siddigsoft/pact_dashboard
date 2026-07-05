@@ -183,7 +183,13 @@ const RetainerManagement = () => {
         setTransactions(txResult.data as RetainerTransaction[]);
       }
       if (classResult.data) {
-        setEligibleUsers(classResult.data as unknown as EligibleUser[]);
+        // Guard against a missing retainer_amount_cents (e.g. incomplete classification
+        // record) turning every downstream /100 calc into NaN.
+        const normalized = (classResult.data as unknown as EligibleUser[]).map(u => ({
+          ...u,
+          retainer_amount_cents: u.retainer_amount_cents ?? 0,
+        }));
+        setEligibleUsers(normalized);
       }
     } catch (error) {
       console.error('Failed to fetch retainer data:', error);

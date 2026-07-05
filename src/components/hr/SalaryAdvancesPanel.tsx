@@ -207,10 +207,13 @@ export default function SalaryAdvancesPanel() {
     if (!recoveryAdvId || !recoveryForm.recovery_date || !recoveryForm.amount) {
       toast({ title: 'Date and amount are required', variant: 'destructive' }); return;
     }
+    const recAmt = parseFloat(recoveryForm.amount);
+    if (!Number.isFinite(recAmt) || recAmt <= 0) {
+      toast({ title: 'Recovery amount must be a positive number', variant: 'destructive' }); return;
+    }
     setSavingRecovery(true);
     const adv = (advances ?? []).find(a => a.id === recoveryAdvId);
     const outstanding = adv ? getOutstanding(recoveryAdvId, adv.amount) : 0;
-    const recAmt = parseFloat(recoveryForm.amount);
 
     const { error } = await supabase.from('hr_salary_advance_recoveries' as any).insert({
       advance_id: recoveryAdvId,
