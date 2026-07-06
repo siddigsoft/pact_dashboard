@@ -18,6 +18,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface BankAccount {
   id: string; account_name: string; bank_name: string; account_number: string | null;
@@ -41,7 +42,7 @@ const BLANK_BANK = { account_name: '', bank_name: '', account_number: '', curren
 const BLANK_LINE = { statement_date: '', description: '', reference: '', amount: '', running_balance: '', currency: 'USD' };
 
 export default function AccountingBankRecon() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
@@ -280,7 +281,19 @@ export default function AccountingBankRecon() {
     downloadCsv(`bank-statement-${selectedBank?.account_name ?? 'recon'}-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = statementLines.map(l => ({
+      'Date': l.statement_date,
+      'Description': l.description ?? '',
+      'Reference': l.reference ?? '',
+      'Amount': l.amount,
+      'Running Balance': l.running_balance ?? 0,
+      'Matched': l.is_matched ? 'Yes' : 'No',
+      'Matched JE': l.matched_journal_entry_id ?? '',
+    }));
+    exportToExcel(rows, `Bank Recon - ${selectedBank?.account_name ?? 'Report'}`, `bank-recon-${selectedBank?.account_name ?? 'report'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -309,8 +322,11 @@ export default function AccountingBankRecon() {
               </Button>
             </>
           )}
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!statementLines.length} data-testid="button-export">
-            <Download className="h-4 w-4 mr-1" /> Export
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!statementLines.length} data-testid="button-export-bank-recon">
+            <Download className="h-4 w-4 mr-1" /> Export Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!statementLines.length} data-testid="button-export-csv">
+            <Download className="h-4 w-4 mr-1" /> Export CSV
           </Button>
         </div>
       </div>

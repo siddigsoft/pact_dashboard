@@ -12,6 +12,7 @@ import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, Legend } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -39,7 +40,7 @@ function classifyCF(accountType: string, subtype: string | null): CFCategory {
 interface CfSection { label: string; labelAr: string; items: { account_id: string; code: string; name: string; inflow: number; outflow: number; net: number }[]; totalInflow: number; totalOutflow: number; total: number }
 
 export default function AccountingCashFlow() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
 
@@ -158,6 +159,29 @@ export default function AccountingCashFlow() {
     downloadCsv(`cash-flow-${new Date().toISOString().slice(0, 10)}.csv`, rows);
   };
 
+  const exportExcel = () => {
+    const mainRows: (string | number)[][] = [];
+    for (const [key, sec] of Object.entries(sections) as [string, CfSection][]) {
+      mainRows.push([sec.label, '', '', '', '']);
+      sec.items.forEach(i => mainRows.push(['', `${i.code} ${i.name}`, i.inflow, i.outflow, i.net]));
+      mainRows.push(['SUBTOTAL', '', sec.totalInflow, sec.totalOutflow, sec.total]);
+      mainRows.push(['', '', '', '', '']);
+    }
+
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Cash Flow Statement',
+      subtitleLine: `Period: ${periodLabel(periodId)} | Currency: ${selectedCurrency} | Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`,
+      metaLine: `Net Change in Cash: ${formatNumber(netChange)} ${selectedCurrency}`,
+      mainSheet: {
+        sheetName: 'Cash Flow',
+        headers: ['Category', 'Account', 'Inflow', 'Outflow', 'Net'],
+        rows: mainRows,
+        totalsRow: ['', 'NET CHANGE IN CASH', '', '', netChange],
+      },
+      filenamePrefix: `cash-flow-${format(new Date(), 'yyyy-MM-dd')}`,
+    });
+  };
+
   const exportPdf = async () => {
     setPdfBusy(true);
     try {
@@ -177,7 +201,7 @@ export default function AccountingCashFlow() {
     } finally { setPdfBusy(false); }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const SectionBlock = ({ sectionKey, sec }: { sectionKey: string; sec: CfSection }) => {
@@ -255,6 +279,7 @@ export default function AccountingCashFlow() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={runReport} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={loading} data-testid="button-csv"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={loading} data-testid="button-export-cash-flow"><Download className="h-4 w-4 mr-1" />Excel</Button>
           <Button variant="outline" size="sm" onClick={exportPdf} disabled={loading || pdfBusy} data-testid="button-pdf">{pdfBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}PDF</Button>
         </div>
       </div>

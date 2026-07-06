@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { exportToExcel } from '@/utils/report-export';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -1050,6 +1051,17 @@ export default function PreFundingRegistry() {
     return true;
   });
 
+  const exportFunds = () => exportToExcel(
+    filtered.map(f => ({
+      'Fund Name': f.name, 'Source': (f as any).source ?? '', 'Status': f.status,
+      'Amount': f.amount, 'Currency': f.currency,
+      'Project': projects.find(p => p.id === (f as any).project_id)?.name ?? '',
+      'Created At': (f as any).created_at ? format(new Date((f as any).created_at), 'yyyy-MM-dd') : '',
+    })),
+    'Fund Registry',
+    `fund-registry-${format(new Date(), 'yyyy-MM-dd')}.xlsx`
+  );
+
   if (!canAccess) {
     return (
       <div className="p-8 text-center">
@@ -1099,6 +1111,9 @@ export default function PreFundingRegistry() {
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-registry">
             <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportFunds} data-testid="button-export-fund-registry">
+            <Download className="h-4 w-4 mr-1.5" />Export
           </Button>
           {canAccess && (
             <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white" onClick={openNew} data-testid="button-new-fund-registry">

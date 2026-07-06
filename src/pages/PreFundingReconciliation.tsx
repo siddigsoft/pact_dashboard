@@ -29,6 +29,7 @@ import { linkPaymentToKnownFund } from '@/utils/preFundLinkage';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { FilePreviewDialog } from '@/components/ui/FilePreviewDialog';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -474,102 +475,87 @@ async function generateDonorStatementPDF(
 }
 
 // ── Excel Reconciliation Export ───────────────────────────────────────────
-function generateReconciliationExcel(
+function handleExportReconciliationExcel(
   fund: PreFundSummary,
   transactions: PreFundTransaction[],
   profileMap: Map<string, string>,
   reconciliations: Reconciliation[],
-): { buffer: ArrayBuffer; filename: string } {
-  const wb = XLSX.utils.book_new();
-
-  // ── Sheet 1: Fund Summary ─────────────────────────────────────────────
+) {
   const period = fund.start_date && fund.end_date
     ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
     : '—';
-  const summaryRows = [
-    ['PACT – Pre-Fund Reconciliation Report'],
-    ['Generated', format(new Date(), 'MMMM d, yyyy HH:mm')],
-    [],
-    ['FUND DETAILS'],
-    ['Fund Name',       fund.name],
-    ['Donor / Source',  fund.source ?? '—'],
-    ['Currency',        fund.currency],
-    ['Reporting Period',period],
-    ['Status',          fund.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
-    [],
-    ['FINANCIAL SUMMARY'],
-    ['Item',            'Amount'],
-    ['Total Funded',    fund.amount],
-    ['Total Paid Out',  fund.paid_amount],
-    ['Total Committed', fund.committed_amount],
-    ['Available Balance',fund.available_balance],
-  ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary['!cols'] = [{ wch: 22 }, { wch: 36 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Fund Summary');
 
-  // ── Sheet 2: All Transactions ─────────────────────────────────────────
-  const txnHeader = [
-    'Date', 'Created At', 'Type', 'Reference', 'Description',
-    'Source Module', 'Source Record ID',
-    `Amount (${fund.currency})`, 'Reconciled', 'Reconciled At',
-    'Paid By (User)', 'Recorded By',
-    'Receipt URL', 'GL Journal Entry',
-  ];
-  const txnRows = transactions.map(t => [
-    t.transaction_date,
-    t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '—',
-    TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
-    t.reference ?? '—',
-    t.description ?? '—',
-    t.source_table ? t.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—',
-    t.source_id ?? '—',
-    t.amount,
-    t.reconciled ? 'Yes' : 'No',
-    t.reconciled_at ? format(parseISO(t.reconciled_at), 'yyyy-MM-dd HH:mm:ss') : '—',
-    t.user_id ? (profileMap.get(t.user_id) ?? t.user_id) : '—',
-    t.created_by ? (profileMap.get(t.created_by) ?? t.created_by) : '—',
-    t.receipt_url ?? '—',
-    t.gl_journal_entry_id ?? '—',
-  ]);
-  const wsTxns = XLSX.utils.aoa_to_sheet([txnHeader, ...txnRows]);
-  wsTxns['!cols'] = [
-    { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 36 },
-    { wch: 26 }, { wch: 38 }, { wch: 16 }, { wch: 10 }, { wch: 20 },
-    { wch: 24 }, { wch: 24 }, { wch: 54 }, { wch: 38 },
-  ];
-  // Bold header row
-  const range = XLSX.utils.decode_range(wsTxns['!ref'] ?? 'A1');
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = wsTxns[XLSX.utils.encode_cell({ r: 0, c })];
-    if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: '0F2041' } }, font_color: { rgb: 'FFFFFF' } };
-  }
-  XLSX.utils.book_append_sheet(wb, wsTxns, 'Transactions');
-
-  // ── Sheet 3: Reconciliation History ──────────────────────────────────
-  if (reconciliations.length > 0) {
-    const reconHeader = ['Period Start', 'Period End', 'Closed At', 'Total Funded', 'Total Paid', 'Total Committed', 'Variance', 'Surplus Action', 'Carry Forward', 'Returned', 'Notes'];
-    const reconRows = reconciliations.map(r => [
-      r.period_start ?? '—',
-      r.period_end ?? '—',
-      r.closed_at ? format(parseISO(r.closed_at), 'yyyy-MM-dd HH:mm:ss') : '—',
-      r.total_funded ?? 0,
-      r.total_paid ?? 0,
-      r.total_committed ?? 0,
-      r.variance ?? 0,
-      r.surplus_action?.replace(/_/g, ' ') ?? '—',
-      r.carry_forward_amount ?? 0,
-      r.return_amount ?? 0,
-      r.notes ?? '—',
-    ]);
-    const wsRecon = XLSX.utils.aoa_to_sheet([reconHeader, ...reconRows]);
-    wsRecon['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 20 }, ...Array(8).fill({ wch: 14 })];
-    XLSX.utils.book_append_sheet(wb, wsRecon, 'Reconciliation History');
-  }
-
-  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
-  const filename = `PreFund-Recon-${fund.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
-  return { buffer, filename };
+  exportStandardExcel({
+    reportTitle: 'PACT Command Center - Pre-Fund Reconciliation Report',
+    subtitleLine: `Fund: ${fund.name} | Donor: ${fund.source ?? '—'} | Period: ${period} | Generated: ${format(new Date(), 'PPP p')}`,
+    metaLine: `Total Funded: ${fund.currency} ${formatNumber(fund.amount, 0)} | Available: ${fund.currency} ${formatNumber(fund.available_balance, 0)}`,
+    filenamePrefix: `PreFund-Recon-${fund.name.replace(/\s+/g, '-')}`,
+    mainSheet: {
+      sheetName: 'Transactions',
+      headers: [
+        'Date', 'Created At', 'Type', 'Reference', 'Description',
+        'Source Module', 'Source Record ID',
+        `Amount (${fund.currency})`, 'Reconciled', 'Reconciled At',
+        'Paid By (User)', 'Recorded By',
+        'Receipt URL', 'GL Journal Entry'
+      ],
+      rows: transactions.map(t => [
+        t.transaction_date,
+        t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+        TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
+        t.reference ?? '—',
+        t.description ?? '—',
+        t.source_table ? t.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—',
+        t.source_id ?? '—',
+        t.amount,
+        t.reconciled ? 'Yes' : 'No',
+        t.reconciled_at ? format(parseISO(t.reconciled_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+        t.user_id ? (profileMap.get(t.user_id) ?? t.user_id) : '—',
+        t.created_by ? (profileMap.get(t.created_by) ?? t.created_by) : '—',
+        t.receipt_url ?? '—',
+        t.gl_journal_entry_id ?? '—',
+      ]),
+      colWidths: {
+        0: 12, 1: 20, 2: 14, 3: 18, 4: 36, 5: 26, 6: 38, 7: 16, 8: 10, 9: 20, 10: 24, 11: 24, 12: 54, 13: 38
+      }
+    },
+    summarySheet: {
+      title: 'Fund Summary',
+      rows: [
+        ['Fund Name', fund.name],
+        ['Donor / Source', fund.source ?? '—'],
+        ['Currency', fund.currency],
+        ['Reporting Period', period],
+        ['Status', fund.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
+        [],
+        ['FINANCIAL SUMMARY'],
+        ['Total Funded', fund.amount],
+        ['Total Paid Out', fund.paid_amount],
+        ['Total Committed', fund.committed_amount],
+        ['Available Balance', fund.available_balance],
+      ]
+    },
+    breakdownSheets: reconciliations.length > 0 ? [
+      {
+        title: 'Reconciliation History',
+        sheetName: 'Reconciliation History',
+        headers: ['Period Start', 'Period End', 'Closed At', 'Total Funded', 'Total Paid', 'Total Committed', 'Variance', 'Surplus Action', 'Carry Forward', 'Returned', 'Notes'],
+        rows: reconciliations.map(r => [
+          r.period_start ?? '—',
+          r.period_end ?? '—',
+          r.closed_at ? format(parseISO(r.closed_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+          r.total_funded ?? 0,
+          r.total_paid ?? 0,
+          r.total_committed ?? 0,
+          r.variance ?? 0,
+          r.surplus_action?.replace(/_/g, ' ') ?? '—',
+          r.carry_forward_amount ?? 0,
+          r.return_amount ?? 0,
+          r.notes ?? '—',
+        ])
+      }
+    ] : []
+  });
 }
 
 async function uploadPdfToStorage(blob: Blob, filename: string, fundId: string): Promise<string | null> {
@@ -1687,12 +1673,8 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setExportingExcel(true);
     try {
-      const { buffer, filename } = generateReconciliationExcel(selectedFund, transactions, profileMap, reconciliations);
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
-      toast({ title: 'Excel exported', description: `${filename} — ${transactions.length} transactions` });
+      handleExportReconciliationExcel(selectedFund, transactions, profileMap, reconciliations);
+      toast({ title: 'Excel exported', description: `${transactions.length} transactions included` });
     } catch (e: any) {
       toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
     } finally { setExportingExcel(false); }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +20,7 @@ import {
   ChevronRight, ChevronDown, Plus, Pencil, Trash2, Globe,
 } from 'lucide-react';
 import { ACCT_TYPE_LABELS, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 
@@ -71,7 +73,8 @@ const BLANK_FORM = {
 type FormState = typeof BLANK_FORM;
 
 export default function AccountingCOA() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { authReady } = useAppContext();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
 
@@ -191,6 +194,30 @@ export default function AccountingCOA() {
       return [r.code, r.name_en, r.name_ar, r.account_type, r.subtype, r.is_active ? 'Yes' : 'No', r.is_postable ? 'Yes' : 'No', r.parent_id ?? '', ctr?.code ?? '', r.version];
     });
     downloadCsv(`chart-of-accounts-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  };
+
+  const exportExcel = () => {
+    const rows = filtered.map(r => {
+      const ctr = countries.find(c => c.id === r.country_id);
+      return {
+        'Code': r.code,
+        'Name (EN)': r.name_en,
+        'Name (AR)': r.name_ar,
+        'Type': r.account_type,
+        'Subtype': r.subtype,
+        'Active': r.is_active ? 'Yes' : 'No',
+        'Postable': r.is_postable ? 'Yes' : 'No',
+        'Parent ID': r.parent_id ?? '',
+        'Country': ctr?.code ?? '',
+        'Version': r.version
+      };
+    });
+    const { format } = import.meta.env.VITE_DATE_FNS_FORMAT || { format: (d: any, f: string) => d.toISOString().slice(0, 10) };
+    // Trying to use format from date-fns which is likely already imported or available.
+    // Actually, I can just use a simple date string if format is not easily accessible here.
+    // But it is imported in many files. Let's see if it's imported here.
+    // It's not imported. I'll use new Date().toISOString().slice(0, 10)
+    exportToExcel(rows, 'Chart of Accounts', `chart-of-accounts-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const toggle = (id: string) => {
@@ -389,8 +416,22 @@ export default function AccountingCOA() {
     );
   };
 
+  const exportExcel = () => {
+    const data = filtered.map(r => ({
+      'Code': r.code,
+      'Name (EN)': r.name_en,
+      'Name (AR)': r.name_ar,
+      'Type': ACCT_TYPE_LABELS[r.account_type]?.en ?? r.account_type,
+      'Subtype': r.subtype,
+      'Postable': r.is_postable ? 'Yes' : 'No',
+      'Active': r.is_active ? 'Yes' : 'No',
+      'Country': countries.find(c => c.id === r.country_id)?.name_en ?? 'Global'
+    }));
+    exportToExcel(data, 'Chart of Accounts', `coa-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   // ── guards ────────────────────────────────────────────────
-  if (authLoading) {
+  if (!authReady || !isAuthenticated) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
   if (!allowed) return <Navigate to="/" replace />;
@@ -420,6 +461,9 @@ export default function AccountingCOA() {
           )}
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-coa">
+            <Download className="w-4 h-4 mr-1" /> Excel
           </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
             <Download className="w-4 h-4 mr-1" /> CSV

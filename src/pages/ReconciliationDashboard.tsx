@@ -24,10 +24,10 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { exportMultiSheetExcel } from '@/utils/report-export';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isValid, differenceInDays, startOfMonth, subDays } from 'date-fns';
-import * as XLSX from 'xlsx';
 
 interface OpCostRow {
   id: string;
@@ -458,9 +458,6 @@ const ReconciliationDashboard = () => {
       'Days Since Payment': getDaysSincePayment(item.paid_at),
       'Project': item.project_id || 'General',
     }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Pending Reconciliation');
 
     const reconData = recentlyReconciled.map(item => ({
       'Ref #': item.id.slice(0, 8).toUpperCase(),
@@ -471,10 +468,12 @@ const ReconciliationDashboard = () => {
       'Paid Date': safeFormatDate(item.paid_at),
       'Reconciled Date': safeFormatDate(item.reconciled_at),
     }));
-    const ws2 = XLSX.utils.json_to_sheet(reconData);
-    XLSX.utils.book_append_sheet(wb, ws2, 'Recently Reconciled');
 
-    XLSX.writeFile(wb, `Reconciliation_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportMultiSheetExcel([
+      { name: 'Pending Reconciliation', data },
+      { name: 'Recently Reconciled', data: reconData }
+    ], `Reconciliation_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+
     toast({ title: 'Exported', description: 'Reconciliation data exported to Excel.' });
   };
 

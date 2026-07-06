@@ -16,10 +16,11 @@ import { Switch } from '@/components/ui/switch';
 import {
   GitBranch, Plus, Trash2, ChevronUp, ChevronDown, RefreshCw,
   AlertTriangle, CheckCircle2, Clock, Users, ArrowRight, Edit2,
-  X, Search, CheckCircle, XCircle, ShieldCheck,
+  X, Search, CheckCircle, XCircle, ShieldCheck, Download,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -386,6 +387,17 @@ export default function PreFundingApprovalFlow() {
     f.project_id === projectFilter
   );
 
+  function exportFunds() {
+    const rows = filteredFunds.map(f => ({
+      'Fund Name': f.name,
+      'Project': f.project_name ?? '—',
+      'Status': f.status.replace(/_/g, ' '),
+      'Currency': f.currency,
+      'Amount': f.amount,
+    }));
+    exportToExcel(rows, 'Pre-Fund Approval Flows', `pre-fund-approvals-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   if (!canAccess) return (
     <div className="p-8 text-center">
       <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
@@ -409,9 +421,14 @@ export default function PreFundingApprovalFlow() {
             <p className="text-sm text-muted-foreground">Configure per-fund approval chains and process pending approvals</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={loadFunds} className="shrink-0">
-          <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportFunds} data-testid="button-export-prefunding-approvals">
+            <Download className="h-4 w-4 mr-1.5" />Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadFunds} className="shrink-0">
+            <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
+          </Button>
+        </div>
       </div>
 
       {error && <Alert variant="destructive"><AlertDescription>{error} — run pre_funding_migration.sql</AlertDescription></Alert>}

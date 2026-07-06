@@ -69,18 +69,34 @@ function getStatusColor(status: string): { font: string; bg: string } {
 }
 
 function addTitle(ws: ExcelJS.Worksheet, title: string, colSpan: number) {
-  const row = ws.addRow([title]);
-  row.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
-  row.height = 26;
-  if (colSpan > 1) ws.mergeCells(row.number, 1, row.number, colSpan);
-  return row;
+  /* Row 1: Organisation name */
+  const r1 = ws.addRow(['PACT Command Center']);
+  r1.height = 22;
+  ws.mergeCells(r1.number, 1, r1.number, colSpan);
+  r1.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+  r1.getCell(1).font = { bold: true, size: 13, name: 'Calibri', color: { argb: WHITE } };
+  r1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+  /* Row 2: Report title */
+  const r2 = ws.addRow([title]);
+  r2.height = 28;
+  ws.mergeCells(r2.number, 1, r2.number, colSpan);
+  r2.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY_MID } };
+  r2.getCell(1).font = { bold: true, size: 15, name: 'Calibri', color: { argb: WHITE } };
+  r2.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+  return r2;
 }
 
-function addSubtitle(ws: ExcelJS.Worksheet, text: string, colSpan: number) {
-  const row = ws.addRow([text]);
-  row.font = bodyFont(10, 'FF5A5F6E');
+function addSubtitle(ws: ExcelJS.Worksheet, text: string, colSpan: number, count?: number) {
+  const generatedText = `Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm')}`;
+  const countText = count !== undefined ? `   |   Total Records: ${count}` : '';
+  const row = ws.addRow([`${text}   |   ${generatedText}${countText}`]);
   row.height = 18;
   if (colSpan > 1) ws.mergeCells(row.number, 1, row.number, colSpan);
+  row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F4FB' } };
+  row.getCell(1).font = { size: 10, name: 'Calibri', italic: true, color: { argb: '5A5F6E' } };
+  row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
 }
 
 function addHeaderRow(ws: ExcelJS.Worksheet, headers: string[]): ExcelJS.Row {
@@ -192,8 +208,8 @@ export async function exportOverviewToFormattedExcel(
   wb.created = new Date();
 
   const ws = wb.addWorksheet('Advance Requests');
-  addTitle(ws, 'Transportation Advance Cost Report', 10);
-  addSubtitle(ws, `Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm')}`, 10);
+  addTitle(ws, 'Transportation Advance Cost Report', 11);
+  addSubtitle(ws, 'Overview of all advance requests', 11, filteredRequests.length);
   ws.addRow([]);
 
   const summHeaders = ['Metric', 'Value'];
@@ -270,7 +286,7 @@ export async function exportAgingToFormattedExcel(
 
   const ws = wb.addWorksheet('Aging Summary');
   addTitle(ws, 'Advance Aging Report', 3);
-  addSubtitle(ws, `Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm')}`, 3);
+  addSubtitle(ws, 'Summary of outstanding advances by aging bucket', 3, agingData.totalCount);
   ws.addRow([]);
 
   addHeaderRow(ws, ['Aging Bucket', 'Count', 'Total Amount (SDG)']);
@@ -323,7 +339,7 @@ export async function exportGroupedToFormattedExcel(
 
   const ws = wb.addWorksheet(`Summary by ${groupName}`);
   addTitle(ws, `Advance Requests by ${groupName}`, 5);
-  addSubtitle(ws, `Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm')}`, 5);
+  addSubtitle(ws, `Summary of advance requests grouped by ${groupName}`, 5, filteredRequests.length);
   ws.addRow([]);
 
   const hasP = groupData.some(g => g.pending !== undefined);

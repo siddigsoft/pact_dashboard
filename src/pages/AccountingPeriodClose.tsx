@@ -20,6 +20,7 @@ import { format, parseISO, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface FiscalYear { id: string; code: string; start_date: string; end_date: string; is_closed: boolean }
 interface Period {
@@ -206,6 +207,18 @@ export default function AccountingPeriodClose() {
     if (expanded.has(period.id)) void loadHealth({ ...period, status: next as any });
   };
 
+  const exportPeriods = () => {
+    const rows = visiblePeriods.map(p => ({
+      'FY Code': selectedFY?.code || '',
+      'Period No': p.period_no,
+      'Start Date': p.start_date,
+      'End Date': p.end_date,
+      'Status': STATUS_CFG[p.status]?.label || p.status,
+      'Closed At': p.closed_at ? format(parseISO(p.closed_at), 'yyyy-MM-dd HH:mm') : '',
+    }));
+    exportToExcel(rows, `Periods - ${selectedFY?.code || 'Export'}`, `fiscal-periods-${selectedFY?.code || format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const stats = useMemo(() => {
     const open   = visiblePeriods.filter(p => p.status === 'open').length;
     const closed = visiblePeriods.filter(p => p.status !== 'open').length;
@@ -238,9 +251,14 @@ export default function AccountingPeriodClose() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">Manage fiscal period close workflow with pre-close health checks.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-close">
-          <RefreshCw className="w-4 h-4 mr-1" /> Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2 ml-auto">
+          <Button variant="outline" size="sm" onClick={exportPeriods} disabled={!visiblePeriods.length} data-testid="button-export-accounting-period-close">
+            <ClipboardCheck className="w-4 h-4 mr-1" /> Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-close">
+            <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* FY selector */}

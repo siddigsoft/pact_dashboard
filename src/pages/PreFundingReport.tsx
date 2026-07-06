@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { exportMultiSheetExcel } from '@/utils/report-export';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -465,155 +466,66 @@ export default function PreFundingReport() {
   };
 
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const now = format(new Date(), 'MMM d, yyyy HH:mm');
-    const filename = `PreFunding-Report-${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
-
-    // ── Helper: set column widths ──────────────────────────────────────────────
-    const setCols = (ws: XLSX.WorkSheet, widths: number[]) => {
-      ws['!cols'] = widths.map(w => ({ wch: w }));
-    };
-
-    // ── Sheet 1: Cover / Summary ───────────────────────────────────────────────
     const currency = filteredFunds[0]?.currency ?? 'USD';
-    const summaryData: any[][] = [
-      ['PACT — PRE-FUNDING REPORT', '', '', ''],
-      [`Generated: ${now}`, '', '', ''],
-      ['', '', '', ''],
-      ['REPORT FILTERS', '', '', ''],
-      ['Status Filter', statusFilter === 'all' ? 'All Statuses' : STATUS_CFG[statusFilter]?.label ?? statusFilter, '', ''],
-      ['Currency Filter', currencyFilter, '', ''],
-      ['Date From', dateFrom || '—', '', ''],
-      ['Date To', dateTo || '—', '', ''],
-      ['', '', '', ''],
-      ['SUMMARY STATISTICS', '', '', ''],
-      ['Metric', 'Value', '', ''],
-      ['Total Funds in View', filteredFunds.length, '', ''],
-      ['Active Funds', kpis.activeFunds.length, '', ''],
-      ['Total Funded', `${currency} ${formatNumber(kpis.totalFunded, 2)}`, '', ''],
-      ['Total Disbursed', `${currency} ${formatNumber(kpis.totalPaid, 2)}`, '', ''],
-      ['Total Committed', `${currency} ${formatNumber(kpis.totalCommit, 2)}`, '', ''],
-      ['Available Balance', `${currency} ${formatNumber(kpis.totalBalance, 2)}`, '', ''],
-      ['Overall Utilization', `${kpis.utilPct}%`, '', ''],
-      ['Total Transactions', filteredTxns.length, '', ''],
-      ['Total Approval Steps', filteredSteps.length, '', ''],
-      ['', '', '', ''],
-      ['STATUS BREAKDOWN', '', '', ''],
-      ['Status', 'Count', 'Amount', 'Currency'],
-      ...Object.entries(
-        filteredFunds.reduce((acc, f) => {
-          if (!acc[f.status]) acc[f.status] = { count: 0, amount: 0 };
-          acc[f.status].count++;
-          acc[f.status].amount += f.amount;
-          return acc;
-        }, {} as Record<string, { count: number; amount: number }>)
-      ).map(([status, v]) => [STATUS_CFG[status]?.label ?? status, v.count, v.amount, currency]),
-    ];
-    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-    setCols(summaryWs, [28, 22, 16, 8]);
-    XLSX.utils.book_append_sheet(wb, summaryWs, 'Cover');
 
-    // ── Sheet 2: Fund Detail ───────────────────────────────────────────────────
-    const fundHeaders = [
-      'Fund Name', 'Project', 'Source / Donor', 'Status', 'Currency',
-      'Amount', 'Disbursed', 'Committed', 'Balance', 'Utilization %',
-      'Start Date', 'End Date', 'Created',
-    ];
-    const fundRows = filteredFunds.map(f => [
-      f.name,
-      f.project_name ?? '—',
-      f.source ?? '—',
-      STATUS_CFG[f.status]?.label ?? f.status,
-      f.currency,
-      f.amount,
-      f.paid_amount ?? 0,
-      f.committed_amount ?? 0,
-      f.available_balance ?? 0,
-      f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
-      f.start_date ?? '',
-      f.end_date ?? '',
-      f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
-    ]);
-    const totalsRow = [
-      `TOTALS (${filteredFunds.length} funds)`, '', '', '', currency,
-      filteredFunds.reduce((s, f) => s + f.amount, 0),
-      filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0),
-      filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0),
-      filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0),
-      kpis.utilPct,
-      '', '', '',
-    ];
-    const fundWs = XLSX.utils.aoa_to_sheet([fundHeaders, ...fundRows, [], totalsRow]);
-    setCols(fundWs, [30, 22, 22, 18, 8, 14, 14, 14, 14, 12, 12, 12, 12]);
-    XLSX.utils.book_append_sheet(wb, fundWs, 'Fund Detail');
-
-    // ── Sheet 3: Transactions ──────────────────────────────────────────────────
-    const txnHeaders = ['Date', 'Fund Name', 'Type', 'Reference', 'Description', 'Amount', 'Currency'];
-    const txnRows = filteredTxns.map(t => [
-      t.transaction_date ?? '',
-      t.fund_name ?? '—',
-      t.transaction_type,
-      t.reference ?? '',
-      t.description ?? '',
-      t.amount,
-      t.currency,
-    ]);
-    const txnTotals = ['TOTAL', '', '', '', '',
-      filteredTxns.reduce((s, t) => s + t.amount, 0), ''];
-    const txnWs = XLSX.utils.aoa_to_sheet([txnHeaders, ...txnRows, [], txnTotals]);
-    setCols(txnWs, [12, 30, 14, 18, 30, 14, 8]);
-    XLSX.utils.book_append_sheet(wb, txnWs, 'Transactions');
-
-    // ── Sheet 4: Approval Chain ────────────────────────────────────────────────
-    // Group by fund — each fund gets a header row then its steps
-    const chainRows: any[][] = [
-      ['APPROVAL CHAIN REPORT', '', '', '', '', '', ''],
-      [`Generated: ${now}`, '', '', '', '', '', ''],
-      [],
-      ['Fund Name', 'Step #', 'Step Label', 'Required', 'Assignee(s)', 'Status', 'Date Actioned', 'Notes'],
-    ];
-    // Group steps by fund
-    const byFundChain: Record<string, StepRow[]> = {};
-    filteredSteps.forEach(s => {
-      if (!byFundChain[s.pre_fund_request_id]) byFundChain[s.pre_fund_request_id] = [];
-      byFundChain[s.pre_fund_request_id].push(s);
-    });
-    Object.values(byFundChain).forEach(fundSteps => {
-      const fundName = fundSteps[0].fund_name ?? '—';
-      fundSteps.forEach((s, i) => {
-        chainRows.push([
-          i === 0 ? fundName : '',
-          s.step_order,
-          s.step_label,
-          s.is_required ? 'Required' : 'Optional',
-          s.assignee_names ?? '—',
-          s.status === 'approved' ? '✓ Approved' : s.status === 'rejected' ? '✗ Rejected' : '⏳ Pending',
-          s.approved_at ? format(parseISO(s.approved_at), 'yyyy-MM-dd HH:mm') : '—',
-          s.notes ?? '',
-        ]);
-      });
-      chainRows.push([]); // blank row between funds
-    });
-    const chainWs = XLSX.utils.aoa_to_sheet(chainRows);
-    setCols(chainWs, [30, 6, 22, 10, 28, 12, 18, 30]);
-    XLSX.utils.book_append_sheet(wb, chainWs, 'Approval Chain');
-
-    // ── Sheet 5: Monthly Trend ─────────────────────────────────────────────────
-    const trendHeaders = ['Month', 'Disbursed', 'Receipts', 'Net'];
-    const trendRows = monthlyData.map(m => {
-      const disbursed = filteredTxns
-        .filter(t => t.transaction_type === 'payment' && t.transaction_date?.startsWith(m.label.replace(' ', '-').toLowerCase()))
-        .reduce((s, t) => s + t.amount, 0);
-      const receipts = filteredTxns
-        .filter(t => t.transaction_type === 'receipt' && t.transaction_date?.startsWith(m.label.replace(' ', '-').toLowerCase()))
-        .reduce((s, t) => s + t.amount, 0);
-      return [m.label, m.disbursed, receipts, receipts - m.disbursed];
-    });
-    const trendWs = XLSX.utils.aoa_to_sheet([trendHeaders, ...trendRows]);
-    setCols(trendWs, [12, 16, 16, 16]);
-    XLSX.utils.book_append_sheet(wb, trendWs, 'Monthly Trend');
-
-    XLSX.writeFile(wb, filename);
+    exportMultiSheetExcel([
+      {
+        name: 'Summary',
+        data: [
+          { Metric: 'Total Funds in View', Value: filteredFunds.length },
+          { Metric: 'Active Funds', Value: kpis.activeFunds.length },
+          { Metric: 'Total Funded', Value: `${currency} ${formatNumber(kpis.totalFunded, 2)}` },
+          { Metric: 'Total Disbursed', Value: `${currency} ${formatNumber(kpis.totalPaid, 2)}` },
+          { Metric: 'Total Committed', Value: `${currency} ${formatNumber(kpis.totalCommit, 2)}` },
+          { Metric: 'Available Balance', Value: `${currency} ${formatNumber(kpis.totalBalance, 2)}` },
+          { Metric: 'Overall Utilization', Value: `${kpis.utilPct}%` },
+          { Metric: 'Total Transactions', Value: filteredTxns.length },
+        ]
+      },
+      {
+        name: 'Fund Detail',
+        data: filteredFunds.map(f => ({
+          'Fund Name': f.name,
+          'Project': f.project_name ?? '—',
+          'Source / Donor': f.source ?? '—',
+          Status: STATUS_CFG[f.status]?.label ?? f.status,
+          Currency: f.currency,
+          Amount: f.amount,
+          Disbursed: f.paid_amount ?? 0,
+          Committed: f.committed_amount ?? 0,
+          Balance: f.available_balance ?? 0,
+          'Utilization %': f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
+          'Start Date': f.start_date ?? '',
+          'End Date': f.end_date ?? '',
+          Created: f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
+        }))
+      },
+      {
+        name: 'Transactions',
+        data: filteredTxns.map(t => ({
+          Date: t.transaction_date ?? '',
+          'Fund Name': t.fund_name ?? '—',
+          Type: t.transaction_type,
+          Reference: t.reference ?? '',
+          Description: t.description ?? '',
+          Amount: t.amount,
+          Currency: t.currency,
+        }))
+      },
+      {
+        name: 'Approval Chain',
+        data: filteredSteps.map(s => ({
+          'Fund Name': s.fund_name ?? '—',
+          'Step #': s.step_order,
+          'Step Label': s.step_label,
+          'Required': s.is_required ? 'Required' : 'Optional',
+          'Assignee(s)': s.assignee_names ?? '—',
+          Status: s.status === 'approved' ? '✓ Approved' : s.status === 'rejected' ? '✗ Rejected' : '⏳ Pending',
+          'Date Actioned': s.approved_at ? format(parseISO(s.approved_at), 'yyyy-MM-dd HH:mm') : '—',
+          Notes: s.notes ?? '',
+        }))
+      }
+    ], `PreFunding-Report-${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────

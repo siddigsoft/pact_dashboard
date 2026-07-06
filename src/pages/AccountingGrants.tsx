@@ -21,6 +21,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
+import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -75,7 +76,7 @@ const BLANK_EXPENSE = { expense_date: '', amount: '', description: '' };
 const BLANK_MILESTONE = { title: '', due_date: '', status: 'pending', submitted_date: '', notes: '' };
 
 export default function AccountingGrants() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
@@ -292,6 +293,23 @@ export default function AccountingGrants() {
     downloadCsv(`grants-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
+  const exportExcel = () => {
+    const data = filtered.map(g => ({
+      'Grant Name': g.grant_name,
+      'Donor': g.donor_name,
+      'Reference': g.reference_number ?? '',
+      'Award Amount': g.award_amount,
+      'Currency': g.currency,
+      'Spent': g.spent,
+      'Remaining': g.remaining,
+      'Burn Rate %': `${g.burnRate}%`,
+      'Start Date': g.start_date,
+      'End Date': g.end_date,
+      'Status': g.status
+    }));
+    exportToExcel(data, 'Grants', `grants-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const generateGrantPdf = async (g: GrantWithSpend) => {
@@ -413,7 +431,7 @@ export default function AccountingGrants() {
     }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -430,6 +448,7 @@ export default function AccountingGrants() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-grants"><Download className="h-4 w-4 mr-1" />Excel</Button>
           {canEdit && !migrationNeeded && <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-grant"><Plus className="h-4 w-4 mr-1" />Add Grant</Button>}
         </div>
       </div>

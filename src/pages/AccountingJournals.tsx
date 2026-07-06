@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2, AlertTriangle, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
+import { ACCT_STATUS_TONE, formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Textarea } from '@/components/ui/textarea';
@@ -312,6 +313,23 @@ export default function AccountingJournals() {
     setLinesLoading(false);
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(e => ({
+      'Entry #': e.entry_no,
+      'Posting Date': e.posting_date,
+      'Period': periodLabel(e.period_id),
+      'Status': e.status,
+      'Source Type': e.source_type,
+      'Source ID': e.source_id ?? '',
+      'Description (EN)': e.description_en,
+      'Description (AR)': e.description_ar ?? '',
+      'Idempotency Key': e.idempotency_key,
+      'Posted At': e.posted_at ? format(parseISO(e.posted_at), 'yyyy-MM-dd HH:mm') : '',
+      'Created At': format(parseISO(e.created_at), 'yyyy-MM-dd HH:mm'),
+    }));
+    exportToExcel(rows, 'Journal Entries', `journal-entries-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportCsv = () => {
     const header = ['Entry #', 'Posting Date', 'Period', 'Status', 'Source Type', 'Source ID', 'Description (EN)', 'Description (AR)', 'Idempotency Key', 'Posted At', 'Created At'];
     const body = filtered.map(e => [
@@ -363,8 +381,11 @@ export default function AccountingJournals() {
           <Button variant="outline" size="sm" onClick={() => void loadAll()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel">
+            <Download className="w-4 h-4 mr-1" /> Excel
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
-            <Download className="w-4 h-4 mr-1" /> CSV
+            <FileText className="w-4 h-4 mr-1" /> CSV
           </Button>
         </div>
       </div>

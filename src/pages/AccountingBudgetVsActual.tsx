@@ -16,6 +16,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -40,7 +41,7 @@ function usageBand(pct: number): 'ok' | 'warn' | 'over' {
 }
 
 export default function AccountingBudgetVsActual() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
@@ -224,6 +225,20 @@ export default function AccountingBudgetVsActual() {
     downloadCsv(`budget-vs-actual-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body, footer]);
   };
 
+  const exportExcel = () => {
+    const data = rows.map(r => ({
+      'Code': r.account_code,
+      'Account': r.account_name_en,
+      'Type': r.account_type,
+      'Budget': r.budget,
+      'Actual': r.actual,
+      'Encumbered': r.encumbrance,
+      'Available': r.variance,
+      '% Used': `${r.pct}%`
+    }));
+    exportToExcel(data, 'Budget vs Actual', `budget-vs-actual-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportPdf = async () => {
     setPdfBusy(true);
     try {
@@ -252,7 +267,7 @@ export default function AccountingBudgetVsActual() {
     } finally { setPdfBusy(false); }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -273,6 +288,9 @@ export default function AccountingBudgetVsActual() {
           </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length} data-testid="button-export-csv">
             <Download className="h-4 w-4 mr-1" />CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!rows.length} data-testid="button-export-budget-vs-actual">
+            <Download className="h-4 w-4 mr-1" />Excel
           </Button>
           <Button variant="outline" size="sm" onClick={exportPdf} disabled={!rows.length || pdfBusy} data-testid="button-export-pdf">
             {pdfBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}PDF

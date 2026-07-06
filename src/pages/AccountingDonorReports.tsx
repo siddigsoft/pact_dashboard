@@ -19,6 +19,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
 
 interface Fund {
@@ -41,7 +42,7 @@ const RESTRICTION_CFG: Record<string, { label: string; color: string; short: str
 const CHART_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#0ea5e9'];
 
 export default function AccountingDonorReports() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { toast } = useToast();
 
@@ -154,7 +155,21 @@ export default function AccountingDonorReports() {
     ]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const data = filtered.map(f => ({
+      'Code': f.code,
+      'Name': f.name_en,
+      'Type': RESTRICTION_CFG[f.restriction_type]?.label ?? f.restriction_type,
+      'Donor': f.partner?.name ?? '',
+      'Total Debit': f.total_debit,
+      'Total Credit': f.total_credit,
+      'Net': f.net,
+      'Active': f.is_active ? 'Yes' : 'No'
+    }));
+    exportToExcel(data, 'Donor Fund Report', `donor-fund-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed)   return <Navigate to="/" replace />;
 
   return (
@@ -177,7 +192,8 @@ export default function AccountingDonorReports() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-donor"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-donor"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-donor"><Download className="w-4 h-4 mr-1" /> CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-donor-reports"><Download className="w-4 h-4 mr-1" /> Excel</Button>
         </div>
       </div>
 

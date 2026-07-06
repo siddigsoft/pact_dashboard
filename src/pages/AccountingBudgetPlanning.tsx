@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Account { id: string; code: string; name_en: string; name_ar: string; account_type: string; country_id: string | null }
 interface FiscalYear { id: string; code: string; name_en: string }
@@ -41,7 +42,7 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export default function AccountingBudgetPlanning() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
@@ -394,6 +395,16 @@ export default function AccountingBudgetPlanning() {
     ]);
   };
 
+  const exportExcel = () => {
+    const rowsMap = rows.map(r => ({
+      'Account Code': r.code,
+      'Account Name': r.name_en,
+      'Type': TYPE_LABEL[r.type]?.label ?? r.type,
+      'Budget Amount': r.budget,
+    }));
+    exportToExcel(rowsMap, `Budget Plan - ${selectedPeriod?.period_name ?? 'Report'}`, `budget-plan-${periodId}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   /* ── download blank import template ── */
   const downloadTemplate = () => {
     const withFund = fundId !== 'all';
@@ -412,7 +423,7 @@ export default function AccountingBudgetPlanning() {
     toast({ title: 'Template downloaded', description: `${templateRows.length} account rows — fill in budget_amount and import` });
   };
 
-  if (authLoading || loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -446,7 +457,8 @@ export default function AccountingBudgetPlanning() {
             {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />} Import CSV
           </Button>
           <Button variant="outline" size="sm" onClick={downloadTemplate} disabled={!accounts.length} data-testid="button-download-template"><FileDown className="w-4 h-4 mr-1" /> Template</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-budget"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-budget-planning"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
           <Button variant="outline" size="sm" onClick={() => void loadBudgetLines(periodId, fundId)} data-testid="button-refresh-budget"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} data-testid="input-import-csv" />
         </div>

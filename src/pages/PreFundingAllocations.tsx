@@ -12,10 +12,12 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Users, RefreshCw, AlertTriangle, Search, ChevronDown, ChevronRight,
-  Wallet, TrendingDown, CheckCircle2, Info,
+  Wallet, TrendingDown, CheckCircle2, Info, Download,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
+import { format } from 'date-fns';
 
 interface AllocRow {
   id: string;
@@ -195,12 +197,12 @@ export default function PreFundingAllocations() {
           ? (supabase as any).from('operational_cost_submissions').select('id,submitted_by').in('id', untaggedOcsIds)
           : Promise.resolve({ data: [] }),
       ]);
-      const dpOwnerMap  = new Map((dpOwnersRes.data ?? []).map((r: any) => [r.id, r.requested_by]));
-      const ocsOwnerMap = new Map((ocsOwnersRes.data ?? []).map((r: any) => [r.id, r.submitted_by]));
+      const dpOwnerMap  = new Map<string, string>((dpOwnersRes.data ?? []).map((r: any) => [r.id as string, r.requested_by as string]));
+      const ocsOwnerMap = new Map<string, string>((ocsOwnersRes.data ?? []).map((r: any) => [r.id as string, r.submitted_by as string]));
       const resolveOwner = (t: any): string | null => {
         if (t.user_id) return t.user_id;
-        if (t.source_table === 'down_payment_requests' && t.source_id) return dpOwnerMap.get(t.source_id) ?? null;
-        if (t.source_table === 'operational_cost_submissions' && t.source_id) return ocsOwnerMap.get(t.source_id) ?? null;
+        if (t.source_table === 'down_payment_requests' && t.source_id) return dpOwnerMap.get(t.source_id as string) ?? null;
+        if (t.source_table === 'operational_cost_submissions' && t.source_id) return ocsOwnerMap.get(t.source_id as string) ?? null;
         return null;
       };
 
@@ -266,8 +268,8 @@ export default function PreFundingAllocations() {
       });
 
       setAll(enriched);
-      setFundPaidMap(paidMap);
-      setFunds((fundsRes.data ?? []).map((f: any) => ({ id: f.id, name: f.name })));
+      setFundPaidMap(paidMap as Map<string, number>);
+      setFunds((fundsRes.data ?? []).map((f: any) => ({ id: f.id as string, name: f.name as string })));
     } catch (e: any) {
       console.error('Allocations load error', e);
     } finally {
@@ -321,6 +323,22 @@ export default function PreFundingAllocations() {
   const toggleExpand = (uid: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(uid) ? n.delete(uid) : n.add(uid); return n; });
 
+  function exportAllocations() {
+    const rows = staff.flatMap(s => s.allocations.map(a => ({
+      'Staff Name': s.user_name,
+      'Email': s.user_email,
+      'Role': s.user_role.replace(/_/g, ' '),
+      'Fund Name': a.fund_name,
+      'Allocated Amount': a.allocated_amount,
+      'Spent Amount': a.spent_amount,
+      'Remaining': Math.max(0, a.allocated_amount - a.spent_amount),
+      'Currency': a.currency,
+      'Allocated At': format(new Date(a.created_at), 'yyyy-MM-dd'),
+      'Notes': a.notes ?? '',
+    })));
+    exportToExcel(rows, 'Pre-Fund Allocations', `pre-fund-allocations-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   if (!canAccess) return (
     <div className="p-8 text-center">
       <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
@@ -344,9 +362,14 @@ export default function PreFundingAllocations() {
               : 'Your personal fund allocation — what you were assigned, what has been spent, and what remains'}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-allocs">
-          <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportAllocations} data-testid="button-export-allocations">
+            <Download className="h-4 w-4 mr-1.5" />Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-allocs">
+            <RefreshCw className="h-4 w-4 mr-1.5" />Refresh
+          </Button>
+        </div>
       </div>
 
       {/* KPI row */}

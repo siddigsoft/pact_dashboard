@@ -12,6 +12,7 @@ import { Loader2, FileText, Download, RefreshCw, TrendingUp, Scale } from 'lucid
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv, ACCT_FUNCTIONAL_CCY } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -37,7 +38,7 @@ function netBalance(row: TbRow, type: string): number {
 }
 
 export default function AccountingFinancialStatements() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
 
@@ -175,6 +176,31 @@ export default function AccountingFinancialStatements() {
     downloadCsv(`income-statement-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
   };
 
+  const exportIncomeStatementExcel = () => {
+    const data: any[] = [
+      { 'Account Code': '=== REVENUE ===', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      ...incomeData.revenue.map(r => ({
+        'Account Code': r.account_code,
+        'Name (EN)': r.account_name_en,
+        'Name (AR)': r.account_name_ar,
+        'Amount': netBalance(r, 'revenue')
+      })),
+      { 'Account Code': 'Total Revenue', 'Name (EN)': '', 'Name (AR)': '', 'Amount': incomeData.totalRevenue },
+      { 'Account Code': '', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      { 'Account Code': '=== EXPENSES ===', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      ...incomeData.expenses.map(r => ({
+        'Account Code': r.account_code,
+        'Name (EN)': r.account_name_en,
+        'Name (AR)': r.account_name_ar,
+        'Amount': netBalance(r, 'expense')
+      })),
+      { 'Account Code': 'Total Expenses', 'Name (EN)': '', 'Name (AR)': '', 'Amount': incomeData.totalExpenses },
+      { 'Account Code': '', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      { 'Account Code': 'NET SURPLUS / DEFICIT', 'Name (EN)': '', 'Name (AR)': '', 'Amount': incomeData.netSurplus }
+    ];
+    exportToExcel(data, 'Income Statement', `income-statement-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportBalanceSheetCsv = () => {
     const header = ['Account Code', 'Name (EN)', 'Name (AR)', 'Amount'];
     const rows: (string | number)[][] = [
@@ -192,6 +218,39 @@ export default function AccountingFinancialStatements() {
       ['', 'Total Net Assets', 'إجمالي صافي الأصول', formatNumber(bsData.totalEquity + incomeData.netSurplus)],
     ];
     downloadCsv(`balance-sheet-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
+  };
+
+  const exportBalanceSheetExcel = () => {
+    const data: any[] = [
+      { 'Account Code': '=== ASSETS ===', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      ...bsData.assets.map(r => ({
+        'Account Code': r.account_code,
+        'Name (EN)': r.account_name_en,
+        'Name (AR)': r.account_name_ar,
+        'Amount': netBalance(r, 'asset')
+      })),
+      { 'Account Code': 'Total Assets', 'Name (EN)': '', 'Name (AR)': '', 'Amount': bsData.totalAssets },
+      { 'Account Code': '', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      { 'Account Code': '=== LIABILITIES ===', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      ...bsData.liabilities.map(r => ({
+        'Account Code': r.account_code,
+        'Name (EN)': r.account_name_en,
+        'Name (AR)': r.account_name_ar,
+        'Amount': netBalance(r, 'liability')
+      })),
+      { 'Account Code': 'Total Liabilities', 'Name (EN)': '', 'Name (AR)': '', 'Amount': bsData.totalLiabilities },
+      { 'Account Code': '', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      { 'Account Code': '=== NET ASSETS / EQUITY ===', 'Name (EN)': '', 'Name (AR)': '', 'Amount': '' },
+      ...bsData.equity.map(r => ({
+        'Account Code': r.account_code,
+        'Name (EN)': r.account_name_en,
+        'Name (AR)': r.account_name_ar,
+        'Amount': netBalance(r, 'equity')
+      })),
+      { 'Account Code': 'Period Surplus/(Deficit)', 'Name (EN)': '', 'Name (AR)': '', 'Amount': incomeData.netSurplus },
+      { 'Account Code': 'Total Net Assets', 'Name (EN)': '', 'Name (AR)': '', 'Amount': bsData.totalEquity + incomeData.netSurplus }
+    ];
+    exportToExcel(data, 'Balance Sheet', `balance-sheet-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   const exportPdf = async (type: 'income' | 'balance') => {
@@ -250,7 +309,7 @@ export default function AccountingFinancialStatements() {
     }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const StatementSection = ({ rows, type, title, titleAr, totalLabel, totalLabelAr, total, accentClass }: {
@@ -383,6 +442,9 @@ export default function AccountingFinancialStatements() {
                 <Button variant="outline" size="sm" onClick={exportIncomeStatementCsv} disabled={!tb.length} data-testid="button-export-is-csv">
                   <Download className="h-3.5 w-3.5 mr-1" /> CSV
                 </Button>
+                <Button variant="outline" size="sm" onClick={exportIncomeStatementExcel} disabled={!tb.length} data-testid="button-export-is-excel">
+                  <Download className="h-3.5 w-3.5 mr-1" /> Excel
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => exportPdf('income')} disabled={!tb.length || pdfBusy} data-testid="button-export-is-pdf">
                   {pdfBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1" />} PDF
                 </Button>
@@ -435,6 +497,9 @@ export default function AccountingFinancialStatements() {
                 )}
                 <Button variant="outline" size="sm" onClick={exportBalanceSheetCsv} disabled={!tb.length} data-testid="button-export-bs-csv">
                   <Download className="h-3.5 w-3.5 mr-1" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportBalanceSheetExcel} disabled={!tb.length} data-testid="button-export-bs-excel">
+                  <Download className="h-3.5 w-3.5 mr-1" /> Excel
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => exportPdf('balance')} disabled={!tb.length || pdfBusy} data-testid="button-export-bs-pdf">
                   {pdfBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1" />} PDF

@@ -10,10 +10,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, RefreshCw, Download, AlertTriangle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { format, differenceInMonths, parseISO } from 'date-fns';
-import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Asset {
   id: string; asset_name: string; asset_code: string | null; category: string | null;
@@ -124,9 +125,19 @@ export default function AccountingDepreciationRun() {
   };
 
   const exportAssets = () => {
-    const header = ['Asset Code', 'Asset Name', 'Category', 'Cost', 'Salvage', 'Life (months)', 'Book Value', 'Monthly Depr', 'Accumulated Depr', 'Status'];
-    const body = filtered.map(a => [a.asset_code ?? '', a.asset_name, a.category ?? '', a.acquisition_cost.toFixed(2), a.salvage_value.toFixed(2), String(a.useful_life_months), a.bookValue.toFixed(2), a.monthlyDepr.toFixed(2), a.accumulatedDepr.toFixed(2), a.fullyDepreciated ? 'Fully Depreciated' : 'Active']);
-    downloadCsv(`depreciation-schedule-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    const rows = filtered.map(a => ({
+      'Asset Code': a.asset_code ?? '',
+      'Asset Name': a.asset_name,
+      'Category': a.category ?? '',
+      'Cost': a.acquisition_cost,
+      'Salvage': a.salvage_value,
+      'Life (months)': a.useful_life_months,
+      'Book Value': a.bookValue,
+      'Monthly Depr': a.monthlyDepr,
+      'Accumulated Depr': a.accumulatedDepr,
+      'Status': a.fullyDepreciated ? 'Fully Depreciated' : 'Active'
+    }));
+    exportToExcel(rows, 'Depreciation Schedule', `depreciation-schedule-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
@@ -144,7 +155,7 @@ export default function AccountingDepreciationRun() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportAssets} disabled={!filtered.length}><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportAssets} disabled={!filtered.length} data-testid="button-export-depreciation-run"><Download className="h-4 w-4 mr-1" />Export</Button>
           {canRun && !migrationNeeded && (
             <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={running || eligibleAssets.length === 0} data-testid="button-run-depreciation">
               {running ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-1" />}Run Depreciation

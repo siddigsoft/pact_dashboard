@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useUser } from '@/context/user/UserContext';
+import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Wallet, Plus, AlertCircle, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { Wallet, Plus, AlertCircle, CheckCircle2, Clock, XCircle, Download } from 'lucide-react';
 import { format } from 'date-fns';
+import { exportToExcel } from '@/utils/report-export';
 
 type Advance = {
   id: string; user_id: string; amount: number; currency: string; reason: string | null;
@@ -36,7 +37,9 @@ const STATUS_META: Record<string, { label: string; labelAr: string; cls: string;
 };
 
 export default function MyAdvances() {
-  const { user, profile } = useUser();
+  const { currentUser } = useAppContext();
+  const profile = currentUser;
+  const user = currentUser;
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -123,6 +126,19 @@ export default function MyAdvances() {
     refetch();
   };
 
+  function exportAdvances() {
+    const rows = advances.map(a => ({
+      'Date': format(new Date(a.created_at), 'yyyy-MM-dd'),
+      'Amount': a.amount,
+      'Currency': a.currency,
+      'Months': a.repayment_months,
+      'Repaid': a.total_repaid,
+      'Status': STATUS_META[a.status]?.label ?? a.status,
+      'Reason': a.reason ?? '',
+    }));
+    exportToExcel(rows, 'My Salary Advances', `my-salary-advances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-6xl" data-testid="page-my-advances">
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -135,9 +151,14 @@ export default function MyAdvances() {
             Request a salary advance and track repayments. / اطلب سلفة على راتبك وتابع سدادها.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)} data-testid="button-new-advance">
-          <Plus className="w-4 h-4 mr-2" /> New Request / طلب جديد
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportAdvances} data-testid="button-export-my-advances">
+            <Download className="w-4 h-4 mr-2" /> Export
+          </Button>
+          <Button onClick={() => setOpen(true)} data-testid="button-new-advance">
+            <Plus className="w-4 h-4 mr-2" /> New Request / طلب جديد
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

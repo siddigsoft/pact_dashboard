@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Clock, Download, RefreshCw, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
@@ -53,7 +55,8 @@ function ageBucket(postingDate: string, paymentTerms: number): AgeBucket {
 }
 
 export default function AccountingAPAging() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
+  const { authReady } = useAppContext();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
 
@@ -143,9 +146,42 @@ export default function AccountingAPAging() {
     downloadCsv(`ap-aging-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows, footer]);
   };
 
+  const exportExcel = () => {
+    const rows = agingRows.map(r => ({
+      'Vendor Code': r.vendor.vendor_code ?? '',
+      'Vendor Name': r.vendor.name_en,
+      'Type': r.vendor.vendor_type,
+      'Currency': r.currency,
+      'Current': r.current,
+      '1–30d': r.b1_30,
+      '31–60d': r.b31_60,
+      '61–90d': r.b61_90,
+      '90+d': r.over90,
+      'Total': r.total,
+      'Oldest (days)': r.oldestDays
+    }));
+    
+    // Add totals row
+    rows.push({
+      'Vendor Code': '',
+      'Vendor Name': 'TOTAL',
+      'Type': '',
+      'Currency': '',
+      'Current': totals.current,
+      '1–30d': totals.b1_30,
+      '31–60d': totals.b31_60,
+      '61–90d': totals.b61_90,
+      '90+d': totals.over90,
+      'Total': totals.total,
+      'Oldest (days)': 0
+    });
+
+    exportToExcel(rows, 'AP Aging', `ap-aging-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const VENDOR_TYPES = ['supplier', 'service_provider', 'consultant', 'ngo_partner', 'government', 'utility'];
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const riskBadge = (r: VendorAgingRow) => {
@@ -169,6 +205,7 @@ export default function AccountingAPAging() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!agingRows.length} data-testid="button-export-ap-aging"><Download className="h-4 w-4 mr-1" />Excel</Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!agingRows.length} data-testid="button-export"><Download className="h-4 w-4 mr-1" />CSV</Button>
         </div>
       </div>

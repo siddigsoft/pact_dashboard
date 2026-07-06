@@ -25,6 +25,7 @@ import {
   ResponsiveContainer, Cell, PieChart, Pie,
 } from 'recharts';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface PersonalTask {
@@ -246,6 +247,34 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
     ...filteredAllTx.map(t => [format(parseISO(t.created_at), 'dd MMM yyyy HH:mm'), t.tx_type, t.description ?? '', String(t.amount), t.currency, t.status ?? '']),
   ], `payroll-transactions-${format(new Date(), 'yyyy-MM')}.csv`);
 
+  const exportPeriodTasksExcel = () => exportToExcel(
+    periodTasks.map(t => ({
+      'Task': t.title, 'Category': t.category ?? '', 'Priority': t.priority ?? '',
+      'Completed': t.completed_at ? format(parseISO(t.completed_at), 'dd MMM yyyy') : '',
+      'Reward (SDG)': t.completion_reward_amount ?? 0,
+    })),
+    'Payroll Tasks',
+    `payroll-tasks-${format(periodStart, 'yyyy-MM')}.xlsx`
+  );
+
+  const exportAnnualReportExcel = () => exportToExcel(
+    annualRows.map(r => ({
+      'Month': r.label, 'Tasks': r.taskCount, 'Task Rewards (SDG)': r.taskEarned,
+      'Withdrawals (SDG)': r.withdrawn, 'Net': r.taskEarned - r.withdrawn,
+    })),
+    'Payroll Annual Report',
+    `payroll-annual-${format(new Date(), 'yyyy')}.xlsx`
+  );
+
+  const exportAllTxExcel = () => exportToExcel(
+    filteredAllTx.map(t => ({
+      'Date': format(parseISO(t.created_at), 'dd MMM yyyy HH:mm'), 'Type': t.tx_type,
+      'Description': t.description ?? '', 'Amount': t.amount, 'Currency': t.currency, 'Status': t.status ?? '',
+    })),
+    'Payroll Transactions',
+    `payroll-transactions-${format(new Date(), 'yyyy-MM')}.xlsx`
+  );
+
   // ── Layout ───────────────────────────────────────────────────────────────
   return (
     <div className={cn('min-h-screen bg-[#f5f7fa] dark:bg-[#0d1117]', embedded && 'min-h-0')}>
@@ -308,7 +337,8 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMonthOffset(o => o + 1)} disabled={monthOffset >= 0}><ChevronRight className="h-4 w-4" /></Button>
               </div>
               {monthOffset !== 0 && <Button variant="ghost" size="sm" onClick={() => setMonthOffset(0)}>This month</Button>}
-              <Button variant="outline" size="sm" className="ml-auto gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasks}><Download className="h-3.5 w-3.5" />Export CSV</Button>
+              <Button variant="outline" size="sm" className="ml-auto gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasks} data-testid="button-export-csv-period-tasks"><Download className="h-3.5 w-3.5" />CSV</Button>
+              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportPeriodTasksExcel} data-testid="button-export-excel-period-tasks"><Download className="h-3.5 w-3.5" />Excel</Button>
             </div>
 
             {/* Chart + breakdown */}
@@ -377,7 +407,8 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
           <TabsContent value="annual" className="mt-4 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">12-Month Earnings Report</h2>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReport}><Download className="h-3.5 w-3.5" />Export CSV</Button>
+              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReport} data-testid="button-export-csv-annual"><Download className="h-3.5 w-3.5" />CSV</Button>
+              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAnnualReportExcel} data-testid="button-export-excel-annual"><Download className="h-3.5 w-3.5" />Excel</Button>
             </div>
 
             <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
@@ -520,7 +551,8 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
                 <option value="all">All types</option>
                 {txTypes.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTx}><Download className="h-3.5 w-3.5" />Export</Button>
+              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTx} data-testid="button-export-csv-all-tx"><Download className="h-3.5 w-3.5" />CSV</Button>
+              <Button variant="outline" size="sm" className="gap-1.5 bg-white dark:bg-slate-900 shadow-sm" onClick={exportAllTxExcel} data-testid="button-export-excel-all-tx"><Download className="h-3.5 w-3.5" />Excel</Button>
             </div>
 
             <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">

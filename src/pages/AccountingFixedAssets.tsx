@@ -14,11 +14,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Loader2, Package, Plus, Download, RefreshCw, Pencil, Search, Trash2, TrendingDown, Calendar, AlertTriangle, X, Banknote, FileX2, TableProperties } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
-import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Asset {
   id: string; asset_tag: string | null; name_en: string; name_ar: string | null; category: string;
@@ -241,12 +242,22 @@ export default function AccountingFixedAssets() {
   };
 
   const exportCsv = () => {
-    const header = ['Tag', 'Name', 'Category', 'Acquisition Date', 'Cost', 'Currency', 'Book Value', 'Dep %', 'Status', 'Location'];
     const rows = filtered.map(a => {
       const { bookValue, depreciationPct } = calcDepreciation(a, today);
-      return [a.asset_tag ?? '', a.name_en, a.category, a.acquisition_date, a.acquisition_cost.toFixed(2), a.currency, bookValue.toFixed(2), `${depreciationPct}%`, a.status, a.location ?? ''];
+      return {
+        'Tag': a.asset_tag ?? '',
+        'Name': a.name_en,
+        'Category': a.category,
+        'Acquisition Date': a.acquisition_date,
+        'Cost': a.acquisition_cost,
+        'Currency': a.currency,
+        'Book Value': bookValue,
+        'Dep %': `${depreciationPct}%`,
+        'Status': a.status,
+        'Location': a.location ?? ''
+      };
     });
-    downloadCsv(`fixed-assets-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
+    exportToExcel(rows, 'Fixed Assets', `fixed-assets-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   const openDispose = (a: Asset, e: React.MouseEvent) => {
@@ -446,7 +457,7 @@ export default function AccountingFixedAssets() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadAssets} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-fixed-assets"><Download className="h-4 w-4 mr-1" />Export</Button>
           {canEdit && <Button variant="outline" size="sm" onClick={() => { setDepRunResults([]); setDepRunDialog(true); }} disabled={assets.filter(a => a.status === 'active').length === 0} data-testid="button-run-dep"><TrendingDown className="h-4 w-4 mr-1" />Run Depreciation</Button>}
           {canEdit && <Button size="sm" onClick={() => openDialog()} data-testid="button-add"><Plus className="h-4 w-4 mr-1" />Add Asset</Button>}
         </div>

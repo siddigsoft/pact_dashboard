@@ -13,12 +13,13 @@ import {
   Banknote, RefreshCw, AlertTriangle, TrendingDown, Calendar,
   ChevronRight, DollarSign, Clock, Lock,
   Globe, ArrowUpDown, Users, ChevronDown, ChevronUp,
-  Flame, Layers, User, Receipt, ArrowRight,
+  Flame, Layers, User, Receipt, ArrowRight, Download,
 } from 'lucide-react';
 import { usePreFundPaymentGate } from '@/hooks/usePreFundPaymentGate';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 interface PreFundRow {
   id: string; name: string; source: string | null;
@@ -413,6 +414,25 @@ export default function PreFundingOverview() {
     });
   };
 
+  function exportBalances() {
+    const rows = filtered.map(f => {
+      const effPaid = effectivePaidByFund.get(f.id) ?? 0;
+      return {
+        'Fund Name': f.name,
+        'Source': f.source ?? '—',
+        'Status': STATUS_CFG[f.status]?.label ?? f.status,
+        'Amount': f.amount,
+        'Paid Out': effPaid,
+        'Committed': f.committed_amount,
+        'Available': Math.max(0, f.amount - effPaid),
+        'Currency': f.currency,
+        'Start Date': f.start_date ?? '—',
+        'End Date': f.end_date ?? '—',
+      };
+    });
+    exportToExcel(rows, 'Pre-Fund Balances', `pre-fund-balances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   if (!canAccess) {
     return (
       <div className="p-8 text-center">
@@ -448,6 +468,9 @@ export default function PreFundingOverview() {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={exportBalances} data-testid="button-export-prefunding-overview">
+            <Download className="h-4 w-4 mr-1.5" />Export
+          </Button>
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} data-testid="button-refresh-overview">
             <RefreshCw className={cn('h-4 w-4 mr-1.5', refreshing && 'animate-spin')} />
             Refresh

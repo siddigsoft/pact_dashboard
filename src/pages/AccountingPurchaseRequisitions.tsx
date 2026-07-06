@@ -20,6 +20,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Fund { id: string; code: string; name_en: string }
 interface Account { id: string; code: string; name_en: string }
@@ -196,6 +197,20 @@ export default function AccountingPurchaseRequisitions() {
     ]);
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(p => ({
+      'PR #': p.pr_number,
+      'Title': p.title,
+      'Priority': p.priority,
+      'Status': p.status,
+      'Estimated Amount': p.estimated_amount,
+      'Currency': p.currency,
+      'Required By': p.required_by_date ?? '',
+      'Created': format(parseISO(p.created_at), 'yyyy-MM-dd'),
+    }));
+    exportToExcel(rows, 'Purchase Requisitions', `purchase-requisitions-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed)   return <Navigate to="/" replace />;
 
@@ -225,8 +240,11 @@ export default function AccountingPurchaseRequisitions() {
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-pr">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-pr">
-            <Download className="w-4 h-4 mr-1" /> Export
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv-pr">
+            <Download className="w-4 h-4 mr-1" /> CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-excel-pr">
+            <Download className="w-4 h-4 mr-1" /> Excel
           </Button>
           <Button size="sm" onClick={openCreate} data-testid="button-create-pr">
             <Plus className="w-4 h-4 mr-1" /> New PR

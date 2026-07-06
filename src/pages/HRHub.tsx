@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, CartesianGrid } from 'recharts';
-import * as XLSX from 'xlsx';
+import { exportMultiSheetExcel } from '@/utils/report-export';
 
 const PayrollPanel         = lazy(() => import('./Payroll'));
 const RetainerPanel        = lazy(() => import('./RetainerManagement'));
@@ -1351,18 +1351,39 @@ function StaffCostProjection() {
   })), [computed]);
 
   const exportXLSX = useCallback(() => {
-    const wb = XLSX.utils.book_new();
-    for (const sc of scenarios) {
+    const sheets = scenarios.map(sc => {
       const c = computeScenario(sc.rows);
-      const data = [
-        ['Role / Grade','Headcount','Base Salary','Allow %','Deduct %','Net / Head','Monthly Gross','Monthly Net','Annual Net','Currency'],
-        ...c.rows.map(r => [r.role, r.headcount, r.baseSalary, r.allowancePct, r.deductionPct, Math.round(r.netPerHead), Math.round(r.monthlyGross), Math.round(r.monthlyNet), Math.round(r.monthlyNet * 12), r.currency]),
-        [],
-        ['TOTALS', c.headcount,'','','','', Math.round(c.monthlyGross), Math.round(c.monthlyNet), Math.round(c.annualNet),''],
-      ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), sc.name.slice(0, 31));
-    }
-    XLSX.writeFile(wb, 'cost-projection.xlsx');
+      return {
+        name: sc.name.slice(0, 31),
+        data: [
+          ...c.rows.map(r => ({
+            'Role / Grade': r.role,
+            'Headcount': r.headcount,
+            'Base Salary': r.baseSalary,
+            'Allow %': r.allowancePct,
+            'Deduct %': r.deductionPct,
+            'Net / Head': Math.round(r.netPerHead),
+            'Monthly Gross': Math.round(r.monthlyGross),
+            'Monthly Net': Math.round(r.monthlyNet),
+            'Annual Net': Math.round(r.monthlyNet * 12),
+            'Currency': r.currency
+          })),
+          {
+            'Role / Grade': 'TOTALS',
+            'Headcount': c.headcount,
+            'Base Salary': '',
+            'Allow %': '',
+            'Deduct %': '',
+            'Net / Head': '',
+            'Monthly Gross': Math.round(c.monthlyGross),
+            'Monthly Net': Math.round(c.monthlyNet),
+            'Annual Net': Math.round(c.annualNet),
+            'Currency': ''
+          }
+        ]
+      };
+    });
+    exportMultiSheetExcel(sheets, 'cost-projection.xlsx');
   }, [scenarios]);
 
   const fmtN = (n: number, cur = displayCurrency) => `${cur} ${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;

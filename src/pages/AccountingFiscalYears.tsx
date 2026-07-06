@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +18,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
-import { ACCT_STATUS_TONE } from '@/lib/accountingFormat';
+import { ACCT_STATUS_TONE, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 
 interface FiscalYear {
@@ -45,7 +47,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function AccountingFiscalYears() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const { authReady } = useAppContext();
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
 
@@ -191,7 +194,40 @@ export default function AccountingFiscalYears() {
     }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows: any[] = [];
+    years.forEach(fy => {
+      const fyPeriods = periodsByYear.get(fy.id) ?? [];
+      if (fyPeriods.length === 0) {
+        rows.push({
+          'FY Code': fy.code,
+          'FY Start': fy.start_date,
+          'FY End': fy.end_date,
+          'FY Closed': fy.is_closed ? 'Yes' : 'No',
+          'Period #': '',
+          'Period Start': '',
+          'Period End': '',
+          'Period Status': ''
+        });
+      } else {
+        fyPeriods.forEach(p => {
+          rows.push({
+            'FY Code': fy.code,
+            'FY Start': fy.start_date,
+            'FY End': fy.end_date,
+            'FY Closed': fy.is_closed ? 'Yes' : 'No',
+            'Period #': p.period_no,
+            'Period Start': p.start_date,
+            'Period End': p.end_date,
+            'Period Status': STATUS_LABELS[p.status] ?? p.status
+          });
+        });
+      }
+    });
+    exportToExcel(rows, 'Fiscal Years & Periods', `fiscal-years-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -211,6 +247,9 @@ export default function AccountingFiscalYears() {
           )}
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!years.length} data-testid="button-export-fiscal-years">
+            <Download className="w-4 h-4 mr-1" /> Excel
           </Button>
         </div>
       </div>

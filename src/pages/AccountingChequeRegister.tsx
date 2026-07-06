@@ -20,6 +20,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface BankAccount { id: string; account_name: string; account_number: string | null; bank_name: string | null }
 interface APInvoice { id: string; invoice_number: string; total_amount: number; currency: string }
@@ -67,7 +68,7 @@ const BLANK = {
 };
 
 export default function AccountingChequeRegister() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canAction  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
@@ -198,7 +199,22 @@ export default function AccountingChequeRegister() {
     ]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = filtered.map(c => ({
+      'Cheque #': c.cheque_number,
+      'Type': TYPE_LABELS[c.payment_type] ?? c.payment_type,
+      'Payee': c.payee_name,
+      'Status': STATUS_CFG[c.status]?.label ?? c.status,
+      'Amount': c.amount,
+      'Currency': c.currency,
+      'Issue Date': c.issue_date,
+      'Clearance Date': c.clearance_date ?? '',
+      'Bank Ref': c.bank_reference ?? '',
+      'Memo': c.memo ?? '',
+    }));
+    exportToExcel(rows, 'Cheque & Payment Register', `cheque-register-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (!allowed)   return <Navigate to="/" replace />;
 
   return (
@@ -223,7 +239,8 @@ export default function AccountingChequeRegister() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-cheque"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-cheque"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-cheque-register"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
           {canAction && <Button size="sm" onClick={openCreate} data-testid="button-create-cheque"><Plus className="w-4 h-4 mr-1" /> New Payment</Button>}
         </div>
       </div>

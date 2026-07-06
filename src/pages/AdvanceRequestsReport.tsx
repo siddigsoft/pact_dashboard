@@ -57,6 +57,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { generateWriteOffCertificatePdf } from '@/utils/writeOffCertificatePdf';
+import { exportToExcel, exportToCSV, exportMultiSheetExcel } from '@/utils/report-export';
 import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGroupedToFormattedExcel } from '@/utils/advanceReportExcelUtils';
 import { useToast } from '@/hooks/use-toast';
 import type { DownPaymentRequest } from '@/types/down-payment';

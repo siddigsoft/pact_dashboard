@@ -62,6 +62,7 @@ import type { CurrentUserClassificationRow } from '@/types/hr-finance-tables';
 import { useNavigate } from 'react-router-dom';
 import { format, subMonths } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface RetainerTransaction {
   id: string;
@@ -372,6 +373,25 @@ const RetainerManagement = () => {
     toast({ title: 'Export Complete', description: 'Payment history has been exported to CSV' });
   };
 
+  const exportPaymentHistoryExcel = () => {
+    const rows = filteredTransactions.map(t => {
+      const user = userNameMap[t.user_id];
+      return {
+        'Date': format(new Date(t.created_at), 'yyyy-MM-dd HH:mm'),
+        'Period': t.metadata?.period || '',
+        'User': user?.name || '',
+        'Email': user?.email || '',
+        'Amount': t.amount,
+        'Currency': t.currency || 'SDG',
+        'Balance Before': t.balance_before || 0,
+        'Balance After': t.balance_after || 0,
+        'Description': t.description,
+      };
+    });
+    exportToExcel(rows, 'Retainer Payment History', `retainer-payments-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    toast({ title: 'Export Complete', description: 'Payment history has been exported to Excel' });
+  };
+
   const exportTrackingGrid = () => {
     const months = getLast12Months().reverse();
     const headers = ['User', 'Email', 'Level', 'Retainer Amount', ...months.map(m => {
@@ -395,6 +415,26 @@ const RetainerManagement = () => {
     a.click();
     window.URL.revokeObjectURL(url);
     toast({ title: 'Export Complete', description: 'Tracking grid has been exported to CSV' });
+  };
+
+  const exportTrackingGridExcel = () => {
+    const months = getLast12Months().reverse();
+    const rows = paymentGrid.map(entry => {
+      const row: Record<string, any> = {
+        'User': entry.userName,
+        'Email': entry.email,
+        'Level': entry.level,
+        'Retainer Amount': `${entry.currency} ${entry.retainerAmount}`,
+      };
+      months.forEach(m => {
+        const [y, mo] = m.split('-');
+        const label = format(new Date(parseInt(y), parseInt(mo) - 1), 'MMM yyyy');
+        row[label] = entry.months[m]?.paid ? `Paid (${entry.months[m].amount})` : 'Not Paid';
+      });
+      return row;
+    });
+    exportToExcel(rows, 'Retainer Tracking Grid', `retainer-tracking-grid-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    toast({ title: 'Export Complete', description: 'Tracking grid has been exported to Excel' });
   };
 
   const exportEligibleUsers = () => {
@@ -421,6 +461,21 @@ const RetainerManagement = () => {
     toast({ title: 'Export Complete', description: 'Eligible users list has been exported to CSV' });
   };
 
+  const exportEligibleUsersExcel = () => {
+    const rows = filteredEligible.map(u => ({
+      'Name': u.full_name || '',
+      'Email': u.email || '',
+      'Level': u.classification_level,
+      'Role Scope': u.role_scope || '',
+      'Retainer Amount': u.retainer_amount_cents / 100,
+      'Currency': u.retainer_currency || 'SDG',
+      'Frequency': u.retainer_frequency || 'monthly',
+      'Active': u.is_active ? 'Yes' : 'No',
+    }));
+    exportToExcel(rows, 'Eligible Retainer Users', `retainer-eligible-users-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    toast({ title: 'Export Complete', description: 'Eligible users list has been exported to Excel' });
+  };
+
   const exportMonthlySummary = () => {
     const months = getLast12Months().reverse();
     const headers = ['Period', 'Users Paid', 'Total Amount', 'Currency'];
@@ -444,6 +499,22 @@ const RetainerManagement = () => {
     a.click();
     window.URL.revokeObjectURL(url);
     toast({ title: 'Export Complete', description: 'Monthly summary has been exported to CSV' });
+  };
+
+  const exportMonthlySummaryExcel = () => {
+    const months = getLast12Months().reverse();
+    const rows = months.map(m => {
+      const monthTx = transactions.filter(t => t.metadata?.period === m);
+      const total = monthTx.reduce((sum, t) => sum + t.amount, 0);
+      return {
+        'Period': m,
+        'Users Paid': monthTx.length,
+        'Total Amount': total,
+        'Currency': 'SDG',
+      };
+    });
+    exportToExcel(rows, 'Monthly Retainer Summary', `retainer-monthly-summary-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    toast({ title: 'Export Complete', description: 'Monthly summary has been exported to Excel' });
   };
 
   if (!canManage) {
@@ -715,8 +786,11 @@ const RetainerManagement = () => {
                       Quick Stats
                     </CardTitle>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={exportMonthlySummary} data-testid="button-export-summary">
-                        <Download className="h-4 w-4 mr-1" />Monthly Summary
+                      <Button variant="outline" size="sm" onClick={exportMonthlySummary} data-testid="button-export-summary-csv">
+                        <Download className="h-4 w-4 mr-1" />CSV
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={exportMonthlySummaryExcel} data-testid="button-export-summary-excel">
+                        <Download className="h-4 w-4 mr-1" />Excel
                       </Button>
                     </div>
                   </div>
@@ -760,9 +834,14 @@ const RetainerManagement = () => {
                       </CardTitle>
                       <CardDescription>Complete record of all retainer payments</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={exportPaymentHistory} data-testid="button-export-history">
-                      <Download className="h-4 w-4 mr-1" />Export CSV
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={exportPaymentHistory} data-testid="button-export-history-csv">
+                        <Download className="h-4 w-4 mr-1" />CSV
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={exportPaymentHistoryExcel} data-testid="button-export-history-excel">
+                        <Download className="h-4 w-4 mr-1" />Excel
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -868,9 +947,14 @@ const RetainerManagement = () => {
                       </CardTitle>
                       <CardDescription>Month-by-month view of retainer payment status per user</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={exportTrackingGrid} data-testid="button-export-grid">
-                      <Download className="h-4 w-4 mr-1" />Export Grid
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={exportTrackingGrid} data-testid="button-export-grid-csv">
+                        <Download className="h-4 w-4 mr-1" />CSV
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={exportTrackingGridExcel} data-testid="button-export-grid-excel">
+                        <Download className="h-4 w-4 mr-1" />Excel
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -954,8 +1038,11 @@ const RetainerManagement = () => {
                       <Button variant="outline" size="sm" onClick={() => navigate('/classifications')} data-testid="button-go-classifications">
                         Manage Classifications
                       </Button>
-                      <Button variant="outline" size="sm" onClick={exportEligibleUsers} data-testid="button-export-eligible">
-                        <Download className="h-4 w-4 mr-1" />Export
+                      <Button variant="outline" size="sm" onClick={exportEligibleUsers} data-testid="button-export-eligible-csv">
+                        <Download className="h-4 w-4 mr-1" />CSV
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={exportEligibleUsersExcel} data-testid="button-export-eligible-excel">
+                        <Download className="h-4 w-4 mr-1" />Excel
                       </Button>
                     </div>
                   </div>

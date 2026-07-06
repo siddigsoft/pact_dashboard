@@ -20,6 +20,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface PO { id: string; po_number: string; title: string; amount: number; currency: string }
 interface GRN { id: string; grn_number: string; title: string }
@@ -66,7 +67,7 @@ const BLANK = {
 };
 
 export default function AccountingAPInvoices() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const allowed    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canApprove = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
   const { toast } = useToast();
@@ -226,7 +227,27 @@ export default function AccountingAPInvoices() {
     ]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = filtered.map(i => {
+      const vendor = vendors.find(v => v.id === i.vendor_id);
+      return {
+        'Invoice #': i.invoice_number,
+        'Vendor Ref': i.vendor_invoice_ref ?? '',
+        'Vendor': vendor?.name_en ?? '',
+        'Status': STATUS_CFG[i.status]?.label ?? i.status,
+        'Subtotal': i.subtotal,
+        'Tax': i.tax_amount,
+        'Total': i.total_amount,
+        'Currency': i.currency,
+        'Invoice Date': i.invoice_date,
+        'Due Date': i.due_date ?? '',
+        'Matched PO': i.matched_po ? 'Yes' : 'No',
+        'Matched GRN': i.matched_grn ? 'Yes' : 'No',
+      };
+    });
+    exportToExcel(rows, 'AP Invoices', `ap-invoices-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (!allowed)   return <Navigate to="/" replace />;
 
   return (
@@ -253,7 +274,8 @@ export default function AccountingAPInvoices() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-inv"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-inv"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-ap-invoices"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-inv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
           {canApprove && <Button size="sm" onClick={openCreate} data-testid="button-create-inv"><Plus className="w-4 h-4 mr-1" /> New Invoice</Button>}
         </div>
       </div>

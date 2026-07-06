@@ -12,6 +12,7 @@ import { format, startOfYear, endOfYear, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
 } from 'recharts';
@@ -26,7 +27,7 @@ interface ConsolidatedRow { account_type: string; total_debit: number; total_cre
 interface ElimEntry { desc: string; amount: number; entity_a: string; entity_b: string; account: string }
 
 export default function AccountingConsolidation() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const [lines, setLines] = useState<JournalLine[]>([]);
@@ -121,7 +122,19 @@ export default function AccountingConsolidation() {
     downloadCsv(`consolidation-${yearFilter}.csv`, [header, ...body]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const data = byCountry.map(c => ({
+      'Entity': c.country,
+      'Revenue': c.revenue,
+      'Expense': c.expense,
+      'Net Income': c.net,
+      'Assets': c.assets,
+      'Liabilities': c.liabilities
+    }));
+    exportToExcel(data, 'Consolidation', `consolidation-${yearFilter}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
@@ -143,6 +156,7 @@ export default function AccountingConsolidation() {
           </Select>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
           <Button variant="outline" size="sm" onClick={exportConsolidated} disabled={!byCountry.length}><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!byCountry.length} data-testid="button-export-consolidation"><Download className="h-4 w-4 mr-1" />Excel</Button>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Vendor { id: string; vendor_code: string | null; name_en: string; name_ar: string | null; vendor_type: string; tax_id: string | null; country_id: string | null; gl_account_id: string | null; payment_terms: number; currency: string; contact_name: string | null; contact_email: string | null; contact_phone: string | null; address: string | null; bank_name: string | null; bank_account_no: string | null; swift_code: string | null; is_active: boolean; notes: string | null; created_at: string }
 interface JournalLine { id: string; entry_id: string; line_no: number; debit_credit: string; functional_amount: number; functional_currency: string; description: string | null; acct_journal_entries: { entry_no: number; posting_date: string; description_en: string; status: string } | null }
@@ -27,7 +28,7 @@ const VENDOR_TYPES = ['supplier', 'service_provider', 'consultant', 'ngo_partner
 const BLANK_VENDOR: Partial<Vendor> = { name_en: '', name_ar: '', vendor_type: 'supplier', payment_terms: 30, currency: 'USD', tax_id: '', contact_name: '', contact_email: '', contact_phone: '', address: '', bank_name: '', bank_account_no: '', swift_code: '', notes: '' };
 
 export default function AccountingVendors() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
@@ -142,6 +143,25 @@ export default function AccountingVendors() {
     downloadCsv(`vendors-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(v => {
+      const c = countries.find(x => x.id === v.country_id);
+      return {
+        'Code': v.vendor_code ?? '',
+        'Name (EN)': v.name_en,
+        'Name (AR)': v.name_ar ?? '',
+        'Type': v.vendor_type,
+        'Country': c?.name_en ?? '',
+        'Currency': v.currency,
+        'Payment Terms': String(v.payment_terms),
+        'Contact': v.contact_name ?? '',
+        'Email': v.contact_email ?? '',
+        'Active': v.is_active ? 'Yes' : 'No',
+      };
+    });
+    exportToExcel(rows, 'Vendor Registry', `vendors-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   // Vendor ledger summary
   const ledgerSummary = useMemo(() => {
     let totalDR = 0, totalCR = 0;
@@ -153,7 +173,7 @@ export default function AccountingVendors() {
     return { totalDR, totalCR, net: totalCR - totalDR };
   }, [vendorLines]);
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const typeBadge = (t: string) => {
@@ -175,7 +195,8 @@ export default function AccountingVendors() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadVendors} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel"><Download className="h-4 w-4 mr-1" />Excel</Button>
           {canEdit && <Button size="sm" onClick={() => openDialog()} data-testid="button-add"><Plus className="h-4 w-4 mr-1" />Add Vendor</Button>}
         </div>
       </div>

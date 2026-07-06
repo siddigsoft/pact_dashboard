@@ -15,7 +15,8 @@ import {
   TrendingUp, TrendingDown, ArrowLeftRight, Globe, Calendar,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
+import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -125,6 +126,17 @@ export default function AccountingMultiCurrency() {
     setSaving(false);
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(r => ({
+      'From': r.from_currency,
+      'To': r.to_currency,
+      'Rate': r.rate,
+      'Effective Date': r.effective_date,
+      'Source': r.source ?? '',
+    }));
+    exportToExcel(rows, 'Exchange Rates', `exchange-rates-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportCsv = () => {
     downloadCsv('exchange_rates.csv', [
       ['From', 'To', 'Rate', 'Effective Date', 'Source'],
@@ -180,7 +192,8 @@ export default function AccountingMultiCurrency() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-fx"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-fx"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-fx-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-fx-csv"><ArrowLeftRight className="w-4 h-4 mr-1" /> CSV</Button>
           {canEdit && <Button size="sm" onClick={openCreate} data-testid="button-create-fx"><Plus className="w-4 h-4 mr-1" /> Add Rate</Button>}
         </div>
       </div>

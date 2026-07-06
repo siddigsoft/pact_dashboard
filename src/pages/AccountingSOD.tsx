@@ -18,6 +18,7 @@ import { downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface JournalEntry {
   id: string; entry_no: string; posting_date: string;
@@ -137,6 +138,18 @@ export default function AccountingSOD() {
         v.entry.posted_at ?? '',
       ]),
     ]);
+  };
+
+  const exportExcel = () => {
+    const rows = violations.map(v => ({
+      'Entry No': v.entry.entry_no,
+      'Posting Date': v.entry.posting_date,
+      'Created & Posted By': v.creatorName,
+      'Source Type': v.entry.source_type ?? '',
+      'Description': v.entry.description_en ?? '',
+      'Posted At': v.entry.posted_at ?? '',
+    }));
+    exportToExcel(rows, 'SOD Violations', `sod-violations-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;

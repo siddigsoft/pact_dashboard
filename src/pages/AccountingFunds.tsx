@@ -17,6 +17,7 @@ import { Loader2, RefreshCw, Plus, Pencil, Search, Landmark } from 'lucide-react
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Fund {
   id: string;
@@ -50,7 +51,7 @@ const BLANK: Omit<Fund, 'id' | 'created_at'> = {
 };
 
 export default function AccountingFunds() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin', 'finance', 'accountant']);
 
@@ -152,7 +153,19 @@ export default function AccountingFunds() {
     }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  const exportFunds = () => {
+    const rows = filtered.map(f => ({
+      'Code': f.code,
+      'Name (EN)': f.name_en,
+      'Name (AR)': f.name_ar,
+      'Restriction': RESTRICTION_LABEL[f.restriction_type] || f.restriction_type,
+      'Start Date': f.start_date || '',
+      'End Date': f.end_date || '',
+      'Active': f.is_active ? 'Yes' : 'No',
+    }));
+    exportToExcel(rows, 'Funds Register', `funds-registry-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -174,6 +187,9 @@ export default function AccountingFunds() {
               <Plus className="w-4 h-4 mr-1" /> Add Fund
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={exportFunds} disabled={!filtered.length} data-testid="button-export-funds">
+            <Landmark className="w-4 h-4 mr-1" /> Export
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>

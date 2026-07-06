@@ -16,7 +16,8 @@ import {
   AlertTriangle, ShoppingCart, ArrowRight, Truck,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
+import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -172,6 +173,28 @@ export default function AccountingGRN() {
     else { toast({ title: `GRN marked as ${STATUS_CFG[newStatus]?.label ?? newStatus}` }); setDetailGRN(null); setActionNote(''); void load(); }
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(g => {
+      const po = pos.find(p => p.id === g.po_id);
+      const acceptedValue = Number(g.unit_cost ?? 0) * Number(g.quantity_accepted ?? g.quantity_received);
+      return {
+        'GRN #': g.grn_number,
+        'Title': g.title,
+        'PO #': po?.po_number ?? '',
+        'Status': STATUS_CFG[g.status]?.label ?? g.status,
+        'Condition': CONDITION_CFG[g.condition]?.label ?? g.condition,
+        'Qty Received': g.quantity_received,
+        'Qty Accepted': g.quantity_accepted ?? '',
+        'Unit': g.unit ?? '',
+        'Unit Cost': g.unit_cost ?? '',
+        'Accepted Value': acceptedValue,
+        'Currency': g.currency,
+        'Received Date': g.received_date,
+      };
+    });
+    exportToExcel(rows, 'Goods Receipt Notes', `grn-reports-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportCsv = () => {
     downloadCsv('goods_receipt_notes.csv', [
       ['GRN #', 'Title', 'PO #', 'Status', 'Condition', 'Qty Received', 'Qty Accepted', 'Unit', 'Unit Cost', 'Currency', 'Received Date'],
@@ -210,7 +233,8 @@ export default function AccountingGRN() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-grn"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-grn"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-grn-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-grn-csv"><FileText className="w-4 h-4 mr-1" /> CSV</Button>
           <Button size="sm" onClick={openCreate} data-testid="button-create-grn"><Plus className="w-4 h-4 mr-1" /> New GRN</Button>
         </div>
       </div>

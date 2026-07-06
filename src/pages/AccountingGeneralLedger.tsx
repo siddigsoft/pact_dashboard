@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, BookOpen, Download, RefreshCw, Search, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { formatNumber, downloadCsv, ACCT_FUNCTIONAL_CCY } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
+import { formatNumber, ACCT_FUNCTIONAL_CCY, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
@@ -34,7 +35,7 @@ interface GLLine {
 const PAGE_SIZE = 100;
 
 export default function AccountingGeneralLedger() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const [searchParams] = useSearchParams();
@@ -231,6 +232,43 @@ export default function AccountingGeneralLedger() {
     return `${y?.code ?? '?'} P${String(p.period_no).padStart(2, '0')} · ${format(parseISO(p.start_date), 'MMM d')} – ${format(parseISO(p.end_date), 'MMM d, yyyy')}`;
   };
 
+  const exportExcel = () => {
+    if (!selectedAccount || !selectedPeriod) return;
+    const rows = linesWithBalance.map(l => ({
+      'Date': l.posting_date,
+      'Entry#': `JE-${String(l.entry_no).padStart(4, '0')}`,
+      'Description': l.line_description ?? l.description_en,
+      'Debit': l.debit_credit === 'DR' ? l.functional_amount : 0,
+      'Credit': l.debit_credit === 'CR' ? l.functional_amount : 0,
+      'Balance': l.runningBalance,
+      'Currency': l.functional_currency,
+    }));
+    
+    // Add opening balance as first row
+    rows.unshift({
+      'Date': selectedPeriod.start_date,
+      'Entry#': '',
+      'Description': 'Opening Balance',
+      'Debit': 0,
+      'Credit': 0,
+      'Balance': openingBalance,
+      'Currency': selectedCurrency,
+    });
+
+    // Add closing balance as last row
+    rows.push({
+      'Date': '',
+      'Entry#': '',
+      'Description': 'Closing Balance',
+      'Debit': totalDR,
+      'Credit': totalCR,
+      'Balance': closingBalance,
+      'Currency': selectedCurrency,
+    });
+
+    exportToExcel(rows, 'General Ledger', `general-ledger-${selectedAccount.code}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportCsv = () => {
     if (!selectedAccount || !selectedPeriod) return;
     const header = ['Date', 'Entry#', 'Description', 'DR', 'CR', 'Balance', 'Currency'];
@@ -248,7 +286,7 @@ export default function AccountingGeneralLedger() {
     downloadCsv(`general-ledger-${selectedAccount.code}-${new Date().toISOString().slice(0, 10)}.csv`, [header, opening, ...body, closing]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -267,8 +305,11 @@ export default function AccountingGeneralLedger() {
           <Button variant="outline" size="sm" onClick={runLedger} disabled={loading || !accountId} data-testid="button-refresh">
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} /> Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!lines.length} data-testid="button-export-gl">
+            <Download className="h-4 w-4 mr-1" /> Excel
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!lines.length} data-testid="button-export-csv">
-            <Download className="h-4 w-4 mr-1" /> CSV
+            <FileDown className="h-4 w-4 mr-1" /> CSV
           </Button>
         </div>
       </div>

@@ -23,6 +23,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 /* ─── types ──────────────────────────────────────────────────────────────── */
 interface JournalEntry {
@@ -114,7 +115,7 @@ function scoreEntry(e: JournalEntry): { type: RiskType; score: number } | null {
 
 /* ─── component ───────────────────────────────────────────────────────────── */
 export default function AccountingAMLCompliance() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin']);
 
@@ -382,7 +383,22 @@ export default function AccountingAMLCompliance() {
     downloadCsv(`aml-alerts-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = filtered.map(f => ({
+      'Entry No': f.entry_no,
+      'Date': f.posting_date,
+      'Amount': f.amount,
+      'Currency': f.currency,
+      'Risk Type': RISK_META[f.risk_type]?.label ?? f.risk_type,
+      'Risk Score': f.risk_score,
+      'Status': STATUS_META[f.status]?.label ?? f.status,
+      'Description': f.description ?? '',
+      'Source': f.source_type ?? '',
+      'Reviewer Note': f.reviewer_note ?? '',
+    }));
+    exportToExcel(rows, 'AML Alerts', `aml-alerts-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (!allowed) return <Navigate to="/" replace />;
 
   const checkStatus = (s: ComplianceCheck['status']) => {
@@ -413,8 +429,11 @@ export default function AccountingAMLCompliance() {
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="button-refresh">
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export">
-            <Download className="h-4 w-4 mr-1" />Export
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-aml-compliance">
+            <Download className="h-4 w-4 mr-1" />Export Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
+            <Download className="h-4 w-4 mr-1" />Export CSV
           </Button>
         </div>
       </div>

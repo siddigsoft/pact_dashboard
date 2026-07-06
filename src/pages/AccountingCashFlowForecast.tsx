@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, TrendingUp, RefreshCw, Download, AlertTriangle, BarChart3 } from 'lucide-react';
 import { format, addMonths, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
@@ -28,7 +30,8 @@ interface ForecastRow {
 interface HistoricalRow { month: string; inflows: number; outflows: number; net: number }
 
 export default function AccountingCashFlowForecast() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
+  const { authReady } = useAppContext();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const [loading, setLoading] = useState(true);
@@ -195,7 +198,19 @@ export default function AccountingCashFlowForecast() {
     downloadCsv(`cash-flow-forecast-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = forecast.map(r => ({
+      'Month': r.label,
+      'Opening Balance': r.openingBalance,
+      'Inflows': r.inflows,
+      'Outflows': r.outflows,
+      'Net': r.net,
+      'Closing Balance': r.closingBalance
+    }));
+    exportToExcel(rows, 'Cash Flow Forecast', `cash-flow-forecast-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const lowestBalance = forecast.reduce((min, r) => Math.min(min, r.closingBalance), Infinity);
@@ -216,6 +231,9 @@ export default function AccountingCashFlowForecast() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="button-refresh">
             <RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!forecast.length} data-testid="button-export-cash-flow-forecast">
+            <Download className="h-4 w-4 mr-1" />Excel
           </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!forecast.length} data-testid="button-export">
             <Download className="h-4 w-4 mr-1" />CSV

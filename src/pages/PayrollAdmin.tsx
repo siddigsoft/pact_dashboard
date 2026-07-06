@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import { exportToExcel, exportMultiSheetExcel } from '@/utils/report-export';
 import {
   Users, Trash2, Edit3, Save, Lock, CheckCircle2, Download,
   Loader2, Banknote, CalendarRange, PlusCircle, TrendingDown,
@@ -1678,48 +1678,61 @@ function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; emplo
   const maxDeptBar  = deptSummary[0]?.gross || 1;
 
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    // Summary sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['PACT Payroll Report', isProjection ? 'Current Configuration (Projection)' : selectedRun?.period_label ?? ''],
-      ['Generated', format(new Date(), 'dd MMM yyyy HH:mm')],
-      [],
-      ['SUMMARY'],
-      ['Headcount', items.length],
-      ['Total Base', totalBase],
-      ['Total Allowances', totalAllow],
-      ['Total Gross', totalGross],
-      ['Total Deductions', totalDed],
-      ['Total Net Pay', totalNet],
-    ]), 'Summary');
-
-    // Allowances sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Allowance', 'Employees', 'Total Amount', '% of Gross'],
-      ...allowanceSummary.map(a => [a.name, a.count, a.total, `${a.pctOfGross.toFixed(1)}%`]),
-    ]), 'Allowances');
-
-    // Deductions sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Deduction', 'Employees', 'Total Amount', '% of Gross'],
-      ...deductionSummary.map(d => [d.name, d.count, d.total, `${d.pctOfGross.toFixed(1)}%`]),
-    ]), 'Deductions');
-
-    // Department sheet
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Department', 'Headcount', 'Total Base', 'Total Gross', 'Total Deductions', 'Total Net'],
-      ...deptSummary.map(d => [d.dept, d.headcount, d.base, d.gross, d.deductions, d.net]),
-    ]), 'By Department');
-
-    // Full employee list
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Employee', 'Department', 'Base', 'Allowances', 'Gross', 'Deductions', 'Net'],
-      ...items.map(i => [i.user_name, i.department_name, i.base_salary, i.allowances_total, i.gross_salary, i.deductions_total, i.net_salary]),
-    ]), 'Employee Detail');
-
     const label = isProjection ? 'projection' : (selectedRun?.period_label ?? 'report');
-    XLSX.writeFile(wb, `pact-payroll-${label.replace(/\s/g, '-').toLowerCase()}.xlsx`);
+    exportMultiSheetExcel([
+      {
+        name: 'Summary',
+        data: [
+          { Item: 'Headcount', Value: items.length },
+          { Item: 'Total Base', Value: totalBase },
+          { Item: 'Total Allowances', Value: totalAllow },
+          { Item: 'Total Gross', Value: totalGross },
+          { Item: 'Total Deductions', Value: totalDed },
+          { Item: 'Total Net Pay', Value: totalNet },
+        ]
+      },
+      {
+        name: 'Allowances',
+        data: allowanceSummary.map(a => ({
+          'Allowance': a.name,
+          'Employees': a.count,
+          'Total Amount': a.total,
+          '% of Gross': `${a.pctOfGross.toFixed(1)}%`
+        }))
+      },
+      {
+        name: 'Deductions',
+        data: deductionSummary.map(d => ({
+          'Deduction': d.name,
+          'Employees': d.count,
+          'Total Amount': d.total,
+          '% of Gross': `${d.pctOfGross.toFixed(1)}%`
+        }))
+      },
+      {
+        name: 'By Department',
+        data: deptSummary.map(d => ({
+          'Department': d.dept,
+          'Headcount': d.headcount,
+          'Total Base': d.base,
+          'Total Gross': d.gross,
+          'Total Deductions': d.deductions,
+          'Total Net': d.net
+        }))
+      },
+      {
+        name: 'Employee Detail',
+        data: items.map(i => ({
+          'Employee': i.user_name,
+          'Department': i.department_name,
+          'Base': i.base_salary,
+          'Allowances': i.allowances_total,
+          'Gross': i.gross_salary,
+          'Deductions': i.deductions_total,
+          'Net': i.net_salary
+        }))
+      }
+    ], `pact-payroll-${label.replace(/\s/g, '-').toLowerCase()}.xlsx`);
   };
 
   const loading = selectedRunId !== 'projection' && loadingItems;
@@ -2013,9 +2026,7 @@ function ContractExpiryReport({ employees }: { employees: EmployeeRow[] }) {
       'Days Remaining': e.days,
       'Status': e.days < 0 ? 'Expired' : e.days <= 30 ? 'Critical' : e.days <= 60 ? 'Urgent' : e.days <= 90 ? 'Warning' : 'OK',
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Contract Expiry');
-    XLSX.writeFile(wb, `pact-contract-expiry-${format(today, 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(rows, 'Contract Expiry', `pact-contract-expiry-${format(today, 'yyyy-MM-dd')}.xlsx`);
   };
 
   const ExpirySection = ({ title, items, color, bg, border }: {
@@ -2139,14 +2150,29 @@ function HeadcountReport({ employees }: { employees: EmployeeRow[] }) {
   };
 
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      byDept.map(d => ({ Department: d.dept, Headcount: d.count, 'With Salary': d.withSalary, 'Without Salary': d.count - d.withSalary, ...d.types }))
-    ), 'By Department');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      employees.map(e => ({ Name: e.full_name ?? '—', Department: e.department_name ?? '—', 'Employment Type': e.employment_type ?? '—', 'Has Salary Config': e.salary_config ? 'Yes' : 'No', 'Contract Start': e.contract_start_date ?? '—', 'Contract End': e.contract_end_date ?? 'Open-ended' }))
-    ), 'All Staff');
-    XLSX.writeFile(wb, `pact-headcount-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportMultiSheetExcel([
+      {
+        name: 'By Department',
+        data: byDept.map(d => ({
+          Department: d.dept,
+          Headcount: d.count,
+          'With Salary': d.withSalary,
+          'Without Salary': d.count - d.withSalary,
+          ...d.types
+        }))
+      },
+      {
+        name: 'All Staff',
+        data: employees.map(e => ({
+          Name: e.full_name ?? '—',
+          Department: e.department_name ?? '—',
+          'Employment Type': e.employment_type ?? '—',
+          'Has Salary Config': e.salary_config ? 'Yes' : 'No',
+          'Contract Start': e.contract_start_date ?? '—',
+          'Contract End': e.contract_end_date ?? 'Open-ended'
+        }))
+      }
+    ], `pact-headcount-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   return (
@@ -2286,20 +2312,38 @@ function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: Employe
   const maxMonthGross = Math.max(...monthlyTotals.map(m => m.gross), 1);
 
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-      { Label: 'YTD Gross', Value: ytdGross },
-      { Label: 'YTD Deductions', Value: ytdDed },
-      { Label: 'YTD Net Pay', Value: ytdNet },
-      { Label: 'Payroll Runs', Value: yearRuns.length },
-    ]), 'Summary');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      monthlyTotals.map(m => ({ Month: m.label, Status: m.status, Headcount: m.headcount, 'Total Gross': m.gross, 'Total Net': m.net }))
-    ), 'Monthly');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      empSummary.map(e => ({ Name: e.name, Department: e.dept, 'Months Paid': e.months, 'YTD Gross': e.gross, 'YTD Deductions': e.ded, 'YTD Net': e.net }))
-    ), 'By Employee');
-    XLSX.writeFile(wb, `pact-ytd-${thisYear}.xlsx`);
+    exportMultiSheetExcel([
+      {
+        name: 'Summary',
+        data: [
+          { Label: 'YTD Gross', Value: ytdGross },
+          { Label: 'YTD Deductions', Value: ytdDed },
+          { Label: 'YTD Net Pay', Value: ytdNet },
+          { Label: 'Payroll Runs', Value: yearRuns.length },
+        ]
+      },
+      {
+        name: 'Monthly',
+        data: monthlyTotals.map(m => ({
+          Month: m.label,
+          Status: m.status,
+          Headcount: m.headcount,
+          'Total Gross': m.gross,
+          'Total Net': m.net
+        }))
+      },
+      {
+        name: 'By Employee',
+        data: empSummary.map(e => ({
+          Name: e.name,
+          Department: e.dept,
+          'Months Paid': e.months,
+          'YTD Gross': e.gross,
+          'YTD Deductions': e.ded,
+          'YTD Net': e.net
+        }))
+      }
+    ], `pact-ytd-${thisYear}.xlsx`);
   };
 
   if (isLoading) return (
@@ -2482,26 +2526,30 @@ function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
   }, [itemsA, itemsB]);
 
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-      { Metric: 'Headcount',   [runA?.period_label ?? 'A']: totA.count,  [runB?.period_label ?? 'B']: totB.count,  Change: totB.count - totA.count },
-      { Metric: 'Total Gross', [runA?.period_label ?? 'A']: totA.gross,  [runB?.period_label ?? 'B']: totB.gross,  Change: totB.gross - totA.gross },
-      { Metric: 'Total Deductions', [runA?.period_label ?? 'A']: totA.ded, [runB?.period_label ?? 'B']: totB.ded, Change: totB.ded - totA.ded },
-      { Metric: 'Total Net',   [runA?.period_label ?? 'A']: totA.net,    [runB?.period_label ?? 'B']: totB.net,    Change: totB.net - totA.net },
-    ]), 'Summary');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      empComparison.map(e => ({
-        Name: e.name, Department: e.dept,
-        [`Gross (${runA?.period_label})`]: e.a?.gross_salary ?? 0,
-        [`Gross (${runB?.period_label})`]: e.b?.gross_salary ?? 0,
-        'Gross Change': (e.b?.gross_salary ?? 0) - (e.a?.gross_salary ?? 0),
-        [`Net (${runA?.period_label})`]: e.a?.net_salary ?? 0,
-        [`Net (${runB?.period_label})`]: e.b?.net_salary ?? 0,
-        'Net Change': (e.b?.net_salary ?? 0) - (e.a?.net_salary ?? 0),
-        Note: !e.a ? 'New this month' : !e.b ? 'Left/removed' : '',
-      }))
-    ), 'Employee Detail');
-    XLSX.writeFile(wb, `pact-payroll-compare-${runA?.period_label?.replace(/\s/g, '-') ?? 'A'}-vs-${runB?.period_label?.replace(/\s/g, '-') ?? 'B'}.xlsx`);
+    exportMultiSheetExcel([
+      {
+        name: 'Summary',
+        data: [
+          { Metric: 'Headcount',   [runA?.period_label ?? 'A']: totA.count,  [runB?.period_label ?? 'B']: totB.count,  Change: totB.count - totA.count },
+          { Metric: 'Total Gross', [runA?.period_label ?? 'A']: totA.gross,  [runB?.period_label ?? 'B']: totB.gross,  Change: totB.gross - totA.gross },
+          { Metric: 'Total Deductions', [runA?.period_label ?? 'A']: totA.ded, [runB?.period_label ?? 'B']: totB.ded, Change: totB.ded - totA.ded },
+          { Metric: 'Total Net',   [runA?.period_label ?? 'A']: totA.net,    [runB?.period_label ?? 'B']: totB.net,    Change: totB.net - totA.net },
+        ]
+      },
+      {
+        name: 'Employee Detail',
+        data: empComparison.map(e => ({
+          Name: e.name, Department: e.dept,
+          [`Gross (${runA?.period_label})`]: e.a?.gross_salary ?? 0,
+          [`Gross (${runB?.period_label})`]: e.b?.gross_salary ?? 0,
+          'Gross Change': (e.b?.gross_salary ?? 0) - (e.a?.gross_salary ?? 0),
+          [`Net (${runA?.period_label})`]: e.a?.net_salary ?? 0,
+          [`Net (${runB?.period_label})`]: e.b?.net_salary ?? 0,
+          'Net Change': (e.b?.net_salary ?? 0) - (e.a?.net_salary ?? 0),
+          Note: !e.a ? 'New this month' : !e.b ? 'Left/removed' : '',
+        }))
+      }
+    ], `pact-payroll-compare-${runA?.period_label?.replace(/\s/g, '-') ?? 'A'}-vs-${runB?.period_label?.replace(/\s/g, '-') ?? 'B'}.xlsx`);
   };
 
   if (runs.length < 2) return (
@@ -2671,18 +2719,20 @@ function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
   }, [rows]);
 
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      rows.map(r => ({
-        Employee: r.user_name, Department: r.department_name, 'Gross Salary': r.gross_salary,
-        ...Object.fromEntries(r.statutory.map(d => [d.name, d.amount])),
-        'Total Statutory': r.total,
-      }))
-    ), 'Statutory');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      Object.entries(grandTotals).map(([name, total]) => ({ 'Statutory Item': name, 'Total Amount': total }))
-    ), 'Summary');
-    XLSX.writeFile(wb, `pact-statutory-${run?.period_label?.replace(/\s/g, '-') ?? 'report'}.xlsx`);
+    exportMultiSheetExcel([
+      {
+        name: 'Statutory',
+        data: rows.map(r => ({
+          Employee: r.user_name, Department: r.department_name, 'Gross Salary': r.gross_salary,
+          ...Object.fromEntries(r.statutory.map(d => [d.name, d.amount])),
+          'Total Statutory': r.total,
+        }))
+      },
+      {
+        name: 'Summary',
+        data: Object.entries(grandTotals).map(([name, total]) => ({ 'Statutory Item': name, 'Total Amount': total }))
+      }
+    ], `pact-statutory-${run?.period_label?.replace(/\s/g, '-') ?? 'report'}.xlsx`);
   };
 
   if (runs.length === 0) return (

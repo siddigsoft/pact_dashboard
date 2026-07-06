@@ -20,6 +20,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Encumbrance {
   id: string; source_type: string; source_id: string;
@@ -45,7 +46,7 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export default function AccountingBudgetEncumbrance() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
@@ -176,7 +177,22 @@ export default function AccountingBudgetEncumbrance() {
     ]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = filtered.map(e => {
+      const fund = funds.find(f => f.id === e.fund_id);
+      return {
+        'Source Type': SOURCE_LABEL[e.source_type] ?? e.source_type,
+        'Source ID': e.source_id,
+        'Amount': e.amount,
+        'Currency': e.currency,
+        'Status': STATUS_CFG[e.status]?.label ?? e.status,
+        'Fund': fund?.name_en ?? '',
+        'Created': e.created_at,
+      };
+    });
+    exportToExcel(rows, 'Budget Encumbrances', `budget-encumbrances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (!allowed)   return <Navigate to="/" replace />;
 
   if (tableExists === false) {
@@ -216,7 +232,8 @@ export default function AccountingBudgetEncumbrance() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-enc"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-enc"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-budget-enc"><Download className="w-4 h-4 mr-1" /> Export Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv"><Download className="w-4 h-4 mr-1" /> Export CSV</Button>
         </div>
       </div>
 

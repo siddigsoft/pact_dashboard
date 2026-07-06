@@ -15,6 +15,7 @@ import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFor
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { ensureArabicFont, setArabicFont, setLatinFont, ARABIC_FONT_NAME } from '@/lib/jspdfArabic';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
@@ -32,7 +33,7 @@ interface TbRow {
 interface AccountMeta { id: string; account_type: string; subtype: string; country_id: string | null }
 
 export default function AccountingTrialBalance() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { countryId: defaultCountryId, loading: acctCountryLoading } = useAccountingCountry();
 
@@ -159,6 +160,18 @@ export default function AccountingTrialBalance() {
     downloadCsv(`trial-balance-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body, footer]);
   };
 
+  const exportExcel = () => {
+    const data = tb.map(r => ({
+      'Code': r.account_code,
+      'Name (EN)': r.account_name_en,
+      'Name (AR)': r.account_name_ar,
+      'Debit': r.debit_total,
+      'Credit': r.credit_total,
+      'Net Balance': r.net_balance
+    }));
+    exportToExcel(data, 'Trial Balance', `trial-balance-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportPdf = async () => {
     setPdfBusy(true);
     try {
@@ -213,7 +226,7 @@ export default function AccountingTrialBalance() {
     }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -234,6 +247,9 @@ export default function AccountingTrialBalance() {
           </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
             <Download className="w-4 h-4 mr-1" /> CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-trial-balance">
+            <Download className="h-4 w-4 mr-1" /> Excel
           </Button>
           <Button variant="outline" size="sm" onClick={() => void exportPdf()} disabled={!filtered.length || pdfBusy} data-testid="button-export-pdf">
             {pdfBusy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />} PDF (EN/AR)

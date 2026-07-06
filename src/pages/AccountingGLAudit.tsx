@@ -16,7 +16,7 @@ import {
 import { format, parseISO, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/utils/report-export';
 
 interface BridgeLogEntry {
   id: string;
@@ -207,9 +207,7 @@ export default function AccountingGLAudit() {
       'Error':           e.error_message ?? '',
       'Posted At':       format(parseISO(e.created_at), 'yyyy-MM-dd HH:mm:ss'),
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'GL Bridge Log');
-    XLSX.writeFile(wb, `GL_Bridge_Log_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(rows, 'GL Bridge Log', `GL_Bridge_Log_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   const totals = {

@@ -23,6 +23,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface LineItem { name: string; amount: number; type: 'fixed' | 'percent'; }
@@ -244,22 +245,34 @@ export default function SalaryRetainerReport() {
   }
 
   function exportExcel() {
-    const data = [
-      ['Employee', 'Department', 'Role', 'Type', 'Base Salary', 'Gross Salary', 'Net Salary', 'Retainer', 'Currency', 'Total Fixed Cost'],
-      ...filtered.map(e => [
-        e.full_name ?? '', e.department_name ?? '', e.role ?? '',
-        e.contract_type ?? e.employment_type ?? '',
-        e.salaryCalc?.base ?? '', e.salaryCalc?.gross ?? '', e.salaryCalc?.net ?? '',
-        e.retainerPeriod?.amount ?? '',
-        e.salaryCalc?.currency ?? e.retainerPeriod?.currency ?? 'SDG',
-        e.totalFixed,
-      ]),
-      ['', '', '', 'TOTAL', '', totals.salary, '', totals.retainer, '', totals.combined],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Salary & Retainer');
-    XLSX.writeFile(wb, `salary-retainer-${format(periodStart, 'yyyy-MM')}.xlsx`);
+    const data = filtered.map(e => ({
+      'Employee': e.full_name ?? '',
+      'Department': e.department_name ?? '',
+      'Role': e.role ?? '',
+      'Type': e.contract_type ?? e.employment_type ?? '',
+      'Base Salary': e.salaryCalc?.base ?? '',
+      'Gross Salary': e.salaryCalc?.gross ?? '',
+      'Net Salary': e.salaryCalc?.net ?? '',
+      'Retainer': e.retainerPeriod?.amount ?? '',
+      'Currency': e.salaryCalc?.currency ?? e.retainerPeriod?.currency ?? 'SDG',
+      'Total Fixed Cost': e.totalFixed,
+    }));
+    
+    // Add total row
+    data.push({
+      'Employee': 'TOTAL',
+      'Department': '',
+      'Role': '',
+      'Type': '',
+      'Base Salary': '',
+      'Gross Salary': totals.salary,
+      'Net Salary': '',
+      'Retainer': totals.retainer,
+      'Currency': '',
+      'Total Fixed Cost': totals.combined,
+    } as any);
+
+    exportToExcel(data, 'Salary & Retainer', `salary-retainer-${format(periodStart, 'yyyy-MM')}.xlsx`);
   }
 
   function exportPDF() {

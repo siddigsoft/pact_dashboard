@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { format } from 'date-fns';
+import { Download } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export';
 
 /* ── helpers ── */
 function pct(n: number, d: number) { return d > 0 ? Math.round(n / d * 100) : 0; }
@@ -80,6 +82,20 @@ function TrackerView() {
     return { total, complete, incomplete: total - complete, avgPct };
   }, [rows]);
 
+  function exportStaffOnboarding() {
+    const rowsForExport = filtered.map(x => ({
+      'Employee Name': x.profile.full_name ?? '—',
+      'Employee ID': x.profile.employee_id ?? '—',
+      'Email': x.profile.email ?? '—',
+      'Role': x.profile.role ?? '—',
+      'Completion %': x.pct,
+      'Steps Completed': x.done,
+      'Total Steps': x.total,
+      'Joined Date': x.profile.created_at ? format(new Date(x.profile.created_at), 'yyyy-MM-dd') : '—',
+    }));
+    exportToExcel(rowsForExport, 'Staff Onboarding Tracker', `staff-onboarding-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   if (loading) return (
     <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
       Loading staff onboarding data…
@@ -125,6 +141,21 @@ function TrackerView() {
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+          <button
+            onClick={exportStaffOnboarding}
+            data-testid="button-export-staff-onboarding"
+            style={{
+              padding: '8px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: '1.5px solid #0F2041',
+              background: '#fff',
+              color:      '#0F2041',
+              transition: 'all 0.15s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Download style={{ width: 14, height: 14 }} /> Export
+          </button>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}

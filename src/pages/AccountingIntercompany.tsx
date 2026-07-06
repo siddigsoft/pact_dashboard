@@ -17,7 +17,8 @@ import {
   Eye, Download, Send, Clock, Ban,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
+import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 
 interface Country {
@@ -214,6 +215,23 @@ export default function AccountingIntercompany() {
     else { toast({ title: `${t.transfer_number} cancelled` }); void load(); }
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(t => ({
+      'Transfer No.': t.transfer_number,
+      'Date': t.transfer_date,
+      'From': countryMap[t.from_country_id]?.name_en ?? t.from_country_id,
+      'To': countryMap[t.to_country_id]?.name_en ?? t.to_country_id,
+      'Amount': t.amount,
+      'Currency': t.currency,
+      'Status': t.status,
+      'Reference': t.reference ?? '',
+      'Description': t.description_en ?? '',
+      'From JE': t.from_je_id ?? '',
+      'To JE': t.to_je_id ?? '',
+    }));
+    exportToExcel(rows, 'Intercompany Transfers', `intercompany-transfers-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportCsv = () => {
     const header = ['#', 'Transfer No.', 'Date', 'From', 'To', 'Amount', 'Currency', 'Status', 'Reference', 'Description', 'From JE', 'To JE'];
     const rows = filtered.map((t, i) => [
@@ -260,8 +278,11 @@ export default function AccountingIntercompany() {
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} data-testid="button-refresh">
             <RefreshCw className={cn('w-4 h-4 mr-1', loading && 'animate-spin')} /> Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel">
+            <Download className="w-4 h-4 mr-1" /> Excel
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
-            <Download className="w-4 h-4 mr-1" /> CSV
+            <ArrowRightLeft className="w-4 h-4 mr-1" /> CSV
           </Button>
         </div>
       </div>

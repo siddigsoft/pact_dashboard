@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Loader2, ShoppingCart, Plus, Download, RefreshCw, Search, CheckCircle2, XCircle, Clock, FileText, Pencil, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
+import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -177,6 +178,20 @@ export default function AccountingPurchaseOrders() {
     await load();
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(p => ({
+      'PO Number': p.po_number,
+      'Title': p.title,
+      'Vendor': vendors.find(v => v.id === p.vendor_id)?.name_en ?? '',
+      'Amount': p.amount,
+      'Currency': p.currency,
+      'Status': STATUS_CFG[p.status]?.label ?? p.status,
+      'Required Date': p.required_date ?? '',
+      'Created': format(parseISO(p.created_at), 'yyyy-MM-dd'),
+    }));
+    exportToExcel(rows, 'Purchase Orders', `purchase-orders-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportCsv = () => {
     const header = ['PO Number', 'Title', 'Vendor', 'Amount', 'Currency', 'Status', 'Required Date', 'Created'];
     const rows = filtered.map(p => [p.po_number, p.title, vendors.find(v => v.id === p.vendor_id)?.name_en ?? '', p.amount.toFixed(2), p.currency, p.status, p.required_date ?? '', format(parseISO(p.created_at), 'yyyy-MM-dd')]);
@@ -212,7 +227,8 @@ export default function AccountingPurchaseOrders() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel"><Download className="h-4 w-4 mr-1" />Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv"><ShoppingCart className="h-4 w-4 mr-1" />CSV</Button>
           <Button size="sm" onClick={() => openDialog()} data-testid="button-new"><Plus className="h-4 w-4 mr-1" />New PO</Button>
         </div>
       </div>

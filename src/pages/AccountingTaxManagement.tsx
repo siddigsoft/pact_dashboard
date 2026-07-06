@@ -22,6 +22,7 @@ import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { exportToExcel } from '@/utils/report-export';
 
 interface TaxCode {
   id: string; code: string; name_en: string; name_ar: string | null;
@@ -171,6 +172,22 @@ export default function AccountingTaxManagement() {
     ]);
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map(t => {
+      const country = countries.find(c => c.id === t.country_id);
+      return {
+        'Code': t.code,
+        'Name': t.name_en,
+        'Type': t.tax_type,
+        'Rate %': t.rate_pct,
+        'Applicable To': t.applicable_to,
+        'Active': t.is_active ? 'Yes' : 'No',
+        'Country': country?.name_en ?? '',
+      };
+    });
+    exportToExcel(rows, 'Tax Codes', `tax-codes-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed)   return <Navigate to="/" replace />;
 
@@ -222,7 +239,8 @@ export default function AccountingTaxManagement() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh-tax"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-tax"><Download className="w-4 h-4 mr-1" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv-tax"><Download className="w-4 h-4 mr-1" /> CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} data-testid="button-export-excel-tax"><Download className="w-4 h-4 mr-1" /> Excel</Button>
           {canEdit && <Button size="sm" onClick={openCreate} data-testid="button-create-tax"><Plus className="w-4 h-4 mr-1" /> New Tax Code</Button>}
         </div>
       </div>

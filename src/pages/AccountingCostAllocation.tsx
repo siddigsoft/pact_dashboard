@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
@@ -65,7 +67,8 @@ const MIGRATION_NOTICE = (
 );
 
 export default function AccountingCostAllocation() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
+  const { authReady } = useAppContext();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
 
@@ -347,7 +350,19 @@ export default function AccountingCostAllocation() {
     ]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  const exportExcel = () => {
+    const rows = runs.map(r => ({
+      'Run Date': r.run_date,
+      'Rules Applied': r.rule_count,
+      'Total Allocated': r.total_allocated,
+      'Journal Entry': r.journal_entry_id ?? '—',
+      'Status': r.status,
+      'Notes': r.notes ?? ''
+    }));
+    exportToExcel(rows, 'Cost Allocation Runs', `allocation-runs-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const activeRulesCount = rules.filter(r => r.is_active).length;
@@ -366,6 +381,9 @@ export default function AccountingCostAllocation() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!runs.length} data-testid="button-export-cost-allocation">
+            <Download className="h-4 w-4 mr-1" />Excel
+          </Button>
           {canEdit && !migrationNeeded && (
             <>
               <Button variant="outline" size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-rule">
