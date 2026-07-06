@@ -14,6 +14,7 @@ import {
 import { differenceInMonths, differenceInYears, parseISO, isValid, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { exportToExcel } from '@/utils/report-export';
 import * as XLSX from 'xlsx';
 
 interface StaffRow {
@@ -121,8 +122,7 @@ export default function EOSBPanel() {
       const { data } = await supabase
         .from('employee_salary_config' as any)
         .select('user_id, base_salary')
-        .limit(1000)
-        .catch(() => ({ data: null }));
+        .limit(1000);
       const map: Record<string, number> = {};
       for (const r of (data ?? []) as any[]) {
         if (r.user_id && !map[r.user_id]) map[r.user_id] = Number(r.base_salary ?? 0);
@@ -140,9 +140,7 @@ export default function EOSBPanel() {
         .select('*')
         .order('updated_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
-        .then(r => r as any)
-        .catch(() => ({ data: null, error: null } as any));
+        .maybeSingle();
       if (error || !data) return DEFAULT_EOSB_SETTINGS;
       return {
         tier1_years_threshold: Number(data.tier1_years_threshold ?? DEFAULT_EOSB_SETTINGS.tier1_years_threshold),
@@ -259,10 +257,8 @@ export default function EOSBPanel() {
         'EOSB Amount':     Math.round(eosb * 100) / 100,
       };
     });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'EOSB');
-    XLSX.writeFile(wb, `EOSB_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  }, [filtered]);
+    exportToExcel(data, 'EOSB', `EOSB_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }, [filtered, activeEosbSettings]);
 
   const profNameMap = (profiles ?? []).reduce((m: Record<string, string>, p: any) => {
     m[p.id] = p.full_name ?? p.id.slice(0, 8);

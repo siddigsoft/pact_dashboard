@@ -1,3 +1,4 @@
+import { exportToExcel, exportToCSV } from '@/utils/report-export';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -69,7 +70,6 @@ import {
   MousePointer
 } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
-import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import activityTracker, { ActivityEntry, ActivityType, ActivityCategory } from '@/services/activity-tracking.service';
 
@@ -725,17 +725,7 @@ const AuditLogs = () => {
       'Workflow Step': log.workflowStep ? WORKFLOW_STEP_LABELS[log.workflowStep] : '',
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit Logs');
-    
-    // Auto-size columns
-    const colWidths = Object.keys(exportData[0] || {}).map(key => ({
-      wch: Math.max(key.length, 15)
-    }));
-    worksheet['!cols'] = colWidths;
-    
-    XLSX.writeFile(workbook, `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmm')}.xlsx`);
+    exportToExcel(exportData, 'Audit Logs', `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmm')}.xlsx`);
   };
 
   const handleExportCSV = () => {
@@ -750,18 +740,7 @@ const AuditLogs = () => {
       'Success': log.success ? 'Yes' : 'No',
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const csv = XLSX.utils.sheet_to_csv(worksheet);
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmm')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    exportToCSV(exportData, `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmm')}.csv`);
   };
 
   const toggleLogExpanded = (logId: string) => {

@@ -22,6 +22,7 @@ import {
   Clock, MapPin, Calculator, List, Copy, Play, Archive, MoreHorizontal,
   Globe, Scale, FileText,
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export.ts';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
@@ -858,9 +859,8 @@ function TrackingTab({ study, draws }: { study: Study; draws: SampleDraw[] }) {
   };
 
   const exportUnits = () => {
-    const ws = XLSX.utils.json_to_sheet(units.map(u => ({ ...u.unit_data, status: u.status, stratum: u.stratum, cluster: u.cluster, sort_order: u.sort_order })));
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Sample');
-    XLSX.writeFile(wb, `sample_${study.name.replace(/\s+/g,'_')}.xlsx`);
+    const rows = units.map(u => ({ ...u.unit_data, status: u.status, stratum: u.stratum, cluster: u.cluster, sort_order: u.sort_order }));
+    exportToExcel(rows, 'Sample', `sample_${study.name.replace(/\s+/g,'_')}.xlsx`);
   };
 
   const filtered = units.filter(u => statusFilter === 'all' || u.status === statusFilter);
@@ -1265,9 +1265,7 @@ function WeightsTab({ study, draws, frames }: { study: Study; draws: SampleDraw[
 
   const exportWithWeights = () => {
     const rows = weightRows.map(r => ({ unit_key: r.unitKey, stratum: r.stratum, cluster: r.cluster, design_weight: r.weight, n_in_group: r.n_stratum, N_in_group: r.N_stratum }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Weights');
-    XLSX.writeFile(wb, `weights_${study.name.replace(/\s+/g,'_')}.xlsx`);
+    exportToExcel(rows, 'Weights', `weights_${study.name.replace(/\s+/g,'_')}.xlsx`);
   };
 
   const N = frame?.total_units ?? study.population_size ?? units.length;

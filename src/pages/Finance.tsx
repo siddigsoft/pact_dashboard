@@ -45,7 +45,8 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import * as XLSX from "xlsx";
+import { exportStandardExcel } from "@/utils/standardExcelExport";
+import { exportToExcel } from "@/utils/report-export";
 
 // T016: this was hardcoded to SDG everywhere it was used, even for data that
 // carries its own `currency` field (e.g. wallets/advances that may be in
@@ -498,47 +499,61 @@ const Finance: React.FC = () => {
 
   const exportConsolidatedExcel = () => {
     if (!csData) return;
-    const wb = XLSX.utils.book_new();
 
-    const fmtUsdXl = (sdg: number) => exchangeRate ? convertSdgToUsd(sdg, exchangeRate.rate) : '';
+    const fmtUsdXlValue = (sdg: number) => exchangeRate ? convertSdgToUsd(sdg, exchangeRate.rate) : 0;
     const xlWalletBal = csData.totalAssets - csData.advancesReceivable;
-    const summarySheet = XLSX.utils.aoa_to_sheet([
-      ['PACT Consolidated Financial Statement'],
-      [`Period: ${csStartDate} to ${csEndDate}`],
-      ...(exchangeRate ? [[`Exchange Rate: 1 USD = ${exchangeRate.rate.toLocaleString()} SDG (as of ${exchangeRate.fetchedAt})`]] : []),
-      [],
-      ['Item', 'Amount (SDG)', 'Amount (USD)'],
-      ['Total Assets', csData.totalAssets, fmtUsdXl(csData.totalAssets)],
-      ['  Wallet Balances', xlWalletBal, fmtUsdXl(xlWalletBal)],
-      ['  Advances Receivable', csData.advancesReceivable, fmtUsdXl(csData.advancesReceivable)],
-      ['Total Liabilities (Pending Payments)', csData.totalLiabilities, fmtUsdXl(csData.totalLiabilities)],
-      ['Net Position', csData.netPosition, fmtUsdXl(csData.netPosition)],
-      ['Total Inflows', csData.totalInflow, fmtUsdXl(csData.totalInflow)],
-      ['Total Outflows', csData.totalOutflow, fmtUsdXl(csData.totalOutflow)],
-    ]);
-    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-    if (csData.inflowCategories.length > 0) {
-      const inflowRows = [['Category', 'Amount (SDG)', 'Amount (USD)'], ...csData.inflowCategories.map(c => [c.category, c.amount, fmtUsdXl(c.amount)])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inflowRows), 'Inflows');
-    }
+    exportStandardExcel({
+      reportTitle: 'PACT - Consolidated Financial Statement',
+      subtitleLine: `Period: ${csStartDate} to ${csEndDate} | Generated: ${format(new Date(), 'PPpp')}`,
+      metaLine: exchangeRate ? `Exchange Rate: 1 USD = ${exchangeRate.rate.toLocaleString()} SDG (as of ${exchangeRate.fetchedAt})` : undefined,
+      filenamePrefix: 'PACT-Consolidated-Statement',
+      mainSheet: {
+        sheetName: 'Summary',
+        headers: ['Item', 'Amount (SDG)', 'Amount (USD)'],
+        rows: [
+          ['Total Assets', csData.totalAssets, fmtUsdXlValue(csData.totalAssets)],
+          ['  Wallet Balances', xlWalletBal, fmtUsdXlValue(xlWalletBal)],
+          ['  Advances Receivable', csData.advancesReceivable, fmtUsdXlValue(csData.advancesReceivable)],
+          ['Total Liabilities (Pending Payments)', csData.totalLiabilities, fmtUsdXlValue(csData.totalLiabilities)],
+          ['Net Position', csData.netPosition, fmtUsdXlValue(csData.netPosition)],
+          ['Total Inflows', csData.totalInflow, fmtUsdXlValue(csData.totalInflow)],
+          ['Total Outflows', csData.totalOutflow, fmtUsdXlValue(csData.totalOutflow)],
+        ],
+        colWidths: { 0: 40, 1: 20, 2: 20 }
+      },
+      breakdownSheets: [
+        ...(csData.inflowCategories.length > 0 ? [{
+          title: 'Inflow Categories',
+          sheetName: 'Inflows',
+          headers: ['Category', 'Amount (SDG)', 'Amount (USD)'],
+          rows: csData.inflowCategories.map(c => [c.category, c.amount, fmtUsdXlValue(c.amount)]),
+          colWidths: [30, 20, 20]
+        }] : []),
+        ...(csData.expenseCategories.length > 0 ? [{
+          title: 'Expense Categories',
+          sheetName: 'Expenses',
+          headers: ['Category', 'Amount (SDG)', 'Amount (USD)'],
+          rows: csData.expenseCategories.map(c => [c.category, c.amount, fmtUsdXlValue(c.amount)]),
+          colWidths: [30, 20, 20]
+        }] : []),
+        ...(csData.projectBreakdown.length > 0 ? [{
+          title: 'Project-Level Breakdown',
+          sheetName: 'Projects',
+          headers: ['Project', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)'],
+          rows: csData.projectBreakdown.map(p => [p.project, p.inflow, p.outflow, p.net, fmtUsdXlValue(p.net)]),
+          colWidths: [30, 20, 20, 20, 20]
+        }] : []),
+        ...(csData.hubBreakdown.length > 0 ? [{
+          title: 'Hub-Level Breakdown',
+          sheetName: 'Hubs',
+          headers: ['Hub', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)'],
+          rows: csData.hubBreakdown.map(h => [h.hub, h.inflow, h.outflow, h.net, fmtUsdXlValue(h.net)]),
+          colWidths: [20, 20, 20, 20, 20]
+        }] : [])
+      ]
+    });
 
-    if (csData.expenseCategories.length > 0) {
-      const expenseRows = [['Category', 'Amount (SDG)', 'Amount (USD)'], ...csData.expenseCategories.map(c => [c.category, c.amount, fmtUsdXl(c.amount)])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expenseRows), 'Expenses');
-    }
-
-    if (csData.projectBreakdown.length > 0) {
-      const projRows = [['Project', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)'], ...csData.projectBreakdown.map(p => [p.project, p.inflow, p.outflow, p.net, fmtUsdXl(p.net)])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projRows), 'Projects');
-    }
-
-    if (csData.hubBreakdown.length > 0) {
-      const hubRows = [['Hub', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)'], ...csData.hubBreakdown.map(h => [h.hub, h.inflow, h.outflow, h.net, fmtUsdXl(h.net)])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hubRows), 'Hubs');
-    }
-
-    XLSX.writeFile(wb, `PACT-Consolidated-Statement-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     toast({ title: 'Excel Exported', description: 'Consolidated statement Excel file has been downloaded.' });
   };
 

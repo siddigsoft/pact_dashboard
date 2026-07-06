@@ -17,6 +17,7 @@ import {
   DollarSign, RotateCcw, AlertTriangle, Trash2, CheckCircle2,
   Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info, ArrowRightLeft, Download, ExternalLink,
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export.ts';
 import * as XLSX from 'xlsx';
 import {
   fetchPaymentTrail, fetchMmpPaymentTrail,
@@ -124,19 +125,10 @@ export function MoneyTrailPanel({
       };
     });
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(sheetData);
-    ws['!cols'] = [
-      { wch: 12 }, { wch: 8 }, { wch: 30 }, { wch: 32 },
-      { wch: 12 }, { wch: 8 }, { wch: 22 }, { wch: 16 }, { wch: 30 }, { wch: 40 },
-    ];
-
-    const sheetName = mode === 'site' ? 'Site Trail' : 'MMP Trail';
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
     const id = mode === 'site' ? (siteEntryId || 'site') : (mmpId || 'mmp');
     const dateStr = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `money-trail-${id.slice(0, 8)}-${dateStr}.xlsx`);
+    const sheetName = mode === 'site' ? 'Site Trail' : 'MMP Trail';
+    exportToExcel(sheetData, sheetName, `money-trail-${id.slice(0, 8)}-${dateStr}.xlsx`);
   };
 
   useEffect(() => {

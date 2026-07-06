@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { HeartPulse, Plus, Loader2, Edit2, Trash2, Users, UserPlus, FileDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/utils/report-export';
 import { format } from 'date-fns';
 
 interface Plan {
@@ -134,14 +134,16 @@ export default function BenefitsAdministration() {
     fetchAll();
   }
 
-  function exportToExcel() {
+  function handleExport() {
     const rows = enrollments.map(e => ({
-      Plan: plans.find(p => p.id === e.plan_id)?.name ?? '', Staff: profiles.find(p => p.id === e.user_id)?.full_name ?? '',
-      Status: e.status, Dependents: e.dependents_count, 'Enrolled At': e.enrolled_at, 'Terminated At': e.terminated_at ?? '',
+      Plan: plans.find(p => p.id === e.plan_id)?.name ?? '',
+      Staff: profiles.find(p => p.id === e.user_id)?.full_name ?? '',
+      Status: e.status,
+      Dependents: e.dependents_count,
+      'Enrolled At': e.enrolled_at,
+      'Terminated At': e.terminated_at ?? '',
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Enrollments');
-    XLSX.writeFile(wb, `Benefit_Enrollments_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(rows, 'Enrollments', `Benefit_Enrollments_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   async function removeEnroll(e: Enrollment) {
@@ -167,7 +169,7 @@ export default function BenefitsAdministration() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Manage benefit plans and staff enrollments.</p>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-enrollments"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          <Button variant="outline" onClick={handleExport} data-testid="button-export-enrollments"><FileDown className="h-4 w-4 mr-1" />Export</Button>
           {isAdmin && <Button onClick={openNewPlan} data-testid="button-new-plan"><Plus className="h-4 w-4 mr-1" />New Plan</Button>}
         </div>
       </div>

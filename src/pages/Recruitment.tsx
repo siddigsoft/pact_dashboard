@@ -16,7 +16,7 @@ import { Briefcase, Plus, Loader2, Users, Star, Trash2, Edit2, Search, FileDown 
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/utils/report-export';
 
 interface JobPosting {
   id: string; title: string; department_id: string | null; employment_type: string;
@@ -193,17 +193,19 @@ export default function Recruitment() {
     fetchAll();
   }
 
-  function exportToExcel() {
+  function handleExport() {
     const rows = candidates.map(c => ({
       'Job Posting': postings.find(p => p.id === c.job_posting_id)?.title ?? '',
-      'Candidate': c.full_name, Email: c.email ?? '', Phone: c.phone ?? '', Source: c.source ?? '',
-      Stage: STAGE_CFG[c.stage].label, Rating: c.rating ?? '',
+      'Candidate': c.full_name,
+      Email: c.email ?? '',
+      Phone: c.phone ?? '',
+      Source: c.source ?? '',
+      Stage: STAGE_CFG[c.stage].label,
+      Rating: c.rating ?? '',
       'Interview Date': c.interview_date ? format(new Date(c.interview_date), 'yyyy-MM-dd HH:mm') : '',
       'Applied At': format(new Date(c.applied_at), 'yyyy-MM-dd'),
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Candidates');
-    XLSX.writeFile(wb, `Recruitment_Candidates_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(rows, 'Candidates', `Recruitment_Candidates_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -228,7 +230,7 @@ export default function Recruitment() {
           <Input placeholder="Search postings..." className="pl-8" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-postings" />
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-candidates"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          <Button variant="outline" onClick={handleExport} data-testid="button-export-candidates"><FileDown className="h-4 w-4 mr-1" />Export</Button>
           {isAdmin && <Button onClick={openNewJob} data-testid="button-new-posting"><Plus className="h-4 w-4 mr-1" />New Job Posting</Button>}
         </div>
       </div>

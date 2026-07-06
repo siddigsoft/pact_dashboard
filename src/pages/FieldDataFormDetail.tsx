@@ -39,6 +39,7 @@ import {
 } from 'recharts';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { exportToExcel, exportToCSV } from '@/utils/report-export.ts';
 import * as XLSX from 'xlsx';
 
 type Tab = 'overview' | 'table' | 'import' | 'exports' | 'sync' | 'map' | 'media' | 'charts' | 'activity' | 'publish' | 'datasets';
@@ -529,11 +530,10 @@ export default function FieldDataFormDetail() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = `${fileName}.json`; a.click();
         URL.revokeObjectURL(url);
+      } else if (exportFormat === 'csv') {
+        exportToCSV(rows, `${fileName}.csv`);
       } else {
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Submissions');
-        XLSX.writeFile(wb, `${fileName}.${exportFormat}`);
+        exportToExcel(rows, 'Submissions', `${fileName}.xlsx`);
       }
 
       await supabase.from('field_data_exports').insert({

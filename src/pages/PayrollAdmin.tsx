@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { exportToExcel, exportMultiSheetExcel } from '@/utils/report-export';
 import {
   Users, Trash2, Edit3, Save, Lock, CheckCircle2, Download,

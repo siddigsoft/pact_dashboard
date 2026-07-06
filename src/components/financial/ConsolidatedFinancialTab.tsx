@@ -31,7 +31,7 @@ import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid, startOfMonth, subMonths } from 'date-fns';
-import * as XLSX from 'xlsx';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -222,42 +222,50 @@ export function ConsolidatedFinancialTab({
   ].filter(d => d.value > 0), [transportStats.paid, opStats.paidAmount]);
 
   const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    const summaryData = [
-      ['Consolidated Financial Report', '', '', ''],
-      ['Generated', format(new Date(), 'dd MMM yyyy HH:mm'), '', ''],
-      ['', '', '', ''],
-      ['OVERALL SUMMARY', '', '', ''],
-      ['Metric', 'Transportation', 'Operational', 'Combined'],
-      ['Total Submissions', transportStats.total, opStats.total, transportStats.total + opStats.total],
-      ['Total Requested (SDG)', transportStats.requested, opStats.totalAmount, transportStats.requested + opStats.totalAmount],
-      ['Total Approved (SDG)', transportStats.approved, opStats.approvedAmount, transportStats.approved + opStats.approvedAmount],
-      ['Total Paid (SDG)', transportStats.paid, opStats.paidAmount, transportStats.paid + opStats.paidAmount],
-      ['Pending Count', transportStats.pendingCount, opStats.pendingCount, transportStats.pendingCount + opStats.pendingCount],
-      ['Pending Amount (SDG)', transportStats.pending, opStats.pendingAmount, transportStats.pending + opStats.pendingAmount],
-    ];
-    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-    ws1['!cols'] = [{ wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
-    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
-
-    const trendData = [['Month', 'Transportation (SDG)', 'Operational (SDG)', 'Combined (SDG)']];
-    monthlyTrend.forEach(m => trendData.push([m.label, String(m.transport), String(m.operational), String(m.transport + m.operational)]));
-    const ws2 = XLSX.utils.aoa_to_sheet(trendData);
-    XLSX.utils.book_append_sheet(wb, ws2, 'Monthly Trend');
-
-    const catData = [['Category', 'Amount (SDG)', '% of Total']];
-    const totalCat = categoryBreakdown.reduce((s, c) => s + c.value, 0);
-    categoryBreakdown.forEach(c => catData.push([c.name, String(c.value), totalCat > 0 ? `${((c.value / totalCat) * 100).toFixed(1)}%` : '0%']));
-    const ws3 = XLSX.utils.aoa_to_sheet(catData);
-    XLSX.utils.book_append_sheet(wb, ws3, 'Category Breakdown');
-
-    const projData = [['Project', 'Transportation (SDG)', 'Operational (SDG)', 'Total (SDG)']];
-    projectBreakdown.forEach(p => projData.push([p.projectName, String(p.transport), String(p.operational), String(p.total)]));
-    const ws4 = XLSX.utils.aoa_to_sheet(projData);
-    XLSX.utils.book_append_sheet(wb, ws4, 'By Project');
-
-    XLSX.writeFile(wb, `Consolidated_Financial_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportStandardExcel({
+      reportTitle: 'PACT Consolidated Financial Report',
+      subtitleLine: `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}`,
+      filenamePrefix: 'Consolidated_Financial_Report',
+      mainSheet: {
+        sheetName: 'Summary',
+        headers: ['Metric', 'Transportation', 'Operational', 'Combined'],
+        rows: [
+          ['Total Submissions', transportStats.total, opStats.total, transportStats.total + opStats.total],
+          ['Total Requested (SDG)', transportStats.requested, opStats.totalAmount, transportStats.requested + opStats.totalAmount],
+          ['Total Approved (SDG)', transportStats.approved, opStats.approvedAmount, transportStats.approved + opStats.approvedAmount],
+          ['Total Paid (SDG)', transportStats.paid, opStats.paidAmount, transportStats.paid + opStats.paidAmount],
+          ['Pending Count', transportStats.pendingCount, opStats.pendingCount, transportStats.pendingCount + opStats.pendingCount],
+          ['Pending Amount (SDG)', transportStats.pending, opStats.pendingAmount, transportStats.pending + opStats.pendingAmount],
+        ],
+        colWidths: { 0: 30, 1: 20, 2: 20, 3: 20 }
+      },
+      breakdownSheets: [
+        {
+          title: 'Monthly Spending Trend',
+          sheetName: 'Monthly Trend',
+          headers: ['Month', 'Transportation (SDG)', 'Operational (SDG)', 'Combined (SDG)'],
+          rows: monthlyTrend.map(m => [m.label, m.transport, m.operational, m.transport + m.operational]),
+          colWidths: [20, 20, 20, 20]
+        },
+        {
+          title: 'Spending by Category',
+          sheetName: 'Category Breakdown',
+          headers: ['Category', 'Amount (SDG)', '% of Total'],
+          rows: (() => {
+            const totalCat = categoryBreakdown.reduce((s, c) => s + c.value, 0);
+            return categoryBreakdown.map(c => [c.name, c.value, totalCat > 0 ? `${((c.value / totalCat) * 100).toFixed(1)}%` : '0%']);
+          })(),
+          colWidths: [30, 20, 15]
+        },
+        {
+          title: 'Spending by Project',
+          sheetName: 'By Project',
+          headers: ['Project', 'Transportation (SDG)', 'Operational (SDG)', 'Total (SDG)'],
+          rows: projectBreakdown.map(p => [p.projectName, p.transport, p.operational, p.total]),
+          colWidths: [30, 20, 20, 20]
+        }
+      ]
+    });
     toast({ title: 'Export complete', description: 'Consolidated report exported to Excel' });
   };
 

@@ -1,3 +1,4 @@
+import { exportToExcel } from '@/utils/report-export';
 import { useState, useMemo } from 'react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,7 +31,6 @@ import { RewardDeductionsEditor, RewardBreakdownDisplay } from '@/components/tas
 import { computeRewardBreakdown, type RewardDeduction } from '@/utils/rewardCalc';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 
 const PRIORITY_CFG: Record<PersonalTaskPriority, { label: string; color: string }> = {
   low:      { label: 'Low',      color: 'bg-blue-100 text-blue-700' },
@@ -871,15 +871,18 @@ function PayrollPanel() {
   };
 
   const exportExcel = () => {
-    const wsData = [
-      ['Name', 'Department', 'Tasks Completed', 'Task Rewards', 'Retainer', 'Total Earnings', 'Currency', 'Wallet Balance'],
-      ...rows.map(r => [r.userName, r.deptName, r.tasksCompleted, r.taskRewards, r.retainerAmount, r.totalEarnings, r.currency, r.walletBalance]),
-      ['TOTAL', '', totals.tasks, totals.rewards, totals.retainers, totals.total, '', totals.balance],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
-    XLSX.writeFile(wb, `payroll-${fromDate}-to-${toDate}.xlsx`);
+    const exportData = rows.map(r => ({
+      'Name': r.userName,
+      'Department': r.deptName,
+      'Tasks Completed': r.tasksCompleted,
+      'Task Rewards': r.taskRewards,
+      'Retainer': r.retainerAmount,
+      'Total Earnings': r.totalEarnings,
+      'Currency': r.currency,
+      'Wallet Balance': r.walletBalance,
+    }));
+
+    exportToExcel(exportData, 'Payroll', `payroll-${fromDate}-to-${toDate}.xlsx`);
     toast({ title: 'Excel exported — sending payroll summaries to members…' });
     notifyDeptMembers();
   };

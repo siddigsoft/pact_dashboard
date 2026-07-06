@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Plus, Loader2, Edit2, Trash2, TrendingUp, Users, FileDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/utils/report-export';
 import { format } from 'date-fns';
 
 interface Plan {
@@ -114,15 +114,20 @@ export default function HeadcountPlanning() {
     fetchAll();
   }
 
-  function exportToExcel() {
+  function handleExport() {
     const rows = filtered.map(p => ({
-      Position: p.position_title, Department: depts.find(d => d.id === p.department_id)?.name ?? '',
-      'Fiscal Year': p.fiscal_year, Quarter: p.quarter ?? '', Current: p.current_count, Budgeted: p.budgeted_count,
-      'Planned Hires': p.planned_hires, 'Planned Cost': p.planned_salary_cost, Currency: p.currency, Status: p.status,
+      Position: p.position_title,
+      Department: depts.find(d => d.id === p.department_id)?.name ?? '',
+      'Fiscal Year': p.fiscal_year,
+      Quarter: p.quarter ?? '',
+      Current: p.current_count,
+      Budgeted: p.budgeted_count,
+      'Planned Hires': p.planned_hires,
+      'Planned Cost': p.planned_salary_cost,
+      Currency: p.currency,
+      Status: p.status,
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Headcount Plan');
-    XLSX.writeFile(wb, `Headcount_Plan_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(rows, 'Headcount Plan', `Headcount_Plan_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   async function remove(p: Plan) {
@@ -156,7 +161,7 @@ export default function HeadcountPlanning() {
           </SelectContent>
         </Select>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-headcount"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          <Button variant="outline" onClick={handleExport} data-testid="button-export-headcount"><FileDown className="h-4 w-4 mr-1" />Export</Button>
           {canEdit && <Button onClick={openNew} data-testid="button-new-headcount-plan"><Plus className="h-4 w-4 mr-1" />New Plan Row</Button>}
         </div>
       </div>

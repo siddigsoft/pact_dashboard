@@ -52,7 +52,9 @@ import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
 import { logPaymentEvent } from '@/services/paymentEventLogger';
 import { dispatchNotification } from '@/lib/notify';
 import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
-import { getLatestExchangeRate } from '@/utils/exchange-rate-service';
+import { exportToExcel, exportMultiSheetExcel } from '@/utils/report-export';
+import { exportStandardExcel, type StandardSheetSpec, sumField } from '@/utils/standardExcelExport';
+import { format } from 'date-fns';
 import { checkFinanceReadinessForClose, canSubmitForApproval, mmpCostSubmissionOrFilter } from '@/utils/cycleCloseGates';
 import {
   buildCostApproveUpdate,
@@ -849,52 +851,79 @@ const MMPCycleClose = () => {
 
   const exportPaymentSheetExcel = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
-    const XLSX = await import('xlsx');
     const mmpName = mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'Cycle';
-    const wb = XLSX.utils.book_new();
     const advMap: Record<string, AdvanceDetail> = {};
     cycleSummaryData.advanceDetails.forEach(a => { if (a.siteEntryId) advMap[a.siteEntryId] = a; });
     const totalGross = cycleSummaryData.enumeratorCosts.reduce((s, e) => s + e.totalCost, 0);
     const totalAdvPaid = Object.values(advMap).reduce((s, a) => s + a.paidAmount, 0);
     const totalNet = Math.max(0, totalGross - totalAdvPaid);
-    const payRows = cycleSummaryData.enumeratorCosts.map(e => {
+
+    const headers = [
+      'Enumerator', 'Site Name', 'Site Code', 'State', 'Locality', 'Visit Status',
+      'Enum. Fee (SDG)', 'Transport Fee (SDG)', 'Gross Total (SDG)',
+      'Advance Paid (SDG)', 'Advance Remaining (SDG)', 'NET TO PAY (SDG)', 'Cost Ack.'
+    ];
+
+    const rows = cycleSummaryData.enumeratorCosts.map(e => {
       const adv = advMap[e.id];
       const advPaid = adv?.paidAmount ?? 0;
-      return {
-        'Enumerator': e.enumeratorName, 'Site Name': e.siteName, 'Site Code': e.siteCode,
-        'State': e.state, 'Locality': e.locality, 'Visit Status': e.status.replace(/_/g, ' '),
-        'Enum. Fee (SDG)': e.enumeratorFee, 'Transport Fee (SDG)': e.transportFee,
-        'Gross Total (SDG)': e.totalCost,
-        'Advance Paid (SDG)': advPaid > 0 ? advPaid : 0,
-        'Advance Remaining (SDG)': adv && adv.remainingAmount > 0 ? adv.remainingAmount : 0,
-        'NET TO PAY (SDG)': Math.max(0, e.totalCost - advPaid),
-        'Cost Ack.': e.costAcknowledged ? 'Yes' : 'No',
-      };
+      return [
+        e.enumeratorName, e.siteName, e.siteCode,
+        e.state, e.locality, e.status.replace(/_/g, ' '),
+        e.enumeratorFee, e.transportFee,
+        e.totalCost,
+        advPaid > 0 ? advPaid : 0,
+        adv && adv.remainingAmount > 0 ? adv.remainingAmount : 0,
+        Math.max(0, e.totalCost - advPaid),
+        e.costAcknowledged ? 'Yes' : 'No'
+      ];
     });
-    payRows.push({
-      'Enumerator': 'TOTAL', 'Site Name': '', 'Site Code': '', 'State': '', 'Locality': '', 'Visit Status': '',
-      'Enum. Fee (SDG)': cycleSummaryData.totalEnumeratorFee, 'Transport Fee (SDG)': cycleSummaryData.totalTransportFee,
-      'Gross Total (SDG)': totalGross, 'Advance Paid (SDG)': totalAdvPaid,
-      'Advance Remaining (SDG)': Object.values(advMap).reduce((s, a) => s + Math.max(0, a.remainingAmount), 0),
-      'NET TO PAY (SDG)': totalNet, 'Cost Ack.': '',
-    } as any);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payRows), 'Payment Sheet');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-      { 'Item': 'MMP Cycle', 'Value': mmpName },
-      { 'Item': 'Generated', 'Value': new Date().toLocaleDateString('en-GB') },
-      { 'Item': 'Total Dispatched Sites', 'Value': cycleSummaryData.enumeratorCosts.length },
-      { 'Item': 'Gross Fees (SDG)', 'Value': totalGross },
-      { 'Item': 'Advances Already Paid (SDG)', 'Value': totalAdvPaid },
-      { 'Item': 'NET AMOUNT TO PAY (SDG)', 'Value': totalNet },
-      { 'Item': 'Approved Op. Costs (SDG)', 'Value': cycleSummaryData.totalApprovedCents / 100 },
-      ...(feesLockedRate ? [
-        { 'Item': '─── Exchange Rate ───', 'Value': '' },
-        { 'Item': 'Rate Applied (1 USD → SDG)', 'Value': feesLockedRate },
-        { 'Item': 'Rate Locked On', 'Value': feesLockedAt ? new Date(feesLockedAt).toLocaleDateString('en-GB') : '' },
-        { 'Item': 'Note', 'Value': 'All fees above are in SDG at the locked rate' },
-      ] : [{ 'Item': 'Exchange Rate', 'Value': 'Not locked — fees may still be in USD' }]),
-    ]), 'Summary');
-    XLSX.writeFile(wb, `${mmpName}-payment-sheet-${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    const totalAdvRem = Object.values(advMap).reduce((s, a) => s + Math.max(0, a.remainingAmount), 0);
+    const totalsRow = [
+      'TOTAL', '', '', '', '', '',
+      cycleSummaryData.totalEnumeratorFee, cycleSummaryData.totalTransportFee,
+      totalGross, totalAdvPaid,
+      totalAdvRem,
+      totalNet, ''
+    ];
+
+    const summaryRows = [
+      ['MMP Cycle', mmpName],
+      ['Generated', format(new Date(), 'dd/MM/yyyy')],
+      ['Total Dispatched Sites', cycleSummaryData.enumeratorCosts.length],
+      ['Gross Fees (SDG)', totalGross],
+      ['Advances Already Paid (SDG)', totalAdvPaid],
+      ['NET AMOUNT TO PAY (SDG)', totalNet],
+      ['Approved Op. Costs (SDG)', cycleSummaryData.totalApprovedCents / 100],
+    ];
+
+    if (feesLockedRate) {
+      summaryRows.push(['─── Exchange Rate ───', '']);
+      summaryRows.push(['Rate Applied (1 USD → SDG)', feesLockedRate]);
+      summaryRows.push(['Rate Locked On', feesLockedAt ? format(new Date(feesLockedAt), 'dd/MM/yyyy') : '']);
+      summaryRows.push(['Note', 'All fees above are in SDG at the locked rate']);
+    } else {
+      summaryRows.push(['Exchange Rate', 'Not locked — fees may still be in USD']);
+    }
+
+    exportStandardExcel({
+      reportTitle: `PACT Command Center - ${mmpName} Payment Sheet`,
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Sites: ${cycleSummaryData.enumeratorCosts.length}`,
+      mainSheet: {
+        sheetName: 'Payment Sheet',
+        headers,
+        rows,
+        totalsRow,
+        colWidths: { 0: 20, 1: 25, 2: 12, 3: 15, 4: 15, 5: 15, 6: 18, 7: 18, 8: 18, 9: 18, 10: 22, 11: 18, 12: 10 }
+      },
+      summarySheet: {
+        title: 'Cycle Payment Summary',
+        rows: summaryRows,
+        colWidths: [30, 30]
+      },
+      filenamePrefix: `${mmpName.replace(/\s+/g, '_')}_payment_sheet`
+    });
   }, [cycleSummaryData, checklistMmpId, mmpFiles, feesLockedRate, feesLockedAt]);
 
   const exportPaymentSheetPDF = useCallback(async () => {
@@ -2671,97 +2700,119 @@ const MMPCycleClose = () => {
 
   const exportCycleSummaryExcel = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
-    const XLSX = await import('xlsx');
-    const wb = XLSX.utils.book_new();
     const mmpName = mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'Cycle';
     const fmt = (cents: number, cur: string) => `${(cents / 100).toLocaleString()} ${cur}`;
 
-    // Sheet 1: Cost Submissions
-    const costRows = cycleSummaryData.costSubs.map(r => ({
-      'Category': r.category,
-      'Submissions': r.count,
-      'Approved Amount': fmt(r.approvedCents, r.currency),
-      'Pending Amount': fmt(r.pendingCents, r.currency),
-      'Total Amount': fmt(r.approvedCents + r.pendingCents, r.currency),
-    }));
-    costRows.push({
-      'Category': 'TOTAL',
-      'Submissions': cycleSummaryData.costSubs.reduce((s, r) => s + r.count, 0),
-      'Approved Amount': fmt(cycleSummaryData.totalApprovedCents, cycleSummaryData.currency),
-      'Pending Amount': fmt(cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0), cycleSummaryData.currency),
-      'Total Amount': fmt(cycleSummaryData.costSubs.reduce((s, r) => s + r.approvedCents + r.pendingCents, 0), cycleSummaryData.currency),
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(costRows), 'Cost Submissions');
+    // Main Sheet: Cost Submissions
+    const costHeaders = ['Category', 'Submissions', 'Approved Amount', 'Pending Amount', 'Total Amount'];
+    const costRows = cycleSummaryData.costSubs.map(r => [
+      r.category,
+      r.count,
+      fmt(r.approvedCents, r.currency),
+      fmt(r.pendingCents, r.currency),
+      fmt(r.approvedCents + r.pendingCents, r.currency),
+    ]);
+    const costTotalsRow = [
+      'TOTAL',
+      cycleSummaryData.costSubs.reduce((s, r) => s + r.count, 0),
+      fmt(cycleSummaryData.totalApprovedCents, cycleSummaryData.currency),
+      fmt(cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0), cycleSummaryData.currency),
+      fmt(cycleSummaryData.costSubs.reduce((s, r) => s + r.approvedCents + r.pendingCents, 0), cycleSummaryData.currency),
+    ];
+
+    const breakdownSheets: any[] = [];
 
     // Sheet 2: Transport Advances (per person)
-    const advRows = cycleSummaryData.advanceDetails.map(a => ({
-      'Recipient': a.requesterName,
-      'Site': a.siteName,
-      'Type': a.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
-      'Total Advanced': `${a.requestedAmount.toLocaleString()} ${a.currency}`,
-      'Paid': a.paidAmount > 0 ? `${a.paidAmount.toLocaleString()} ${a.currency}` : '—',
-      'Remaining': a.remainingAmount > 0 ? `${a.remainingAmount.toLocaleString()} ${a.currency}` : 'Settled',
-      'Status': a.remainingAmount <= 0 ? 'Fully Paid' : a.paidAmount > 0 ? 'Partial' : a.status,
-    }));
+    const advHeaders = ['Recipient', 'Site', 'Type', 'Total Advanced', 'Paid', 'Remaining', 'Status'];
+    const advRows = cycleSummaryData.advanceDetails.map(a => [
+      a.requesterName,
+      a.siteName,
+      a.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
+      `${a.requestedAmount.toLocaleString()} ${a.currency}`,
+      a.paidAmount > 0 ? `${a.paidAmount.toLocaleString()} ${a.currency}` : '—',
+      a.remainingAmount > 0 ? `${a.remainingAmount.toLocaleString()} ${a.currency}` : 'Settled',
+      a.remainingAmount <= 0 ? 'Fully Paid' : a.paidAmount > 0 ? 'Partial' : a.status,
+    ]);
     if (advRows.length > 0) {
-      const totalAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.requestedAmount, 0);
-      const totalPaidAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.paidAmount, 0);
-      const totalRem = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
-      advRows.push({ 'Recipient': 'TOTAL', 'Site': '', 'Type': '', 'Total Advanced': `${totalAdv.toLocaleString()} ${cycleSummaryData.currency}`, 'Paid': `${totalPaidAdv.toLocaleString()} ${cycleSummaryData.currency}`, 'Remaining': `${totalRem.toLocaleString()} ${cycleSummaryData.currency}`, 'Status': '' } as any);
+      breakdownSheets.push({
+        title: 'Transport Advances Breakdown',
+        sheetName: 'Transport Advances',
+        headers: advHeaders,
+        rows: advRows,
+        colWidths: [20, 20, 15, 18, 18, 18, 15]
+      });
     }
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(advRows.length > 0 ? advRows : [{ 'Note': 'No transport advances found' }]), 'Transport Advances');
 
     // Sheet 3: Withdrawal Requests
     if (cycleSummaryData.withdrawals.length > 0) {
-      const wdRows = cycleSummaryData.withdrawals.map(w => ({
-        'Requested By': w.userName,
-        'Amount': `${w.amount.toLocaleString()} ${w.currency}`,
-        'Status': w.status,
-        'Reason': w.reason,
-      }));
-      const activeTotal = cycleSummaryData.totalWithdrawalAmount;
-      wdRows.push({ 'Requested By': 'TOTAL (active)', 'Amount': `${activeTotal.toLocaleString()} ${cycleSummaryData.currency}`, 'Status': '', 'Reason': '' } as any);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wdRows), 'Withdrawal Requests');
+      const wdHeaders = ['Requested By', 'Amount', 'Status', 'Reason'];
+      const wdRows = cycleSummaryData.withdrawals.map(w => [
+        w.userName,
+        `${w.amount.toLocaleString()} ${w.currency}`,
+        w.status,
+        w.reason,
+      ]);
+      breakdownSheets.push({
+        title: 'Withdrawal Requests Breakdown',
+        sheetName: 'Withdrawal Requests',
+        headers: wdHeaders,
+        rows: wdRows,
+        colWidths: [20, 18, 15, 30]
+      });
     }
 
-    // Sheet: Enumerator Costs
+    // Sheet 4: Enumerator Costs
     if (cycleSummaryData.enumeratorCosts.length > 0) {
-      const enumRows = cycleSummaryData.enumeratorCosts.map(e => ({
-        'Enumerator': e.enumeratorName,
-        'Site Name': e.siteName,
-        'Site Code': e.siteCode,
-        'State': e.state,
-        'Locality': e.locality,
-        'Enumerator Fee (SDG)': e.enumeratorFee,
-        'Transport Fee (SDG)': e.transportFee,
-        'Total Cost (SDG)': e.totalCost,
-        'Visit Status': e.status,
-        'Cost Acknowledged': e.costAcknowledged ? 'Yes' : 'No',
-      }));
-      enumRows.push({
-        'Enumerator': 'TOTAL',
-        'Site Name': '',
-        'Site Code': '',
-        'State': '',
-        'Locality': '',
-        'Enumerator Fee (SDG)': cycleSummaryData.totalEnumeratorFee,
-        'Transport Fee (SDG)': cycleSummaryData.totalTransportFee,
-        'Total Cost (SDG)': cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee,
-        'Visit Status': '',
-        'Cost Acknowledged': '',
-      } as any);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(enumRows), 'Enumerator Costs');
+      const enumHeaders = ['Enumerator', 'Site Name', 'Site Code', 'State', 'Locality', 'Enumerator Fee (SDG)', 'Transport Fee (SDG)', 'Total Cost (SDG)', 'Visit Status', 'Cost Acknowledged'];
+      const enumRows = cycleSummaryData.enumeratorCosts.map(e => [
+        e.enumeratorName,
+        e.siteName,
+        e.siteCode,
+        e.state,
+        e.locality,
+        e.enumeratorFee,
+        e.transportFee,
+        e.totalCost,
+        e.status,
+        e.costAcknowledged ? 'Yes' : 'No',
+      ]);
+      breakdownSheets.push({
+        title: 'Enumerator Costs Breakdown',
+        sheetName: 'Enumerator Costs',
+        headers: enumHeaders,
+        rows: enumRows,
+        colWidths: [20, 25, 12, 15, 15, 18, 18, 18, 15, 12]
+      });
     }
 
-    // Sheet: Coverage snapshot from siteVisitCounts
+    // Sheet 5: Coverage snapshot from siteVisitCounts
     const counts = siteVisitCounts[checklistMmpId];
     if (counts) {
-      const covRows = Object.entries(counts.statusCounts).map(([status, count]) => ({ 'Status': status, 'Count': count }));
-      covRows.push({ 'Status': 'TOTAL SITES', 'Count': counts.total });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(covRows), 'Site Coverage');
+      const covHeaders = ['Status', 'Count'];
+      const covRows = Object.entries(counts.statusCounts).map(([status, count]) => [status, count]);
+      covRows.push(['TOTAL SITES', counts.total]);
+      breakdownSheets.push({
+        title: 'Site Coverage Summary',
+        sheetName: 'Site Coverage',
+        headers: covHeaders,
+        rows: covRows,
+        colWidths: [25, 12]
+      });
     }
 
-    XLSX.writeFile(wb, `${mmpName}-cycle-summary-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    exportStandardExcel({
+      reportTitle: `PACT Command Center - ${mmpName} Cycle Summary`,
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | MMP: ${mmpName}`,
+      mainSheet: {
+        sheetName: 'Cost Submissions',
+        headers: costHeaders,
+        rows: costRows,
+        totalsRow: costTotalsRow,
+        colWidths: { 0: 25, 1: 15, 2: 20, 3: 20, 4: 20 }
+      },
+      breakdownSheets,
+      filenamePrefix: `${mmpName.replace(/\s+/g, '_')}_cycle_summary`
+    });
   }, [cycleSummaryData, checklistMmpId, mmpFiles, siteVisitCounts]);
 
   const exportCycleSummaryPDF = useCallback(async () => {
@@ -3565,9 +3616,8 @@ const MMPCycleClose = () => {
   };
 
   const exportCoverageReportExcel = async (mmpId?: string) => {
-    const XLSX = await import('xlsx');
     const sites = mmpId ? uncoveredSites.filter(s => s.mmp_id === mmpId) : uncoveredSites;
-    const wsData = sites.map(s => ({
+    const excelData = sites.map(s => ({
       'Site Name': s.site_name,
       'Site Code': s.site_code,
       'State': s.state,
@@ -3578,10 +3628,12 @@ const MMPCycleClose = () => {
       'Other Details': s.not_covered_reason_other || '',
       'Flagged At': s.not_covered_at || '',
     }));
-    const ws = XLSX.utils.json_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Uncovered Sites');
-    XLSX.writeFile(wb, `coverage-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    exportToExcel(
+      excelData,
+      'Uncovered Sites',
+      `coverage-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   };
 
   const reasonBreakdown = useMemo(() => {
@@ -7001,7 +7053,6 @@ const MMPCycleClose = () => {
                         size="sm"
                         variant="outline"
                         onClick={async () => {
-                          const XLSX = await import('xlsx');
                           const rows = wfpResults.map(r => ({
                             'WFP Site Name':   r.wfp_site_name || '',
                             'PACT Site Name':  r.matched_site?.site_name || '',
@@ -7014,24 +7065,25 @@ const MMPCycleClose = () => {
                             'Outcome':         r.outcome,
                             'Notes':           r.match_notes || '',
                           }));
-                          const wb = XLSX.utils.book_new();
-                          const ws = XLSX.utils.json_to_sheet(rows);
-                          ws['!cols'] = [{ wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 28 }];
-                          XLSX.utils.book_append_sheet(wb, ws, 'WFP Results');
+
                           const confirmed = wfpResults.filter(r => r.outcome === 'confirmed').length;
                           const rejected  = wfpResults.filter(r => r.outcome === 'rejected').length;
                           const none      = wfpResults.filter(r => r.match_tier === 'none').length;
-                          const summary   = XLSX.utils.aoa_to_sheet([
-                            ['WFP Match Results Summary'],
-                            ['File', wfpAppliedUpload.filename],
-                            ['Applied', new Date(wfpAppliedUpload.applied_at).toLocaleString()],
-                            ['Total Rows', wfpResults.length],
-                            ['Confirmed', confirmed],
-                            ['Rejected', rejected],
-                            ['No Match (WFP rows)', none],
-                          ]);
-                          XLSX.utils.book_append_sheet(wb, summary, 'Summary');
-                          XLSX.writeFile(wb, `wfp-results-${checklistMmpId?.slice(0, 8)}-${new Date().toISOString().split('T')[0]}.xlsx`);
+
+                          const summaryRows = [
+                            { 'Item': 'WFP Match Results Summary', 'Value': '' },
+                            { 'Item': 'File', 'Value': wfpAppliedUpload.filename },
+                            { 'Item': 'Applied', 'Value': format(new Date(wfpAppliedUpload.applied_at), 'MMM d, yyyy h:mm a') },
+                            { 'Item': 'Total Rows', 'Value': wfpResults.length },
+                            { 'Item': 'Confirmed', 'Value': confirmed },
+                            { 'Item': 'Rejected', 'Value': rejected },
+                            { 'Item': 'No Match (WFP rows)', 'Value': none },
+                          ];
+
+                          exportMultiSheetExcel([
+                            { name: 'WFP Results', data: rows },
+                            { name: 'Summary', data: summaryRows }
+                          ], `wfp-results-${checklistMmpId?.slice(0, 8)}-${new Date().toISOString().split('T')[0]}.xlsx`);
                         }}
                         data-testid="button-wfp-export-results"
                       >

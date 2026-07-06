@@ -18,6 +18,7 @@ import { format, parse, isValid } from 'date-fns';
 import { hubs, sudanStates } from '@/data/sudanStates';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
 import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, buildCoverageTrackerWorkbook, exportEnumeratorTrackerExcel, exportEnumeratorTrackerFormattedExcel } from '@/utils/analyticsExcelUtils';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -3219,165 +3220,125 @@ const QuestionnaireAnalytics = () => {
   }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, generatePdfBase64, generateAnalyticsExcelBase64, generateAnalyticsPdfBase64, generateTrackerExcelBase64, generateAllTrackersExcelBase64, trackerAllFormat, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
-    const wb = XLSX.utils.book_new();
+    const hubRows = hubSummary.map((h, i) => [i + 1, h.name, h.sites, h.questionnaires, h.percentage.toFixed(1) + '%']);
+    const stateRows = stateSummary.map((s, i) => [i + 1, s.name, s.sites, s.collectors, s.questionnaires, s.percentage.toFixed(1) + '%']);
+    const localityRows = localitySummary.map((l, i) => [i + 1, l.name, l.sites, l.questionnaires, l.percentage.toFixed(1) + '%']);
+    const siteRows = siteDetailsWithActivity.map((s, i) => [i + 1, s.name, s.activityNames, s.state, s.locality, s.collectors, s.questionnaires, s.percentage.toFixed(1) + '%']);
 
-    const hubData = hubSummary.map((h, i) => ({ '#': i + 1, Hub: h.name, Sites: h.sites, Questionnaires: h.questionnaires, '%': h.percentage.toFixed(1) + '%' }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hubData), 'By Hub');
-
-    const stateData = stateSummary.map((s, i) => ({ '#': i + 1, State: s.name, Sites: s.sites, DC: s.collectors, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateData), 'By State');
-
-    const localityData = localitySummary.map((l, i) => ({ '#': i + 1, Locality: l.name, Sites: l.sites, Questionnaires: l.questionnaires, '%': l.percentage.toFixed(1) + '%' }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localityData), 'By Locality');
-
-    const siteData = siteDetailsWithActivity.map((s, i) => ({ '#': i + 1, 'Site Name': s.name, Activity: s.activityNames, State: s.state, Locality: s.locality, DC: s.collectors, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteData), 'By Site');
-
-    const actRows: any[] = [];
+    const actRows: (string | number)[][] = [];
     activityBreakdown.forEach(a => {
-      actRows.push({ Activity: a.name, Level: 'Activity', Detail: '', Sites: a.siteCount, Questionnaires: a.questionnaireCount, '%': a.percentage.toFixed(1) + '%' });
-      a.byHub.forEach(h => actRows.push({ Activity: a.name, Level: 'Hub', Detail: h.name, Sites: h.sites, Questionnaires: h.count, '%': '' }));
-      a.byState.forEach(s => actRows.push({ Activity: a.name, Level: 'State', Detail: s.name, Sites: s.sites, Questionnaires: s.count, '%': '' }));
-      a.byLocality.forEach(l => actRows.push({ Activity: a.name, Level: 'Locality', Detail: l.name, Sites: l.sites, Questionnaires: l.count, '%': '' }));
-      a.byCollector.forEach(c => actRows.push({ Activity: a.name, Level: 'Collector', Detail: c.name, Sites: '', Questionnaires: c.count, '%': '' }));
+      actRows.push([a.name, 'Activity', '', a.siteCount, a.questionnaireCount, a.percentage.toFixed(1) + '%']);
+      a.byHub.forEach(h => actRows.push([a.name, 'Hub', h.name, h.sites, h.count, '']));
+      a.byState.forEach(s => actRows.push([a.name, 'State', s.name, s.sites, s.count, '']));
+      a.byLocality.forEach(l => actRows.push([a.name, 'Locality', l.name, l.sites, l.count, '']));
+      a.byCollector.forEach(c => actRows.push([a.name, 'Collector', c.name, '', c.count, '']));
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(actRows), 'By Activity');
 
-    const collRows = collectorDetails.map((c, i) => ({
-      '#': i + 1,
-      'UUID': c.profileId || '-',
-      'Device ID': c.deviceId || '-',
-      'Data Collector': c.name,
-      'Name Variants': c.nameVariants.length > 0 ? c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ') : '',
-      Hub: c.hubs.join(', '),
-      State: c.states.join(', '),
-      'Sites Count': c.sites.length,
-      'Sites': c.sites.map(s => `${s.name} (${s.count})`).join(', '),
-      'Total Activities': c.activities.reduce((s, a) => s + a.count, 0),
-      Activities: c.activities.map(a => `${a.name} (${a.count})`).join(', '),
-      Localities: c.localities.map(l => `${l.name} (${l.count})`).join(', '),
-      Questionnaires: c.count,
-      '%': c.percentage.toFixed(1) + '%',
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(collRows), 'By Collector');
+    const collRows = collectorDetails.map((c, i) => [
+      i + 1,
+      c.profileId || '-',
+      c.deviceId || '-',
+      c.name,
+      c.nameVariants.length > 0 ? c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ') : '',
+      c.hubs.join(', '),
+      c.states.join(', '),
+      c.sites.length,
+      c.sites.map(s => `${s.name} (${s.count})`).join(', '),
+      c.activities.reduce((s, a) => s + a.count, 0),
+      c.activities.map(a => `${a.name} (${a.count})`).join(', '),
+      c.localities.map(l => `${l.name} (${l.count})`).join(', '),
+      c.count,
+      c.percentage.toFixed(1) + '%',
+    ]);
 
-    const usedSheetNames = new Set<string>();
-    collectorDetails.forEach((c, ci) => {
-      const detailRows: any[] = [];
-      detailRows.push({ Section: 'COLLECTOR INFO', Field: 'Name (Primary)', Value: c.name });
-      detailRows.push({ Section: '', Field: 'UUID', Value: c.profileId || '-' });
-      detailRows.push({ Section: '', Field: 'Device ID', Value: c.deviceId || '-' });
+    const breakdownSheets = [
+      {
+        title: 'Summary By Hub',
+        sheetName: 'By Hub',
+        headers: ['#', 'Hub', 'Sites', 'Questionnaires', '%'],
+        rows: hubRows,
+      },
+      {
+        title: 'Summary By State',
+        sheetName: 'By State',
+        headers: ['#', 'State', 'Sites', 'DC', 'Questionnaires', '%'],
+        rows: stateRows,
+      },
+      {
+        title: 'Summary By Locality',
+        sheetName: 'By Locality',
+        headers: ['#', 'Locality', 'Sites', 'Questionnaires', '%'],
+        rows: localityRows,
+      },
+      {
+        title: 'Summary By Site',
+        sheetName: 'By Site',
+        headers: ['#', 'Site Name', 'Activity', 'State', 'Locality', 'DC', 'Questionnaires', '%'],
+        rows: siteRows,
+      },
+      {
+        title: 'Summary By Activity',
+        sheetName: 'By Activity',
+        headers: ['Activity', 'Level', 'Detail', 'Sites', 'Questionnaires', '%'],
+        rows: actRows,
+      },
+      {
+        title: 'Summary By Collector',
+        sheetName: 'By Collector',
+        headers: ['#', 'UUID', 'Device ID', 'Data Collector', 'Name Variants', 'Hub', 'State', 'Sites Count', 'Sites', 'Total Activities', 'Activities', 'Localities', 'Questionnaires', '%'],
+        rows: collRows,
+      },
+    ];
+
+    collectorDetails.forEach((c) => {
+      const detailRows: (string | number)[][] = [];
+      detailRows.push(['Name (Primary)', c.name]);
+      detailRows.push(['UUID', c.profileId || '-']);
+      detailRows.push(['Device ID', c.deviceId || '-']);
       if (c.nameVariants.length > 0) {
-        detailRows.push({ Section: '', Field: 'Name Variants', Value: '' });
-        c.nameVariants.forEach(v => detailRows.push({ Section: '', Field: `  ${v.name}`, Value: v.count }));
+        c.nameVariants.forEach(v => detailRows.push([`Name Variant: ${v.name}`, v.count]));
       }
-      detailRows.push({ Section: '', Field: 'Hub(s)', Value: c.hubs.join(', ') });
-      detailRows.push({ Section: '', Field: 'State(s)', Value: c.states.join(', ') });
-      detailRows.push({ Section: '', Field: 'Total Questionnaires', Value: c.count });
-      detailRows.push({ Section: '', Field: 'Percentage', Value: c.percentage.toFixed(1) + '%' });
-      detailRows.push({ Section: '' });
-      detailRows.push({ Section: 'ACTIVITIES', Field: 'Activity', Value: 'Count' });
-      c.activities.forEach(a => detailRows.push({ Section: '', Field: a.name, Value: a.count }));
-      detailRows.push({ Section: '', Field: 'Total', Value: c.activities.reduce((s, a) => s + a.count, 0) });
-      detailRows.push({ Section: '' });
-      detailRows.push({ Section: 'LOCALITIES', Field: 'Locality', Value: 'Count' });
-      c.localities.forEach(l => detailRows.push({ Section: '', Field: l.name, Value: l.count }));
+      detailRows.push(['Hub(s)', c.hubs.join(', ')]);
+      detailRows.push(['State(s)', c.states.join(', ')]);
+      detailRows.push(['Total Questionnaires', c.count]);
+      detailRows.push(['Percentage', c.percentage.toFixed(1) + '%']);
+      detailRows.push([]);
+      detailRows.push(['ACTIVITIES', 'Count']);
+      c.activities.forEach(a => detailRows.push([a.name, a.count]));
+      detailRows.push(['Activity Total', c.activities.reduce((s, a) => s + a.count, 0)]);
+      detailRows.push([]);
+      detailRows.push(['LOCALITIES', 'Count']);
+      c.localities.forEach(l => detailRows.push([l.name, l.count]));
       if (c.sites.length > 0) {
-        detailRows.push({ Section: '' });
-        detailRows.push({ Section: 'ACTIVITY SITES', Field: 'Site Name', Value: 'Count' });
-        c.sites.forEach(s => detailRows.push({ Section: '', Field: s.name, Value: s.count }));
-        detailRows.push({ Section: '', Field: 'Total Sites', Value: c.sites.length });
+        detailRows.push([]);
+        detailRows.push(['ACTIVITY SITES', 'Count']);
+        c.sites.forEach(s => detailRows.push([s.name, s.count]));
+        detailRows.push(['Total Sites', c.sites.length]);
       }
-      let sheetName = `DC-${c.name}`.replace(/[\\/*?[\]:]/g, '').slice(0, 28);
-      if (usedSheetNames.has(sheetName)) sheetName = `${sheetName.slice(0, 25)}-${ci + 1}`;
-      usedSheetNames.add(sheetName);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), sheetName.slice(0, 31));
+      breakdownSheets.push({
+        title: `Collector: ${c.name}`,
+        sheetName: `DC-${c.name}`.replace(/[\\/*?[\]:]/g, '').slice(0, 31),
+        headers: ['Field', 'Value'],
+        rows: detailRows,
+      });
     });
 
-    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, hubTrackers, stateTrackers } = trackerData;
-    const trackerRows: any[] = [];
-    matrix.forEach(row => {
-      const r: any = { Activity: row.activity };
-      hubs.forEach((hub, hi) => {
-        r[`${hub} Sites`] = row.cells[hi].sites;
-        r[`${hub} Actual`] = row.cells[hi].questionnaires;
-        r[`${hub} PDM Sites`] = row.isPdm ? Math.floor(row.cells[hi].questionnaires / 7) : row.cells[hi].questionnaires;
-        r[`${hub} Collectors`] = row.cells[hi].collectors;
-      });
-      r['Total Sites'] = row.totalSites;
-      r['Total Actual'] = row.totalQ;
-      r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ;
-      r['Total Collectors'] = row.totalCollectors;
-      trackerRows.push(r);
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Questionnaire Analytics Report',
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Records: ${filteredData.length}`,
+      filenamePrefix: 'questionnaire_analytics',
+      mainSheet: {
+        sheetName: 'Overview',
+        headers: ['Metric', 'Value'],
+        rows: [
+          ['Total Questionnaires', filteredData.length],
+          ['Unique Sites', siteDetails.length],
+          ['Total Collectors', collectorDetails.length],
+        ],
+      },
+      breakdownSheets,
     });
-    const totalRow: any = { Activity: 'Grand Total' };
-    hubs.forEach((hub, hi) => {
-      totalRow[`${hub} Sites`] = hubTotals[hi].sites;
-      totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      const pdmSitesCol = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
-      totalRow[`${hub} PDM Sites`] = pdmSitesCol || 0;
-      totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
-    });
-    totalRow['Total Sites'] = grandSites;
-    totalRow['Total Actual'] = grandQ;
-    const pdmSitesGrand = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
-    totalRow['Total PDM Sites'] = pdmSitesGrand || 0;
-    totalRow['Total Collectors'] = grandCollectors;
-    trackerRows.push(totalRow);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trackerRows), 'Tracker');
-
-    hubTrackers.forEach(ht => {
-      const htRows: any[] = [];
-      ht.matrix.forEach(row => {
-        const r: any = { Activity: row.activity };
-        ht.states.forEach((st, si) => {
-          r[`${st} Sites`] = row.cells[si].sites;
-          r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires;
-          r[`${st} DC`] = row.cells[si].collectors;
-        });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
-        htRows.push(r);
-      });
-      const htTotal: any = { Activity: 'Total' };
-      ht.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
-      });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
-      htRows.push(htTotal);
-      const sheetName = `Hub-${ht.hub}`.slice(0, 31);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), sheetName);
-    });
-
-    stateTrackers.forEach(st => {
-      const stRows: any[] = [];
-      st.matrix.forEach(row => {
-        const r: any = { Activity: row.activity };
-        st.localities.forEach((loc, li) => {
-          r[`${loc} Sites`] = row.cells[li].sites;
-          r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires;
-          r[`${loc} DC`] = row.cells[li].collectors;
-        });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
-        stRows.push(r);
-      });
-      const stTotal: any = { Activity: 'Total' };
-      st.colTotals.forEach((ct, ci) => {
-        const pdmSitesCol = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
-      });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
-      stRows.push(stTotal);
-      const sheetName = `State-${st.state}`.slice(0, 31);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), sheetName);
-    });
-
-    XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
-  }, [hubSummary, stateSummary, localitySummary, siteSummary, siteDetailsWithActivity, activityBreakdown, collectorDetails, trackerData]);
+  }, [hubSummary, stateSummary, localitySummary, siteDetailsWithActivity, activityBreakdown, collectorDetails, filteredData, siteDetails]);
 
   const exportToPdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -3539,113 +3500,148 @@ const QuestionnaireAnalytics = () => {
   }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails, trackerData]);
 
   const exportTrackerToExcel = useCallback(() => {
-    const wb = XLSX.utils.book_new();
-    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown, hubTrackers, stateTrackers } = trackerData;
+    const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors, hubTrackers, stateTrackers } = trackerData;
 
-    const rows: any[] = [];
-    matrix.forEach(row => {
-      const r: any = { Activity: row.activity };
-      hubs.forEach((hub, hi) => {
-        r[`${hub} Sites`] = row.cells[hi].sites;
-        r[`${hub} Actual`] = row.cells[hi].questionnaires;
-        r[`${hub} PDM Sites`] = Math.floor(row.cells[hi].questionnaires / 7);
-        r[`${hub} DC`] = row.cells[hi].collectors;
+    const breakdownSheets: any[] = [];
+
+    // 1. Tracker Sheet
+    const trackerHeaders = ['Activity'];
+    hubs.forEach(hub => {
+      trackerHeaders.push(`${hub} Sites`, `${hub} Actual`, `${hub} PDM Sites`, `${hub} Collectors`);
+    });
+    trackerHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total Collectors');
+
+    const trackerRows = matrix.map(row => {
+      const r: (string | number)[] = [row.activity];
+      hubs.forEach((_, hi) => {
+        r.push(row.cells[hi].sites, row.cells[hi].questionnaires, row.isPdm ? Math.floor(row.cells[hi].questionnaires / 7) : row.cells[hi].questionnaires, row.cells[hi].collectors);
       });
-      r['Total Sites'] = row.totalSites;
-      r['Total Actual'] = row.totalQ;
-      r['Total PDM Sites'] = Math.floor(row.totalQ / 7);
-      r['Total DC'] = row.totalCollectors;
-      rows.push(r);
+      r.push(row.totalSites, row.totalQ, row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ, row.totalCollectors);
+      return r;
     });
-    const totalRow: any = { Activity: 'Grand Total' };
-    hubs.forEach((hub, hi) => {
-      totalRow[`${hub} Sites`] = hubTotals[hi].sites;
-      totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      const pdmSitesCol = matrix.reduce((a, r) => a + (Math.floor(r.cells[hi].questionnaires / 7)), 0);
-      totalRow[`${hub} PDM Sites`] = pdmSitesCol || 0;
-      totalRow[`${hub} DC`] = hubTotals[hi].collectors;
-    });
-    totalRow['Total Sites'] = grandSites;
-    totalRow['Total Actual'] = grandQ;
-    const pdmSitesGrand2 = matrix.reduce((a, r) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
-    totalRow['Total PDM Sites'] = pdmSitesGrand2 || 0;
-    totalRow['Total DC'] = grandCollectors;
-    rows.push(totalRow);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity x Hub');
 
-    const stateRows: any[] = [];
-    stateBreakdown.forEach(sb => {
-      sb.activities.forEach(a => {
-        if (a.questionnaires > 0) {
-          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': Math.floor(a.questionnaires / 7) });
-        }
-      });
+    const totalRow: (string | number)[] = ['Grand Total'];
+    hubs.forEach((_, hi) => {
+      const pdmSitesCol = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
+      totalRow.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmSitesCol, hubTotals[hi].collectors);
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateRows), 'Activity x State');
+    const pdmSitesGrandTotal = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b, c) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
+    totalRow.push(grandSites, grandQ, pdmSitesGrandTotal, grandCollectors);
+    trackerRows.push(totalRow);
 
+    breakdownSheets.push({
+      title: 'Tracker - Activity by Hub',
+      sheetName: 'Tracker',
+      headers: trackerHeaders,
+      rows: trackerRows,
+    });
+
+    // 2. Hub Sheets
     hubTrackers.forEach(ht => {
-      const htRows: any[] = [];
-      ht.matrix.forEach(row => {
-        const r: any = { Activity: row.activity };
-        ht.states.forEach((st, si) => {
-          r[`${st} Sites`] = row.cells[si].sites;
-          r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires;
-          r[`${st} DC`] = row.cells[si].collectors;
-        });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
-        htRows.push(r);
+      const htHeaders = ['Activity'];
+      ht.states.forEach(st => {
+        htHeaders.push(`${st} Sites`, `${st} Actual`, `${st} PDM Sites`, `${st} DC`);
       });
-      const htTotal: any = { Activity: 'Total' };
+      htHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
+
+      const htRows = ht.matrix.map(row => {
+        const r: (string | number)[] = [row.activity];
+        ht.states.forEach((_, si) => {
+          r.push(row.cells[si].sites, row.cells[si].questionnaires, row.isPdm ? Math.floor(row.cells[si].questionnaires / 7) : row.cells[si].questionnaires, row.cells[si].collectors);
+        });
+        r.push(row.totalSites, row.totalQ, row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ, row.totalCollectors);
+        return r;
+      });
+
+      const htTotalRow: (string | number)[] = ['Total'];
       ht.colTotals.forEach((ct, ci) => {
         const pdmSitesCol = ht.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+        htTotalRow.push(ct.sites, ct.questionnaires, pdmSitesCol, ct.collectors);
       });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
-      htRows.push(htTotal);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b, c) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
+      htTotalRow.push(ht.grandSites, ht.grandQ, htPdmSitesGrand, ht.grandCollectors);
+      htRows.push(htTotalRow);
+
+      breakdownSheets.push({
+        title: `Hub Tracker: ${ht.hub}`,
+        sheetName: `Hub-${ht.hub}`.slice(0, 31),
+        headers: htHeaders,
+        rows: htRows,
+      });
     });
 
+    // 3. State Sheets
     stateTrackers.forEach(st => {
-      const stRows: any[] = [];
-      st.matrix.forEach(row => {
-        const r: any = { Activity: row.activity };
-        st.localities.forEach((loc, li) => {
-          r[`${loc} Sites`] = row.cells[li].sites;
-          r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires;
-          r[`${loc} DC`] = row.cells[li].collectors;
-        });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ; r['Total DC'] = row.totalCollectors;
-        stRows.push(r);
+      const stHeaders = ['Activity'];
+      st.localities.forEach(loc => {
+        stHeaders.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM Sites`, `${loc} DC`);
       });
-      const stTotal: any = { Activity: 'Total' };
+      stHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
+
+      const stRows = st.matrix.map(row => {
+        const r: (string | number)[] = [row.activity];
+        st.localities.forEach((_, li) => {
+          r.push(row.cells[li].sites, row.cells[li].questionnaires, row.isPdm ? Math.floor(row.cells[li].questionnaires / 7) : row.cells[li].questionnaires, row.cells[li].collectors);
+        });
+        r.push(row.totalSites, row.totalQ, row.isPdm ? Math.floor(row.totalQ / 7) : row.totalQ, row.totalCollectors);
+        return r;
+      });
+
+      const stTotalRow: (string | number)[] = ['Total'];
       st.colTotals.forEach((ct, ci) => {
         const pdmSitesCol = st.matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[ci].questionnaires / 7) : r.cells[ci].questionnaires), 0);
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+        stTotalRow.push(ct.sites, ct.questionnaires, pdmSitesCol, ct.collectors);
       });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand; stTotal['Total DC'] = st.grandCollectors;
-      stRows.push(stTotal);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b, c) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
+      stTotalRow.push(st.grandSites, st.grandQ, stPdmSitesGrand, st.grandCollectors);
+      stRows.push(stTotalRow);
+
+      breakdownSheets.push({
+        title: `State Tracker: ${st.state}`,
+        sheetName: `State-${st.state}`.slice(0, 31),
+        headers: stHeaders,
+        rows: stRows,
+      });
     });
 
-    XLSX.writeFile(wb, 'tracker_report.xlsx');
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Tracker Report',
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Sites: ${grandSites} | Total Questionnaires: ${grandQ}`,
+      filenamePrefix: 'tracker_report',
+      mainSheet: {
+        sheetName: 'Tracker Overview',
+        headers: ['Metric', 'Value'],
+        rows: [
+          ['Total Sites', grandSites],
+          ['Total Questionnaires', grandQ],
+          ['Total Collectors', grandCollectors],
+        ],
+      },
+      breakdownSheets,
+    });
   }, [trackerData]);
 
   const exportActivityByStateExcel = useCallback(() => {
-    const wb = XLSX.utils.book_new();
-    const rows: any[] = [];
-    trackerData.stateBreakdown.forEach(sb => {
+    const { stateBreakdown } = trackerData;
+    const rows: (string | number)[][] = [];
+    stateBreakdown.forEach(sb => {
       sb.activities.filter(a => a.questionnaires > 0).forEach(a => {
-        rows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': Math.floor(a.questionnaires / 7) });
+        rows.push([sb.state, a.activity, a.sites, a.questionnaires, Math.floor(a.questionnaires / 7)]);
       });
       const pdmSitesTotal = sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + (Math.floor(a.questionnaires / 7)), 0);
-      rows.push({ State: sb.state, Activity: 'Total', Sites: sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0), Questionnaires: sb.totalQ, 'PDM Sites': pdmSitesTotal || '-' });
+      rows.push([sb.state, 'Total', sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0), sb.totalQ, pdmSitesTotal || '-']);
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity by State');
-    XLSX.writeFile(wb, 'tracker_activity_by_state.xlsx');
+
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Tracker Activity by State',
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`,
+      filenamePrefix: 'tracker_activity_by_state',
+      mainSheet: {
+        sheetName: 'Activity by State',
+        headers: ['State', 'Activity', 'Sites', 'Questionnaires', 'PDM Sites'],
+        rows,
+      },
+    });
   }, [trackerData]);
 
   const exportActivityByStatePdf = useCallback(async () => {
@@ -4152,402 +4148,103 @@ const QuestionnaireAnalytics = () => {
       toast({ title: 'No data to export', description: 'Load a CSV file first.', variant: 'destructive' });
       return;
     }
-    try {
 
-    // ── Live bank-account lookup from profiles ──────────────────────────────
-    // Build a case-insensitive account lookup from ALL profiles with bank accounts.
-    // Keys are lowercased+trimmed so col.name (from CSV) matches even when casing differs.
-    // ── Helper: extract { number, name } from any bank_account shape ─────────
-    const extractAcct = (raw: any): { number: string; name: string } => {
-      if (!raw) return { number: '', name: '' };
-      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return { number: '', name: '' }; } }
-      if (typeof raw !== 'object') return { number: '', name: '' };
-      const num = String(raw.accountNumber ?? raw.account_number ?? '').trim();
-      const nam = String(raw.accountName  ?? raw.account_name  ?? '').trim();
-      if (num || nam) return { number: num, name: nam };
-      // Fallback: first non-empty string/number value as the number
-      for (const val of Object.values(raw)) {
-        if ((typeof val === 'string' || typeof val === 'number') && String(val).trim())
-          return { number: String(val).trim(), name: '' };
-      }
-      return { number: '', name: '' };
-    };
+    const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
+    const breakdownSheets: any[] = [];
 
-    // ── Step 1: name-based map (exact match on full_name / username / email) ────
-    const liveAccountMap     = new Map<string, string>(); // collector key → account number
-    const liveAccountNameMap = new Map<string, string>(); // collector key → account name
-    bankAccountByName.forEach((acct, name) => {
-      if (acct) liveAccountMap.set(name.trim().toLowerCase(), acct);
+    // 1. Summary Sheet
+    const trackerHeaders = ['Activity'];
+    hubs.forEach(hub => {
+      trackerHeaders.push(`${hub} Sites`, `${hub} Actual`, `${hub} PDM Sites`, `${hub} Collectors`);
     });
-    const { data: profileRows } = await supabase
-      .from('profiles')
-      .select('id, full_name, username, email, bank_account')
-      .not('bank_account', 'is', null);
-    const profileIdToAcct      = new Map<string, string>();
-    const profileIdToAcctName  = new Map<string, string>();
-    const profileIdToFullName  = new Map<string, string>(); // id → full_name lowercase
-    // profNameToAcct: profile full_name (lower) → {acct, acctName} — used for word-overlap below
-    const profNameToAcct     = new Map<string, string>();
-    const profNameToAcctName = new Map<string, string>();
-    (profileRows || []).forEach((p: any) => {
-      const { number: acct, name: acctName } = extractAcct(p.bank_account);
-      if (!acct && !acctName) return;
-      profileIdToAcct.set(p.id, acct);
-      profileIdToAcctName.set(p.id, acctName);
-      if (p.full_name) {
-        const fl = p.full_name.trim().toLowerCase();
-        profileIdToFullName.set(p.id, fl);
-        if (acct)     profNameToAcct.set(fl, acct);
-        if (acctName) profNameToAcctName.set(fl, acctName);
-      }
-      [p.full_name, p.username, p.email].filter(Boolean).forEach((n: string) => {
-        const k = n.trim().toLowerCase();
-        if (acct)     liveAccountMap.set(k, acct);
-        if (acctName) liveAccountNameMap.set(k, acctName);
-      });
-    });
+    trackerHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total Collectors');
 
-    // ── Step 1b: word-overlap fallback ──────────────────────────────────────────
-    // Handles mismatches like CSV "Abdalla Adam Abdalla" vs DB "Abdalla Adam Abdalla Mansoor".
-    // For each CSV collector still missing an account, find a profile whose name contains
-    // ALL words (≥3 chars) from the CSV name, or vice-versa.
-    const allCsvCollectorKeys = new Set<string>();
-    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
-      allCsvCollectorKeys.add(col.name.trim().toLowerCase());
-    })));
-    for (const csvKey of allCsvCollectorKeys) {
-      const needsNo   = !liveAccountMap.has(csvKey);
-      const needsName = !liveAccountNameMap.has(csvKey);
-      if (!needsNo && !needsName) continue;
-      const words = csvKey.split(/\s+/).filter(w => w.length >= 3);
-      if (words.length === 0) continue;
-      for (const [profName, acct] of profNameToAcct) {
-        // Match if all CSV words appear in profile name, OR all profile words appear in CSV name
-        const profWords = profName.split(/\s+/).filter(w => w.length >= 3);
-        const csvInProf  = words.every(w => profName.includes(w));
-        const profInCsv  = profWords.length > 0 && profWords.every(w => csvKey.includes(w));
-        if (csvInProf || profInCsv) {
-          if (needsNo && acct) liveAccountMap.set(csvKey, acct);
-          const an = profNameToAcctName.get(profName);
-          if (needsName && an) liveAccountNameMap.set(csvKey, an);
-          break;
-        }
-      }
-    }
-
-    // ── Step 2: site-based bridge (reliable even when names differ) ───────────
-    // Collect every unique site name across all collectors in the CSV data.
-    const allSiteNames = new Set<string>();
-    csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col =>
-      col.sites.forEach(s => { if (s) allSiteNames.add(s.trim()); })
-    )));
-    if (allSiteNames.size > 0) {
-      // Query mmp_site_entries for those sites → get accepted_by user IDs
-      const { data: mmpRows } = await supabase
-        .from('mmp_site_entries')
-        .select('site_name, hub_office, state, accepted_by')
-        .in('site_name', [...allSiteNames].slice(0, 400))
-        .not('accepted_by', 'is', null);
-
-      // Build: "site||hub||state" → Set<userId>
-      const siteKey = (site: string, hub: string, state: string) =>
-        `${site.trim().toLowerCase()}||${hub.trim().toLowerCase()}||${state.trim().toLowerCase()}`;
-      const siteToUsers = new Map<string, Set<string>>();
-      (mmpRows || []).forEach((e: any) => {
-        const k = siteKey(e.site_name || '', e.hub_office || '', e.state || '');
-        if (!siteToUsers.has(k)) siteToUsers.set(k, new Set());
-        siteToUsers.get(k)!.add(e.accepted_by);
-      });
-
-      // Snapshot accounts already claimed by name/word-overlap BEFORE running the site bridge.
-      // The site bridge must NEVER reassign a claimed account to a different collector —
-      // this prevents Arif's account (correctly name-matched) from spilling over to
-      // Arabic-named collectors like طارق سيد whose DB name differs from the CSV name.
-      const claimedAccountNos  = new Set<string>(liveAccountMap.values());
-      const claimedAccountNames = new Set<string>(liveAccountNameMap.values());
-      // Map from profile UID → the collector nameKey that already claimed it via name match.
-      // Built so we can skip bridge UIDs that are already "owned" by someone else.
-      const claimedUids = new Set<string>();
-      liveAccountMap.forEach((acct, _nameKey) => {
-        profileIdToAcct.forEach((a, uid) => { if (a === acct) claimedUids.add(uid); });
-      });
-
-      // For each collector, collect user IDs via site bridge, then resolve bank account + name.
-      // Rules (in priority order):
-      //   1. Name-exact-match uid always wins.
-      //   2. Top-voted uid wins ONLY if its account is NOT already claimed by another collector.
-      //   3. If top-voted uid is claimed and no name match exists → leave as "—" (no bridge guess).
-      csvEnumData.forEach(hg => hg.states.forEach(sg => sg.collectors.forEach(col => {
-        const nameKey = col.name.trim().toLowerCase();
-        const alreadyHasNo   = liveAccountMap.has(nameKey);
-        const alreadyHasName = liveAccountNameMap.has(nameKey);
-        if (alreadyHasNo && alreadyHasName) return;
-        // Rank candidates by how many of the collector's sites they appear in.
-        const uidVotes = new Map<string, number>();
-        col.sites.forEach(site => {
-          const k = siteKey(site, hg.hub, sg.state);
-          siteToUsers.get(k)?.forEach(uid => uidVotes.set(uid, (uidVotes.get(uid) || 0) + 1));
-        });
-        const nameMatchUid = [...uidVotes.keys()].find(uid => profileIdToFullName.get(uid) === nameKey);
-        const topVotedUid  = [...uidVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-        // If no name match and the top-voted uid is already claimed by a different collector, skip.
-        const resolvedUid  = nameMatchUid ?? (topVotedUid && !claimedUids.has(topVotedUid) ? topVotedUid : undefined);
-        if (!resolvedUid) return;
-        if (!alreadyHasNo) {
-          const acct = profileIdToAcct.get(resolvedUid);
-          // Extra guard: don't assign if this account number is already claimed
-          if (acct && !claimedAccountNos.has(acct)) liveAccountMap.set(nameKey, acct);
-        }
-        if (!alreadyHasName) {
-          const an = profileIdToAcctName.get(resolvedUid);
-          if (an && !claimedAccountNames.has(an)) liveAccountNameMap.set(nameKey, an);
-        }
-      })));
-    }
-
-    console.log(`[CSV Enum Export] liveAccountMap: ${liveAccountMap.size}, liveAccountNameMap: ${liveAccountNameMap.size}, profiles: ${(profileRows||[]).length}`);
-    console.log(`[CSV Enum Export] Sample:`, [...liveAccountMap.entries()].slice(0, 5));
-
-    // Build: hub → activity → state → [{name, count}]
-    const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
-    csvEnumData.forEach(hg => {
-      if (!colLookup.has(hg.hub)) colLookup.set(hg.hub, new Map());
-      const actMap = colLookup.get(hg.hub)!;
-      hg.states.forEach(sg => {
-        sg.collectors.forEach(col => {
-          col.activities.forEach(act => {
-            if (!actMap.has(act.name)) actMap.set(act.name, new Map());
-            if (!actMap.get(act.name)!.has(sg.state)) actMap.get(act.name)!.set(sg.state, []);
-            actMap.get(act.name)!.get(sg.state)!.push({ name: col.name, count: act.count });
-          });
-        });
-      });
-    });
-
-    const XNAVY = 'FF0F2041', XWHITE = 'FFFFFFFF', XLIGHT = 'FFF5F7FC', XBORDER = 'FFC8CDD7';
-    const COL_BG = 'FFFFF8F0', COL_FG = 'FF78603A';
-    const ExcelJS = (await import('exceljs')).default;
-    const xBorder = (): any => {
-      const s: any = { style: 'thin', color: { argb: XBORDER } };
-      return { top: s, bottom: s, left: s, right: s };
-    };
-
-    // Build hub-level collector lookup: hub → activity → collector → count (summed across all states)
-    const hubColLookup = new Map<string, Map<string, Map<string, number>>>();
-    csvEnumData.forEach(hg => {
-      if (!hubColLookup.has(hg.hub)) hubColLookup.set(hg.hub, new Map());
-      const actMap = hubColLookup.get(hg.hub)!;
-      hg.states.forEach(sg => {
-        sg.collectors.forEach(col => {
-          col.activities.forEach(act => {
-            if (!actMap.has(act.name)) actMap.set(act.name, new Map());
-            const colMap = actMap.get(act.name)!;
-            colMap.set(col.name, (colMap.get(col.name) || 0) + act.count);
-          });
-        });
-      });
-    });
-
-    const wb = new ExcelJS.Workbook();
-    wb.creator = 'PACT Command Center';
-    wb.created = new Date();
-
-    // Pre-assign ALL sheet names before creating any worksheet.
-    // ExcelJS uses case-insensitive comparison; we do the same here.
-    const assignedNamesLower = new Set<string>(['summary', 'payment']);
-    function assignUnique(base: string): string {
-      const sanitized = base.replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Sheet';
-      let candidate = sanitized;
-      let c = 2;
-      while (assignedNamesLower.has(candidate.toLowerCase())) {
-        const suffix = ` ${c++}`;
-        candidate = sanitized.slice(0, 31 - suffix.length) + suffix;
-      }
-      assignedNamesLower.add(candidate.toLowerCase());
-      return candidate;
-    }
-    // Hub sheets — pre-assigned
-    const hubSheetNameMap = new Map<string, string>();
-    trackerData.hubTrackers.forEach((ht: any) => { hubSheetNameMap.set(ht.hub, assignUnique(ht.hub)); });
-    // Per-DC sheets — pre-assigned; key = hub||state||deviceId-or-name
-    // Using deviceId (when present) ensures two collectors with the same canonical
-    // name in the same hub+state never share a key and corrupt each other's sheet.
-    const dcSheetNameMap = new Map<string, string>();
-    csvEnumData.forEach(hg => {
-      hg.states.forEach(sg => {
-        sg.collectors.forEach(col => {
-          const dcKey = `${hg.hub}||${sg.state}||${col.deviceId || col.name}`;
-          dcSheetNameMap.set(dcKey, assignUnique(col.name));
-        });
-      });
-    });
-
-    // ── Summary sheet (Activity × Hub, with collector sub-rows) ──────────
-    {
-      const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
-      const wsSummary = wb.addWorksheet('Summary');
-      const numHubs = hubs.length;
-      const totalCols = 1 + numHubs * 4 + 4;
-      wsSummary.getColumn(1).width = 36;
-      for (let i = 2; i <= totalCols; i++) wsSummary.getColumn(i).width = 9;
-
-      const titleRowS = wsSummary.addRow(['Tracker — Enumerators (CSV) — Summary']);
-      titleRowS.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
-      titleRowS.height = 24;
-      wsSummary.addRow([]);
-
-      // Header row 1 — Hub group labels (merged × 4)
-      const sh1Vals: (string | null)[] = ['Activity'];
-      hubs.forEach(h => { sh1Vals.push(h, null, null, null); });
-      sh1Vals.push('Total', null, null, null);
-      const sh1Row = wsSummary.addRow(sh1Vals);
-      sh1Row.height = 22;
-      let smCol = 2;
-      for (let hi = 0; hi <= numHubs; hi++) {
-        wsSummary.mergeCells(sh1Row.number, smCol, sh1Row.number, smCol + 3);
-        smCol += 4;
-      }
-      sh1Row.eachCell({ includeEmpty: true }, (cell, ci) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
-        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XWHITE } };
-        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
-        cell.border = xBorder();
-      });
-
-      // Header row 2 — Sites / Actual / PDM / DC per hub + Total
-      const sh2Vals: string[] = [''];
-      for (let hi = 0; hi <= numHubs; hi++) sh2Vals.push('Sites', 'Actual', 'PDM', 'DC');
-      const sh2Row = wsSummary.addRow(sh2Vals);
-      sh2Row.height = 18;
-      sh2Row.eachCell({ includeEmpty: true }, (cell, ci) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
-        cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: XWHITE } };
-        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
-        cell.border = xBorder();
-      });
-
-      // Activity rows + collector sub-rows
-      matrix.forEach((mRow, ri) => {
-
-        const actVals: (string | number)[] = [mRow.activity];
-        mRow.cells.forEach(c => {
-          actVals.push(c.sites || '-', c.questionnaires || '-', mRow.isPdm ? (c.questionnaires ? Math.floor(c.questionnaires / 7) : '-') : (c.questionnaires || '-'), c.collectors || '-');
-        });
-        actVals.push(mRow.totalSites, mRow.totalQ, mRow.isPdm ? (mRow.totalQ ? Math.floor(mRow.totalQ / 7) : '-') : (mRow.totalQ || '-'), mRow.totalCollectors);
-        const actRowS = wsSummary.addRow(actVals);
-        actRowS.height = 18;
-        const altBg = ri % 2 === 1 ? XLIGHT : 'FFFFFFFF';
-        actRowS.eachCell({ includeEmpty: true }, (cell, ci) => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: altBg } };
-          cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XNAVY } };
-          cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
-          cell.border = xBorder();
-        });
-
-        // Collector sub-rows across all hubs
-        const allCollNames = new Set<string>();
-        hubs.forEach(h => { hubColLookup.get(h)?.get(mRow.activity)?.forEach((_, name) => allCollNames.add(name)); });
-        allCollNames.forEach(collName => {
-          const subVals: (string | number)[] = [`   · ${collName}`];
-          hubs.forEach(h => {
-            const cnt = hubColLookup.get(h)?.get(mRow.activity)?.get(collName) || 0;
-            subVals.push('-', cnt || '-', mRow.isPdm ? (cnt ? Math.floor(cnt / 7) : '-') : (cnt || '-'), '');
-          });
-          subVals.push('', '', '', '');
-          const subRowS = wsSummary.addRow(subVals);
-          subRowS.height = 15;
-          subRowS.eachCell({ includeEmpty: true }, (cell, ci) => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COL_BG } };
-            cell.font = { italic: true, size: 9, name: 'Calibri', color: { argb: COL_FG } };
-            cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
-            cell.border = xBorder();
-          });
-        });
-      });
-
-      // Total row
-      const sTotVals: (string | number)[] = ['Total'];
+    const trackerRows = matrix.map(row => {
+      const r: (string | number)[] = [row.activity];
       hubs.forEach((_, hi) => {
-        const pdmCol = matrix.reduce((a, r) => a + (r.isPdm ? Math.floor(r.cells[hi].questionnaires / 7) : r.cells[hi].questionnaires), 0);
-        sTotVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || '-', hubTotals[hi].collectors);
+        r.push(row.cells[hi].sites, row.cells[hi].questionnaires, Math.floor(row.cells[hi].questionnaires / 7), row.cells[hi].collectors);
       });
-      const sPdmGrand = matrix.reduce((a, r) => a + (r.isPdm ? r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0) : r.totalQ), 0);
-      sTotVals.push(grandSites, grandQ, sPdmGrand || '-', grandCollectors);
-      const sTotRow = wsSummary.addRow(sTotVals);
-      sTotRow.height = 20;
-      sTotRow.eachCell({ includeEmpty: true }, (cell, ci) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: XNAVY } };
-        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
-        cell.border = xBorder();
+      r.push(row.totalSites, row.totalQ, Math.floor(row.totalQ / 7), row.totalCollectors);
+      return r;
+    });
+
+    const totalRow: (string | number)[] = ['Grand Total'];
+    hubs.forEach((_, hi) => {
+      const pdmSitesCol = matrix.reduce((a, r) => a + Math.floor(r.cells[hi].questionnaires / 7), 0);
+      totalRow.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmSitesCol, hubTotals[hi].collectors);
+    });
+    const pdmSitesGrandTotal = matrix.reduce((a, r) => a + r.cells.reduce((b, c) => b + Math.floor(c.questionnaires / 7), 0), 0);
+    totalRow.push(grandSites, grandQ, pdmSitesGrandTotal, grandCollectors);
+    trackerRows.push(totalRow);
+
+    breakdownSheets.push({
+      title: 'Tracker — Enumerators (CSV) — Summary',
+      sheetName: 'Summary',
+      headers: trackerHeaders,
+      rows: trackerRows,
+    });
+
+    // 2. Collectors Sheet
+    const collectorRows: (string | number)[][] = [];
+    let cSeq = 0;
+    csvEnumData.forEach(hg => {
+      hg.states.forEach(sg => {
+        sg.collectors.forEach(col => {
+          cSeq++;
+          const actStr = col.activities.map(a => `${a.name} (${a.count})`).join(', ');
+          collectorRows.push([cSeq, col.name, col.deviceId || '—', hg.hub, sg.state, col.questionnaires, col.sites.length, col.pdmSites, actStr]);
+        });
       });
-    }
+    });
 
-    // ── Collectors sheet — flat list of every collector with Hub & State ────
-    {
-      const wsC = wb.addWorksheet('Collectors');
-      const CCOLS = ['#', 'Data Collector', 'Device ID', 'Hub', 'State', 'Questionnaires', 'Sites', 'PDM Sites', 'Activities'];
-      wsC.getColumn(1).width = 5;
-      wsC.getColumn(2).width = 30;
-      wsC.getColumn(3).width = 22;
-      wsC.getColumn(4).width = 18;
-      wsC.getColumn(5).width = 18;
-      wsC.getColumn(6).width = 16;
-      wsC.getColumn(7).width = 14;
-      wsC.getColumn(8).width = 14;
-      wsC.getColumn(9).width = 40;
+    breakdownSheets.push({
+      title: 'All Data Collectors — Hub & State Breakdown',
+      sheetName: 'Collectors',
+      headers: ['#', 'Data Collector', 'Device ID', 'Hub', 'State', 'Questionnaires', 'Sites', 'PDM Sites', 'Activities'],
+      rows: collectorRows,
+    });
 
-      const cTitle = wsC.addRow(['All Data Collectors — Hub & State Breakdown']);
-      wsC.mergeCells(cTitle.number, 1, cTitle.number, CCOLS.length);
-      cTitle.font = { bold: true, size: 14, name: 'Calibri', color: { argb: XNAVY } };
-      cTitle.height = 28;
-      wsC.addRow(['Tracker — Enumerators (CSV)']).getCell(1).font = { italic: true, size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-      wsC.addRow(['Generated: ' + new Date().toLocaleString()]).font = { size: 9, name: 'Calibri', color: { argb: 'FF6B7280' } };
-      wsC.addRow([]);
-
-      const cHdr = wsC.addRow(CCOLS);
-      cHdr.height = 22;
-      cHdr.eachCell((cell, ci) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
-        cell.font = { bold: true, color: { argb: XWHITE }, size: 10, name: 'Calibri' };
-        cell.border = xBorder();
-        cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle', wrapText: ci === 9 };
-      });
-
-      let cSeq = 0;
+    // 3. Payment Sheet
+    if (costPerSite > 0) {
+      const payHeaders = ['#', 'Collector', 'Hub', 'State', 'PDM Sites', 'Cost/Site (USD)', 'Total (USD)', 'Rate (SDG/USD)', 'Total (SDG)'];
+      const payRows: (string | number)[][] = [];
+      let pSeq = 0;
       csvEnumData.forEach(hg => {
         hg.states.forEach(sg => {
-          sg.collectors.forEach((col, ci) => {
-            cSeq++;
-            const actStr = col.activities.map(a => `${a.name} (${a.count})`).join(', ');
-            const dr = wsC.addRow([cSeq, col.name, col.deviceId || '—', hg.hub, sg.state, col.questionnaires, col.sites.length, col.pdmSites, actStr]);
-            dr.height = 18;
-            dr.eachCell((cell, idx) => {
-              cell.border = xBorder();
-              cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
-              cell.alignment = { horizontal: idx > 5 ? 'center' : 'left', vertical: 'middle', wrapText: idx === 9 };
-              if (cSeq % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLIGHT } };
-            });
+          sg.collectors.forEach(col => {
+            pSeq++;
+            payRows.push([pSeq, col.name, hg.hub, sg.state, col.pdmSites, costPerSite, col.pdmSites * costPerSite, exchangeRate, col.pdmSites * costPerSite * exchangeRate]);
           });
         });
       });
+      const totalPdm = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.pdmSites, 0), 0), 0);
+      payRows.push(['', 'GRAND TOTAL', '', '', totalPdm, costPerSite, totalPdm * costPerSite, exchangeRate, totalPdm * costPerSite * exchangeRate]);
 
-      // Grand total row
-      const grandQ   = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.questionnaires, 0), 0), 0);
-      const grandSites = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.sites.length, 0), 0), 0);
-      const grandPdm   = csvEnumData.reduce((s, hg) => s + hg.states.reduce((s2, sg) => s2 + sg.collectors.reduce((s3, c) => s3 + c.pdmSites, 0), 0), 0);
-      const cTot = wsC.addRow(['', 'GRAND TOTAL', '', '', '', grandQ, grandSites, grandPdm, '']);
-      cTot.height = 22;
-      cTot.eachCell((cell, ci) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XNAVY } };
-        cell.font = { bold: true, size: 11, name: 'Calibri', color: { argb: XWHITE } };
-        cell.border = xBorder();
-        cell.alignment = { horizontal: ci > 5 ? 'center' : 'left', vertical: 'middle' };
+      breakdownSheets.push({
+        title: 'Enumerator Payment Details',
+        sheetName: 'Payment',
+        headers: payHeaders,
+        rows: payRows,
       });
     }
 
-    for (const ht of trackerData.hubTrackers) {
-      const ws = wb.addWorksheet(hubSheetNameMap.get(ht.hub)!);
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Enumerator Tracker Report (CSV)',
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`,
+      filenamePrefix: 'enumerator_tracker_csv',
+      mainSheet: {
+        sheetName: 'Overview',
+        headers: ['Metric', 'Value'],
+        rows: [
+          ['Total Hubs', hubs.length],
+          ['Total Questionnaires', grandQ],
+          ['Total Sites', grandSites],
+          ['Total Collectors', grandCollectors],
+        ],
+      },
+      breakdownSheets,
+    });
+  }, [trackerData, csvEnumData, toast]);
       const numStates = ht.states.length;
       const totalCols = 1 + numStates * 4 + 4;
       ws.getColumn(1).width = 36;
@@ -4975,26 +4672,47 @@ const QuestionnaireAnalytics = () => {
   }, [trackerData, csvEnumData, bankAccountByName, filteredData, toast]);
 
   const exportTrackerPerStateFormattedExcel = useCallback(async () => {
-    const sheets = trackerData.stateTrackers.map((st: any) => {
+    const { stateTrackers } = trackerData;
+    const breakdownSheets = stateTrackers.map((st: any) => {
       const headers = ['Activity'];
-      st.localities.forEach((loc: string) => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM`, `${loc} DC`); });
+      st.localities.forEach((loc: string) => {
+        headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM`, `${loc} DC`);
+      });
       headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+
       const rows = st.matrix.map((row: any) => {
-        const r: (string|number)[] = [row.activity];
-        row.cells.forEach((c: any) => { r.push(c.sites || '-', c.questionnaires || '-', c.questionnaires ? Math.floor(c.questionnaires / 7) : '-', c.collectors || '-'); });
+        const r: (string | number)[] = [row.activity];
+        st.localities.forEach((_: string, li: number) => {
+          r.push(row.cells[li].sites || '-', row.cells[li].questionnaires || '-', row.cells[li].questionnaires ? Math.floor(row.cells[li].questionnaires / 7) : '-', row.cells[li].collectors || '-');
+        });
         r.push(row.totalSites, row.totalQ, row.totalQ ? Math.floor(row.totalQ / 7) : '-', row.totalCollectors);
         return r;
       });
-      const totR: (string|number)[] = ['Total'];
+
+      const totalRow: (string | number)[] = ['Total'];
       st.colTotals.forEach((ct: any, ci: number) => {
         const pdmSitesCol = st.matrix.reduce((a: number, r: any) => a + Math.floor(r.cells[ci].questionnaires / 7), 0);
-        totR.push(ct.sites, ct.questionnaires, pdmSitesCol || '-', ct.collectors);
+        totalRow.push(ct.sites, ct.questionnaires, pdmSitesCol || '-', ct.collectors);
       });
-      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: any, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
-      totR.push(st.grandSites, st.grandQ, stPdmSitesGrand || '-', st.grandCollectors);
-      return { title: st.state, headers, rows, totalRow: totR };
+      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + r.cells.reduce((b: number, c: any) => b + Math.floor(c.questionnaires / 7), 0), 0);
+      totalRow.push(st.grandSites, st.grandQ, stPdmSitesGrand || '-', st.grandCollectors);
+
+      return {
+        title: `State: ${st.state}`,
+        sheetName: st.state.slice(0, 31),
+        headers,
+        rows,
+        totalsRow: totalRow,
+      };
     });
-    await exportFormattedExcel(sheets, 'tracker_per_state.xlsx');
+
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Tracker per State (Formatted)',
+      subtitleLine: `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`,
+      filenamePrefix: 'tracker_per_state_formatted',
+      mainSheet: breakdownSheets[0] || { sheetName: 'No Data', headers: [], rows: [] },
+      breakdownSheets: breakdownSheets.slice(1),
+    });
   }, [trackerData]);
 
   const exportHubDrilldownFormattedExcel = useCallback(async () => {

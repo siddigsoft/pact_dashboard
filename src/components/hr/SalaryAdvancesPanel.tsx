@@ -16,6 +16,7 @@ import {
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { exportToExcel } from '@/utils/report-export';
 import * as XLSX from 'xlsx';
 
 interface Advance {
@@ -117,8 +118,7 @@ export default function SalaryAdvancesPanel() {
         .from('hr_salary_advance_recoveries' as any)
         .select('*')
         .order('recovery_date', { ascending: false })
-        .limit(2000)
-        .catch(() => ({ data: [] as Recovery[] }));
+        .limit(2000);
       return (data ?? []) as Recovery[];
     },
     staleTime: 30_000,
@@ -249,9 +249,7 @@ export default function SalaryAdvancesPanel() {
       'Reason':          a.reason ?? '',
       'Monthly Recovery Plan': a.monthly_recovery ?? '',
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Advances');
-    XLSX.writeFile(wb, `salary_advances_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(data, 'Salary Advances', `salary_advances_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   const migrationNeeded = advances === null;

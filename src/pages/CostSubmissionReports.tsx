@@ -40,7 +40,7 @@ import {
   EnhancedCostRequest,
   CostReportData
 } from "@/types/cost-submission";
-import * as XLSX from 'xlsx';
+import { exportToExcel as exportStandardExcel } from "@/utils/report-export";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -180,10 +180,11 @@ export default function CostSubmissionReports({
 
   const exportToExcel = () => {
     const data = prepareReportData();
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Cost Submissions');
-    XLSX.writeFile(wb, `cost_submissions_report_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    exportStandardExcel(
+      data,
+      'Cost Submissions',
+      `cost_submissions_report_${format(new Date(), 'yyyyMMdd')}.xlsx`
+    );
     
     toast({
       title: "Export Successful",

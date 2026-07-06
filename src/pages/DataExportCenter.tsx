@@ -1,3 +1,4 @@
+import { exportToExcel, exportToCSV } from '@/utils/report-export';
 import { useState, useCallback } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -46,36 +47,6 @@ const DataExportCenter = () => {
       ...prev,
       [category]: { id: category, category, status, progress }
     }));
-  };
-
-  const downloadFile = (content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportToExcel = async (data: Record<string, unknown>[], sheetName: string, filename: string) => {
-    const XLSX = await import('xlsx');
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    XLSX.writeFile(wb, filename);
-  };
-
-  const toCsv = (data: Record<string, unknown>[]) => {
-    if (data.length === 0) return '';
-    const headers = Object.keys(data[0]);
-    const rows = data.map(row =>
-      headers.map(h => {
-        const val = String(row[h] ?? '');
-        return val.includes(',') || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val;
-      }).join(',')
-    );
-    return [headers.join(','), ...rows].join('\n');
   };
 
   const exportCycleReports = useCallback(async () => {
@@ -131,9 +102,9 @@ const DataExportCenter = () => {
 
       const filename = `cycle-reports-${new Date().toISOString().slice(0, 10)}`;
       if (format === 'excel') {
-        await exportToExcel(exportData, 'Cycle Reports', `${filename}.xlsx`);
+        exportToExcel(exportData, 'Cycle Reports', `${filename}.xlsx`);
       } else {
-        downloadFile(toCsv(exportData), `${filename}.csv`, 'text/csv');
+        exportToCSV(exportData, `${filename}.csv`);
       }
 
       setJobStatus('cycles', 'done', 100);
@@ -202,9 +173,9 @@ const DataExportCenter = () => {
 
       const filename = `site-visits-${new Date().toISOString().slice(0, 10)}`;
       if (format === 'excel') {
-        await exportToExcel(exportData, 'Site Visits', `${filename}.xlsx`);
+        exportToExcel(exportData, 'Site Visits', `${filename}.xlsx`);
       } else {
-        downloadFile(toCsv(exportData), `${filename}.csv`, 'text/csv');
+        exportToCSV(exportData, `${filename}.csv`);
       }
 
       setJobStatus('visits', 'done', 100);
@@ -276,9 +247,9 @@ const DataExportCenter = () => {
 
       const filename = `coverage-analytics-${new Date().toISOString().slice(0, 10)}`;
       if (format === 'excel') {
-        await exportToExcel(exportData, 'Coverage Analytics', `${filename}.xlsx`);
+        exportToExcel(exportData, 'Coverage Analytics', `${filename}.xlsx`);
       } else {
-        downloadFile(toCsv(exportData), `${filename}.csv`, 'text/csv');
+        exportToCSV(exportData, `${filename}.csv`);
       }
 
       setJobStatus('analytics', 'done', 100);
@@ -356,9 +327,9 @@ const DataExportCenter = () => {
 
       const filename = `all-mmps-${new Date().toISOString().slice(0, 10)}`;
       if (format === 'excel') {
-        await exportToExcel(exportData, 'All MMPs', `${filename}.xlsx`);
+        exportToExcel(exportData, 'All MMPs', `${filename}.xlsx`);
       } else {
-        downloadFile(toCsv(exportData), `${filename}.csv`, 'text/csv');
+        exportToCSV(exportData, `${filename}.csv`);
       }
 
       setJobStatus('allmmps', 'done', 100);

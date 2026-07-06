@@ -6,7 +6,7 @@ import {
 } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import { exportStandardExcel, type StandardSheetSpec } from '@/utils/standardExcelExport';
 import {
   TrendingUp, TrendingDown, DollarSign, ChevronLeft, ChevronRight, Download,
   Loader2, FileSpreadsheet, FileText, BarChart2, CheckCircle2, AlertCircle,
@@ -377,13 +377,7 @@ export default function MonthEndFinancialSummary() {
   }
 
   function exportExcel() {
-    const wb = XLSX.utils.book_new();
-
-    const summary = [
-      ['MONTH-END FINANCIAL SUMMARY', periodLabel],
-      ['Generated', format(new Date(), 'dd MMM yyyy HH:mm')],
-      [],
-      ['ITEM', 'AMOUNT (SDG)', 'NOTES'],
+    const summaryRows: (string | number)[][] = [
       ['Total Payroll Payout (Net)', totalPayroll, 'Net payable to employees'],
       ['Total Gross Payroll', totalGrossPayroll, 'Before deductions'],
       ['Project Milestones Receivable', milestones.reduce((s, m) => s + (Number(m.amount) || 0), 0), 'Outstanding'],
@@ -392,39 +386,65 @@ export default function MonthEndFinancialSummary() {
       ['Subscription Costs (Monthly Est.)', totalSubscriptions, `${subscriptions.length} active subscriptions`],
       ['Operational Expenses (Approved)', totalOperationalExpenses, `${operationalCosts.length} approved submissions`],
       ...(preFundTxns.length > 0 || activeFunds.length > 0 ? [
-        [],
+        ['', '', ''],
         ['PRE-FUND ACTIVITY', '', ''],
-        ['Pre-Fund Received', preFundReceived, `${preFundTxns.filter(t=>t.transaction_type==='receipt').length} receipts`],
-        ['Pre-Fund Paid Out', preFundPaid, `${preFundTxns.filter(t=>t.transaction_type==='payment').length} payments`],
-        ['Pre-Fund Committed', preFundCommitted, `${preFundTxns.filter(t=>t.transaction_type==='commitment').length} commitments`],
+        ['Pre-Fund Received', preFundReceived, `${preFundTxns.filter(t => t.transaction_type === 'receipt').length} receipts`],
+        ['Pre-Fund Paid Out', preFundPaid, `${preFundTxns.filter(t => t.transaction_type === 'payment').length} payments`],
+        ['Pre-Fund Committed', preFundCommitted, `${preFundTxns.filter(t => t.transaction_type === 'commitment').length} commitments`],
         ['Pre-Fund Available Balance', preFundAvailable, `${activeFunds.length} active funds`],
         ['Pre-Fund Variance (Received−Paid−Committed)', preFundVariance, ''],
       ] : []),
-      [],
+      ['', '', ''],
       ['NET POSITION', netPosition, 'Receivable − Payroll − Subscriptions − Operational Expenses'],
     ];
-    const ws1 = XLSX.utils.aoa_to_sheet(summary);
-    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+
+    const mainSheet: StandardSheetSpec = {
+      sheetName: 'Summary',
+      headers: ['ITEM', 'AMOUNT (SDG)', 'NOTES'],
+      rows: summaryRows,
+      colWidths: { 0: 42, 1: 20, 2: 42 },
+    };
+
+    const breakdownSheets: { title: string; sheetName: string; headers: string[]; rows: (string | number)[][]; colWidths?: number[] }[] = [];
 
     if (milestones.length > 0) {
-      const mData = [['Project ID', 'Title', 'Amount', 'Currency', 'Due Date', 'Status'],
-        ...milestones.map(m => [m.project_id, m.title, m.amount, m.currency, m.due_date, m.status])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mData), 'Milestones');
+      breakdownSheets.push({
+        title: `Project Milestones Receivable — ${periodLabel}`,
+        sheetName: 'Milestones',
+        headers: ['Project ID', 'Title', 'Amount', 'Currency', 'Due Date', 'Status'],
+        rows: milestones.map(m => [m.project_id, m.title, m.amount, m.currency, m.due_date, m.status]),
+        colWidths: [16, 36, 14, 10, 14, 16],
+      });
     }
 
     if (subscriptions.length > 0) {
-      const sData = [['Name', 'Amount', 'Currency', 'Billing Cycle', 'Monthly Est.'],
-        ...subscriptions.map(s => [s.name, s.amount, s.currency, s.billing_cycle, monthlyEquivalent(Number(s.amount), s.billing_cycle)])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sData), 'Subscriptions');
+      breakdownSheets.push({
+        title: `Subscription Costs — ${periodLabel}`,
+        sheetName: 'Subscriptions',
+        headers: ['Name', 'Amount', 'Currency', 'Billing Cycle', 'Monthly Est.'],
+        rows: subscriptions.map(s => [s.name, s.amount, s.currency, s.billing_cycle, monthlyEquivalent(Number(s.amount), s.billing_cycle)]),
+        colWidths: [30, 14, 10, 16, 16],
+      });
     }
 
     if (operationalCosts.length > 0) {
-      const oData = [['Category', 'Description', 'Amount', 'Currency', 'Expense Date', 'Status'],
-        ...operationalCosts.map(c => [c.expense_category, c.description, (Number(c.amount_cents) || 0) / 100, c.currency, c.expense_date, c.status])];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(oData), 'Operational Expenses');
+      breakdownSheets.push({
+        title: `Operational Expenses (Approved) — ${periodLabel}`,
+        sheetName: 'Operational Expenses',
+        headers: ['Category', 'Description', 'Amount', 'Currency', 'Expense Date', 'Status'],
+        rows: operationalCosts.map(c => [c.expense_category, c.description, (Number(c.amount_cents) || 0) / 100, c.currency, c.expense_date, c.status]),
+        colWidths: [20, 40, 14, 10, 16, 16],
+      });
     }
 
-    XLSX.writeFile(wb, `month-end-summary-${format(periodStart, 'yyyy-MM')}.xlsx`);
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center - Month-End Financial Summary',
+      subtitleLine: `Period: ${periodLabel}`,
+      metaLine: `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')} | Net Position: ${fmt(netPosition)}`,
+      mainSheet,
+      breakdownSheets,
+      filenamePrefix: `month-end-summary-${format(periodStart, 'yyyy-MM')}`,
+    });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────

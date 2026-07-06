@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertTriangle, Send, Download, Loader2, CheckCircle2, Info, User,
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export.ts';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
@@ -132,7 +133,7 @@ export function WFPBulkActions({ results, mmpId, mmpName }: WFPBulkActionsProps)
     setSending(true);
     try {
       const mmpLabel = mmpName || 'this MMP cycle';
-      const adminName = currentUser.full_name || currentUser.email || 'Admin';
+      const adminName = currentUser.fullName || currentUser.email || 'Admin';
 
       for (const enumId of uniqueEnumerators) {
         const info = byEnumerator[enumId];
@@ -187,13 +188,8 @@ export function WFPBulkActions({ results, mmpId, mmpName }: WFPBulkActionsProps)
       'Outcome':         r.outcome,
     }));
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Message: 'No unmatched WFP rows' }]);
-    ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 20 }, { wch: 24 }, { wch: 24 }, { wch: 12 }, { wch: 30 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'WFP No-Match');
-
     const dateStr = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `wfp-no-match-${mmpId.slice(0, 8)}-${dateStr}.xlsx`);
+    exportToExcel(rows.length > 0 ? rows : [{ Message: 'No unmatched WFP rows' }], 'WFP No-Match', `wfp-no-match-${mmpId.slice(0, 8)}-${dateStr}.xlsx`);
     toast({ title: 'Report downloaded', description: `${rows.length} WFP rows with no PACT match.` });
   };
 

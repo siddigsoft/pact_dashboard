@@ -26,7 +26,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/utils/report-export';
 
 interface ProjectCostTabProps {
   projectId: string;
@@ -122,25 +122,29 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
 
       // 1. By source_id = projectId (if project is linked directly to JE)
       promises.push(
-        supabase
-          .from('acct_journal_entries')
-          .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
-          .eq('source_id', projectId)
-          .in('status', ['posted', 'draft'])
-          .order('posting_date', { ascending: false })
-          .limit(100)
+        Promise.resolve(
+          supabase
+            .from('acct_journal_entries')
+            .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
+            .eq('source_id', projectId)
+            .in('status', ['posted', 'draft'])
+            .order('posting_date', { ascending: false })
+            .limit(100)
+        )
       );
 
       // 2. By source_id matching any cost submission ID
       if (costIds.length > 0) {
         promises.push(
-          supabase
-            .from('acct_journal_entries')
-            .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
-            .in('source_id', costIds.slice(0, 100))
-            .in('status', ['posted', 'draft'])
-            .order('posting_date', { ascending: false })
-            .limit(200)
+          Promise.resolve(
+            supabase
+              .from('acct_journal_entries')
+              .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
+              .in('source_id', costIds.slice(0, 100))
+              .in('status', ['posted', 'draft'])
+              .order('posting_date', { ascending: false })
+              .limit(200)
+          )
         );
       }
 
@@ -321,8 +325,8 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
     return u?.name || u?.email || userId.slice(0, 8);
   };
 
-  const exportToExcel = () => {
-    const rows = filteredCosts.map(c => ({
+  const exportToExcelData = () => {
+    const data = filteredCosts.map(c => ({
       Date: safeFormatDate(c.expense_date || c.submitted_at),
       Category: EXPENSE_LABELS[c.expense_category] || c.expense_category,
       Description: c.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '-',
@@ -331,9 +335,11 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
       Status: STATUS_CONFIG[getDerivedStatus(c)]?.label || getDerivedStatus(c),
       'Submitted By': getUserName(c.submitted_by),
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Project Costs');
-    XLSX.writeFile(wb, `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_costs.xlsx`);
+    exportToExcel(
+      data,
+      'Project Costs',
+      `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_costs.xlsx`
+    );
   };
 
   if (loading) {
@@ -464,7 +470,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
           </SelectContent>
         </Select>
         <div className="flex-1" />
-        <Button size="sm" variant="outline" onClick={exportToExcel} data-testid="button-export-costs">
+        <Button size="sm" variant="outline" onClick={exportToExcelData} data-testid="button-export-costs">
           <Download className="h-4 w-4 mr-1.5" />
           Export
         </Button>

@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { exportToExcel } from '@/utils/report-export';
 
 // ── types ────────────────────────────────────────────────────────────────────
 
@@ -393,24 +394,34 @@ export default function EnumeratorFeesReport() {
 
   // ── export ────────────────────────────────────────────────────────────────
   const exportCsv = () => {
-    const header = ['Enumerator','Site Name','Site Code','State','Locality','MMP','Hub','Month','Cycle Status','Site Status','Enumerator Fee (SDG)','Transport Fee (SDG)','Total Fee (SDG)','Acknowledged','Fee Payment Status','Paid Date','Payment Method','Transport Advance Status','Advance Requested (SDG)','Advance Paid (SDG)'];
-    const lines = [header.join(','), ...filtered.map(r => [
-      r.enumeratorName, r.siteName, r.siteCode, r.state, r.locality,
-      r.mmpName, r.mmpHub, r.mmpMonth || '', r.cycleStatus, r.siteStatus,
-      r.enumeratorFee ?? '', r.transportFee ?? '', r.totalFee ?? '',
-      r.costAcknowledged ? 'Yes' : 'No',
-      r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
-      r.feePaidAt ? fmtDate(r.feePaidAt) : '',
-      r.feePaymentMethod || '',
-      r.advanceStatus === 'none' ? 'Not Requested' : r.advanceStatus.replace(/_/g, ' '),
-      r.advanceRequestedAmount ?? '',
-      r.advancePaidAmount ?? '',
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))];
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `enumerator-fees-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
+    const data = filtered.map(r => ({
+      Enumerator: r.enumeratorName,
+      'Site Name': r.siteName,
+      'Site Code': r.siteCode,
+      State: r.state,
+      Locality: r.locality,
+      MMP: r.mmpName,
+      Hub: r.mmpHub,
+      Month: r.mmpMonth || '',
+      'Cycle Status': r.cycleStatus,
+      'Site Status': r.siteStatus,
+      'Enumerator Fee (SDG)': r.enumeratorFee ?? '',
+      'Transport Fee (SDG)': r.transportFee ?? '',
+      'Total Fee (SDG)': r.totalFee ?? '',
+      Acknowledged: r.costAcknowledged ? 'Yes' : 'No',
+      'Fee Payment Status': r.feePaidStatus === 'paid' ? 'Paid' : 'Unpaid',
+      'Paid Date': r.feePaidAt ? fmtDate(r.feePaidAt) : '',
+      'Payment Method': r.feePaymentMethod || '',
+      'Transport Advance Status': r.advanceStatus === 'none' ? 'Not Requested' : r.advanceStatus.replace(/_/g, ' '),
+      'Advance Requested (SDG)': r.advanceRequestedAmount ?? '',
+      'Advance Paid (SDG)': r.advancePaidAmount ?? '',
+    }));
+    
+    exportToExcel(
+      data,
+      'Enumerator Fees',
+      `enumerator-fees-${new Date().toISOString().slice(0,10)}.xlsx`
+    );
   };
 
   // ── payment mutations ─────────────────────────────────────────────────────

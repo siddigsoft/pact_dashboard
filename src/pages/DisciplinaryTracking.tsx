@@ -15,7 +15,7 @@ import { AlertTriangle, Plus, Loader2, Edit2, Trash2, ShieldAlert, Lock, FileDow
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Case {
   id: string; user_id: string; case_type: 'disciplinary' | 'grievance'; category: string | null;
@@ -126,15 +126,19 @@ export default function DisciplinaryTracking() {
     fetchAll();
   }
 
-  function exportToExcel() {
+  function handleExport() {
     const rows = cases.map(c => ({
-      'Staff Member': nameOf(c.user_id), Type: c.case_type, Category: c.category ?? '', Severity: c.severity,
-      Status: c.status, 'Incident Date': c.incident_date, 'Assigned To': nameOf(c.assigned_to),
-      Description: c.description, 'Resolution Notes': c.resolution_notes ?? '',
+      'Staff Member': nameOf(c.user_id),
+      Type: c.case_type,
+      Category: c.category ?? '',
+      Severity: c.severity,
+      Status: c.status,
+      'Incident Date': c.incident_date,
+      'Assigned To': nameOf(c.assigned_to),
+      Description: c.description,
+      'Resolution Notes': c.resolution_notes ?? '',
     }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Cases');
-    XLSX.writeFile(wb, `Disciplinary_Cases_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportToExcel(rows, 'Cases', `Disciplinary_Cases_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
   async function remove(c: Case) {
@@ -180,7 +184,7 @@ export default function DisciplinaryTracking() {
           </Select>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportToExcel} data-testid="button-export-cases"><FileDown className="h-4 w-4 mr-1" />Export</Button>
+          <Button variant="outline" onClick={handleExport} data-testid="button-export-cases"><FileDown className="h-4 w-4 mr-1" />Export</Button>
           <Button onClick={openNew} data-testid="button-new-case"><Plus className="h-4 w-4 mr-1" />Log Case</Button>
         </div>
       </div>
