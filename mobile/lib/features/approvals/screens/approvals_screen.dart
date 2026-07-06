@@ -33,13 +33,40 @@ class _ApprovalsScreenState extends ConsumerState<ApprovalsScreen> {
         isFOM
             ? client.from('operational_cost_submissions').select('id, reference_number, amount, currency, tier1_status, tier2_status, status, expense_category, created_at, submitter:profiles!submitted_by(name)').eq('tier1_status', 'approved').eq('tier2_status', 'pending').order('created_at')
             : client.from('operational_cost_submissions').select('id, reference_number, amount, currency, tier1_status, tier2_status, status, expense_category, created_at, submitter:profiles!submitted_by(name)').eq('tier1_status', 'pending').order('created_at'),
-        client.from('down_payment_requests').select('id, amount, currency, status, purpose, created_at, requester:profiles!user_id(name)').inFilter('status', ['pending_supervisor', 'pending_admin']).order('created_at'),
+        client.from('down_payment_requests').select('id, amount, currency, status, purpose, mmp_site_entry_id, created_at, requester:profiles!user_id(name)').inFilter('status', ['pending_supervisor', 'pending_admin']).order('created_at'),
         client.from('withdrawal_requests').select('id, amount, currency, status, reason, created_at, requester:profiles!user_id(name)').eq('status', 'supervisor_approved').order('created_at'),
       ]);
 
+      final downPayments = List<Map<String, dynamic>>.from(results[1]);
+      // Cross-reference the Enumerator Fees ledger (mmp_site_entries.fee_paid_status)
+      // so field approvers see the same "already paid" / "not paid" signal as the web app.
+      try {
+        final entryIds = downPayments
+            .map((d) => d['mmp_site_entry_id'] as String?)
+            .whereType<String>()
+            .toSet()
+            .toList();
+        if (entryIds.isNotEmpty) {
+          final feeRows = await client.rpc('get_site_entry_fee_status', params: {'entry_ids': entryIds});
+          final feeMap = {for (final f in List<Map<String, dynamic>>.from(feeRows)) f['id'] as String: f};
+          for (final d in downPayments) {
+            final entryId = d['mmp_site_entry_id'] as String?;
+            if (entryId != null && feeMap.containsKey(entryId)) {
+              final f = feeMap[entryId]!;
+              d['fee_paid_status'] = f['fee_paid_status'];
+              d['fee_paid_amount'] = f['fee_paid_amount'];
+              d['enumerator_fee'] = f['enumerator_fee'];
+              d['transport_fee'] = f['transport_fee'];
+            }
+          }
+        }
+      } catch (_) {
+        // Non-critical: fee ledger cross-reference is best-effort.
+      }
+
       setState(() {
         _costSubmissions = List<Map<String, dynamic>>.from(results[0]);
-        _downPayments = List<Map<String, dynamic>>.from(results[1]);
+        _downPayments = downPayments;
         _withdrawals = List<Map<String, dynamic>>.from(results[2]);
         _loading = false;
       });
@@ -234,17 +261,50 @@ class _DownPaymentCard extends StatelessWidget {
     final amount = (dp['amount'] as num?)?.toStringAsFixed(0) ?? '0';
     final currency = dp['currency'] as String? ?? 'SDG';
     final requester = (dp['requester'] as Map?)?['name'] as String? ?? 'Unknown';
+    final enumeratorFee = dp['enumerator_fee'] as num?;
+    final transportFee = dp['transport_fee'] as num?;
+    final feePaidStatus = dp['fee_paid_status'] as String?;
+    final hasFeeInfo = (enumeratorFee != null && enumeratorFee > 0) || (transportFee != null && transportFee > 0);
+    final isFeePaid = feePaidStatus == 'paid';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: const CircleAvatar(backgroundColor: AppColors.accent, child: Icon(Icons.payments_outlined, color: Colors.white, size: 18)),
-        title: Text('Down Payment — $currency $amount', style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(requester),
-        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          IconButton(icon: const Icon(Icons.close, color: AppColors.error), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.check, color: AppColors.success), onPressed: () {}),
-        ]),
-      ),
+      child: Column(children: [
+        ListTile(
+          leading: const CircleAvatar(backgroundColor: AppColors.accent, child: Icon(Icons.payments_outlined, color: Colors.white, size: 18)),
+          title: Text('Down Payment — $currency $amount', style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(requester),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(icon: const Icon(Icons.close, color: AppColors.error), onPressed: () {}),
+            IconButton(icon: const Icon(Icons.check, color: AppColors.success), onPressed: () {}),
+          ]),
+        ),
+        if (hasFeeInfo)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isFeePaid ? AppColors.success.withOpacity(0.1) : AppColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isFeePaid ? AppColors.success.withOpacity(0.4) : AppColors.warning.withOpacity(0.4)),
+              ),
+              child: Row(children: [
+                Icon(isFeePaid ? Icons.check_circle : Icons.warning_amber_rounded, size: 16, color: isFeePaid ? AppColors.success : AppColors.warning),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isFeePaid
+                        ? 'Fees Paid${dp['fee_paid_amount'] != null ? ' (${(dp['fee_paid_amount'] as num).toStringAsFixed(0)} SDG)' : ''}'
+                        : 'Transport Fee Not Paid — Remaining Enumerator Fee: ${(enumeratorFee ?? 0).toStringAsFixed(0)} SDG',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isFeePaid ? AppColors.success : AppColors.warning),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+      ]),
     );
   }
 }

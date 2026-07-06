@@ -87,6 +87,12 @@ function transformFromDB(data: any): DownPaymentRequest {
     paymentProofUrl: data.payment_proof_url || null,
     paymentProofNotes: data.payment_proof_notes || null,
     paymentProofUploadedAt: data.payment_proof_uploaded_at || null,
+    feePaidStatus: undefined,
+    feePaidAmount: undefined,
+    feePaidAt: undefined,
+    feePaymentMethod: undefined,
+    enumeratorFee: undefined,
+    transportFee: undefined,
   };
 }
 
@@ -247,12 +253,28 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     }));
   }
 
-  const [enrichResult, hubResult, profileResult] = await Promise.allSettled([
+  // Batch-fetch the Enumerator Fees ledger status (paid/unpaid, amounts) per
+  // site entry, same chunking/SECURITY DEFINER pattern as geo enrichment, so
+  // the Transport Advance / Down Payment page can show whether the fee was
+  // already settled outside the app and highlight it accordingly.
+  async function fetchFeeStatusBatched(ids: string[]) {
+    if (ids.length === 0) return [];
+    const CHUNK = 800;
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+    const results = await Promise.all(
+      chunks.map(chunk => (supabase as any).rpc('get_site_entry_fee_status', { entry_ids: chunk }))
+    );
+    return results.flatMap((r: any) => r.data || []);
+  }
+
+  const [enrichResult, hubResult, profileResult, feeStatusResult] = await Promise.allSettled([
     fetchEnrichmentBatched(entryIds),
     hubIds.length > 0 ? fetchHubEnrichment(hubIds) : Promise.resolve([]),
     missingNameIds.length > 0
       ? supabase.from('profiles').select('id, full_name, username, email').in('id', missingNameIds)
       : Promise.resolve({ data: [] }),
+    fetchFeeStatusBatched(entryIds),
   ]);
 
   if (enrichResult.status === 'fulfilled' && (enrichResult.value as any[]).length > 0) {
@@ -309,6 +331,25 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     });
   } else if (hubResult.status === 'rejected') {
     console.warn('[DownPayment] Hub name enrichment failed (non-critical):', hubResult.reason);
+  }
+
+  if (feeStatusResult.status === 'fulfilled' && (feeStatusResult.value as any[])?.length > 0) {
+    const feeMap = new Map<string, any>(
+      (feeStatusResult.value as any[]).map((f: any) => [f.id, f])
+    );
+    transformed.forEach(r => {
+      if (r.mmpSiteEntryId && feeMap.has(r.mmpSiteEntryId)) {
+        const f = feeMap.get(r.mmpSiteEntryId)!;
+        r.feePaidStatus = f.fee_paid_status === 'paid' ? 'paid' : 'unpaid';
+        r.feePaidAmount = f.fee_paid_amount != null ? Number(f.fee_paid_amount) : null;
+        r.feePaidAt = f.fee_paid_at || null;
+        r.feePaymentMethod = f.fee_payment_method || null;
+        r.enumeratorFee = f.enumerator_fee != null ? Number(f.enumerator_fee) : null;
+        r.transportFee = f.transport_fee != null ? Number(f.transport_fee) : null;
+      }
+    });
+  } else if (feeStatusResult.status === 'rejected') {
+    console.warn('[DownPayment] Fee status enrichment failed (non-critical):', feeStatusResult.reason);
   }
 
   return transformed;

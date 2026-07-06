@@ -150,6 +150,15 @@ export interface DownPaymentRequest {
   paymentProofUrl?: string | null;
   paymentProofNotes?: string | null;
   paymentProofUploadedAt?: string | null;
+
+  // Enumerator Fees ledger cross-reference (from mmp_site_entries, tracks fees
+  // paid outside the app — separate from this transport advance record).
+  feePaidStatus?: 'unpaid' | 'paid';
+  feePaidAmount?: number | null;
+  feePaidAt?: string | null;
+  feePaymentMethod?: string | null;
+  enumeratorFee?: number | null;
+  transportFee?: number | null;
 }
 
 export interface CreateDownPaymentRequest {

@@ -12,3 +12,4 @@
 - [hr-idempotent-batch-tools](hr-idempotent-batch-tools.md) — HR admin batch tools (carry-forward, broadcast) that additively update or all-or-nothing on failure need a marker column / allSettled pattern, or re-runs double-count and partial failures misreport.
 - [bug-audit-verify-before-fix](bug-audit-verify-before-fix.md) — When auditing a hub for bugs from a subagent-generated list, always re-read the real code first; several flagged issues are often already-safe false positives.
 - [pact-excel-export-standard](pact-excel-export-standard.md) — All PACT report pages should offer Excel via `exportToExcel`/`exportStandardExcel` (or the branded ExcelJS builder for staff pages); add as an extra button, never remove existing CSV/PDF.
+- [untracked-security-definer-rpcs](untracked-security-definer-rpcs.md) — get_entry_enrichment and similar RPCs live only in Supabase, no migration file; never edit them blind, always add a new separately-named RPC instead.

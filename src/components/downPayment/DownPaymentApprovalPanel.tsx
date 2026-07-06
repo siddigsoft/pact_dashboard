@@ -2439,6 +2439,17 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 )}
               </div>
               {getStatusBadge(request.status)}
+              {request.feePaidStatus === 'paid' ? (
+                <Badge className="gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border-emerald-300" data-testid={`badge-fee-paid-${request.id}`}>
+                  <CheckCircle2 className="h-3 w-3" />
+                  Fees Paid{request.feePaidAmount ? ` (${request.feePaidAmount.toLocaleString()} SDG)` : ''}
+                </Badge>
+              ) : (request.enumeratorFee || request.transportFee) ? (
+                <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400" data-testid={`badge-fee-unpaid-${request.id}`}>
+                  <AlertTriangle className="h-3 w-3" />
+                  Transport Fee Not Paid
+                </Badge>
+              ) : null}
             </div>
           </div>
 
@@ -2680,6 +2691,41 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               </div>
             )}
           </div>
+
+          {(request.enumeratorFee || request.transportFee) && (
+            <div
+              className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs ${
+                request.feePaidStatus === 'paid'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+              }`}
+              data-testid={`fee-status-block-${request.id}`}
+            >
+              <div className="flex items-center gap-1.5">
+                {request.feePaidStatus === 'paid' ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                )}
+                <span className={request.feePaidStatus === 'paid' ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300'}>
+                  {request.feePaidStatus === 'paid'
+                    ? `Transport & Enumerator fee paid via Finance Ledger${request.feePaidAt ? ` on ${format(new Date(request.feePaidAt), 'MMM d, yyyy')}` : ''}`
+                    : 'Transport fee not yet paid in Finance Ledger (Enumerator Fees Report)'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0 font-medium">
+                {request.feePaidStatus === 'paid' ? (
+                  <span className="text-emerald-700 dark:text-emerald-400" data-testid={`text-fee-paid-amount-${request.id}`}>
+                    Paid {request.feePaidAmount != null ? request.feePaidAmount.toLocaleString() : ((request.enumeratorFee || 0) + (request.transportFee || 0)).toLocaleString()} SDG
+                  </span>
+                ) : (
+                  <span className="text-amber-700 dark:text-amber-400" data-testid={`text-fee-remaining-${request.id}`}>
+                    Remaining Enumerator Fee: {(request.enumeratorFee ?? 0).toLocaleString()} SDG
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {request.justification && (
             <div className="bg-muted/50 p-3 rounded-md">
