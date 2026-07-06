@@ -17,7 +17,7 @@ export const downloadMMP = (siteData: any[], fields: ExportFields, name: string 
   try {
     // Filter and transform data based on included fields
     const exportData = siteData.map(site => {
-      const row: any = {
+      const row: Record<string, string | number> = {
         'Site Code': site.siteCode || '',
         'Site Name': site.siteName || '',
         'Hub Office': site.hubOffice || '',
@@ -59,9 +59,24 @@ export const downloadMMP = (siteData: any[], fields: ExportFields, name: string 
       return row;
     });
 
-    // Create workbook and worksheet
+    // Create workbook and worksheet with PACT-standard title block
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const headers = exportData.length > 0 ? Object.keys(exportData[0]) : [];
+    const dataRows = exportData.map(row => headers.map(h => row[h] ?? ''));
+    const titleRows: (string | number)[][] = [
+      ['PACT Command Center - MMP Site Export Report'],
+      [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Sites: ${exportData.length}`],
+      [],
+    ];
+    const allRows = headers.length > 0 ? [...titleRows, headers, ...dataRows] : [...titleRows, ['No data available']];
+    const ws = XLSX.utils.aoa_to_sheet(allRows);
+    if (headers.length > 0) {
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+      ];
+      ws['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 4, 14), 40) }));
+    }
 
     // Add worksheet to workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Sites');

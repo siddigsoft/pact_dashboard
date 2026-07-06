@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 import type { ProjectBudget, MMPBudget, BudgetTransaction } from '@/types/budget';
 
 const formatCurrency = (cents: number): string => {
@@ -177,12 +178,13 @@ export function exportBudgetToPDF(data: BudgetExportData, filename: string = 'bu
  */
 export function exportBudgetToExcel(data: BudgetExportData, filename: string = 'budget_report.xlsx'): void {
   const workbook = XLSX.utils.book_new();
+  const generatedLine = `Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`;
 
   // Summary sheet
   if (data.stats) {
-    const summaryData = [
-      ['PACT Budget Report'],
-      [`Generated: ${new Date().toLocaleDateString('en-SD')}`],
+    const summaryData: (string | number)[][] = [
+      ['PACT Command Center - Budget Report'],
+      [generatedLine],
       [''],
       ['Metric', 'Value'],
       ['Total Budget', formatCurrency(data.stats.totalBudget * 100)],
@@ -192,67 +194,102 @@ export function exportBudgetToExcel(data: BudgetExportData, filename: string = '
     ];
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    summarySheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
+    ];
+    summarySheet['!cols'] = [{ wch: 22 }, { wch: 22 }];
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
   }
 
   // Project Budgets sheet
   if (data.projectBudgets.length > 0) {
-    const projectData = [
-      ['Fiscal Year', 'Period', 'Total Budget', 'Allocated', 'Spent', 'Remaining', 'Status', 'Created'],
-      ...data.projectBudgets.map(pb => [
-        pb.fiscalYear,
-        pb.budgetPeriod,
-        formatCurrency(pb.totalBudgetCents),
-        formatCurrency(pb.allocatedBudgetCents),
-        formatCurrency(pb.spentBudgetCents),
-        formatCurrency(pb.remainingBudgetCents),
-        pb.status,
-        formatDate(pb.createdAt),
-      ]),
+    const headers = ['Fiscal Year', 'Period', 'Total Budget', 'Allocated', 'Spent', 'Remaining', 'Status', 'Created'];
+    const dataRows = data.projectBudgets.map(pb => [
+      pb.fiscalYear,
+      pb.budgetPeriod,
+      formatCurrency(pb.totalBudgetCents),
+      formatCurrency(pb.allocatedBudgetCents),
+      formatCurrency(pb.spentBudgetCents),
+      formatCurrency(pb.remainingBudgetCents),
+      pb.status,
+      formatDate(pb.createdAt),
+    ]);
+    const projectData: (string | number)[][] = [
+      ['PACT Command Center - Project Budgets Report'],
+      [`${generatedLine} | Total Records: ${data.projectBudgets.length}`],
+      [],
+      headers,
+      ...dataRows,
     ];
 
     const projectSheet = XLSX.utils.aoa_to_sheet(projectData);
+    projectSheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+    ];
+    projectSheet['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 16) }));
     XLSX.utils.book_append_sheet(workbook, projectSheet, 'Project Budgets');
   }
 
   // MMP Budgets sheet
   if (data.mmpBudgets.length > 0) {
-    const mmpData = [
-      ['MMP ID', 'Total Sites', 'Completed Sites', 'Allocated', 'Spent', 'Remaining', 'Avg per Site', 'Status', 'Source'],
-      ...data.mmpBudgets.map(mb => [
-        mb.mmpFileId.slice(0, 8),
-        mb.totalSites,
-        mb.completedSites,
-        formatCurrency(mb.allocatedBudgetCents),
-        formatCurrency(mb.spentBudgetCents),
-        formatCurrency(mb.remainingBudgetCents),
-        formatCurrency(mb.averageCostPerSiteCents),
-        mb.status,
-        mb.sourceType,
-      ]),
+    const headers = ['MMP ID', 'Total Sites', 'Completed Sites', 'Allocated', 'Spent', 'Remaining', 'Avg per Site', 'Status', 'Source'];
+    const dataRows = data.mmpBudgets.map(mb => [
+      mb.mmpFileId.slice(0, 8),
+      mb.totalSites,
+      mb.completedSites,
+      formatCurrency(mb.allocatedBudgetCents),
+      formatCurrency(mb.spentBudgetCents),
+      formatCurrency(mb.remainingBudgetCents),
+      formatCurrency(mb.averageCostPerSiteCents),
+      mb.status,
+      mb.sourceType,
+    ]);
+    const mmpData: (string | number)[][] = [
+      ['PACT Command Center - MMP Budgets Report'],
+      [`${generatedLine} | Total Records: ${data.mmpBudgets.length}`],
+      [],
+      headers,
+      ...dataRows,
     ];
 
     const mmpSheet = XLSX.utils.aoa_to_sheet(mmpData);
+    mmpSheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+    ];
+    mmpSheet['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 16) }));
     XLSX.utils.book_append_sheet(workbook, mmpSheet, 'MMP Budgets');
   }
 
   // Transactions sheet
   if (data.transactions.length > 0) {
-    const txnData = [
-      ['Date', 'Type', 'Category', 'Amount', 'Currency', 'Description', 'Before', 'After'],
-      ...data.transactions.slice(0, 1000).map(txn => [
-        formatDate(txn.createdAt),
-        txn.transactionType,
-        txn.category || '',
-        formatCurrency(txn.amountCents),
-        txn.currency,
-        txn.description || '',
-        formatCurrency(txn.balanceBeforeCents),
-        formatCurrency(txn.balanceAfterCents),
-      ]),
+    const headers = ['Date', 'Type', 'Category', 'Amount', 'Currency', 'Description', 'Before', 'After'];
+    const dataRows = data.transactions.slice(0, 1000).map(txn => [
+      formatDate(txn.createdAt),
+      txn.transactionType,
+      txn.category || '',
+      formatCurrency(txn.amountCents),
+      txn.currency,
+      txn.description || '',
+      formatCurrency(txn.balanceBeforeCents),
+      formatCurrency(txn.balanceAfterCents),
+    ]);
+    const txnData: (string | number)[][] = [
+      ['PACT Command Center - Budget Transactions Report'],
+      [`${generatedLine} | Total Records: ${data.transactions.length}`],
+      [],
+      headers,
+      ...dataRows,
     ];
 
     const txnSheet = XLSX.utils.aoa_to_sheet(txnData);
+    txnSheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+    ];
+    txnSheet['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 16) }));
     XLSX.utils.book_append_sheet(workbook, txnSheet, 'Transactions');
   }
 

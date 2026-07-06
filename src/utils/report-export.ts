@@ -583,8 +583,32 @@ export function exportToExcel(
   filename: string
 ): void {
   const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.json_to_sheet(data);
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+  if (data.length === 0) {
+    const worksheet = XLSX.utils.aoa_to_sheet([[`PACT Command Center - ${sheetName} Report`], ['No data available']]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+    XLSX.writeFile(workbook, filename);
+    return;
+  }
+
+  const headers = Object.keys(data[0]);
+  const rows = data.map(row => headers.map(h => row[h] ?? ''));
+
+  const titleRows: (string | number)[][] = [
+    [`PACT Command Center - ${sheetName} Report`],
+    [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Records: ${data.length}`],
+    [],
+  ];
+
+  const allRows = [...titleRows, headers, ...rows];
+  const worksheet = XLSX.utils.aoa_to_sheet(allRows);
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+  ];
+  worksheet['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 4, 14), 40) }));
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
   XLSX.writeFile(workbook, filename);
 }
 
@@ -606,11 +630,30 @@ export function exportMultiSheetExcel(
   filename: string
 ): void {
   const workbook = XLSX.utils.book_new();
-  
+
   sheets.forEach(sheet => {
-    const worksheet = XLSX.utils.json_to_sheet(sheet.data);
+    if (sheet.data.length === 0) {
+      const worksheet = XLSX.utils.aoa_to_sheet([[`PACT Command Center - ${sheet.name}`], ['No data available']]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
+      return;
+    }
+
+    const headers = Object.keys(sheet.data[0]);
+    const rows = sheet.data.map(row => headers.map(h => row[h] ?? ''));
+    const titleRows: (string | number)[][] = [
+      [`PACT Command Center - ${sheet.name}`],
+      [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Records: ${sheet.data.length}`],
+      [],
+    ];
+    const allRows = [...titleRows, headers, ...rows];
+    const worksheet = XLSX.utils.aoa_to_sheet(allRows);
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+    ];
+    worksheet['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 4, 14), 40) }));
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
   });
-  
+
   XLSX.writeFile(workbook, filename);
 }

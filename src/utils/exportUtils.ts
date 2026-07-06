@@ -92,7 +92,6 @@ export const generateAuditReport = (logs: any[], filters?: any) => {
  * @param filename Optional custom filename
  */
 export const exportSiteEntriesToExcel = (sites: any[], filename?: string) => {
-  // Define CSV header
   const headers = [
     'Site Code',
     'Site Name',
@@ -112,42 +111,44 @@ export const exportSiteEntriesToExcel = (sites: any[], filename?: string) => {
     'Flag Reason'
   ];
 
-  // Convert sites to CSV rows
-  const rows = sites.map(site => {
-    return [
-      site.siteCode,
-      site.siteName,
-      site.mainActivity,
-      site.visitDate,
-      site.visitedBy,
-      site.status,
-      site.inMoDa ? 'Yes' : 'No',
-      site.locality || '',
-      site.state || '',
-      site.address || '',
-      site.coordinates?.latitude || '',
-      site.coordinates?.longitude || '',
-      site.description || '',
-      site.notes || '',
-      site.isFlagged ? 'Yes' : 'No',
-      site.flagReason || ''
-    ].map(value => {
-      // Escape quotes and wrap in quotes to handle commas
-      const stringValue = String(value || '');
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }).join(',');
-  });
+  const rows = sites.map(site => [
+    site.siteCode || '',
+    site.siteName || '',
+    site.mainActivity || '',
+    site.visitDate || '',
+    site.visitedBy || '',
+    site.status || '',
+    site.inMoDa ? 'Yes' : 'No',
+    site.locality || '',
+    site.state || '',
+    site.address || '',
+    site.coordinates?.latitude || '',
+    site.coordinates?.longitude || '',
+    site.description || '',
+    site.notes || '',
+    site.isFlagged ? 'Yes' : 'No',
+    site.flagReason || ''
+  ]);
 
-  // Construct CSV content
-  const csvContent = [
-    headers.join(','),
-    ...rows
-  ].join('\n');
+  const titleRows: (string | number)[][] = [
+    ['PACT Command Center - Site Entries Report'],
+    [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Sites: ${sites.length}`],
+    [],
+  ];
 
-  // Create blob and download
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+  const allRows = [...titleRows, headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+  ];
+  ws['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 4, 14), 30) }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Site Entries');
+
   const today = format(new Date(), 'yyyy-MM-dd');
-  saveAs(blob, filename || `site-entries-${today}.csv`);
+  XLSX.writeFile(wb, filename || `site-entries-${today}.xlsx`);
 };
 
 /**
@@ -211,33 +212,49 @@ export const exportSiteEntriesToPDF = (sites: any[], filename?: string) => {
 };
 
 export const exportAuditLogsToExcel = (logs: any[], filename?: string) => {
-  const rows = logs.map(log => ({
-    'Timestamp': log.timestamp ? format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : '',
-    'Action': log.action || '',
-    'Category': log.category || log.module || '',
-    'Description': log.description || '',
-    'User': log.user || log.actorName || '',
-    'User Role': log.userRole || log.actorRole || '',
-    'Status': log.status || (log.success !== false ? 'success' : 'failed'),
-    'Severity': log.severity || '',
-    'Entity Type': log.entityType || '',
-    'Entity Name': log.entityName || '',
-    'Details': log.details || '',
-    'IP Address': log.ipAddress || '',
-    'Reason': (log.metadata?.reason) || '',
-    'Comment': (log.metadata?.comment) || '',
-  }));
+  const headers = [
+    'Timestamp', 'Action', 'Category', 'Description', 'User', 'User Role',
+    'Status', 'Severity', 'Entity Type', 'Entity Name', 'Details', 'IP Address',
+    'Reason', 'Comment',
+  ];
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Audit Trail');
+  const rows = logs.map(log => [
+    log.timestamp ? format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : '',
+    log.action || '',
+    log.category || log.module || '',
+    log.description || '',
+    log.user || log.actorName || '',
+    log.userRole || log.actorRole || '',
+    log.status || (log.success !== false ? 'success' : 'failed'),
+    log.severity || '',
+    log.entityType || '',
+    log.entityName || '',
+    log.details || '',
+    log.ipAddress || '',
+    (log.metadata?.reason) || '',
+    (log.metadata?.comment) || '',
+  ]);
 
-  const colWidths = [
+  const titleRows: (string | number)[][] = [
+    ['PACT Command Center - Audit Trail Report'],
+    [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Records: ${logs.length}`],
+    [],
+  ];
+
+  const allRows = [...titleRows, headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+  ];
+  ws['!cols'] = [
     { wch: 20 }, { wch: 25 }, { wch: 18 }, { wch: 40 }, { wch: 20 },
     { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 25 },
     { wch: 35 }, { wch: 15 }, { wch: 30 }, { wch: 35 },
   ];
-  ws['!cols'] = colWidths;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Audit Trail');
 
   const today = format(new Date(), 'yyyy-MM-dd');
   XLSX.writeFile(wb, filename || `audit-trail-${today}.xlsx`);
