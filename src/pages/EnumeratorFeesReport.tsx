@@ -243,16 +243,16 @@ export default function EnumeratorFeesReport() {
       }
 
       // 5. Down payment / transport advance requests, keyed by mmp_site_entry_id
+      // NOTE: previously this combined both columns into a single `.or(a.in.(...),b.in.(...))`
+      // filter with a 500-id chunk, which can build a GET request URL well over the
+      // gateway's URL-length limit (500 UUIDs x 2 columns ≈ 37,000 chars) and fail with a
+      // generic "Bad Request" that has nothing to do with missing columns. Splitting into
+      // two separate `.in()` queries with a much smaller chunk size keeps each request URL
+      // short and safe.
       const entryIds = entryList.map((e: any) => e.id).filter(Boolean);
       const dpMap: Record<string, { status: string; requested_amount: number | null; total_paid_amount: number | null; requested_by: string | null }> = {};
-      const DP_CHUNK = 500;
-      for (let i = 0; i < entryIds.length; i += DP_CHUNK) {
-        const chunk = entryIds.slice(i, i + DP_CHUNK);
-        const { data: dps, error: dpErr } = await supabase
-          .from('down_payment_requests')
-          .select('mmp_site_entry_id, site_visit_id, status, requested_amount, total_paid_amount, requested_by, created_at')
-          .or(`mmp_site_entry_id.in.(${chunk.join(',')}),site_visit_id.in.(${chunk.join(',')})`);
-        if (dpErr) throw dpErr;
+      const DP_CHUNK = 150;
+      const applyDp = (dps: any[] | null) => {
         (dps || []).forEach((d: any) => {
           const key = d.mmp_site_entry_id || d.site_visit_id;
           if (!key) return;
@@ -268,6 +268,23 @@ export default function EnumeratorFeesReport() {
             };
           }
         });
+      };
+      for (let i = 0; i < entryIds.length; i += DP_CHUNK) {
+        const chunk = entryIds.slice(i, i + DP_CHUNK);
+        const [byEntry, byVisit] = await Promise.all([
+          supabase
+            .from('down_payment_requests')
+            .select('mmp_site_entry_id, site_visit_id, status, requested_amount, total_paid_amount, requested_by, created_at')
+            .in('mmp_site_entry_id', chunk),
+          supabase
+            .from('down_payment_requests')
+            .select('mmp_site_entry_id, site_visit_id, status, requested_amount, total_paid_amount, requested_by, created_at')
+            .in('site_visit_id', chunk),
+        ]);
+        if (byEntry.error) throw byEntry.error;
+        if (byVisit.error) throw byVisit.error;
+        applyDp(byEntry.data);
+        applyDp(byVisit.data);
       }
 
       const mapped: FeeRow[] = entryList.map((e: any) => {
