@@ -132,17 +132,66 @@ export default function WalletReports() {
     });
   }, [withdrawalRequests, timeframe, currentMonth]);
 
+  // Every approved/active user should appear here, even if they have no
+  // wallet row yet (i.e. haven't earned anything). Users who somehow have a
+  // wallet row but aren't in the active-users list (e.g. legacy/deactivated
+  // accounts) are still included so no real money is ever hidden.
+  const activeUsers = useMemo(
+    () => (users || []).filter(u => (u.isApproved || u.profileStatus === 'approved') && u.profileStatus !== 'inactive'),
+    [users]
+  );
+
+  const allUserWalletStats = useMemo(() => {
+    const walletByUserId = new Map(walletRows.map((w: any) => [w.user_id, w]));
+    const coveredUserIds = new Set(activeUsers.map(u => u.id));
+
+    const buildStat = (userId: string, fallbackName?: string, fallbackEmail?: string) => {
+      const w: any = walletByUserId.get(userId);
+      const balance = w?.balances
+        ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0)
+        : 0;
+      const userTx = filteredTransactions.filter((t: any) => t.user_id === userId);
+      const earned = userTx
+        .filter((t: any) => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || Number(t.amount) > 0)
+        .reduce((sum: number, t: any) => sum + Math.abs(Number(t.amount)), 0);
+      const withdrawn = userTx
+        .filter((t: any) => t.type === 'withdrawal' || Number(t.amount) < 0)
+        .reduce((sum: number, t: any) => sum + Math.abs(Number(t.amount)), 0);
+      const siteVisits = userTx.filter((t: any) => t.site_visit_id).length;
+
+      return {
+        userId,
+        walletId: w?.id || null,
+        name: w?.owner_name || fallbackName || fallbackEmail || 'Unknown',
+        email: fallbackEmail || w?.profiles?.email || '',
+        balance,
+        totalEarned: w ? Math.max(Number(w.totalEarned) || 0, earned) : earned,
+        totalWithdrawn: w ? Math.max(Number(w.totalWithdrawn) || 0, withdrawn) : withdrawn,
+        transactionCount: userTx.length,
+        siteVisits,
+        hasWallet: !!w,
+      };
+    };
+
+    const stats = activeUsers.map(u => buildStat(u.id, u.name, u.email));
+
+    // Include any wallet whose user isn't in the active-users list (e.g. a
+    // deactivated account that still has real balance/history) so it never
+    // silently disappears from the report.
+    walletRows.forEach((w: any) => {
+      if (!coveredUserIds.has(w.user_id)) {
+        stats.push(buildStat(w.user_id));
+      }
+    });
+
+    return stats.sort((a, b) => b.totalEarned - a.totalEarned);
+  }, [activeUsers, walletRows, filteredTransactions]);
+
   const walletSummary = useMemo(() => {
-    const totalBalance = walletRows.reduce((sum, w) => {
-      const bal = w.balances ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0) : 0;
-      return sum + bal;
-    }, 0);
-    const totalEarned = walletRows.reduce((sum, w) => sum + (w.totalEarned || 0), 0);
-    const totalWithdrawn = walletRows.reduce((sum, w) => sum + (w.totalWithdrawn || 0), 0);
-    const activeWallets = walletRows.filter(w => {
-      const bal = w.balances ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0) : 0;
-      return bal > 0;
-    }).length;
+    const totalBalance = allUserWalletStats.reduce((sum, w) => sum + w.balance, 0);
+    const totalEarned = allUserWalletStats.reduce((sum, w) => sum + w.totalEarned, 0);
+    const totalWithdrawn = allUserWalletStats.reduce((sum, w) => sum + w.totalWithdrawn, 0);
+    const activeWallets = allUserWalletStats.filter(w => w.balance > 0).length;
 
     const earningTx = filteredTransactions.filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || Number(t.amount) > 0);
     const withdrawalTx = filteredTransactions.filter(t => t.type === 'withdrawal' || Number(t.amount) < 0);
@@ -154,12 +203,12 @@ export default function WalletReports() {
       totalEarned,
       totalWithdrawn,
       activeWallets,
-      totalWallets: walletRows.length,
+      totalWallets: allUserWalletStats.length,
       totalTxEarnings,
       totalTxWithdrawals,
       totalTransactions: filteredTransactions.length,
     };
-  }, [walletRows, filteredTransactions]);
+  }, [allUserWalletStats, filteredTransactions]);
 
   const withdrawalStats = useMemo(() => {
     const totalRequested = filteredWithdrawals.reduce((sum, req) => sum + req.amount, 0);
@@ -181,35 +230,12 @@ export default function WalletReports() {
   }, [filteredWithdrawals]);
 
   const userWalletStats = useMemo(() => {
-    const filtered = searchQuery
-      ? walletRows.filter(w =>
-          (w.owner_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (w.profiles?.email || '').toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : walletRows;
-
-    return filtered
-      .map((w) => {
-        const balance = w.balances ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0) : 0;
-        const userTx = filteredTransactions.filter(t => t.user_id === w.user_id);
-        const earned = userTx.filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || Number(t.amount) > 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-        const withdrawn = userTx.filter(t => t.type === 'withdrawal' || Number(t.amount) < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-        const siteVisits = userTx.filter(t => t.site_visit_id).length;
-
-        return {
-          userId: w.user_id,
-          walletId: w.id,
-          name: w.owner_name || 'Unknown',
-          email: w.profiles?.email || '',
-          balance,
-          totalEarned: w.totalEarned || earned,
-          totalWithdrawn: w.totalWithdrawn || withdrawn,
-          transactionCount: userTx.length,
-          siteVisits,
-        };
-      })
-      .sort((a, b) => b.totalEarned - a.totalEarned);
-  }, [walletRows, filteredTransactions, searchQuery]);
+    if (!searchQuery) return allUserWalletStats;
+    const q = searchQuery.toLowerCase();
+    return allUserWalletStats.filter(w =>
+      w.name.toLowerCase().includes(q) || w.email.toLowerCase().includes(q)
+    );
+  }, [allUserWalletStats, searchQuery]);
 
   const StatCard = ({ title, value, icon: Icon, trend, color }: any) => (
     <Card className={`bg-gradient-to-br ${color}`}>
@@ -423,7 +449,14 @@ export default function WalletReports() {
                           <TableRow key={stat.userId} data-testid={`row-wallet-${stat.userId}`}>
                             <TableCell>
                               <div>
-                                <p className="font-medium">{stat.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium">{stat.name}</p>
+                                  {!stat.hasWallet && (
+                                    <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                                      No activity yet
+                                    </Badge>
+                                  )}
+                                </div>
                                 <p className="text-xs text-muted-foreground">{stat.email}</p>
                               </div>
                             </TableCell>
