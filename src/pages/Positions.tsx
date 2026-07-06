@@ -11,9 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Briefcase, Plus, Edit2, Trash2, Loader2, Search, UserCheck, UserX, Pause, ClipboardList } from 'lucide-react';
+import { Briefcase, Plus, Edit2, Trash2, Loader2, Search, UserCheck, UserX, Pause, ClipboardList, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { exportToExcel } from '@/utils/report-export';
 
 interface Position {
   id: string;
@@ -161,6 +162,23 @@ export default function PositionsPage() {
     return list;
   }, [positions, statusFilter, deptFilter, search, profileMap]);
 
+  function exportPositions() {
+    const rows = visible.map(p => ({
+      'Title': p.title,
+      'Department': p.department_id ? (deptMap[p.department_id] ?? '') : '',
+      'Level': p.level ?? '',
+      'Employment Type': p.employment_type,
+      'Vacancy Status': STATUS_CFG[p.vacancy_status]?.label ?? p.vacancy_status,
+      'Current Holder': p.current_holder_id ? (profileMap[p.current_holder_id] ?? '') : 'Vacant',
+      'Opened At': p.opened_at ? format(new Date(p.opened_at), 'yyyy-MM-dd') : '',
+      'Target Fill Date': p.target_fill_date ? format(new Date(p.target_fill_date), 'yyyy-MM-dd') : '',
+      'Monthly Budget': p.monthly_budget ?? '',
+      'Currency': p.currency ?? '',
+      'Notes': p.notes ?? '',
+    }));
+    exportToExcel(rows, 'Positions & Vacancies', `positions-vacancies-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   const kpi = useMemo(() => ({
     total: positions.length,
     filled: positions.filter(p => p.vacancy_status === 'filled').length,
@@ -174,11 +192,16 @@ export default function PositionsPage() {
       <header className="flex flex-wrap items-center gap-3">
         <Briefcase className="h-5 w-5 text-blue-500" />
         <h1 className="text-xl font-semibold">Positions & Vacancies</h1>
-        {isAdmin && (
-          <Button size="sm" onClick={openNew} className="ml-auto" data-testid="button-new-position">
-            <Plus className="h-4 w-4 mr-1" /> New position
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="outline" onClick={exportPositions} data-testid="button-export-positions">
+            <Download className="h-4 w-4 mr-1" /> Export
           </Button>
-        )}
+          {isAdmin && (
+            <Button size="sm" onClick={openNew} data-testid="button-new-position">
+              <Plus className="h-4 w-4 mr-1" /> New position
+            </Button>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

@@ -18,9 +18,10 @@ import {
 } from '@/components/ui/accordion';
 import {
   Clock, MapPin, LogIn, LogOut, Calendar, Users, Building2, Globe2,
-  Loader2, Info, ExternalLink,
+  Loader2, Info, ExternalLink, Download,
 } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
+import { exportToExcel } from '@/utils/report-export';
 
 type AttendanceLog = {
   id: string; user_id: string; log_date: string;
@@ -547,7 +548,29 @@ export default function Attendance() {
         {isAdmin && (
           <TabsContent value="team">
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-5 h-5"/> Team Attendance Today / حضور الفريق اليوم</CardTitle></CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
+                <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5"/> Team Attendance Today / حضور الفريق اليوم</CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="button-export-attendance"
+                  onClick={() => {
+                    const rows = teamToday.map(l => ({
+                      'Employee': l.user_name ?? '',
+                      'Date': l.log_date,
+                      'Check In': fmtTime(l.check_in_at),
+                      'Check Out': fmtTime(l.check_out_at),
+                      'Hours Worked': l.hours_worked ? Number(l.hours_worked).toFixed(2) : '',
+                      'Method': methodLabel(methodFromRow(l)),
+                      'Status': l.check_out_at ? 'Complete' : l.check_in_at ? 'In Progress' : 'Not checked in',
+                      'Notes': l.notes ?? '',
+                    }));
+                    exportToExcel(rows, 'Team Attendance', `team-attendance-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-1" /> Export
+                </Button>
+              </CardHeader>
               <CardContent>
                 {loadingTeam ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div> :
                  teamToday.length === 0 ? <div className="text-center text-muted-foreground py-6">No one has checked in yet today. / لم يسجل أحد الحضور اليوم بعد.</div> :

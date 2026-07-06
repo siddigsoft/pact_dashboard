@@ -12,7 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Award, Plus, Edit2, Trash2, Loader2, Search, AlertTriangle, Clock, ExternalLink } from 'lucide-react';
+import { Award, Plus, Edit2, Trash2, Loader2, Search, AlertTriangle, Clock, ExternalLink, Download } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export';
 import { format, parseISO, differenceInDays, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -215,6 +216,22 @@ export default function TrainingCertificationsPage() {
     return list;
   }, [enriched, tab, search, currentUser?.id, profileMap]);
 
+  function exportTraining() {
+    const rows = visible.map(({ r, days, isExpired, isExpiring }) => ({
+      'Employee': profileMap[r.user_id] ?? '',
+      'Title': r.title,
+      'Provider': r.provider ?? '',
+      'Type': r.record_type ?? '',
+      'Completed On': r.completed_on ? format(new Date(r.completed_on), 'yyyy-MM-dd') : '',
+      'Expires On': r.expires_on ? format(new Date(r.expires_on), 'yyyy-MM-dd') : '',
+      'Days To Expiry': days ?? '',
+      'Status': isExpired ? 'Expired' : isExpiring ? 'Expiring soon' : 'Valid',
+      'Certificate URL': r.certificate_url ?? '',
+      'Notes': r.notes ?? '',
+    }));
+    exportToExcel(rows, 'Training & Certifications', `training-certifications-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   const kpi = useMemo(() => ({
     total: records.length,
     expiring: enriched.filter(x => x.isExpiring && !x.isExpired).length,
@@ -227,11 +244,16 @@ export default function TrainingCertificationsPage() {
       <header className="flex flex-wrap items-center gap-3">
         <Award className="h-5 w-5 text-amber-500" />
         <h1 className="text-xl font-semibold">Training & Certifications</h1>
-        {isAdmin && (
-          <Button size="sm" onClick={openNew} className="ml-auto" data-testid="button-new-training">
-            <Plus className="h-4 w-4 mr-1" /> New record
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="outline" onClick={exportTraining} data-testid="button-export-training">
+            <Download className="h-4 w-4 mr-1" /> Export
           </Button>
-        )}
+          {isAdmin && (
+            <Button size="sm" onClick={openNew} data-testid="button-new-training">
+              <Plus className="h-4 w-4 mr-1" /> New record
+            </Button>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

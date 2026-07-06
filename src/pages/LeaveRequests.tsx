@@ -10,8 +10,9 @@ import {
   RefreshCw, User, CalendarDays, MessageSquare, Filter,
   AlertTriangle, ChevronLeft, ChevronRight, List,
   PieChart, Briefcase, Building2, Phone, Mail, IdCard,
-  BarChart3,
+  BarChart3, Download,
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export';
 import { Progress } from '@/components/ui/progress';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
@@ -214,6 +215,23 @@ export default function LeaveRequests() {
     if (typeFilter !== 'all') res = res.filter(r => r.leave_type === typeFilter);
     return res;
   }, [requests, statusFilter, typeFilter]);
+
+  function exportLeaveRequests() {
+    const rows = filtered.map(r => ({
+      'Employee': r.user_name ?? '',
+      'Leave Type': LEAVE_TYPES.find(t => t.value === r.leave_type)?.label ?? r.leave_type,
+      'Start Date': r.start_date,
+      'End Date': r.end_date,
+      'Days': r.days_count,
+      'Status': STATUS_CFG[r.status]?.label ?? r.status,
+      'Reason': r.reason ?? '',
+      'Reviewed By': r.reviewer_name ?? '',
+      'Reviewed At': r.reviewed_at ? format(new Date(r.reviewed_at), 'yyyy-MM-dd') : '',
+      'Reviewer Notes': r.reviewer_notes ?? '',
+      'Submitted At': format(new Date(r.created_at), 'yyyy-MM-dd'),
+    }));
+    exportToExcel(rows, 'Leave Requests', `leave-requests-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
 
   /* ── Calendar: map approved requests to days in calMonth ── */
   const calDays = useMemo(() => {
@@ -540,6 +558,10 @@ export default function LeaveRequests() {
             <Button size="sm" variant="outline" onClick={() => setShowBalance(v => !v)}
               className={cn('border-white/30 text-white hover:bg-white/10', showBalance && 'bg-white/20')}>
               <PieChart className="h-4 w-4 mr-1" />My Balance
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportLeaveRequests}
+              className="border-white/30 text-white hover:bg-white/10" data-testid="button-export-leave-requests">
+              <Download className="h-4 w-4 mr-1" />Export
             </Button>
           </div>
         </div>

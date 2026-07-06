@@ -4,8 +4,9 @@ import { format, parseISO, isValid } from 'date-fns';
 import {
   Star, Plus, Edit2, Trash2, Loader2, CheckCircle2, Clock,
   User, Search, FileText, BarChart2, Send, ChevronDown, ChevronUp,
-  Award, Target, BookOpen, TrendingUp, X,
+  Award, Target, BookOpen, TrendingUp, X, Download,
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -315,6 +316,25 @@ export default function PerformanceReviews() {
   const filtered = (tab === 'my' ? myReviews : tab === 'pending' ? pendingReviews : reviews)
     .filter(r => !search || r.reviewee_name?.toLowerCase().includes(search.toLowerCase()) || r.review_period.toLowerCase().includes(search.toLowerCase()));
 
+  function exportReviews() {
+    const rows = filtered.map(r => ({
+      'Employee': r.reviewee_name ?? '',
+      'Review Period': r.review_period,
+      'Review Type': r.review_type,
+      'Reviewer': r.reviewer_name ?? '',
+      'Status': STATUS_CFG[r.status]?.label ?? r.status,
+      'Overall Rating': r.overall_rating ?? '',
+      'Submitted At': r.submitted_at ? format(new Date(r.submitted_at), 'yyyy-MM-dd') : '',
+      'Reviewed At': r.reviewed_at ? format(new Date(r.reviewed_at), 'yyyy-MM-dd') : '',
+      'Strengths': r.strengths ?? '',
+      'Development Areas': r.development_areas ?? '',
+      'Next Goals': r.next_goals ?? '',
+      'Self Assessment': r.self_assessment ?? '',
+      'Manager Comments': r.manager_comments ?? '',
+    }));
+    exportToExcel(rows, 'Performance Reviews', `performance-reviews-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   const stats = {
     total: myReviews.length,
     completed: myReviews.filter(r => r.status === 'completed').length,
@@ -365,9 +385,14 @@ export default function PerformanceReviews() {
             {isAdmin && <TabsTrigger value="pending">Pending ({pendingReviews.length})</TabsTrigger>}
           </TabsList>
         </Tabs>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 w-48" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="flex gap-2 items-center">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input className="pl-8 w-48" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <Button size="sm" variant="outline" onClick={exportReviews} data-testid="button-export-reviews">
+            <Download className="h-4 w-4 mr-1" /> Export
+          </Button>
         </div>
       </div>
 

@@ -4,8 +4,9 @@ import { format, parseISO, isValid, differenceInCalendarMonths } from 'date-fns'
 import {
   TrendingUp, Plus, Edit2, Trash2, Loader2, User, Calendar,
   DollarSign, BarChart2, Search, ChevronUp, ChevronDown,
-  ArrowUpRight,
+  ArrowUpRight, Download,
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -335,6 +336,23 @@ export default function SalaryIncrements() {
     ? (selectedUser ? increments.filter(r => r.user_id === selectedUser) : increments)
     : myIncrements;
 
+  function exportIncrements() {
+    const rows = filtered.map(r => ({
+      'Employee': r.user_name ?? profiles.find(p => p.id === r.user_id)?.full_name ?? '',
+      'Effective Date': format(new Date(r.effective_date), 'yyyy-MM-dd'),
+      'Type': INCREMENT_TYPES.find(t => t.value === r.increment_type)?.label ?? r.increment_type,
+      'Previous Salary': r.previous_salary ?? '',
+      'New Salary': r.new_salary,
+      'Change %': r.increment_percent ?? '',
+      'Currency': r.currency,
+      'Reason': r.reason ?? '',
+      'Approved By': r.approver_name ?? '',
+      'Notes': r.notes ?? '',
+      'Created At': format(new Date(r.created_at), 'yyyy-MM-dd'),
+    }));
+    exportToExcel(rows, 'Salary Increments', `salary-increments-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  }
+
   const filtered = displayList.filter(r =>
     !search ||
     r.user_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -441,9 +459,14 @@ export default function SalaryIncrements() {
             </SelectContent>
           </Select>
         )}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 w-48" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="flex gap-2 items-center">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input className="pl-8 w-48" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <Button size="sm" variant="outline" onClick={exportIncrements} data-testid="button-export-increments">
+            <Download className="h-4 w-4 mr-1" /> Export
+          </Button>
         </div>
       </div>
 

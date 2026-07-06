@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2, XCircle, AlertCircle, Zap, Clock, ChevronDown,
   ChevronRight, RefreshCw, Shield, ArrowRight, BookOpen, Database,
-  Activity, BarChart3, FileText
+  Activity, BarChart3, FileText, Download
 } from 'lucide-react';
+import { exportToExcel } from '@/utils/report-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -461,11 +462,30 @@ export default function AccountingGLBridge() {
         {/* ── Audit Log tab ─────────────────────────────────────────────────── */}
         <TabsContent value="log">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-sm font-semibold">
                 Bridge Execution Log
                 <span className="font-normal text-muted-foreground ml-2">(last 100 events)</span>
               </CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                data-testid="button-export-gl-bridge-log"
+                onClick={() => {
+                  const rows = logRows.map(row => ({
+                    'Status': row.status,
+                    'Source Table': row.source_table,
+                    'Event Type': row.event_type,
+                    'Source ID': row.source_id,
+                    'Journal Entry ID': row.journal_entry_id ?? '',
+                    'Error': row.error_message ?? '',
+                    'Fired At': format(new Date(row.created_at), 'yyyy-MM-dd HH:mm:ss'),
+                  }));
+                  exportToExcel(rows, 'GL Bridge Execution Log', `gl-bridge-log-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                }}
+              >
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
