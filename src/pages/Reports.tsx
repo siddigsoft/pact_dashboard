@@ -57,13 +57,14 @@ import { AuditingReports } from "@/components/reports/AuditingReports";
 import { DocumentsReport } from "@/components/reports/DocumentsReport";
 import { ReceiptsReport } from "@/components/reports/ReceiptsReport";
 import { SignaturesReport } from "@/components/reports/SignaturesReport";
+import { ReportsDirectory } from "@/components/reports/ReportsDirectory";
 import { useMMP } from "@/context/mmp/MMPContext";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUser } from "@/context/user/UserContext";
 
 const Reports: FC = () => {
-  const [activeTab, setActiveTab] = useState("executive");
+  const [activeTab, setActiveTab] = useState("directory");
   const { toast } = useToast();
   const navigate = useNavigate();
   const { checkPermission, hasAnyRole } = useAuthorization();
@@ -573,7 +574,13 @@ const Reports: FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 lg:grid-cols-11 gap-1 p-1 h-auto">
+          <TabsTrigger value="directory" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileBarChart className="h-3 w-3" />
+              <span className="hidden sm:inline">All Reports</span>
+            </span>
+          </TabsTrigger>
           <TabsTrigger value="executive" className="py-2 text-xs data-[state=active]:bg-blue-50">
             <span className="flex items-center gap-1">
               <LayoutDashboard className="h-3 w-3" />
@@ -635,6 +642,10 @@ const Reports: FC = () => {
             </span>
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="directory" className="mt-4">
+          <ReportsDirectory onSelectInternal={setActiveTab} />
+        </TabsContent>
 
         {/* New Comprehensive Reporting Modules */}
         <TabsContent value="executive" className="mt-4">
