@@ -44,7 +44,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { safeFormat } from '@/lib/utils';
-import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
+import { isTerminalCompletionAppStatus, isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -408,9 +408,10 @@ export const FOMZone: React.FC = () => {
 
 
   
-  // Site visit metrics
+  // Site visit metrics — siteVisits here are app-layer SiteVisit objects from
+  // context, so use isTerminalCompletionAppStatus (not the raw-status variant).
   const totalVisits = siteVisits.length;
-  const completedVisits = siteVisits.filter(v => isTerminalCompletionRawStatus(v.status)).length;
+  const completedVisits = siteVisits.filter(v => isTerminalCompletionAppStatus(v.status)).length;
   const pendingVisits = siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
   const assignedVisits = siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;

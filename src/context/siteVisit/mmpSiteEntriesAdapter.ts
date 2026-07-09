@@ -184,6 +184,12 @@ const mapStatus = (dbStatus: string): SiteVisit['status'] => {
     'dispatched': 'dispatched',
     'accepted': 'accepted',
     'approved': 'dispatched',
+    // Phase A/C terminal statuses — must map explicitly or they fall back to
+    // 'pending' and will be invisible in all completion / coverage metrics.
+    'submitted': 'submitted',
+    'wfp_confirmed': 'wfp_confirmed',
+    'not_covered': 'not_covered',
+    'rejected': 'rejected',
   };
   return statusMap[s] || 'pending';
 };

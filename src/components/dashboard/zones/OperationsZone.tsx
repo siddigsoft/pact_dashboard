@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
+import { isTerminalCompletionAppStatus } from '@/utils/siteCompletionStatus';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -434,12 +435,11 @@ export const OperationsZone: React.FC = () => {
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 5);
 
-  // Calculate metrics - account for all possible status values including coordinator-specific ones
+  // Calculate metrics - use isTerminalCompletionAppStatus so all Phase A/C
+  // terminal statuses (submitted, wfp_confirmed, not_covered, permitVerified,
+  // completed) count correctly, not just the legacy 'completed' string.
   const totalVisits = siteVisits.length;
-  const completedVisits = siteVisits.filter(v => {
-    const s = (v.status || '').toLowerCase();
-    return s === 'completed';
-  }).length;
+  const completedVisits = siteVisits.filter(v => isTerminalCompletionAppStatus(v.status)).length;
   const pendingVisits = siteVisits.filter(v => {
     const s = (v.status || '').toLowerCase();
     return s === 'pending' || s === 'permitverified' || s === 'verified' || s === 'dispatched';
@@ -451,8 +451,7 @@ export const OperationsZone: React.FC = () => {
   const overdueVisits = siteVisits.filter(v => {
     const dueDate = new Date(v.dueDate);
     const today = new Date();
-    const s = (v.status || '').toLowerCase();
-    return dueDate < today && s !== 'completed';
+    return dueDate < today && !isTerminalCompletionAppStatus(v.status);
   }).length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
 

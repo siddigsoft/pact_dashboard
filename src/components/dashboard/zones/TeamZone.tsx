@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { isTerminalCompletionAppStatus } from '@/utils/siteCompletionStatus';
 import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
 import { User } from '@/types/user';
@@ -154,11 +155,11 @@ export const TeamZone: React.FC = () => {
       const now = new Date();
 
       const active = userTasks.filter(t => t.status === 'assigned' || t.status === 'inProgress').length;
-      const completed = userTasks.filter(t => t.status === 'completed').length;
+      const completed = userTasks.filter(t => isTerminalCompletionAppStatus(t.status)).length;
       const pending = userTasks.filter(t => t.status === 'pending' || t.status === 'permitVerified').length;
       const overdue = userTasks.filter(t => {
         const dueDate = new Date(t.dueDate);
-        return dueDate < now && t.status !== 'completed';
+        return dueDate < now && !isTerminalCompletionAppStatus(t.status);
       }).length;
 
       workloadMap.set(user.id, { active, completed, pending, overdue });
