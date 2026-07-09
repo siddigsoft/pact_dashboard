@@ -60,6 +60,7 @@ import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 import ProjectChangeLogPanel from './ProjectChangeLogPanel';
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import ProjectRisksPanel from './ProjectRisksPanel';
+import { ProjectWeeklyDashboard } from './ProjectWeeklyDashboard';
 import { useProjectCloseReadiness } from '@/hooks/useProjectCloseReadiness';
 import { CloseReadinessChecklist } from '@/components/close/CloseReadinessChecklist';
 import { ReconciliationSummary } from '@/components/close/ReconciliationSummary';
@@ -266,6 +267,13 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
       (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
   const canArchive = isAdminUser || isProjectManagerUser;
+
+  // Weekly dashboard: superAdmin + admin only (NOT fom / CD / others)
+  // projectManager sees ONLY their own project's dashboard
+  const canSeeWeeklyDashboard =
+    isSuperAdmin() ||
+    hasAnyRole(['admin', 'Admin']) ||
+    isProjectManagerUser;
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
@@ -675,6 +683,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <strong>Stalled:</strong> No stage advancement in {stalledDays} days. Review the flow and take action.
           </span>
         </div>
+      )}
+
+      {/* ── Weekly Project Dashboard (superAdmin / admin / own PM only) ── */}
+      {canSeeWeeklyDashboard && (
+        <ProjectWeeklyDashboard project={project} />
       )}
 
       {/* Hero Summary Card */}
