@@ -65,6 +65,7 @@ import {
   X
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface SiteVisitData {
   id: string;
@@ -254,9 +255,43 @@ const STATUS_LABELS: Record<string, string> = {
   forwarded_to_coordinator: 'Forwarded to Coordinator',
 };
 
+// Module-level status lists (also used for quick HEAD count queries)
+const POST_DISPATCH_STATUSES = [
+  'accepted', 'Accepted',
+  'assigned', 'Assigned',
+  'inprogress', 'in_progress', 'ongoing', 'Ongoing', 'inProgress',
+  'completed', 'Completed',
+  'submitted', 'Submitted',
+  'wfp_confirmed', 'WFP_Confirmed',
+  'not_covered', 'Not_Covered',
+  'verified', 'Verified',
+  'rejected', 'Rejected', 'declined',
+  'costed', 'approved and costed',
+  'returned_to_fom', 'recalled', 'forwarded_to_coordinator',
+];
+
+const DISPATCHED_STATUSES = ['dispatched', 'Dispatched', 'smart_assigned', 'Smart_Assigned'];
+
+// All correctable target statuses exposed in the Change Status dialog
+const ALL_CORRECTABLE_STATUSES = [
+  { value: 'accepted',                label: 'Accepted' },
+  { value: 'inProgress',              label: 'In Progress (Ongoing)' },
+  { value: 'completed',               label: 'Completed' },
+  { value: 'submitted',               label: 'Submitted' },
+  { value: 'wfp_confirmed',           label: 'WFP Confirmed' },
+  { value: 'not_covered',             label: 'Not Covered' },
+  { value: 'verified',                label: 'Verified' },
+  { value: 'rejected',                label: 'Rejected' },
+  { value: 'returned_to_fom',         label: 'Returned to FOM' },
+  { value: 'recalled',                label: 'Recalled' },
+  { value: 'forwarded_to_coordinator',label: 'Forwarded to Coordinator' },
+  { value: 'dispatched',              label: 'Dispatched (back to pool)' },
+];
+
 export function SuperAdminDataManagement() {
   const { currentUser, users } = useUser();
   const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet, reclaimSite } = useSuperAdmin();
+  const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('site-visits');
   const [loadingVisits, setLoadingVisits] = useState(false);
@@ -369,6 +404,22 @@ export function SuperAdminDataManagement() {
   const [claimedNoCostFilter, setClaimedNoCostFilter] = useState(false);
   const [editingTransportFee, setEditingTransportFee] = useState<{ siteId: string; value: string; saving: boolean } | null>(null);
 
+  // Quick HEAD-count queries — populate stats cards before full data is fetched
+  const [quickCounts, setQuickCounts] = useState<{ claimed: number | null; transactions: number | null; dispatched: number | null } | null>(null);
+
+  // Transaction pagination
+  const TX_PAGE_SIZE = 500;
+  const [txOffset, setTxOffset] = useState(0);
+  const [txHasMore, setTxHasMore] = useState(false);
+  const [txLoadingMore, setTxLoadingMore] = useState(false);
+
+  // Status-correction dialog (Claimed Sites tab)
+  const [showChangeStatusDialog, setShowChangeStatusDialog] = useState(false);
+  const [changeStatusSite, setChangeStatusSite] = useState<ClaimedSiteData | null>(null);
+  const [changeStatusTarget, setChangeStatusTarget] = useState('');
+  const [changeStatusReason, setChangeStatusReason] = useState('');
+  const [changeStatusProcessing, setChangeStatusProcessing] = useState(false);
+
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
     try {
@@ -441,18 +492,22 @@ export function SuperAdminDataManagement() {
     }
   };
 
-  const loadTransactions = async () => {
-    setTxLoading(true);
+  const loadTransactions = async (offset = 0, append = false) => {
+    if (append) setTxLoadingMore(true);
+    else { setTxLoading(true); setTxOffset(0); }
     setTxError(null);
     try {
       const { data, error } = await supabase
         .from('wallet_transactions')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(offset, offset + TX_PAGE_SIZE - 1);
 
       if (error) throw error;
 
       const rawData = data || [];
+      setTxHasMore(rawData.length === TX_PAGE_SIZE);
+      if (append) setTxOffset(offset);
 
       const base: TransactionData[] = rawData.map((t: any) => ({
         id: t.id,
@@ -472,7 +527,11 @@ export function SuperAdminDataManagement() {
         created_at: t.created_at,
       }));
 
-      setTransactions(base);
+      if (append) {
+        setTransactions(prev => [...prev, ...base]);
+      } else {
+        setTransactions(base);
+      }
       loadedTabsRef.current.add('transactions');
 
       // Enrich with hub/state/locality/mmp using both site_visit_id and related_site_visit_id
@@ -498,12 +557,17 @@ export function SuperAdminDataManagement() {
             (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
           }
 
-          setTransactions(base.map((t, idx) => {
+          const enriched = base.map((t, idx) => {
             const raw = rawData[idx];
             const entryId = raw?.site_visit_id || raw?.related_site_visit_id;
             const e = entryId ? entryMap[entryId] : undefined;
             return { ...t, hub_office: e?.hub_office, state: e?.state, locality: e?.locality, mmp_id: e?.mmp_file_id, mmp_name: e?.mmp_file_id ? mmpNameMap[e.mmp_file_id] : undefined };
-          }));
+          });
+          if (append) {
+            setTransactions(prev => [...prev.slice(0, offset), ...enriched]);
+          } else {
+            setTransactions(enriched);
+          }
         } catch (enrichErr) {
           console.warn('[Transactions] Enrichment failed, showing base data:', enrichErr);
         }
@@ -513,28 +577,13 @@ export function SuperAdminDataManagement() {
       setTxError(err?.message || 'Failed to load transactions. Please try again.');
     } finally {
       setTxLoading(false);
+      setTxLoadingMore(false);
     }
   };
 
   const loadClaimedSites = async () => {
     setLoadingClaimed(true);
     try {
-      // "Claimed" = any site that has moved past the dispatch stage.
-      // Use explicit IN list of all post-dispatch statuses (more reliable than NOT IN).
-      const POST_DISPATCH_STATUSES = [
-        'accepted', 'Accepted',
-        'assigned', 'Assigned',
-        'inprogress', 'in_progress', 'ongoing', 'Ongoing', 'inProgress',
-        'completed', 'Completed',
-        'submitted', 'Submitted',
-        'wfp_confirmed', 'WFP_Confirmed',
-        'not_covered', 'Not_Covered',
-        'verified', 'Verified',
-        'rejected', 'Rejected', 'declined',
-        'costed', 'approved and costed',
-        'returned_to_fom', 'recalled', 'forwarded_to_coordinator',
-      ];
-
       // Paginated fetch — bypasses Supabase 1000-row default cap
       const PAGE_SIZE = 1000;
       let allData: any[] = [];
@@ -582,12 +631,6 @@ export function SuperAdminDataManagement() {
   const loadDispatchedSites = async () => {
     setLoadingDispatched(true);
     try {
-      // 'forwarded_to_coordinator' is intentionally excluded — it is already
-      // covered by POST_DISPATCH_STATUSES in loadClaimedSites to avoid duplicates.
-      const DISPATCHED_STATUSES = [
-        'dispatched', 'Dispatched',
-        'smart_assigned', 'Smart_Assigned',
-      ];
       const PAGE_SIZE = 1000;
       let allDispatched: any[] = [];
       let from = 0;
@@ -723,6 +766,22 @@ export function SuperAdminDataManagement() {
     }
   };
 
+  // Quick HEAD counts — show stats card numbers immediately, before full data is loaded
+  const loadQuickCounts = useCallback(async () => {
+    try {
+      const [claimedRes, txRes, dispatchedRes] = await Promise.all([
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).in('status', POST_DISPATCH_STATUSES),
+        supabase.from('wallet_transactions').select('*', { count: 'exact', head: true }),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).in('status', DISPATCHED_STATUSES),
+      ]);
+      setQuickCounts({
+        claimed: claimedRes.count ?? null,
+        transactions: txRes.count ?? null,
+        dispatched: dispatchedRes.count ?? null,
+      });
+    } catch { /* non-critical */ }
+  }, []);
+
   // Force refresh function for manual refresh button
   const forceRefreshCurrentTab = useCallback(() => {
     loadedTabsRef.current.delete(activeTab);
@@ -739,6 +798,7 @@ export function SuperAdminDataManagement() {
   useEffect(() => {
     if (!isSuperAdmin || userMap.size === 0 || hasPreloadedRef.current) return;
     hasPreloadedRef.current = true;
+    loadQuickCounts(); // fast HEAD queries — populate stats cards immediately
     loadSiteVisits();
     loadClaimedSites();
     loadDispatchedSites();
@@ -1107,6 +1167,56 @@ export function SuperAdminDataManagement() {
     setSelectedMMP(mmp);
     setReason('');
     setShowArchiveMMPDialog(true);
+  };
+
+  const openChangeStatusDialog = (site: ClaimedSiteData) => {
+    setChangeStatusSite(site);
+    setChangeStatusTarget('');
+    setChangeStatusReason('');
+    setShowChangeStatusDialog(true);
+  };
+
+  const handleChangeStatus = async () => {
+    if (!changeStatusSite || !currentUser || !changeStatusTarget || !changeStatusReason.trim()) return;
+    setChangeStatusProcessing(true);
+    try {
+      const session = await ensureValidSession();
+      if (!session.success) { setChangeStatusProcessing(false); return; }
+
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ status: changeStatusTarget })
+        .eq('id', changeStatusSite.id);
+
+      if (error) throw error;
+
+      await supabase.from('super_admin_audit_logs').insert({
+        action_type: 'status_correction',
+        entity_type: 'mmp_site_entry',
+        entity_id: changeStatusSite.id,
+        performed_by: currentUser.id,
+        performed_by_name: currentUser.name || currentUser.email || 'Super Admin',
+        performed_by_role: currentUser.role || 'superadmin',
+        reason: changeStatusReason.trim(),
+        details: {
+          site_name: changeStatusSite.site_name,
+          site_code: changeStatusSite.site_code,
+          previous_status: changeStatusSite.status,
+          new_status: changeStatusTarget,
+        },
+      });
+
+      toast({ title: 'Status Updated', description: `"${changeStatusSite.site_name}" changed from ${changeStatusSite.status} → ${changeStatusTarget}.` });
+      setShowChangeStatusDialog(false);
+      setChangeStatusSite(null);
+      setChangeStatusTarget('');
+      setChangeStatusReason('');
+      loadClaimedSites();
+    } catch (error: any) {
+      toast({ title: 'Update Failed', description: error.message || 'Could not update status.', variant: 'destructive' });
+    } finally {
+      setChangeStatusProcessing(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -1591,8 +1701,8 @@ export function SuperAdminDataManagement() {
         />
         <StatsCard
           title="Transactions"
-          value={stats.totalTransactions}
-          subtitle={`${stats.creditTransactions} cr / ${stats.debitTransactions} db`}
+          value={transactions.length > 0 ? transactions.length : (quickCounts?.transactions ?? 0)}
+          subtitle={transactions.length > 0 ? `${stats.creditTransactions} cr / ${stats.debitTransactions} db` : (quickCounts?.transactions != null ? 'Loading details…' : '0 cr / 0 db')}
           icon={DollarSign}
           color="warning"
           onClick={() => setActiveTab('transactions')}
@@ -1600,8 +1710,8 @@ export function SuperAdminDataManagement() {
         />
         <StatsCard
           title="Claimed Sites"
-          value={stats.totalClaimedSites}
-          subtitle={`${stats.assignedSites} accepted`}
+          value={claimedSites.length > 0 ? stats.totalClaimedSites : (quickCounts?.claimed ?? 0)}
+          subtitle={claimedSites.length > 0 ? `${stats.assignedSites} accepted` : (quickCounts?.claimed != null ? 'Loading details…' : '0 accepted')}
           icon={Users}
           color="danger"
           onClick={() => setActiveTab('claimed-sites')}
@@ -1609,8 +1719,8 @@ export function SuperAdminDataManagement() {
         />
         <StatsCard
           title="Dispatched Sites"
-          value={stats.totalDispatchedSites}
-          subtitle={`${stats.uniqueStatesDispatched} states`}
+          value={dispatchedSites.length > 0 ? stats.totalDispatchedSites : (quickCounts?.dispatched ?? 0)}
+          subtitle={dispatchedSites.length > 0 ? `${stats.uniqueStatesDispatched} states` : (quickCounts?.dispatched != null ? 'Loading details…' : '0 states')}
           icon={Send}
           color="warning"
           onClick={() => setActiveTab('dispatched-sites')}
@@ -2184,8 +2294,18 @@ export function SuperAdminDataManagement() {
                       ))}
                     </TableBody>
                   </Table>
-                  {false && (
-                    <div className="text-center py-4 text-sm text-muted-foreground border-t">
+                  {txHasMore && (
+                    <div className="text-center py-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={txLoadingMore}
+                        onClick={() => loadTransactions(txOffset + TX_PAGE_SIZE, true)}
+                        data-testid="button-tx-load-more"
+                      >
+                        {txLoadingMore ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                        {txLoadingMore ? 'Loading…' : `Load more transactions (showing ${transactions.length})`}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -2442,15 +2562,27 @@ export function SuperAdminDataManagement() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => openReclaimSiteDialog(site)}
-                              data-testid={`button-reclaim-${site.id}`}
-                            >
-                              <RotateCcw className="h-4 w-4 mr-1" />
-                              Reclaim
-                            </Button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+                                onClick={() => openChangeStatusDialog(site)}
+                                data-testid={`button-change-status-${site.id}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                Change Status
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => openReclaimSiteDialog(site)}
+                                data-testid={`button-reclaim-${site.id}`}
+                              >
+                                <RotateCcw className="h-4 w-4 mr-1" />
+                                Reclaim
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -3334,6 +3466,90 @@ export function SuperAdminDataManagement() {
             >
               {reverseProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
               {reverseProcessing ? 'Reversing…' : 'Confirm Reversal'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Status Dialog — status correction for Claimed Sites */}
+      <Dialog open={showChangeStatusDialog} onOpenChange={setShowChangeStatusDialog}>
+        <DialogContent className="max-w-md" data-testid="dialog-change-status">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-blue-600" />
+              Change Site Status
+            </DialogTitle>
+            <DialogDescription>
+              Admin correction — override the site's current status. This is logged for audit.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-blue-500/5 border border-blue-500/20 p-4 rounded-lg">
+              <p className="font-semibold">{changeStatusSite?.site_name}</p>
+              <p className="text-sm text-muted-foreground">{changeStatusSite?.site_code}</p>
+              <div className="mt-2 pt-2 border-t border-blue-500/10 flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Current:</span>
+                <Badge variant="outline">{changeStatusSite?.status}</Badge>
+                {changeStatusTarget && (
+                  <>
+                    <span className="text-muted-foreground">→</span>
+                    <Badge className="bg-blue-500/10 text-blue-700 border-blue-500/20">
+                      {ALL_CORRECTABLE_STATUSES.find(s => s.value === changeStatusTarget)?.label || changeStatusTarget}
+                    </Badge>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="change-status-target">New Status <span className="text-destructive">*</span></Label>
+              <Select value={changeStatusTarget} onValueChange={setChangeStatusTarget}>
+                <SelectTrigger id="change-status-target" data-testid="select-change-status-target">
+                  <SelectValue placeholder="Select target status…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ALL_CORRECTABLE_STATUSES.filter(s => s.value !== changeStatusSite?.status).map(s => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="change-status-reason">Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="change-status-reason"
+                value={changeStatusReason}
+                onChange={e => setChangeStatusReason(e.target.value)}
+                placeholder="Explain why this status correction is needed (e.g. system error, data entry mistake)…"
+                rows={3}
+                data-testid="textarea-change-status-reason"
+              />
+            </div>
+
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <p className="text-sm font-medium mb-2">This action will:</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-blue-500" /> Update the site's status in the database</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-blue-500" /> Log the change in the audit trail</li>
+                <li className="flex items-center gap-2"><AlertTriangle className="h-3 w-3 text-yellow-500" /> Does NOT reverse wallet transactions (use Reclaim for that)</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowChangeStatusDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleChangeStatus}
+              disabled={changeStatusProcessing || !changeStatusTarget || !changeStatusReason.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-confirm-change-status"
+            >
+              {changeStatusProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Pencil className="h-4 w-4 mr-2" />}
+              {changeStatusProcessing ? 'Updating…' : 'Update Status'}
             </Button>
           </DialogFooter>
         </DialogContent>

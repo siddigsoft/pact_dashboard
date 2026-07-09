@@ -14,7 +14,7 @@
 --   profile/role lookup as before.
 -- =============================================================================
 
-CREATE OR REPLACE FUNCTION _assert_finance_role()
+CREATE OR REPLACE FUNCTION _assert_finance_role()Financial Summary
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
