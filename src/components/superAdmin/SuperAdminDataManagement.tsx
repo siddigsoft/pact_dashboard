@@ -273,6 +273,8 @@ const POST_DISPATCH_STATUSES = [
 const DISPATCHED_STATUSES = ['dispatched', 'Dispatched', 'smart_assigned', 'Smart_Assigned'];
 
 // All correctable target statuses exposed in the Change Status dialog
+const CLAIMED_PAGE_SIZE = 200; // rows shown at a time in the Claimed Sites table
+
 const ALL_CORRECTABLE_STATUSES = [
   { value: 'accepted',                label: 'Accepted' },
   { value: 'inProgress',              label: 'In Progress (Ongoing)' },
@@ -364,6 +366,12 @@ export function SuperAdminDataManagement() {
     return () => clearTimeout(timer);
   }, [claimedSiteSearch]);
 
+  // Reset claimed-sites page whenever any filter changes
+  useEffect(() => {
+    setClaimedVisibleCount(CLAIMED_PAGE_SIZE);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedClaimedSiteSearch, debouncedSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedTxSearch(txSearch), 300);
     return () => clearTimeout(timer);
@@ -412,6 +420,9 @@ export function SuperAdminDataManagement() {
   const [txOffset, setTxOffset] = useState(0);
   const [txHasMore, setTxHasMore] = useState(false);
   const [txLoadingMore, setTxLoadingMore] = useState(false);
+
+  // Claimed-sites pagination — show CLAIMED_PAGE_SIZE rows at a time, "Show more" to expand
+  const [claimedVisibleCount, setClaimedVisibleCount] = useState(CLAIMED_PAGE_SIZE);
 
   // Status-correction dialog (Claimed Sites tab)
   const [showChangeStatusDialog, setShowChangeStatusDialog] = useState(false);
@@ -1521,7 +1532,9 @@ export function SuperAdminDataManagement() {
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
-      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_id === claimedMmpFilter;
+      // claimedMmpFilter now stores the MMP label (not ID) so same-name MMPs both match
+      const resolvedLabel = mmpById[site.mmp_id!]?.name || site.mmp_name || '';
+      const matchesMmp = claimedMmpFilter === 'all' || resolvedLabel === claimedMmpFilter;
       
       const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
       return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
@@ -1556,15 +1569,16 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Unique MMPs across all claimed sites — keyed by real mmp_id for MmpFilterBar compatibility
-    const mmpOptions = [...new Map(
-      claimedSites
-        .filter(s => s.mmp_id)
-        .map(s => {
-          const label = mmpById[s.mmp_id!]?.name || s.mmp_name || s.mmp_id!;
-          return [s.mmp_id!, { id: s.mmp_id!, label }] as [string, { id: string; label: string }];
-        })
-    ).values()].sort((a, b) => a.label.localeCompare(b.label));
+    // Unique MMPs across all claimed sites — deduplicated by LABEL so same-name MMPs
+    // (different IDs) collapse into one dropdown entry; filter matches by name not ID.
+    const seenLabels = new Map<string, string>(); // label → first mmp_id seen
+    claimedSites.filter(s => s.mmp_id).forEach(s => {
+      const label = mmpById[s.mmp_id!]?.name || s.mmp_name || s.mmp_id!;
+      if (!seenLabels.has(label)) seenLabels.set(label, s.mmp_id!);
+    });
+    const mmpOptions = [...seenLabels.entries()]
+      .map(([label]) => ({ id: label, label }))   // use label as the filter key
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
   }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById]);
@@ -2531,7 +2545,7 @@ export function SuperAdminDataManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClaimedSites.map((site) => (
+                      {filteredClaimedSites.slice(0, claimedVisibleCount).map((site) => (
                         <TableRow key={site.id} className="hover:bg-muted/30" data-testid={`row-claimed-site-${site.id}`}>
                           <TableCell>
                             <div>
@@ -2668,6 +2682,29 @@ export function SuperAdminDataManagement() {
                       ))}
                     </TableBody>
                   </Table>
+
+                  {/* Pagination footer */}
+                  {filteredClaimedSites.length > claimedVisibleCount && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
+                      <span className="text-xs text-muted-foreground">
+                        Showing {claimedVisibleCount.toLocaleString()} of {filteredClaimedSites.length.toLocaleString()} sites
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-8"
+                        onClick={() => setClaimedVisibleCount(c => c + CLAIMED_PAGE_SIZE)}
+                        data-testid="button-claimed-load-more"
+                      >
+                        Show {Math.min(CLAIMED_PAGE_SIZE, filteredClaimedSites.length - claimedVisibleCount).toLocaleString()} more
+                      </Button>
+                    </div>
+                  )}
+                  {filteredClaimedSites.length > 0 && filteredClaimedSites.length <= claimedVisibleCount && filteredClaimedSites.length > CLAIMED_PAGE_SIZE && (
+                    <div className="px-4 py-2 border-t bg-muted/20 text-center">
+                      <span className="text-xs text-muted-foreground">All {filteredClaimedSites.length.toLocaleString()} sites shown</span>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
