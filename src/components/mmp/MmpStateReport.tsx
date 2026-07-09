@@ -273,6 +273,42 @@ export default function MmpStateReport({
       return results.flat();
     };
 
+    // Fetch down-payment advances: try the SECURITY DEFINER RPC first (bypasses RLS),
+    // fall back to a direct paginated query, then fall back to the advanceMap prop.
+    const fetchAdvances = async (ids: string[]): Promise<any[]> => {
+      // 1. RPC — bypasses RLS, preferred path
+      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc(
+        'get_advances_by_entry_ids',
+        { entry_ids: ids },
+      );
+      if (!rpcErr && rpcData && (rpcData as any[]).length > 0) return rpcData as any[];
+
+      // 2. Direct paginated query (subject to RLS — works when user has read access)
+      console.warn('[MmpStateReport] RPC get_advances_by_entry_ids unavailable, falling back:', rpcErr?.message);
+      const direct = await inChunks(
+        'down_payment_requests',
+        'id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,requested_by,requested_at,hub_name',
+        'mmp_site_entry_id',
+        ids,
+      );
+      if (direct.length > 0) return direct;
+
+      // 3. Derive from the advanceMap prop already fetched by the parent
+      return Object.entries(advanceMap)
+        .filter(([entryId]) => ids.includes(entryId))
+        .map(([entryId, info]) => ({
+          id: info.id,
+          mmp_site_entry_id: entryId,
+          status: info.status,
+          requested_amount: info.requestedAmount,
+          approved_amount: info.approvedAmount,
+          total_paid_amount: info.totalPaid,
+          requested_by: null,
+          requested_at: null,
+          hub_name: null,
+        }));
+    };
+
     const run = async () => {
       setLoading(true);
       try {
@@ -285,13 +321,8 @@ export default function MmpStateReport({
             siteIds,
             q => q.eq('module', 'mmp').order('timestamp', { ascending: true })
           ),
-          // Down-payment requests
-          inChunks(
-            'down_payment_requests',
-            'id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,requested_by,requested_at,hub_name',
-            'mmp_site_entry_id',
-            siteIds,
-          ),
+          // Down-payment advances (RPC → direct → advanceMap prop fallback)
+          fetchAdvances(siteIds),
           // Extra collector fields not in the context snapshot
           inChunks(
             'mmp_site_entries',
