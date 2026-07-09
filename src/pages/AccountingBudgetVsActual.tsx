@@ -123,7 +123,7 @@ export default function AccountingBudgetVsActual() {
       const preFundQ = supabase
         .from('pre_fund_requests' as any)
         .select('gl_liability_account, available_balance, amount, status')
-        .in('status', ['active', 'low_balance', 'ending_soon', 'awaiting_receipt'])
+        .in('status', ['active', 'low_balance', 'awaiting_receipt'])
         .limit(2000);
 
       const [tbRes, encRes, preFundRes] = await Promise.all([

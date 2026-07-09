@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS pre_fund_requests (
   committed_amount      NUMERIC(20,4) NOT NULL DEFAULT 0,
   paid_amount           NUMERIC(20,4) NOT NULL DEFAULT 0,
   status                TEXT NOT NULL DEFAULT 'draft'
-                        CHECK (status IN ('draft','pending_approval','awaiting_receipt','active','low_balance','closed','period_locked','pending_grace')),
+                        CHECK (status IN ('draft','pending_approval','awaiting_receipt','active','low_balance','paused','closed','period_locked','pending_grace','rejected')),
   grace_expires_at      TIMESTAMPTZ,               -- set on auto_activate renewals; Finance can cancel before this timestamp
   period_type_id        UUID REFERENCES pre_fund_period_types(id) ON DELETE SET NULL,
   period_type_name      TEXT,                       -- denormalised for display
@@ -359,7 +359,7 @@ ALTER TABLE pre_fund_requests
 ALTER TABLE pre_fund_requests
   ADD CONSTRAINT pre_fund_requests_status_check
   CHECK (status IN ('draft','pending_approval','awaiting_receipt','active','low_balance',
-                    'closed','period_locked','pending_grace','rejected'));
+                    'paused','closed','period_locked','pending_grace','rejected'));
 
 -- ─── 9. Row Level Security ────────────────────────────────────────────────────
 ALTER TABLE pre_fund_period_types      ENABLE ROW LEVEL SECURITY;
