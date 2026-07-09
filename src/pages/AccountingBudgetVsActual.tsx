@@ -116,19 +116,64 @@ export default function AccountingBudgetVsActual() {
     try {
       const encQ = supabase.from('acct_budget_encumbrances' as any).select('account_id, amount').eq('status', 'open').limit(5000);
       if (fundId !== 'all') (encQ as any).eq('fund_id', fundId);
-      const [tbRes, encRes] = await Promise.all([
+
+      // Pre-fund commitments: funds that are outstanding (received but not fully
+      // spent, or committed-but-awaiting-receipt) contribute to the Committed column
+      // against their GL liability account.
+      const preFundQ = supabase
+        .from('pre_fund_requests' as any)
+        .select('gl_liability_account, available_balance, amount, status')
+        .in('status', ['active', 'low_balance', 'ending_soon', 'awaiting_receipt'])
+        .limit(2000);
+
+      const [tbRes, encRes, preFundRes] = await Promise.all([
         supabase.rpc('acct_trial_balance' as any, { p_period_id: periodId, p_branch_id: null, p_fund_id: fundId === 'all' ? null : fundId } as any),
         encQ,
+        preFundQ,
         loadBudgetLines(periodId, fundId),
       ]);
       if (tbRes.error) { setError(tbRes.error.message); return; }
       setTb((tbRes.data ?? []) as TbRow[]);
+
       const newEncMap: Record<string, number> = {};
-      if (!encRes.error || encRes.error.code === '42P01') {
+
+      // 1. Standard budget encumbrances
+      if (!encRes.error || (encRes.error as any)?.code === '42P01') {
         for (const e of ((encRes.data ?? []) as any[])) {
           newEncMap[e.account_id] = (newEncMap[e.account_id] ?? 0) + Number(e.amount ?? 0);
         }
       }
+
+      // 2. Pre-fund commitments → resolve GL code to account_id and merge
+      const pfRows = (preFundRes.data ?? []) as any[];
+      if (pfRows.length > 0) {
+        // Build code→commitment map.
+        // awaiting_receipt: money not yet in hand → treat full amount as outstanding.
+        // active / low_balance / ending_soon: money received, partially spent →
+        //   available_balance is the remaining outstanding liability.
+        const preFundByCode: Record<string, number> = {};
+        for (const pf of pfRows) {
+          const code = pf.gl_liability_account as string | null;
+          if (!code) continue;
+          const commitment = pf.status === 'awaiting_receipt'
+            ? Number(pf.amount ?? 0)
+            : Number(pf.available_balance ?? 0);
+          if (commitment > 0) preFundByCode[code] = (preFundByCode[code] ?? 0) + commitment;
+        }
+
+        const codes = Object.keys(preFundByCode);
+        if (codes.length > 0) {
+          const { data: acctRows } = await supabase
+            .from('acct_accounts')
+            .select('id, code')
+            .in('code', codes);
+          for (const acct of ((acctRows ?? []) as { id: string; code: string }[])) {
+            const commitment = preFundByCode[acct.code] ?? 0;
+            if (commitment > 0) newEncMap[acct.id] = (newEncMap[acct.id] ?? 0) + commitment;
+          }
+        }
+      }
+
       setEncMap(newEncMap);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load report');
