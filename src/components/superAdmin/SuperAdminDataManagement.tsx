@@ -419,6 +419,7 @@ export function SuperAdminDataManagement() {
   const [changeStatusTarget, setChangeStatusTarget] = useState('');
   const [changeStatusReason, setChangeStatusReason] = useState('');
   const [changeStatusProcessing, setChangeStatusProcessing] = useState(false);
+  const [changeStatusReverseWallet, setChangeStatusReverseWallet] = useState(false);
 
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
@@ -1173,6 +1174,7 @@ export function SuperAdminDataManagement() {
     setChangeStatusSite(site);
     setChangeStatusTarget('');
     setChangeStatusReason('');
+    setChangeStatusReverseWallet(false);
     setShowChangeStatusDialog(true);
   };
 
@@ -1183,6 +1185,7 @@ export function SuperAdminDataManagement() {
       const session = await ensureValidSession();
       if (!session.success) { setChangeStatusProcessing(false); return; }
 
+      // 1. Update the site status
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({ status: changeStatusTarget })
@@ -1190,6 +1193,74 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
+      // 2. Optionally reverse wallet transactions linked to this site
+      let walletErrors: string[] = [];
+      let reversedTxCount = 0;
+      if (changeStatusReverseWallet) {
+        const { data: transactions } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .or(`site_visit_id.eq.${changeStatusSite.id},related_site_visit_id.eq.${changeStatusSite.id}`);
+
+        if (transactions && transactions.length > 0) {
+          for (const txn of transactions) {
+            try {
+              // Get wallet and deduct balance
+              const { data: wallet } = await supabase
+                .from('wallets')
+                .select('*')
+                .eq('id', txn.wallet_id)
+                .single();
+
+              if (wallet) {
+                const currentBalance = wallet.balances?.[txn.currency] || 0;
+                const newBalance = Math.max(0, currentBalance - txn.amount);
+                await supabase
+                  .from('wallets')
+                  .update({
+                    balances: { ...wallet.balances, [txn.currency]: newBalance },
+                    total_earned: Math.max(0, (parseFloat(wallet.total_earned) || 0) - txn.amount),
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', wallet.id);
+              }
+
+              // Delete the transaction
+              const { error: deleteErr } = await supabase
+                .from('wallet_transactions')
+                .delete()
+                .eq('id', txn.id);
+
+              if (deleteErr) {
+                walletErrors.push(`TX ${txn.id.slice(0, 8)}: ${deleteErr.message}`);
+              } else {
+                reversedTxCount++;
+              }
+            } catch (txErr: any) {
+              walletErrors.push(txErr.message);
+            }
+          }
+        }
+
+        // Cancel any pending advance requests for this site
+        const { data: pendingAdv } = await supabase
+          .from('down_payment_requests')
+          .select('id')
+          .eq('mmp_site_entry_id', changeStatusSite.id)
+          .in('status', ['pending_supervisor', 'pending_admin']);
+
+        if (pendingAdv && pendingAdv.length > 0) {
+          await supabase
+            .from('down_payment_requests')
+            .update({
+              status: 'cancelled',
+              updated_at: new Date().toISOString(),
+            })
+            .in('id', pendingAdv.map((a: any) => a.id));
+        }
+      }
+
+      // 3. Audit log
       await supabase.from('super_admin_audit_logs').insert({
         action_type: 'status_correction',
         entity_type: 'mmp_site_entry',
@@ -1203,15 +1274,24 @@ export function SuperAdminDataManagement() {
           site_code: changeStatusSite.site_code,
           previous_status: changeStatusSite.status,
           new_status: changeStatusTarget,
+          wallet_reversed: changeStatusReverseWallet,
+          transactions_reversed: reversedTxCount,
+          wallet_errors: walletErrors.length > 0 ? walletErrors : undefined,
         },
       });
 
-      toast({ title: 'Status Updated', description: `"${changeStatusSite.site_name}" changed from ${changeStatusSite.status} → ${changeStatusTarget}.` });
+      const desc = changeStatusReverseWallet
+        ? `"${changeStatusSite.site_name}": ${changeStatusSite.status} → ${changeStatusTarget}. ${reversedTxCount} transaction(s) reversed.${walletErrors.length ? ` (${walletErrors.length} wallet error(s))` : ''}`
+        : `"${changeStatusSite.site_name}": ${changeStatusSite.status} → ${changeStatusTarget}. Wallet not touched.`;
+
+      toast({ title: 'Status Updated', description: desc });
       setShowChangeStatusDialog(false);
       setChangeStatusSite(null);
       setChangeStatusTarget('');
       setChangeStatusReason('');
+      setChangeStatusReverseWallet(false);
       loadClaimedSites();
+      if (changeStatusReverseWallet) loadTransactions();
     } catch (error: any) {
       toast({ title: 'Update Failed', description: error.message || 'Could not update status.', variant: 'destructive' });
     } finally {
@@ -3528,12 +3608,55 @@ export function SuperAdminDataManagement() {
               />
             </div>
 
-            <div className="bg-muted/50 p-3 rounded-lg">
+            {/* Wallet reversal option */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Wallet Transactions</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChangeStatusReverseWallet(false)}
+                  data-testid="btn-wallet-keep"
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 text-sm transition-all ${
+                    !changeStatusReverseWallet
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                      : 'border-border bg-muted/30 text-muted-foreground hover:border-muted-foreground/40'
+                  }`}
+                >
+                  <DollarSign className={`h-5 w-5 ${!changeStatusReverseWallet ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                  <span className="font-medium">Keep Wallet</span>
+                  <span className="text-xs text-center leading-tight opacity-75">Status change only — wallet untouched</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChangeStatusReverseWallet(true)}
+                  data-testid="btn-wallet-reverse"
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 text-sm transition-all ${
+                    changeStatusReverseWallet
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300'
+                      : 'border-border bg-muted/30 text-muted-foreground hover:border-muted-foreground/40'
+                  }`}
+                >
+                  <RotateCcw className={`h-5 w-5 ${changeStatusReverseWallet ? 'text-orange-500' : 'text-muted-foreground'}`} />
+                  <span className="font-medium">Reverse Wallet</span>
+                  <span className="text-xs text-center leading-tight opacity-75">Delete transactions &amp; cancel advances</span>
+                </button>
+              </div>
+            </div>
+
+            <div className={`p-3 rounded-lg ${changeStatusReverseWallet ? 'bg-orange-500/5 border border-orange-500/20' : 'bg-muted/50'}`}>
               <p className="text-sm font-medium mb-2">This action will:</p>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-blue-500" /> Update the site's status in the database</li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-blue-500" /> Log the change in the audit trail</li>
-                <li className="flex items-center gap-2"><AlertTriangle className="h-3 w-3 text-yellow-500" /> Does NOT reverse wallet transactions (use Reclaim for that)</li>
+                {changeStatusReverseWallet ? (
+                  <>
+                    <li className="flex items-center gap-2"><AlertTriangle className="h-3 w-3 text-orange-500" /> Delete all wallet transactions for this site</li>
+                    <li className="flex items-center gap-2"><AlertTriangle className="h-3 w-3 text-orange-500" /> Cancel any pending advance requests</li>
+                    <li className="flex items-center gap-2"><AlertTriangle className="h-3 w-3 text-orange-500" /> Deduct reversed amounts from the enumerator's wallet balance</li>
+                  </>
+                ) : (
+                  <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-muted-foreground/50" /> Wallet transactions are NOT touched</li>
+                )}
               </ul>
             </div>
           </div>
@@ -3545,11 +3668,13 @@ export function SuperAdminDataManagement() {
             <Button
               onClick={handleChangeStatus}
               disabled={changeStatusProcessing || !changeStatusTarget || !changeStatusReason.trim()}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className={changeStatusReverseWallet ? 'bg-orange-600 hover:bg-orange-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}
               data-testid="button-confirm-change-status"
             >
               {changeStatusProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Pencil className="h-4 w-4 mr-2" />}
-              {changeStatusProcessing ? 'Updating…' : 'Update Status'}
+              {changeStatusProcessing
+                ? (changeStatusReverseWallet ? 'Reversing & Updating…' : 'Updating…')
+                : (changeStatusReverseWallet ? 'Update + Reverse Wallet' : 'Update Status Only')}
             </Button>
           </DialogFooter>
         </DialogContent>
