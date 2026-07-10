@@ -196,30 +196,6 @@ export default function AccountingCOA() {
     downloadCsv(`chart-of-accounts-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
-  const exportExcel = () => {
-    const rows = filtered.map(r => {
-      const ctr = countries.find(c => c.id === r.country_id);
-      return {
-        'Code': r.code,
-        'Name (EN)': r.name_en,
-        'Name (AR)': r.name_ar,
-        'Type': r.account_type,
-        'Subtype': r.subtype,
-        'Active': r.is_active ? 'Yes' : 'No',
-        'Postable': r.is_postable ? 'Yes' : 'No',
-        'Parent ID': r.parent_id ?? '',
-        'Country': ctr?.code ?? '',
-        'Version': r.version
-      };
-    });
-    const { format } = import.meta.env.VITE_DATE_FNS_FORMAT || { format: (d: any, f: string) => d.toISOString().slice(0, 10) };
-    // Trying to use format from date-fns which is likely already imported or available.
-    // Actually, I can just use a simple date string if format is not easily accessible here.
-    // But it is imported in many files. Let's see if it's imported here.
-    // It's not imported. I'll use new Date().toISOString().slice(0, 10)
-    exportToExcel(rows, 'Chart of Accounts', `chart-of-accounts-${new Date().toISOString().slice(0, 10)}.xlsx`);
-  };
-
   const toggle = (id: string) => {
     setExpanded(prev => {
       const next = new Set(prev);
