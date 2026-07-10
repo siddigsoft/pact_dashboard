@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { getProjectFlow, type FlowStage } from '@/config/projectFlows';
@@ -197,23 +196,42 @@ async function sendStageNotifications(
   projectId: string,
   projectName: string,
   nextStageLabel: string,
-  teamMembers: string[],
+  teamMembers: string[],  // may contain UUIDs or full names (legacy)
   advancedByName: string,
   advancedById: string,
   isMilestone = false,
 ) {
   if (!teamMembers.length) return;
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .in('full_name', teamMembers)
-    .eq('status', 'approved');
+  // Split members into UUIDs (stored as IDs in modern projects) vs names (legacy)
+  const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ids = teamMembers.filter(m => uuidRx.test(m));
+  const names = teamMembers.filter(m => !uuidRx.test(m));
 
-  if (!profiles?.length) return;
+  const profileResults: any[] = [];
+  if (ids.length > 0) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', ids)
+      .eq('status', 'approved');
+    if (data) profileResults.push(...data);
+  }
+  if (names.length > 0) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('full_name', names)
+      .eq('status', 'approved');
+    if (data) {
+      const existingIds = new Set(profileResults.map(r => r.id));
+      profileResults.push(...data.filter((d: any) => !existingIds.has(d.id)));
+    }
+  }
 
-  const recipientIds = profiles.map((p: any) => p.id);
+  if (!profileResults.length) return;
 
+  const recipientIds = profileResults.map((p: any) => p.id);
   const eventType = isMilestone ? 'project_milestone_reached' : 'project_stage_advanced';
   const titleEn = isMilestone
     ? `Milestone Reached: ${projectName}`
@@ -254,24 +272,60 @@ async function sendStageNotifications(
       },
     },
   }).catch(() => {});
+}
 
-  const notifications = profiles.map((p: any) => ({
-    recipient_id: p.id,
-    user_id: p.id,
-    title_en: titleEn,
-    title_ar: titleAr,
-    message_en: msgEn,
-    message_ar: msgAr,
-    priority: isMilestone ? 'high' : 'normal',
-    action_url: `/projects/${projectId}`,
-    entity_id: projectId,
-    entity_type: 'project',
-    event_type: eventType,
-    status: 'pending',
-    email_sent: false,
-  }));
+// Notify team that a single stage was completed (not necessarily advancing the pointer)
+async function sendStageCompletedNotification(
+  projectId: string,
+  projectName: string,
+  stageLabel: string,
+  recipientIds: string[],
+  actorName: string,
+  actorId: string,
+) {
+  if (!recipientIds.length) return;
+  supabase.functions.invoke('dispatch-notification', {
+    body: {
+      event_type: 'project_stage_completed',
+      entity_type: 'project',
+      entity_id: projectId,
+      priority: 'normal',
+      recipient_ids: recipientIds,
+      title_en: `Stage Completed: ${stageLabel}`,
+      title_ar: `اكتملت المرحلة: ${stageLabel}`,
+      message_en: `${actorName} completed stage "${stageLabel}" in project "${projectName}"`,
+      message_ar: `أكمل ${actorName} مرحلة "${stageLabel}" في مشروع "${projectName}"`,
+      triggered_by: actorId,
+      triggered_by_name: actorName,
+      workflow_stage: stageLabel,
+      action_url: `/projects/${projectId}`,
+      send_email: true,
+      metadata: {
+        project_name: projectName,
+        stage: stageLabel,
+      },
+    },
+  }).catch(() => {});
+}
 
-  await insertNotificationsToDb(notifications);
+// Resolve team member profile IDs from a mixed array of UUIDs and/or full names
+async function resolveTeamRecipientIds(teamMembers: string[], excludeId?: string): Promise<string[]> {
+  if (!teamMembers.length) return [];
+  const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ids = teamMembers.filter(m => uuidRx.test(m));
+  const names = teamMembers.filter(m => !uuidRx.test(m));
+  const results: string[] = [];
+  if (ids.length > 0) results.push(...ids);
+  if (names.length > 0) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('full_name', names)
+      .eq('status', 'approved');
+    if (data) results.push(...data.map((d: any) => d.id));
+  }
+  const unique = [...new Set(results)];
+  return excludeId ? unique.filter(id => id !== excludeId) : unique;
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────
@@ -471,6 +525,26 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       });
       if (logError) throw new Error(logError.message);
 
+      // Build team member list (UUIDs + legacy names, excluding current user)
+      const allTeamMembers = [
+        project.team?.projectManager,
+        ...(project.team?.members ?? []),
+        ...(project.team?.teamComposition?.map(m => m.name) ?? []),
+      ].filter((n): n is string => !!n && n !== currentUser.id && n !== currentUser.fullName);
+      const uniqueTeamMembers = [...new Set(allTeamMembers)];
+
+      // Always notify team that this stage was completed
+      resolveTeamRecipientIds(uniqueTeamMembers, currentUser.id).then(recipientIds => {
+        sendStageCompletedNotification(
+          project.id,
+          project.name,
+          stageToComplete.label,
+          recipientIds,
+          currentUser.fullName ?? 'A team member',
+          currentUser.id,
+        );
+      }).catch(() => {});
+
       // Check if ALL stages in the current group are now complete
       const nowCompletedIds = new Set([...completedStageIds, stageId]);
       const allGroupDone = currentGroupSafe.every(s => nowCompletedIds.has(s.id));
@@ -488,17 +562,11 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
         });
         if (updateError) throw new Error(updateError.message);
 
-        const teamNames = [
-          project.team?.projectManager,
-          ...(project.team?.members ?? []),
-          ...(project.team?.teamComposition?.map(m => m.name) ?? []),
-        ].filter((n): n is string => !!n && n !== currentUser.fullName);
-
         sendStageNotifications(
           project.id,
           project.name,
           nextStage.label,
-          [...new Set(teamNames)],
+          uniqueTeamMembers,
           currentUser.fullName ?? 'A team member',
           currentUser.id,
           false,
@@ -507,17 +575,11 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
 
       // Send milestone notification if this stage is a milestone
       if (isMilestone) {
-        const teamNames = [
-          project.team?.projectManager,
-          ...(project.team?.members ?? []),
-          ...(project.team?.teamComposition?.map(m => m.name) ?? []),
-        ].filter((n): n is string => !!n && n !== currentUser.fullName);
-
         sendStageNotifications(
           project.id,
           project.name,
           stageToComplete.label,
-          [...new Set(teamNames)],
+          uniqueTeamMembers,
           currentUser.fullName ?? 'A team member',
           currentUser.id,
           true,
@@ -566,6 +628,23 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           notes: 'Marked complete via status override',
         });
         if (error) throw new Error(error.message);
+
+        // Notify team of manual stage completion
+        const overrideTeamMembers = [
+          project.team?.projectManager,
+          ...(project.team?.members ?? []),
+          ...(project.team?.teamComposition?.map(m => m.name) ?? []),
+        ].filter((n): n is string => !!n && n !== currentUser.id && n !== currentUser.fullName);
+        resolveTeamRecipientIds([...new Set(overrideTeamMembers)], currentUser.id).then(recipientIds => {
+          sendStageCompletedNotification(
+            project.id,
+            project.name,
+            stage.label,
+            recipientIds,
+            currentUser.fullName ?? 'A team member',
+            currentUser.id,
+          );
+        }).catch(() => {});
 
         // Keep the `current_flow_stage` pointer in sync: if marking this
         // stage complete finishes its whole group, advance the pointer to

@@ -21,6 +21,12 @@ export const TASK_EMAIL_EVENTS = new Set<string>([
   'task_assigned',
   'task_completed',
   'task_cancelled',
+  'task_started',
+  'task_status_changed',
+  'task_comment_added',
+  'task_delayed',
+  'task_rejected',
+  'task_overdue',
 ]);
 
 /**

@@ -169,17 +169,53 @@ export function ProjectMilestonesPanel({ projectId }: Props) {
   const toggleComplete = async (m: Milestone) => {
     const newStatus = m.status === 'completed' ? 'in_progress' : 'completed';
     await supabase.from('project_milestones').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', m.id);
-    // Log milestone completion to workspace activity for team visibility
     if (newStatus === 'completed') {
+      // Workspace activity log
       supabase.from('workspace_activity').insert({
         user_id: currentUser?.id,
         action: 'milestone_completed',
-        metadata: {
-          milestone_id: m.id,
-          milestone_title: m.title,
-          project_id: projectId,
-        },
+        metadata: { milestone_id: m.id, milestone_title: m.title, project_id: projectId },
       }).then(() => {}).catch(() => {});
+
+      // Notify project team via dispatch-notification (in-app + email + WhatsApp)
+      supabase
+        .from('projects')
+        .select('name, team')
+        .eq('id', projectId)
+        .single()
+        .then(({ data: proj }) => {
+          if (!proj) return;
+          const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const teamRaw: string[] = [
+            (proj.team as any)?.projectManager,
+            ...((proj.team as any)?.members ?? []),
+          ].filter((v): v is string => !!v && uuidRx.test(v));
+          const recipientIds = [...new Set(teamRaw)].filter(id => id !== currentUser?.id);
+          if (!recipientIds.length) return;
+          supabase.functions.invoke('dispatch-notification', {
+            body: {
+              event_type: 'project_milestone_completed',
+              entity_type: 'project',
+              entity_id: projectId,
+              priority: 'high',
+              recipient_ids: recipientIds,
+              title_en: `Milestone Completed: ${m.title}`,
+              title_ar: `تم إنجاز نقطة التحول: ${m.title}`,
+              message_en: `${currentUser?.fullName ?? 'A team member'} marked milestone "${m.title}" as completed in project "${proj.name}"`,
+              message_ar: `أكمل ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} نقطة التحول "${m.title}" في مشروع "${proj.name}"`,
+              triggered_by: currentUser?.id,
+              triggered_by_name: currentUser?.fullName,
+              action_url: `/projects/${projectId}`,
+              send_email: true,
+              metadata: {
+                project_name: proj.name,
+                milestone: m.title,
+                due_date: m.due_date ?? undefined,
+              },
+            },
+          }).catch(() => {});
+        })
+        .catch(() => {});
     }
     load();
   };

@@ -229,6 +229,48 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     setRiskDialogOpen(true);
   }
 
+  function dispatchRiskNotification(eventType: 'project_risk_added' | 'project_risk_updated', riskPayload: any) {
+    const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const teamRaw: string[] = [
+      (project.team as any)?.projectManager,
+      ...((project.team as any)?.members ?? []),
+    ].filter((v): v is string => !!v && uuidRx.test(v));
+    const recipientIds = [...new Set(teamRaw)].filter(id => id !== currentUser?.id);
+    if (!recipientIds.length) return;
+
+    const isAdd = eventType === 'project_risk_added';
+    supabase.functions.invoke('dispatch-notification', {
+      body: {
+        event_type: eventType,
+        entity_type: 'project',
+        entity_id: project.id,
+        priority: isAdd ? 'high' : 'normal',
+        recipient_ids: recipientIds,
+        title_en: isAdd ? `New Risk Logged: ${project.name}` : `Risk Updated: ${project.name}`,
+        title_ar: isAdd ? `تم تسجيل مخاطرة جديدة: ${project.name}` : `تم تحديث مخاطرة: ${project.name}`,
+        message_en: isAdd
+          ? `${currentUser?.fullName ?? 'A team member'} logged a new ${riskPayload.category} risk "${riskPayload.title}" (score: ${riskPayload.risk_score}) in "${project.name}"`
+          : `${currentUser?.fullName ?? 'A team member'} updated risk "${riskPayload.title}" — status: ${riskPayload.status} in "${project.name}"`,
+        message_ar: isAdd
+          ? `سجّل ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} مخاطرة جديدة "${riskPayload.title}" (درجة: ${riskPayload.risk_score}) في مشروع "${project.name}"`
+          : `حدّث ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} المخاطرة "${riskPayload.title}" — الحالة: ${riskPayload.status} في مشروع "${project.name}"`,
+        triggered_by: currentUser?.id,
+        triggered_by_name: currentUser?.fullName,
+        action_url: `/projects/${project.id}`,
+        send_email: true,
+        metadata: {
+          project_name: project.name,
+          risk_title: riskPayload.title,
+          category: riskPayload.category,
+          risk_score: riskPayload.risk_score,
+          status: riskPayload.status,
+          due_date: riskPayload.due_date ?? undefined,
+          responsible_unit: riskPayload.responsible_unit ?? undefined,
+        },
+      },
+    }).catch(() => {});
+  }
+
   async function handleSaveRisk() {
     if (!riskForm.title.trim()) return;
     setRiskSaving(true);
@@ -251,12 +293,22 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     };
     if (riskEditing) {
       const { error } = await supabase.from('project_risks').update(payload).eq('id', riskEditing.id);
-      if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-      else { toast({ title: 'Risk updated' }); setRiskDialogOpen(false); refreshRisks(); }
+      if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); }
+      else {
+        toast({ title: 'Risk updated' });
+        setRiskDialogOpen(false);
+        refreshRisks();
+        dispatchRiskNotification('project_risk_updated', payload);
+      }
     } else {
       const { error } = await supabase.from('project_risks').insert(payload);
-      if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-      else { toast({ title: 'Risk added' }); setRiskDialogOpen(false); refreshRisks(); }
+      if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); }
+      else {
+        toast({ title: 'Risk added' });
+        setRiskDialogOpen(false);
+        refreshRisks();
+        dispatchRiskNotification('project_risk_added', payload);
+      }
     }
     setRiskSaving(false);
   }

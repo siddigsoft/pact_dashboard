@@ -115,6 +115,12 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'project_task_overdue':       { title_en: 'Project Task Overdue',                 title_ar: 'مهمة المشروع متأخرة',                        category: 'assignments',  priority: 'high'   },
   'project_health_changed':     { title_en: 'Project Health Status Changed',        title_ar: 'تغيرت حالة صحة المشروع',                     category: 'system',       priority: 'normal' },
   'project_budget_exceeded':    { title_en: 'Project Budget Exceeded',              title_ar: 'تجاوزت ميزانية المشروع',                     category: 'financial',    priority: 'urgent' },
+  'project_stage_completed':    { title_en: 'Stage Completed',                      title_ar: 'اكتملت مرحلة المشروع',                       category: 'system',       priority: 'normal' },
+  'project_milestone_reached':  { title_en: 'Project Milestone Reached',            title_ar: 'تم الوصول إلى نقطة التحول',                  category: 'system',       priority: 'high'   },
+  'project_milestone_completed':{ title_en: 'Milestone Completed',                  title_ar: 'تم إنجاز نقطة التحول',                       category: 'system',       priority: 'high'   },
+  'project_risk_added':         { title_en: 'New Risk Logged',                      title_ar: 'تم تسجيل مخاطرة جديدة',                      category: 'system',       priority: 'high'   },
+  'project_risk_updated':       { title_en: 'Risk Status Updated',                  title_ar: 'تم تحديث حالة المخاطرة',                     category: 'system',       priority: 'normal' },
+  'project_status_changed':     { title_en: 'Project Status Changed',               title_ar: 'تغيرت حالة المشروع',                         category: 'system',       priority: 'normal' },
   // CRM — full lifecycle
   'crm_opportunity_stage_changed': { title_en: 'Opportunity Stage Updated',        title_ar: 'تم تحديث مرحلة الفرصة',                      category: 'system',       priority: 'normal' },
   'crm_opportunity_won':        { title_en: 'Opportunity Won!',                     title_ar: 'تم الفوز بالفرصة!',                          category: 'system',       priority: 'normal' },
@@ -210,6 +216,12 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'project_task_overdue':        'email_notify_task_assigned',
   'project_health_changed':      'email_notify_project_milestones',
   'project_budget_exceeded':     'email_notify_payroll',
+  'project_stage_completed':     'email_notify_project_milestones',
+  'project_milestone_reached':   'email_notify_project_milestones',
+  'project_milestone_completed': 'email_notify_project_milestones',
+  'project_risk_added':          'email_notify_project_milestones',
+  'project_risk_updated':        'email_notify_project_milestones',
+  'project_status_changed':      'email_notify_project_milestones',
   // New leave events
   'leave_request_cancelled':     'email_notify_approval_needed',
   'leave_balance_updated':       'email_notify_system',
@@ -336,7 +348,9 @@ function getEventIconSvg(eventType: string): string {
     'contract_expiring_7d': '⚠️', 'contract_expiring_30d': '⏰', 'task_overdue': '⏰',
     'site_flagged_uncovered': '🚩', 'project_stalled': '⚠️', 'mmp_recall_initiated': '🔄',
     'budget_threshold_80': '📊', 'project_milestone_overdue': '📅', 'broadcast': '📢',
-    'project_stage_advanced': '🚀', 'crm_opportunity_won': '🏆', 'reminder': '🔔',
+    'project_stage_advanced': '🚀', 'project_stage_completed': '✅', 'project_milestone_reached': '🏆',
+    'project_milestone_completed': '🏆', 'project_risk_added': '⚠️', 'project_risk_updated': '🔄',
+    'project_status_changed': '📊', 'crm_opportunity_won': '🏆', 'reminder': '🔔',
   }
   return icons[eventType] || '🔔'
 }
@@ -381,19 +395,31 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.status)       items.push({ label_en: 'Status',          label_ar: 'الحالة',          value: metadata.status })
   }
   if ([
-    'project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
+    'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',
+    'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
     'project_created', 'project_completed', 'project_archived', 'project_member_added', 'project_member_removed',
     'project_health_changed', 'project_budget_exceeded', 'project_stage_deadline_reminder',
+    'project_milestone_completed', 'project_status_changed',
   ].includes(eventType)) {
     if (metadata.project_name)  items.push({ label_en: 'Project',         label_ar: 'المشروع',          value: metadata.project_name })
     if (metadata.project_type)  items.push({ label_en: 'Type',            label_ar: 'النوع',            value: metadata.project_type })
     if (metadata.stage)         items.push({ label_en: 'Stage',           label_ar: 'المرحلة',          value: metadata.stage })
     if (metadata.milestone)     items.push({ label_en: 'Milestone',       label_ar: 'المرحلة الرئيسية', value: metadata.milestone })
+    if (metadata.status)        items.push({ label_en: 'Status',          label_ar: 'الحالة',           value: metadata.status })
     if (metadata.health_score)  items.push({ label_en: 'Health Score',    label_ar: 'درجة الصحة',       value: metadata.health_score })
     if (metadata.days_stalled)  items.push({ label_en: 'Days Stalled',    label_ar: 'أيام التوقف',      value: `${metadata.days_stalled} days` })
     if (metadata.due_date)      items.push({ label_en: 'Due Date',        label_ar: 'تاريخ الاستحقاق',  value: metadata.due_date })
     if (metadata.days_label)    items.push({ label_en: 'Timeline',        label_ar: 'الجدول الزمني',    value: metadata.days_label })
-    if (metadata.role)          items.push({ label_en: 'Role',           label_ar: 'الدور',            value: metadata.role })
+    if (metadata.role)          items.push({ label_en: 'Role',            label_ar: 'الدور',            value: metadata.role })
+  }
+  if (['project_risk_added', 'project_risk_updated'].includes(eventType)) {
+    if (metadata.project_name)  items.push({ label_en: 'Project',         label_ar: 'المشروع',          value: metadata.project_name })
+    if (metadata.risk_title)    items.push({ label_en: 'Risk',            label_ar: 'المخاطرة',         value: metadata.risk_title })
+    if (metadata.category)      items.push({ label_en: 'Category',        label_ar: 'الفئة',            value: metadata.category })
+    if (metadata.risk_score)    items.push({ label_en: 'Risk Score',      label_ar: 'درجة المخاطرة',    value: String(metadata.risk_score) })
+    if (metadata.status)        items.push({ label_en: 'Status',          label_ar: 'الحالة',           value: metadata.status })
+    if (metadata.due_date)      items.push({ label_en: 'Due Date',        label_ar: 'تاريخ الاستحقاق',  value: metadata.due_date })
+    if (metadata.responsible_unit) items.push({ label_en: 'Responsible Unit', label_ar: 'الجهة المسؤولة', value: metadata.responsible_unit })
   }
   if (['mmp_assigned', 'mmp_recall_initiated', 'mmp_cycle_closed', 'mmp_completed'].includes(eventType)) {
     if (metadata.mmp_code)   items.push({ label_en: 'MMP Code',        label_ar: 'رمز الخطة',       value: metadata.mmp_code })
@@ -468,7 +494,12 @@ function generateEventEmailHtml(
   const actionBtnLabel_en = (() => {
     if (['approval_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return 'Review & Approve →'
     if (eventType.includes('assigned')) return 'View Assignment →'
-    if (['project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue', 'project_stage_deadline_reminder'].includes(eventType)) return 'View Project →'
+    if ([
+      'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',
+      'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
+      'project_stage_deadline_reminder', 'project_milestone_completed',
+      'project_risk_added', 'project_risk_updated', 'project_status_changed',
+    ].includes(eventType)) return 'View Project →'
     if (['contract_expiring_7d', 'contract_expiring_30d', 'contract_expired'].includes(eventType)) return 'View Contract →'
     return 'View Details →'
   })()
@@ -478,7 +509,12 @@ function generateEventEmailHtml(
     // (must come BEFORE the generic .includes('assigned') catch so the
     // project-scoped events resolve to the project label, not the
     // generic "View Assignment" label).
-    if (['project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue', 'project_stage_deadline_reminder'].includes(eventType)) return '← عرض المشروع'
+    if ([
+      'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',
+      'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
+      'project_stage_deadline_reminder', 'project_milestone_completed',
+      'project_risk_added', 'project_risk_updated', 'project_status_changed',
+    ].includes(eventType)) return '← عرض المشروع'
     if (eventType.includes('assigned')) return '← عرض التعيين'
     return '← عرض التفاصيل'
   })()
