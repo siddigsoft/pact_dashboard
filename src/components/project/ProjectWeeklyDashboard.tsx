@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   format, getISOWeek, startOfISOWeek, endOfISOWeek,
   parseISO, isValid, subWeeks, differenceInDays,
@@ -23,7 +23,16 @@ import {
   Activity, Milestone, Layers, Link2, CheckSquare, Square,
   GitBranch, ExternalLink, Briefcase, MapPin, DollarSign,
   Calendar, LayoutDashboard, BarChart2, TriangleAlert,
+  Plus, Edit2, Trash2, Loader2, X, Flame, Circle,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/context/user/UserContext';
+import { cn } from '@/lib/utils';
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 interface Risk {
@@ -66,6 +75,32 @@ const CRM_STAGE_META: Record<string, { label: string; color: string }> = {
 };
 const FOLLOW_UP_LABELS: Record<string, string> = {
   open: 'In Progress', mitigated: 'Mitigated', accepted: 'Accepted', closed: 'Resolved',
+};
+const RISK_CATEGORIES = ['operational','financial','technical','schedule','resource','external','compliance','security'];
+const LIKELIHOOD_OPTS = [
+  { value: 'very_low', label: 'Very Low', score: 1 },
+  { value: 'low',      label: 'Low',      score: 2 },
+  { value: 'medium',   label: 'Medium',   score: 3 },
+  { value: 'high',     label: 'High',     score: 4 },
+  { value: 'very_high',label: 'Very High',score: 5 },
+];
+const IMPACT_OPTS = [
+  { value: 'negligible', label: 'Negligible', score: 1 },
+  { value: 'minor',      label: 'Minor',      score: 2 },
+  { value: 'moderate',   label: 'Moderate',   score: 3 },
+  { value: 'major',      label: 'Major',      score: 4 },
+  { value: 'critical',   label: 'Critical',   score: 5 },
+];
+const RISK_STATUS_CFG: Record<string, { label: string; badge: string }> = {
+  open:      { label: 'Open',      badge: 'bg-red-100 text-red-700 dark:bg-red-900/40' },
+  mitigated: { label: 'Mitigated', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40' },
+  closed:    { label: 'Closed',    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40' },
+  accepted:  { label: 'Accepted',  badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800' },
+};
+const BLANK_RISK = {
+  title: '', description: '', category: 'operational', likelihood: 'medium',
+  impact: 'moderate', status: 'open', mitigation_plan: '', contingency_plan: '',
+  due_date: '', responsible_unit: '',
 };
 function healthMeta(score: number) {
   if (score >= 80) return { label: 'Excellent', color: '#10b981', ring: 'text-emerald-500', bg: 'bg-emerald-500', track: 'bg-emerald-100 dark:bg-emerald-950/40' };
@@ -137,6 +172,9 @@ function StatPill({
 export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const navigate = useNavigate();
 
+  const { toast } = useToast();
+  const { currentUser } = useUser();
+
   const [risks, setRisks]           = useState<Risk[]>([]);
   const [milestones, setMilestones] = useState<MilestoneLite[]>([]);
   const [mmps, setMmps]             = useState<MmpLite[]>([]);
@@ -145,6 +183,86 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const [activeTab, setActiveTab]   = useState<TabId>('overview');
   const [includeSubActs, setIncludeSubActs] = useState(false);
   const dashRef = useRef<HTMLDivElement>(null);
+
+  // Risk management state
+  const [riskDialogOpen, setRiskDialogOpen] = useState(false);
+  const [riskEditing, setRiskEditing] = useState<Risk | null>(null);
+  const [riskForm, setRiskForm] = useState({ ...BLANK_RISK });
+  const [riskSaving, setRiskSaving] = useState(false);
+  const [riskDeleting, setRiskDeleting] = useState<string | null>(null);
+  const [riskStatusFilter, setRiskStatusFilter] = useState('all');
+
+  const refreshRisks = useCallback(async () => {
+    const { data } = await supabase
+      .from('project_risks')
+      .select('id,title,category,risk_score,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at,responsible_unit,resolution_date')
+      .eq('project_id', project.id)
+      .order('risk_score', { ascending: false });
+    if (data) setRisks(data as Risk[]);
+  }, [project.id]);
+
+  function openNewRisk() {
+    setRiskEditing(null);
+    setRiskForm({ ...BLANK_RISK });
+    setRiskDialogOpen(true);
+  }
+
+  function openEditRisk(r: Risk) {
+    setRiskEditing(r);
+    setRiskForm({
+      title: r.title,
+      description: '',
+      category: r.category,
+      likelihood: 'medium',
+      impact: 'moderate',
+      status: r.status,
+      mitigation_plan: r.mitigation_plan ?? '',
+      contingency_plan: r.contingency_plan ?? '',
+      due_date: r.due_date ?? '',
+      responsible_unit: r.responsible_unit ?? '',
+    });
+    setRiskDialogOpen(true);
+  }
+
+  async function handleSaveRisk() {
+    if (!riskForm.title.trim()) return;
+    setRiskSaving(true);
+    const lScore = LIKELIHOOD_OPTS.find(o => o.value === riskForm.likelihood)?.score ?? 3;
+    const iScore = IMPACT_OPTS.find(o => o.value === riskForm.impact)?.score ?? 3;
+    const payload: any = {
+      project_id: project.id,
+      title: riskForm.title.trim(),
+      category: riskForm.category,
+      likelihood: riskForm.likelihood,
+      impact: riskForm.impact,
+      risk_score: lScore * iScore,
+      status: riskForm.status,
+      mitigation_plan: riskForm.mitigation_plan || null,
+      contingency_plan: riskForm.contingency_plan || null,
+      due_date: riskForm.due_date || null,
+      responsible_unit: riskForm.responsible_unit || null,
+      created_by: currentUser?.id ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (riskEditing) {
+      const { error } = await supabase.from('project_risks').update(payload).eq('id', riskEditing.id);
+      if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      else { toast({ title: 'Risk updated' }); setRiskDialogOpen(false); refreshRisks(); }
+    } else {
+      const { error } = await supabase.from('project_risks').insert(payload);
+      if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      else { toast({ title: 'Risk added' }); setRiskDialogOpen(false); refreshRisks(); }
+    }
+    setRiskSaving(false);
+  }
+
+  async function handleDeleteRisk(id: string) {
+    setRiskDeleting(id);
+    await supabase.from('project_risks').delete().eq('id', id);
+    toast({ title: 'Risk deleted' });
+    setRisks(p => p.filter(r => r.id !== id));
+    setRiskDeleting(null);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -987,97 +1105,250 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
         {/* ── RISKS TAB ── */}
         {activeTab === 'risks' && (
           <div className="space-y-3">
-            {openRisks.length === 0 ? (
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4 text-red-500" /> Risk Register
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Identify, assess and track project risks</p>
+              </div>
+              <Button size="sm" onClick={openNewRisk} data-testid="btn-add-risk-dashboard">
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Risk
+              </Button>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Total',     value: risks.length,                                    icon: <Activity className="h-3.5 w-3.5" />, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/20' },
+                { label: 'Open',      value: risks.filter(r=>r.status==='open').length,        icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20' },
+                { label: 'High+',     value: risks.filter(r=>r.risk_score>=10).length,         icon: <Flame className="h-3.5 w-3.5" />, color: 'text-orange-600',    bg: 'bg-orange-50 dark:bg-orange-900/20' },
+                { label: 'Mitigated', value: risks.filter(r=>r.status==='mitigated').length,   icon: <ShieldCheck className="h-3.5 w-3.5" />, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+              ].map(s => (
+                <div key={s.label} className={cn('rounded-lg p-2 flex items-center gap-2', s.bg)}>
+                  <span className={s.color}>{s.icon}</span>
+                  <div>
+                    <p className={cn('text-base font-black leading-none', s.color)}>{s.value}</p>
+                    <p className="text-[9px] text-muted-foreground">{s.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filter chips */}
+            <div className="flex gap-1.5 flex-wrap">
+              {(['all','open','mitigated','accepted','closed'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setRiskStatusFilter(s)}
+                  className={cn(
+                    'text-[10px] px-2.5 py-1 rounded-full border font-medium transition-colors capitalize',
+                    riskStatusFilter === s
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                  )}
+                >
+                  {s === 'all' ? 'All' : RISK_STATUS_CFG[s]?.label ?? s}
+                </button>
+              ))}
+            </div>
+
+            {/* Risk list */}
+            {risks.length === 0 ? (
               <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/20 p-8 flex flex-col items-center gap-3">
                 <ShieldCheck className="h-12 w-12 text-emerald-500" />
-                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">No open risks</p>
-                <p className="text-xs text-muted-foreground">All identified risks are mitigated or closed.</p>
+                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">No risks logged yet</p>
+                <p className="text-xs text-muted-foreground text-center">Click <strong>Add Risk</strong> above to log the first risk for this project.</p>
+                <Button size="sm" onClick={openNewRisk} className="mt-1">
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add First Risk
+                </Button>
               </div>
-            ) : (
-              <>
-                {/* Top risk detail */}
-                {topRisk && (
-                  <div className={`rounded-xl border p-4 ${topRiskMeta.bg} ${topRiskMeta.border}`}>
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${topRiskMeta.color}`} />
-                        <p className="text-sm font-bold leading-snug">{topRisk.title}</p>
-                      </div>
-                      <Badge variant="outline" className={`text-[10px] flex-shrink-0 font-bold ${topRiskMeta.color} border-current`}>
-                        {topRiskMeta.label} · Score {topRisk.risk_score}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {[
-                        { l: 'Category',        v: topRisk.category || '—',             icon: <Users className="h-3 w-3 text-blue-500" /> },
-                        { l: 'Mitigation Plan', v: topRisk.mitigation_plan || '—',      icon: <ClipboardList className="h-3 w-3 text-violet-500" /> },
-                        { l: 'Support Needed',  v: topRisk.contingency_plan || '—',     icon: <Headphones className="h-3 w-3 text-indigo-500" /> },
-                        { l: 'Status',          v: FOLLOW_UP_LABELS[topRisk.status] ?? topRisk.status, icon: <RefreshCw className="h-3 w-3 text-indigo-500" /> },
-                        { l: 'Due Date',        v: topRisk.due_date && safeParseISO(topRisk.due_date) ? format(parseISO(topRisk.due_date), 'd MMM yyyy') : '—', icon: <CalendarClock className="h-3 w-3 text-rose-500" /> },
-                        { l: 'Last Updated',    v: safeParseISO(topRisk.updated_at) ? format(parseISO(topRisk.updated_at), 'd MMM yyyy') : '—', icon: <CalendarCheck className="h-3 w-3 text-teal-500" /> },
-                        { l: 'Risk Level',      v: topRiskMeta.label, icon: <ShieldCheck className={`h-3 w-3 ${topRiskMeta.color}`} /> },
-                      ].map(cell => (
-                        <div key={cell.l} className="space-y-0.5">
-                          <div className="flex items-center gap-1">{cell.icon}
-                            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{cell.l}</p>
-                          </div>
-                          <p className="text-[10px] font-semibold pl-4 leading-snug">{cell.v}</p>
-                        </div>
-                      ))}
-                    </div>
+            ) : (() => {
+              const filtered = riskStatusFilter === 'all' ? risks : risks.filter(r => r.status === riskStatusFilter);
+              return filtered.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-xs">No risks match this filter.</div>
+              ) : (
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="px-4 py-2.5 bg-muted/30 border-b flex items-center gap-2">
+                    <ShieldAlert className="h-3.5 w-3.5 text-orange-500" />
+                    <span className="text-xs font-bold">{riskStatusFilter === 'all' ? 'All Risks' : `${RISK_STATUS_CFG[riskStatusFilter]?.label ?? riskStatusFilter} Risks`}</span>
+                    <Badge variant="outline" className="ml-auto text-[9px] px-1.5">{filtered.length}</Badge>
                   </div>
-                )}
-
-                {/* All risks list */}
-                {openRisks.length > 0 && (
-                  <div className="rounded-xl border overflow-hidden">
-                    <div className="px-4 py-2.5 bg-muted/30 border-b flex items-center gap-2">
-                      <ShieldAlert className="h-3.5 w-3.5 text-orange-500" />
-                      <span className="text-xs font-bold">All Open Risks</span>
-                      <Badge variant="outline" className="ml-auto text-[9px] px-1.5 text-orange-600 border-orange-300">
-                        {openRisks.length} open
-                      </Badge>
-                    </div>
-                    <div className="divide-y">
-                      {openRisks.map((r, idx) => {
-                        const meta = getRiskMeta(r.risk_score);
-                        return (
-                          <div key={r.id} className="px-4 py-3 flex items-start gap-3 hover:bg-muted/20 transition-colors">
-                            <div className="flex items-center justify-center h-6 w-6 rounded-full bg-muted text-[10px] font-black text-muted-foreground flex-shrink-0 mt-0.5">
-                              {idx + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold leading-snug">{r.title}</p>
-                              <p className="text-[10px] text-muted-foreground capitalize mt-0.5">
-                                {r.category}
-                                {r.due_date && safeParseISO(r.due_date) && (
-                                  <> · Due {format(parseISO(r.due_date), 'd MMM yyyy')}</>
-                                )}
-                              </p>
-                              {r.mitigation_plan && (
-                                <p className="text-[9px] text-muted-foreground mt-1 line-clamp-1">
-                                  ↳ {r.mitigation_plan}
-                                </p>
+                  <div className="divide-y">
+                    {filtered.map(r => {
+                      const meta = getRiskMeta(r.risk_score);
+                      const statusCfg = RISK_STATUS_CFG[r.status] ?? RISK_STATUS_CFG.open;
+                      return (
+                        <div key={r.id} className="px-4 py-3 flex items-start gap-3 hover:bg-muted/20 transition-colors">
+                          <div className={cn('min-w-[2rem] h-9 rounded-md flex flex-col items-center justify-center text-xs font-black flex-shrink-0 mt-0.5', meta.bg, meta.color)}>
+                            <span>{r.risk_score}</span>
+                            <span className="text-[8px] font-normal">{meta.label}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold leading-snug">{r.title}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <span className="text-[9px] capitalize text-muted-foreground border rounded px-1.5 py-0.5">{r.category}</span>
+                              <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-medium', statusCfg.badge)}>{statusCfg.label}</span>
+                              {r.due_date && safeParseISO(r.due_date) && (
+                                <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                                  <CalendarClock className="h-2.5 w-2.5" /> {format(parseISO(r.due_date), 'd MMM yyyy')}
+                                </span>
                               )}
                             </div>
-                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                              <Badge variant="outline" className={`text-[9px] font-bold ${meta.color} border-current`}>
-                                {meta.label}
-                              </Badge>
-                              <span className={`text-[10px] font-black ${meta.color}`}>{r.risk_score}</span>
-                            </div>
+                            {r.mitigation_plan && (
+                              <p className="text-[9px] text-muted-foreground mt-1 line-clamp-1">↳ {r.mitigation_plan}</p>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditRisk(r)} title="Edit risk">
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteRisk(r.id)} disabled={riskDeleting === r.id} title="Delete risk">
+                              {riskDeleting === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </>
-            )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
       </div>
     </div>
+
+    {/* ── Add / Edit Risk Dialog ── */}
+    <Dialog open={riskDialogOpen} onOpenChange={setRiskDialogOpen}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-red-500" />
+            {riskEditing ? 'Edit Risk' : 'Add Risk'}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="risk-title">Risk Title <span className="text-destructive">*</span></Label>
+            <Input
+              id="risk-title"
+              placeholder="Describe the risk…"
+              value={riskForm.title}
+              onChange={e => setRiskForm(p => ({ ...p, title: e.target.value }))}
+              data-testid="input-risk-title"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={riskForm.category} onValueChange={v => setRiskForm(p => ({ ...p, category: v }))}>
+                <SelectTrigger data-testid="select-risk-category"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {RISK_CATEGORIES.map(c => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={riskForm.status} onValueChange={v => setRiskForm(p => ({ ...p, status: v }))}>
+                <SelectTrigger data-testid="select-risk-status"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(RISK_STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Likelihood</Label>
+              <Select value={riskForm.likelihood} onValueChange={v => setRiskForm(p => ({ ...p, likelihood: v }))}>
+                <SelectTrigger data-testid="select-risk-likelihood"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LIKELIHOOD_OPTS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Impact</Label>
+              <Select value={riskForm.impact} onValueChange={v => setRiskForm(p => ({ ...p, impact: v }))}>
+                <SelectTrigger data-testid="select-risk-impact"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {IMPACT_OPTS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {(() => {
+            const lScore = LIKELIHOOD_OPTS.find(o => o.value === riskForm.likelihood)?.score ?? 3;
+            const iScore = IMPACT_OPTS.find(o => o.value === riskForm.impact)?.score ?? 3;
+            const score = lScore * iScore;
+            const meta = getRiskMeta(score);
+            return (
+              <div className={`rounded-lg px-3 py-2 flex items-center gap-2 text-xs font-medium ${meta.bg} border ${meta.border}`}>
+                <AlertTriangle className={`h-3.5 w-3.5 ${meta.color}`} />
+                <span className={meta.color}>Calculated Risk Score: <strong>{score}</strong> — {meta.label}</span>
+              </div>
+            );
+          })()}
+
+          <div className="space-y-1.5">
+            <Label>Mitigation Plan</Label>
+            <Textarea
+              placeholder="How will this risk be mitigated?"
+              value={riskForm.mitigation_plan}
+              onChange={e => setRiskForm(p => ({ ...p, mitigation_plan: e.target.value }))}
+              rows={3}
+              data-testid="textarea-risk-mitigation"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Contingency / Support Needed</Label>
+            <Textarea
+              placeholder="Fallback plan if mitigation fails…"
+              value={riskForm.contingency_plan}
+              onChange={e => setRiskForm(p => ({ ...p, contingency_plan: e.target.value }))}
+              rows={2}
+              data-testid="textarea-risk-contingency"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Due Date</Label>
+              <Input
+                type="date"
+                value={riskForm.due_date}
+                onChange={e => setRiskForm(p => ({ ...p, due_date: e.target.value }))}
+                data-testid="input-risk-due-date"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Responsible Unit</Label>
+              <Input
+                placeholder="Team / Unit…"
+                value={riskForm.responsible_unit}
+                onChange={e => setRiskForm(p => ({ ...p, responsible_unit: e.target.value }))}
+                data-testid="input-risk-responsible-unit"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setRiskDialogOpen(false)} disabled={riskSaving}>Cancel</Button>
+          <Button onClick={handleSaveRisk} disabled={riskSaving || !riskForm.title.trim()} data-testid="btn-save-risk">
+            {riskSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving…</> : (riskEditing ? 'Update Risk' : 'Add Risk')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
