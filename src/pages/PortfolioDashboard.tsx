@@ -677,7 +677,13 @@ export default function PortfolioDashboard() {
       const nextMilestone = milestones.find(m =>
         m.project_id === p.id && m.status !== 'completed' && m.due_date && isAfter(parseISO(m.due_date), new Date())
       );
-      return { ...p, budget, burnPct, flow, health, rag, overdueMilestones, nextMilestone };
+      // Numeric 0–100 health score derived from portfolio-available signals
+      const _flowScore    = flow.total > 0 ? Math.round((flow.current / flow.total) * 35) : 17;
+      const _budgetScore  = burnPct <= 90 ? 25 : burnPct <= 100 ? 15 : Math.max(0, 25 - Math.round((burnPct - 100) * 0.25));
+      const _msScore      = overdueMilestones === 0 ? 20 : Math.max(0, 20 - overdueMilestones * 5);
+      const _ragScore     = rag.overall === 'green' ? 20 : rag.overall === 'amber' ? 10 : rag.overall === 'grey' ? 15 : 0;
+      const healthScore   = Math.min(100, _flowScore + _budgetScore + _msScore + _ragScore);
+      return { ...p, budget, burnPct, flow, health, rag, overdueMilestones, nextMilestone, healthScore };
     }), [projects, budgetMap, milestones, latestAdvanced]);
 
   // ── Executive View: Filtered dataset ─────────────────────────────────────
@@ -3447,7 +3453,15 @@ export default function PortfolioDashboard() {
                           </div>
                         </div>
                         <span className="text-[11px] text-muted-foreground truncate">{TYPE_LABELS[normaliseProjectType(p.project_type)] ?? p.project_type}</span>
-                        <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full', hCfg.bg, hCfg.text)}>{hCfg.icon}{hCfg.label}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit', hCfg.bg, hCfg.text)}>{hCfg.icon}{hCfg.label}</span>
+                          <span className={cn('text-[10px] font-bold px-2',
+                            p.healthScore >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+                            p.healthScore >= 65 ? 'text-indigo-600 dark:text-indigo-400' :
+                            p.healthScore >= 45 ? 'text-amber-600 dark:text-amber-400' :
+                            p.healthScore >= 25 ? 'text-orange-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400'
+                          )}>Score: {p.healthScore}/100</span>
+                        </div>
                         <div>
                           <div className="flex items-center gap-1.5 mb-0.5">
                             <Progress value={flowPct} className="h-1.5 flex-1" />
@@ -3493,9 +3507,17 @@ export default function PortfolioDashboard() {
                                 className="bg-card border rounded-xl p-3 cursor-pointer hover:shadow-md hover:border-[#1D3461]/30 transition-all">
                                 <p className="text-xs font-semibold line-clamp-2 mb-1">{p.name}</p>
                                 <p className="text-[10px] font-mono text-muted-foreground mb-2">{p.project_code}</p>
-                                <span className={cn('inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full', hCfg.bg, hCfg.text)}>
-                                  {hCfg.icon}{hCfg.label}
-                                </span>
+                                <div className="flex items-center justify-between gap-1 flex-wrap">
+                                  <span className={cn('inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full', hCfg.bg, hCfg.text)}>
+                                    {hCfg.icon}{hCfg.label}
+                                  </span>
+                                  <span className={cn('text-[10px] font-bold',
+                                    p.healthScore >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+                                    p.healthScore >= 65 ? 'text-indigo-600 dark:text-indigo-400' :
+                                    p.healthScore >= 45 ? 'text-amber-600 dark:text-amber-400' :
+                                    'text-red-600 dark:text-red-400'
+                                  )}>{p.healthScore}</span>
+                                </div>
                               </div>
                             );
                           })}
