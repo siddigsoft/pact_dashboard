@@ -40,7 +40,12 @@ interface MilestoneLite {
 interface MmpLite { id: string; name?: string; status?: string; }
 interface CrmOppty { id: string; title: string; stage: string; value_usd: number | null; expected_close_date: string | null; }
 
-interface Props { project: Project; }
+interface Props {
+  project: Project;
+  /** Pass flow.currentStage?.id from useProjectFlow so the pipeline
+   *  always matches the existing flow strip — avoids the stage-1 fallback bug. */
+  currentFlowStageId?: string;
+}
 
 /* ─── Helpers ────────────────────────────────────────────────────────── */
 function getRiskMeta(score: number) {
@@ -79,7 +84,7 @@ function safeParseISO(s: string | null | undefined): Date | null {
 }
 
 /* ─── Component ──────────────────────────────────────────────────────── */
-export function ProjectWeeklyDashboard({ project }: Props) {
+export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const navigate = useNavigate();
 
   const [risks, setRisks]         = useState<Risk[]>([]);
@@ -209,13 +214,14 @@ export function ProjectWeeklyDashboard({ project }: Props) {
   const deliverableEntries = Object.entries(deliverablesState);
   const deliverablesDone   = deliverableEntries.filter(([, v]) => v).length;
 
-  /* Project stage pipeline */
+  /* Project stage pipeline — use prop override so it matches the flow strip */
+  const resolvedFlowStageId = currentFlowStageId ?? project.currentFlowStage;
   const effectiveStages = useMemo(() =>
     getEffectiveStages(project.projectType ?? 'tpm', (project as any).customFlowStages ?? null),
   [project.projectType, project.customFlowStages]);
   const stageProgress = useMemo(() =>
-    getProjectStageProgress(project.projectType ?? 'tpm', project.currentFlowStage, (project as any).customFlowStages ?? null),
-  [project.projectType, project.currentFlowStage, project.customFlowStages]);
+    getProjectStageProgress(project.projectType ?? 'tpm', resolvedFlowStageId, (project as any).customFlowStages ?? null),
+  [project.projectType, resolvedFlowStageId, project.customFlowStages]);
   const currentStageIdx = stageProgress?.stageIdx ?? 0;
 
   /* Health score */

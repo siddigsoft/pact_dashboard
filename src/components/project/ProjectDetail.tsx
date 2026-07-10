@@ -687,7 +687,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* ── Weekly Project Dashboard (superAdmin / admin / own PM only) ── */}
       {canSeeWeeklyDashboard && (
-        <ProjectWeeklyDashboard project={project} />
+        <ProjectWeeklyDashboard project={project} currentFlowStageId={flow.currentStage?.id} />
       )}
 
       {/* Hero Summary Card */}
