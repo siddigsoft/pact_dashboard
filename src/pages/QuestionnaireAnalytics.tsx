@@ -4149,6 +4149,7 @@ const QuestionnaireAnalytics = () => {
       return;
     }
 
+    try {
     const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
     const breakdownSheets: any[] = [];
 
