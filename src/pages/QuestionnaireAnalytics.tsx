@@ -4401,7 +4401,7 @@ const QuestionnaireAnalytics = () => {
         cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
         cell.border = xBorder();
       });
-    }
+    });
 
     if (costPerSite > 0) {
       const PNAVY = 'FF0F2041', PWHITE = 'FFFFFFFF', PBORDER = 'FFC8CDD7';
