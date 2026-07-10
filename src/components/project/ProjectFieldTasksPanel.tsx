@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, X, MapPin, Calendar, User, Flag, Trash2,
   CheckCircle2, Clock, AlertTriangle, Circle, Loader2, Edit2,
-  ChevronDown, Search, CheckSquare, Link2, DollarSign, Timer,
+  ChevronDown, ChevronUp, Search, CheckSquare, Link2, DollarSign, Timer,
   LayoutList, Columns, CalendarDays, BarChart2, ArrowRight,
-  TrendingUp, TrendingDown, Minus, ExternalLink,
+  TrendingUp, TrendingDown, Minus, ExternalLink, Layers, Lock,
   FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
   Square,
 } from 'lucide-react';
@@ -82,7 +82,7 @@ const STATUS_CFG: Record<FieldTaskStatus, { label: string; color: string; border
 const STATUS_ORDER: FieldTaskStatus[] = ['todo', 'inprogress', 'done', 'cancelled'];
 const PRIORITY_ORDER: FieldTaskPriority[] = ['critical', 'high', 'medium', 'low'];
 
-type ViewMode = 'list' | 'board' | 'timeline' | 'gantt';
+type ViewMode = 'list' | 'board' | 'timeline' | 'gantt' | 'by_stage';
 
 // ── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -359,6 +359,10 @@ interface TaskFormProps {
   existingTypedDeps?: TaskDependency[];
   /** All typed deps for the project (used for cycle detection & predecessor filtering) */
   allTypedDeps?: TaskDependency[];
+  /** Stage IDs that are completed — prevents linking new tasks to them */
+  completedStageIds?: Set<string>;
+  /** Pre-selected stage when opening the form from a stage group */
+  defaultStageId?: string;
 }
 
 function getReachableViaDeps(
@@ -422,7 +426,7 @@ function getDepRelations(
 
 const EMPTY_TYPED_DEPS: TaskDependency[] = [];
 
-function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS }: TaskFormProps) {
+function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS, completedStageIds, defaultStageId }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -433,7 +437,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [startDate,     setStartDate]     = useState(initial?.startDate ?? '');
   const [stateName,     setStateName]     = useState(initial?.stateName ?? '');
   const [localityName,  setLocalityName]  = useState(initial?.localityName ?? '');
-  const [stageId,       setStageId]       = useState(initial?.stageId ?? '');
+  const [stageId,       setStageId]       = useState(initial?.stageId ?? defaultStageId ?? '');
   const [notes,         setNotes]         = useState(initial?.notes ?? '');
   const [estHours,      setEstHours]      = useState<string>(initial?.estimatedHours?.toString() ?? '');
   const [actHours,      setActHours]      = useState<string>(initial?.actualHours?.toString() ?? '');
@@ -469,7 +473,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setStartDate(initial?.startDate ?? '');
       setStateName(initial?.stateName ?? '');
       setLocalityName(initial?.localityName ?? '');
-      setStageId(initial?.stageId ?? '');
+      setStageId(initial?.stageId ?? defaultStageId ?? '');
       setNotes(initial?.notes ?? '');
       setEstHours(initial?.estimatedHours?.toString() ?? '');
       setActHours(initial?.actualHours?.toString() ?? '');
@@ -662,10 +666,25 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                       <SelectItem value="none">Not linked to any stage</SelectItem>
                       {allStages.map(s => {
                         const entry = customEntries.find(e => e.id === s.id);
-                        return <SelectItem key={s.id} value={s.id}>{entry?.customLabel || s.label}</SelectItem>;
+                        const label = entry?.customLabel || s.label;
+                        const isCompleted = completedStageIds?.has(s.id) ?? false;
+                        return (
+                          <SelectItem key={s.id} value={s.id} disabled={isCompleted}>
+                            <span className="flex items-center gap-1.5">
+                              {isCompleted && <Lock className="h-3 w-3 text-muted-foreground" />}
+                              {label}
+                              {isCompleted && <span className="text-muted-foreground text-[10px]">(completed)</span>}
+                            </span>
+                          </SelectItem>
+                        );
                       })}
                     </SelectContent>
                   </Select>
+                  {stageId && completedStageIds?.has(stageId) && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
+                      <AlertTriangle className="h-3 w-3" /> This stage is completed — consider linking to an open stage
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -2171,6 +2190,185 @@ function TeamHealthStrip({ tasks, activeMemberId, onMemberClick }: TeamHealthStr
   );
 }
 
+// ── Stage Grouped View ──────────────────────────────────────────────────────
+
+function MiniTaskRow({ task, onOpen }: { task: FieldTask; onOpen: (t: FieldTask) => void }) {
+  const sCfg = STATUS_CFG[task.status];
+  const pCfg = PRIORITY_CFG[task.priority];
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
+      onClick={() => onOpen(task)}
+    >
+      <span className={cn('h-2 w-2 rounded-full flex-shrink-0', pCfg.dot)} title={pCfg.label} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm truncate">{task.title}</p>
+        {task.assignedToName && (
+          <p className="text-[11px] text-muted-foreground truncate">{task.assignedToName}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {task.dueDate && (
+          <span className="text-[10px] text-muted-foreground hidden sm:inline">
+            {format(parseISO(task.dueDate), 'MMM d')}
+          </span>
+        )}
+        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', sCfg.color)}>
+          {sCfg.label}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface StageGroupedViewProps {
+  tasks: FieldTask[];
+  allStages: FlowStage[];
+  customEntries: CustomStageEntry[];
+  completedStageIds: Set<string>;
+  canEdit: boolean;
+  onOpen: (t: FieldTask) => void;
+  onAddToStage: (stageId: string) => void;
+}
+
+function StageGroupedView({
+  tasks, allStages, customEntries, completedStageIds, canEdit, onOpen, onAddToStage,
+}: StageGroupedViewProps) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const tasksByStage = useMemo(() => {
+    const map = new Map<string | null, FieldTask[]>();
+    for (const t of tasks) {
+      const key = t.stageId ?? null;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    }
+    return map;
+  }, [tasks]);
+
+  const unlinkedTasks = tasksByStage.get(null) ?? [];
+
+  const toggle = (id: string) =>
+    setCollapsed(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
+  return (
+    <div className="space-y-2.5">
+      {allStages.map(stage => {
+        const entry = customEntries.find(e => e.id === stage.id);
+        const label = entry?.customLabel || stage.label;
+        const stageTasks = tasksByStage.get(stage.id) ?? [];
+        const isCompleted = completedStageIds.has(stage.id);
+        const isCollapsed = collapsed.has(stage.id);
+
+        return (
+          <div
+            key={stage.id}
+            className={cn(
+              'border rounded-lg overflow-hidden',
+              isCompleted
+                ? 'border-emerald-200 dark:border-emerald-800/40'
+                : 'border-border',
+            )}
+          >
+            {/* Stage header */}
+            <div
+              className={cn(
+                'flex items-center justify-between px-4 py-3 cursor-pointer select-none',
+                isCompleted ? 'bg-emerald-50/60 dark:bg-emerald-900/10' : 'bg-muted/40 hover:bg-muted/60',
+              )}
+              onClick={() => toggle(stage.id)}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {isCompleted
+                  ? <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                  : <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                <span className={cn(
+                  'text-sm font-semibold truncate',
+                  isCompleted ? 'text-emerald-700 dark:text-emerald-400' : 'text-foreground',
+                )}>
+                  {label}
+                </span>
+                {isCompleted && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 flex-shrink-0">
+                    Completed
+                  </span>
+                )}
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-background border text-muted-foreground flex-shrink-0">
+                  {stageTasks.length} task{stageTasks.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {canEdit && !isCompleted && (
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); onAddToStage(stage.id); }}
+                    className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-[#1D3461]/10 hover:bg-[#1D3461]/20 text-[#1D3461] dark:text-blue-400 transition-colors"
+                  >
+                    <Plus className="h-3 w-3" /> Add Task
+                  </button>
+                )}
+                {isCompleted && (
+                  <span title="Stage completed — new tasks cannot be added" className="text-muted-foreground">
+                    <Lock className="h-3.5 w-3.5" />
+                  </span>
+                )}
+                {isCollapsed
+                  ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+              </div>
+            </div>
+
+            {/* Task rows */}
+            {!isCollapsed && (
+              <div className="divide-y divide-border/50">
+                {stageTasks.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-muted-foreground italic">
+                    {isCompleted
+                      ? 'No tasks were logged for this stage.'
+                      : 'No tasks yet — click "Add Task" to log work for this stage.'}
+                  </p>
+                ) : (
+                  stageTasks.map(t => (
+                    <MiniTaskRow key={t.id} task={t} onOpen={onOpen} />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Unlinked tasks */}
+      {unlinkedTasks.length > 0 && (
+        <div className="border border-dashed rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 bg-muted/20">
+            <Link2 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">Not linked to a stage</span>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-background border text-muted-foreground">
+              {unlinkedTasks.length}
+            </span>
+          </div>
+          <div className="divide-y divide-border/50">
+            {unlinkedTasks.map(t => (
+              <MiniTaskRow key={t.id} task={t} onOpen={onOpen} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tasks.length === 0 && (
+        <div className="text-center py-10 text-muted-foreground text-sm">
+          No tasks yet — use the stage headers above to add tasks to a specific stage.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Panel ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -2181,10 +2379,13 @@ interface Props {
   canEdit: boolean;
   allStages: FlowStage[];
   customEntries: CustomStageEntry[];
+  /** IDs of stages that are marked complete — blocks adding new tasks */
+  completedStageIds?: Set<string>;
 }
 
 export function ProjectFieldTasksPanel({
   projectId, projectName, currentUserId, currentUserName = 'A manager', canEdit, allStages, customEntries,
+  completedStageIds = new Set<string>(),
 }: Props) {
   const { toast } = useToast();
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } =
@@ -2223,6 +2424,7 @@ export function ProjectFieldTasksPanel({
 
   const [viewMode,       setViewMode]       = useState<ViewMode>('list');
   const [formOpen,       setFormOpen]       = useState(false);
+  const [defaultStageId, setDefaultStageId] = useState<string>('');
   const [editTask,       setEditTask]       = useState<FieldTask | null>(null);
   const [detailTask,     setDetailTask]     = useState<FieldTask | null>(null);
   const [search,         setSearch]         = useState('');
@@ -2230,6 +2432,11 @@ export function ProjectFieldTasksPanel({
   const [filterPriority, setFilterPriority] = useState<FieldTaskPriority | 'all'>('all');
   const [filterAssignee, setFilterAssignee] = useState<'all' | 'mine'>('all');
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
+
+  const handleAddToStage = (stageId: string) => {
+    setDefaultStageId(stageId);
+    setFormOpen(true);
+  };
 
   const filtered = useMemo(() => {
     return tasks
@@ -2427,6 +2634,7 @@ export function ProjectFieldTasksPanel({
               ['board',    Columns,          'Board',    'Kanban board — drag tasks between To Do / In Progress / Done'],
               ['timeline', CalendarDays,     'Timeline', 'Week-by-week visual timeline — spot scheduling gaps'],
               ['gantt',    GanttChartSquare, 'Gantt',    'Gantt chart — see start/end bars for full project planning'],
+              ['by_stage', Layers,           'By Stage', 'Tasks grouped under each project stage — see what's done, locked, and pending per phase'],
             ] as const).map(([mode, Icon, label, hint]) => (
               <button
                 key={mode}
@@ -2658,17 +2866,30 @@ export function ProjectFieldTasksPanel({
       {viewMode === 'gantt' && (
         <GanttView tasks={filtered} typedDeps={typedDepsAll} onOpen={t => setDetailTask(t)} />
       )}
+      {viewMode === 'by_stage' && (
+        <StageGroupedView
+          tasks={tasks}
+          allStages={allStages}
+          customEntries={customEntries}
+          completedStageIds={completedStageIds}
+          canEdit={canEdit}
+          onOpen={t => setDetailTask(t)}
+          onAddToStage={handleAddToStage}
+        />
+      )}
 
       {/* ── Dialogs ── */}
       <TaskFormDialog
         open={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={() => { setFormOpen(false); setDefaultStageId(''); }}
         onSave={handleCreate}
         isSaving={isCreating}
         allStages={allStages}
         customEntries={customEntries}
         allTasks={tasks}
         allTypedDeps={typedDepsAll}
+        completedStageIds={completedStageIds}
+        defaultStageId={defaultStageId}
       />
       <TaskFormDialog
         open={!!editTask}
@@ -2681,6 +2902,7 @@ export function ProjectFieldTasksPanel({
         allTasks={tasks}
         existingTypedDeps={editTask ? predecessorsOf(editTask.id) : []}
         allTypedDeps={typedDepsAll}
+        completedStageIds={completedStageIds}
       />
       <TaskDetailDialog
         task={detailTask}

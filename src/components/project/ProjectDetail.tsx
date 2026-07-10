@@ -1534,6 +1534,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             canEdit={!project.archived && canArchive}
             allStages={flow.flowDef}
             customEntries={(project.customFlowStages ?? []) as any}
+            completedStageIds={flow.completedStageIds}
           />
         </TabsContent>
 

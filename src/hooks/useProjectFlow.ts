@@ -765,6 +765,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     setStageStatus,
     getStageStatus,
     isStageCompleted,
+    completedStageIds,
     getBlockedBy,
     isStageBlocked,
   };
