@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { dispatchNotification } from '@/lib/notify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -362,6 +363,29 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           severity: 'medium',
         });
         toast({ title: 'Project Closed', description: `"${project.name}" has been closed and archived.` });
+        // Notify all team members about the closure
+        const teamIds = [
+          project.team?.projectManager,
+          ...((project.team as any)?.teamComposition ?? []).map((m: any) => m?.userId),
+        ].filter((id): id is string => !!id && id !== currentUser?.id);
+        if (teamIds.length > 0) {
+          dispatchNotification({
+            event: 'project_archived',
+            recipientIds: [...new Set(teamIds)],
+            titleEn: `Project closed: ${project.name}`,
+            titleAr: `تم إغلاق المشروع: ${project.name}`,
+            messageEn: `${currentUser?.fullName ?? 'A manager'} has closed and archived project "${project.name}".`,
+            messageAr: `قام ${currentUser?.fullName ?? 'أحد المديرين'} بإغلاق وأرشفة مشروع "${project.name}".`,
+            priority: 'normal',
+            entityType: 'project',
+            entityId: project.id,
+            actionUrl: `/projects/${project.id}`,
+            sendEmail: true,
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+            metadata: { project_name: project.name },
+          }).catch(() => {});
+        }
       } else {
         const { error } = await supabase.rpc('reopen_project', {
           p_id: project.id,
@@ -378,6 +402,29 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           severity: 'high',
         });
         toast({ title: 'Project Reopened', description: `"${project.name}" has been restored.` });
+        // Notify all team members about the reopen
+        const teamIds = [
+          project.team?.projectManager,
+          ...((project.team as any)?.teamComposition ?? []).map((m: any) => m?.userId),
+        ].filter((id): id is string => !!id && id !== currentUser?.id);
+        if (teamIds.length > 0) {
+          dispatchNotification({
+            event: 'project_status_changed',
+            recipientIds: [...new Set(teamIds)],
+            titleEn: `Project reopened: ${project.name}`,
+            titleAr: `تمت إعادة فتح المشروع: ${project.name}`,
+            messageEn: `${currentUser?.fullName ?? 'A Super Admin'} has reopened project "${project.name}" — it is now active again.`,
+            messageAr: `قام ${currentUser?.fullName ?? 'المشرف العام'} بإعادة فتح مشروع "${project.name}" — أصبح نشطاً مجدداً.`,
+            priority: 'normal',
+            entityType: 'project',
+            entityId: project.id,
+            actionUrl: `/projects/${project.id}`,
+            sendEmail: true,
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+            metadata: { project_name: project.name },
+          }).catch(() => {});
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ['projects'] });

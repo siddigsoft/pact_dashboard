@@ -471,6 +471,43 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           metadata: { project_name: projectName },
         }).catch(() => {});
       }
+
+      // ── Notify members whose role changed (in-app + email) ─────────────────
+      const prevComposition: Array<{ userId: string; role: string }> =
+        Array.isArray((existingProject?.team as any)?.teamComposition)
+          ? (existingProject?.team as any).teamComposition
+          : [];
+      const newComposition: Array<{ userId: string; role: string }> =
+        Array.isArray((team as any)?.teamComposition) ? (team as any).teamComposition : [];
+      const roleChangedIds: string[] = [];
+      for (const nm of newComposition) {
+        if (!nm?.userId) continue;
+        if (newMemberIds.includes(nm.userId)) continue; // already notified as new add
+        if (nm.userId === currentUser?.id) continue;
+        const prev = prevComposition.find(m => m?.userId === nm.userId);
+        if (prev && prev.role !== nm.role) roleChangedIds.push(nm.userId);
+      }
+      if (roleChangedIds.length > 0) {
+        const projectName = existingProject?.name ?? 'a project';
+        roleChangedIds.forEach(memberId => {
+          const newRoleLabel = resolveTeamMemberRoleLabel(team, memberId);
+          dispatchNotification({
+            event: 'project_member_added',
+            recipientIds: [memberId],
+            titleEn: `Your role in "${projectName}" was updated`,
+            titleAr: `تم تحديث دورك في "${projectName}"`,
+            messageEn: `${currentUser?.fullName ?? 'A team member'} updated your role in project "${projectName}" to ${newRoleLabel}.`,
+            messageAr: `قام ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} بتحديث دورك في مشروع "${projectName}" إلى ${newRoleLabel}.`,
+            entityType: 'project',
+            entityId: projectId,
+            actionUrl: `/projects/${projectId}`,
+            priority: 'normal',
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+            metadata: { project_name: projectName, role: newRoleLabel },
+          }).catch(() => {});
+        });
+      }
     } catch (err) {
       console.error("Error updating project team:", err);
       toast({

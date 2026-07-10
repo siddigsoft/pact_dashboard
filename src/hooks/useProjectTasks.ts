@@ -226,13 +226,33 @@ export function useProjectTasks(projectId: string) {
         .eq('id', id);
       if (error) throw error;
 
+      const cached = qc.getQueryData<FieldTask[]>(key);
+      const task = cached?.find(t => t.id === id);
+
+      // Notify new assignee when reassigned
       const newAssignee = patch.assignedTo;
-      if (newAssignee && newAssignee !== prevAssignee && newAssignee !== currentUserId && currentUserName && projectName) {
-        const cached = qc.getQueryData<FieldTask[]>(key);
-        const task = cached?.find(t => t.id === id);
-        if (task) {
-          notifyAssignee(newAssignee, task.title, projectName, projectId, currentUserName).catch(() => {});
-        }
+      if (newAssignee && newAssignee !== prevAssignee && newAssignee !== currentUserId && currentUserName && projectName && task) {
+        notifyAssignee(newAssignee, task.title, projectName, projectId, currentUserName).catch(() => {});
+      }
+
+      // Notify assignee when their task is marked done
+      if (patch.status === 'done' && task?.assignedTo && projectName && currentUserName) {
+        const assigneeId = task.assignedTo;
+        dispatchNotification({
+          event: 'project_task_completed',
+          recipientIds: [assigneeId],
+          titleEn: 'Your field task was marked done',
+          titleAr: 'تم تحديد مهمتك الميدانية كمنجزة',
+          messageEn: `Field task "${task.title}" in "${projectName}" has been marked as completed.`,
+          messageAr: `تم تحديد المهمة الميدانية "${task.title}" في "${projectName}" كمنجزة.`,
+          priority: 'normal',
+          entityType: 'project',
+          entityId: projectId,
+          actionUrl: `/projects/${projectId}?tab=field_tasks`,
+          sendEmail: true,
+          triggeredByName: currentUserName,
+          metadata: { task_title: task.title, project_name: projectName, actor: currentUserName },
+        }).catch(() => {});
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
