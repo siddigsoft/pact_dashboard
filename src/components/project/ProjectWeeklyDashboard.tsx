@@ -23,7 +23,7 @@ import {
   Activity, Milestone, Layers, Link2, CheckSquare, Square,
   GitBranch, ExternalLink, Briefcase, MapPin, DollarSign,
   Calendar, LayoutDashboard, BarChart2, TriangleAlert,
-  Plus, Edit2, Trash2, Loader2, X, Flame,
+  Plus, Edit2, Trash2, Loader2, Flame, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -192,6 +192,10 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const [riskSaving, setRiskSaving] = useState(false);
   const [riskDeleting, setRiskDeleting] = useState<string | null>(null);
   const [riskStatusFilter, setRiskStatusFilter] = useState('all');
+  const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null);
+  const [selectedRiskIds, setSelectedRiskIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState('closed');
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const refreshRisks = useCallback(async () => {
     const { data } = await supabase
@@ -262,7 +266,37 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     await supabase.from('project_risks').delete().eq('id', id);
     toast({ title: 'Risk deleted' });
     setRisks(p => p.filter(r => r.id !== id));
+    setSelectedRiskIds(p => { const n = new Set(p); n.delete(id); return n; });
     setRiskDeleting(null);
+  }
+
+  async function handleBulkStatus() {
+    if (selectedRiskIds.size === 0) return;
+    setBulkUpdating(true);
+    const ids = [...selectedRiskIds];
+    await supabase.from('project_risks')
+      .update({ status: bulkStatus, updated_at: new Date().toISOString() })
+      .in('id', ids);
+    toast({ title: `${ids.length} risk${ids.length > 1 ? 's' : ''} updated to "${RISK_STATUS_CFG[bulkStatus]?.label ?? bulkStatus}"` });
+    setSelectedRiskIds(new Set());
+    setBulkUpdating(false);
+    refreshRisks();
+  }
+
+  function toggleSelectRisk(id: string) {
+    setSelectedRiskIds(p => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+
+  function toggleSelectAll(riskIds: string[]) {
+    if (riskIds.every(id => selectedRiskIds.has(id))) {
+      setSelectedRiskIds(new Set());
+    } else {
+      setSelectedRiskIds(new Set(riskIds));
+    }
   }
 
   useEffect(() => {
@@ -842,12 +876,18 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
               <Badge variant="outline" className={`ml-1 text-[9px] font-bold ${topRiskMeta.color} border-current`}>
                 {topRiskMeta.label} · Score {topRisk.risk_score}
               </Badge>
-              {openRisks.length > 1 && (
-                <button onClick={() => setActiveTab('risks')}
-                  className={`ml-auto text-[10px] font-semibold ${topRiskMeta.color} hover:underline flex items-center gap-0.5`}>
-                  +{openRisks.length - 1} more risks →
-                </button>
-              )}
+              <div className="ml-auto flex items-center gap-2">
+                {openRisks.length > 1 && (
+                  <button onClick={() => setActiveTab('risks')}
+                    className={`text-[10px] font-semibold ${topRiskMeta.color} hover:underline flex items-center gap-0.5`}>
+                    +{openRisks.length - 1} more →
+                  </button>
+                )}
+                <Button size="icon" variant="ghost" className="h-6 w-6"
+                  onClick={() => openEditRisk(topRisk)} title="Edit this risk">
+                  <Edit2 className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
             {/* 8-field grid — exactly matching the reference design */}
             <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1171,44 +1211,137 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                 <div className="text-center py-6 text-muted-foreground text-xs">No risks match this filter.</div>
               ) : (
                 <div className="rounded-xl border overflow-hidden">
+                  {/* List header with select-all */}
                   <div className="px-4 py-2.5 bg-muted/30 border-b flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded cursor-pointer accent-primary"
+                      checked={filtered.length > 0 && filtered.every(r => selectedRiskIds.has(r.id))}
+                      onChange={() => toggleSelectAll(filtered.map(r => r.id))}
+                      title="Select all"
+                    />
                     <ShieldAlert className="h-3.5 w-3.5 text-orange-500" />
                     <span className="text-xs font-bold">{riskStatusFilter === 'all' ? 'All Risks' : `${RISK_STATUS_CFG[riskStatusFilter]?.label ?? riskStatusFilter} Risks`}</span>
                     <Badge variant="outline" className="ml-auto text-[9px] px-1.5">{filtered.length}</Badge>
                   </div>
+
+                  {/* Bulk action bar — shown when any rows are checked */}
+                  {selectedRiskIds.size > 0 && (
+                    <div className="px-4 py-2 bg-primary/5 border-b flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-semibold text-primary">{selectedRiskIds.size} selected</span>
+                      <span className="text-[10px] text-muted-foreground">→ set status to</span>
+                      <Select value={bulkStatus} onValueChange={setBulkStatus}>
+                        <SelectTrigger className="h-6 text-[10px] w-28 px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(RISK_STATUS_CFG).map(([k, v]) => (
+                            <SelectItem key={k} value={k} className="text-xs">{v.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" className="h-6 text-[10px] px-3" onClick={handleBulkStatus} disabled={bulkUpdating}>
+                        {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
+                      </Button>
+                      <button className="text-[10px] text-muted-foreground hover:text-foreground ml-auto"
+                        onClick={() => setSelectedRiskIds(new Set())}>Clear</button>
+                    </div>
+                  )}
+
+                  {/* Risk rows */}
                   <div className="divide-y">
                     {filtered.map(r => {
                       const meta = getRiskMeta(r.risk_score);
                       const statusCfg = RISK_STATUS_CFG[r.status] ?? RISK_STATUS_CFG.open;
+                      const isExpanded = expandedRiskId === r.id;
+                      const isSelected = selectedRiskIds.has(r.id);
                       return (
-                        <div key={r.id} className="px-4 py-3 flex items-start gap-3 hover:bg-muted/20 transition-colors">
-                          <div className={cn('min-w-[2rem] h-9 rounded-md flex flex-col items-center justify-center text-xs font-black flex-shrink-0 mt-0.5', meta.bg, meta.color)}>
-                            <span>{r.risk_score}</span>
-                            <span className="text-[8px] font-normal">{meta.label}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold leading-snug">{r.title}</p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="text-[9px] capitalize text-muted-foreground border rounded px-1.5 py-0.5">{r.category}</span>
-                              <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-medium', statusCfg.badge)}>{statusCfg.label}</span>
-                              {r.due_date && safeParseISO(r.due_date) && (
-                                <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
-                                  <CalendarClock className="h-2.5 w-2.5" /> {format(parseISO(r.due_date), 'd MMM yyyy')}
-                                </span>
-                              )}
+                        <div key={r.id} className={cn('transition-colors', isSelected && 'bg-primary/5')}>
+                          {/* Main row */}
+                          <div
+                            className="px-4 py-3 flex items-start gap-3 hover:bg-muted/20 cursor-pointer"
+                            onClick={() => setExpandedRiskId(isExpanded ? null : r.id)}
+                          >
+                            {/* Checkbox */}
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 rounded cursor-pointer accent-primary mt-1 flex-shrink-0"
+                              checked={isSelected}
+                              onChange={e => { e.stopPropagation(); toggleSelectRisk(r.id); }}
+                              onClick={e => e.stopPropagation()}
+                            />
+                            {/* Score badge */}
+                            <div className={cn('min-w-[2rem] h-9 rounded-md flex flex-col items-center justify-center text-xs font-black flex-shrink-0', meta.bg, meta.color)}>
+                              <span>{r.risk_score}</span>
+                              <span className="text-[8px] font-normal">{meta.label}</span>
                             </div>
-                            {r.mitigation_plan && (
-                              <p className="text-[9px] text-muted-foreground mt-1 line-clamp-1">↳ {r.mitigation_plan}</p>
-                            )}
+                            {/* Title + meta */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold leading-snug">{r.title}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-[9px] capitalize text-muted-foreground border rounded px-1.5 py-0.5">{r.category}</span>
+                                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-medium', statusCfg.badge)}>{statusCfg.label}</span>
+                                {r.due_date && safeParseISO(r.due_date) && (
+                                  <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                                    <CalendarClock className="h-2.5 w-2.5" /> {format(parseISO(r.due_date), 'd MMM yyyy')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {/* Actions + chevron */}
+                            <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditRisk(r)} title="Edit risk">
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteRisk(r.id)} disabled={riskDeleting === r.id} title="Delete risk">
+                                {riskDeleting === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                              </Button>
+                            </div>
+                            <div className="text-muted-foreground flex-shrink-0 mt-0.5">
+                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditRisk(r)} title="Edit risk">
-                              <Edit2 className="h-3 w-3" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteRisk(r.id)} disabled={riskDeleting === r.id} title="Delete risk">
-                              {riskDeleting === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                            </Button>
-                          </div>
+
+                          {/* Expanded detail panel */}
+                          {isExpanded && (
+                            <div className="px-4 pb-4 border-t bg-muted/10">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                                {r.mitigation_plan && (
+                                  <div>
+                                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mb-1">
+                                      <ClipboardList className="h-3 w-3" /> Mitigation Plan
+                                    </p>
+                                    <p className="text-xs leading-relaxed text-foreground">{r.mitigation_plan}</p>
+                                  </div>
+                                )}
+                                {r.contingency_plan && (
+                                  <div>
+                                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mb-1">
+                                      <Headphones className="h-3 w-3" /> Contingency / Support Needed
+                                    </p>
+                                    <p className="text-xs leading-relaxed text-foreground">{r.contingency_plan}</p>
+                                  </div>
+                                )}
+                                {r.responsible_unit && (
+                                  <div>
+                                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mb-1">
+                                      <Users className="h-3 w-3" /> Responsible Unit
+                                    </p>
+                                    <p className="text-xs font-semibold">{r.responsible_unit}</p>
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 mb-1">
+                                    <CalendarCheck className="h-3 w-3" /> Last Updated
+                                  </p>
+                                  <p className="text-xs">{safeParseISO(r.updated_at) ? format(parseISO(r.updated_at), 'd MMM yyyy') : '—'}</p>
+                                </div>
+                                {!r.mitigation_plan && !r.contingency_plan && !r.responsible_unit && (
+                                  <p className="text-xs text-muted-foreground col-span-2 italic">No additional details. Click Edit to add a mitigation plan.</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
