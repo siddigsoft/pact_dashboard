@@ -535,8 +535,12 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     );
   }
 
+  // Pre-compute filtered risks (avoids IIFE in JSX which confuses esbuild)
+  const riskFiltered = riskStatusFilter === 'all' ? risks : risks.filter(r => r.status === riskStatusFilter);
+
   /* ════════════════════════════════════════════════════════════════════ */
   return (
+    <>
     <div ref={dashRef} className="rounded-2xl border bg-card shadow-sm overflow-hidden print:shadow-none"
       data-testid="project-weekly-dashboard">
 
@@ -1257,24 +1261,22 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add First Risk
                 </Button>
               </div>
-            ) : (() => {
-              const filtered = riskStatusFilter === 'all' ? risks : risks.filter(r => r.status === riskStatusFilter);
-              return filtered.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground text-xs">No risks match this filter.</div>
-              ) : (
+            ) : riskFiltered.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-xs">No risks match this filter.</div>
+            ) : (
                 <div className="rounded-xl border overflow-hidden">
                   {/* List header with select-all */}
                   <div className="px-4 py-2.5 bg-muted/30 border-b flex items-center gap-2">
                     <input
                       type="checkbox"
                       className="h-3.5 w-3.5 rounded cursor-pointer accent-primary"
-                      checked={filtered.length > 0 && filtered.every(r => selectedRiskIds.has(r.id))}
-                      onChange={() => toggleSelectAll(filtered.map(r => r.id))}
+                      checked={riskFiltered.length > 0 && riskFiltered.every(r => selectedRiskIds.has(r.id))}
+                      onChange={() => toggleSelectAll(riskFiltered.map(r => r.id))}
                       title="Select all"
                     />
                     <ShieldAlert className="h-3.5 w-3.5 text-orange-500" />
                     <span className="text-xs font-bold">{riskStatusFilter === 'all' ? 'All Risks' : `${RISK_STATUS_CFG[riskStatusFilter]?.label ?? riskStatusFilter} Risks`}</span>
-                    <Badge variant="outline" className="ml-auto text-[9px] px-1.5">{filtered.length}</Badge>
+                    <Badge variant="outline" className="ml-auto text-[9px] px-1.5">{riskFiltered.length}</Badge>
                   </div>
 
                   {/* Bulk action bar — shown when any rows are checked */}
@@ -1302,7 +1304,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
 
                   {/* Risk rows */}
                   <div className="divide-y">
-                    {filtered.map(r => {
+                    {riskFiltered.map(r => {
                       const meta = getRiskMeta(r.risk_score);
                       const statusCfg = RISK_STATUS_CFG[r.status] ?? RISK_STATUS_CFG.open;
                       const isExpanded = expandedRiskId === r.id;
@@ -1399,8 +1401,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                     })}
                   </div>
                 </div>
-              );
-            })()}
+            )}
           </div>
         )}
 
@@ -1536,5 +1537,6 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

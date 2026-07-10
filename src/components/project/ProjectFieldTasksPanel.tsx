@@ -2845,7 +2845,7 @@ export function ProjectFieldTasksPanel({
           </Button>
         )}
         <span className="text-xs text-muted-foreground ml-auto">{filtered.length}/{tasks.length} tasks</span>
-      </div>
+      </div>}
 
       {/* ── View ── */}
       {viewMode === 'list' && (
