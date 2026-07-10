@@ -4245,7 +4245,62 @@ const QuestionnaireAnalytics = () => {
       },
       breakdownSheets,
     });
-  }, [trackerData, csvEnumData, toast]);
+
+    // ── Detailed per-hub formatted workbook ──────────────────────────────────
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const XNAVY = 'FF0F2041', XWHITE = 'FFFFFFFF', XLIGHT = 'FFF5F7FC', XBORDER = 'FFC8CDD7';
+    const COL_BG = 'FFFFF8EC', COL_FG = 'FF92400E';
+    const xBorder = (): any => { const s: any = { style: 'thin', color: { argb: XBORDER } }; return { top: s, bottom: s, left: s, right: s }; };
+
+    // colLookup: hub → activity → state → [{name, count}]
+    const colLookup = new Map<string, Map<string, Map<string, { name: string; count: number }[]>>>();
+    csvEnumData.forEach((hg: any) => {
+      if (!colLookup.has(hg.hub)) colLookup.set(hg.hub, new Map());
+      const hubMap = colLookup.get(hg.hub)!;
+      hg.states.forEach((sg: any) => {
+        sg.collectors.forEach((col: any) => {
+          col.activities.forEach((act: any) => {
+            if (!hubMap.has(act.name)) hubMap.set(act.name, new Map());
+            const actMap = hubMap.get(act.name)!;
+            if (!actMap.has(sg.state)) actMap.set(sg.state, []);
+            actMap.get(sg.state)!.push({ name: col.name, count: act.count });
+          });
+        });
+      });
+    });
+
+    // Bank account lookups (name.toLowerCase() → accountNo / accountName)
+    const liveAccountMap = new Map<string, string>();
+    const liveAccountNameMap = new Map<string, string>();
+    bankAccountByName.forEach((acctNo: string, name: string) => {
+      const k = name.trim().toLowerCase();
+      liveAccountMap.set(k, acctNo);
+      liveAccountNameMap.set(k, name);
+    });
+
+    // Pre-compute unique ExcelJS sheet names for per-collector sheets (≤31 chars, unique)
+    const dcSheetNameMap = new Map<string, string>();
+    const usedSheetNames = new Set<string>();
+    trackerData.hubTrackers.forEach((ht: any) => usedSheetNames.add(ht.hub.slice(0, 31).replace(/[\\/?*[\]:]/g, '_')));
+    usedSheetNames.add('Payment');
+    csvEnumData.forEach((hg: any) => {
+      hg.states.forEach((sg: any) => {
+        sg.collectors.forEach((col: any) => {
+          const rawKey = `${hg.hub}||${sg.state}||${col.deviceId || col.name}`;
+          const base = col.name.slice(0, 28).replace(/[\\/?*[\]:]/g, '_');
+          let sheetName = base;
+          let n = 2;
+          while (usedSheetNames.has(sheetName)) { sheetName = `${base.slice(0, 25)}_${n++}`; }
+          usedSheetNames.add(sheetName);
+          dcSheetNameMap.set(rawKey, sheetName);
+        });
+      });
+    });
+
+    // Per-hub summary sheets
+    trackerData.hubTrackers.forEach((ht: any) => {
+      const ws = wb.addWorksheet(ht.hub.slice(0, 31).replace(/[\\/?*[\]:]/g, '_'));
       const numStates = ht.states.length;
       const totalCols = 1 + numStates * 4 + 4;
       ws.getColumn(1).width = 36;
