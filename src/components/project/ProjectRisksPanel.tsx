@@ -31,6 +31,8 @@ interface Risk {
   mitigation_plan: string | null;
   contingency_plan: string | null;
   due_date: string | null;
+  responsible_unit: string | null;
+  resolution_date: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -77,7 +79,8 @@ function getRiskLevel(score: number): { label: string; bg: string; text: string 
 
 const BLANK = {
   title: '', description: '', category: 'operational', likelihood: 'medium',
-  impact: 'moderate', status: 'open', owner_id: '', mitigation_plan: '', contingency_plan: '', due_date: '',
+  impact: 'moderate', status: 'open', owner_id: '', mitigation_plan: '',
+  contingency_plan: '', due_date: '', responsible_unit: '', resolution_date: '',
 };
 
 export function ProjectRisksPanel({ projectId }: Props) {
@@ -131,6 +134,8 @@ export function ProjectRisksPanel({ projectId }: Props) {
       mitigation_plan: risk.mitigation_plan ?? '',
       contingency_plan: risk.contingency_plan ?? '',
       due_date: risk.due_date ?? '',
+      responsible_unit: risk.responsible_unit ?? '',
+      resolution_date: risk.resolution_date ?? '',
     });
     setDialogOpen(true);
   }
@@ -150,6 +155,8 @@ export function ProjectRisksPanel({ projectId }: Props) {
       mitigation_plan: form.mitigation_plan || null,
       contingency_plan: form.contingency_plan || null,
       due_date: form.due_date || null,
+      responsible_unit: form.responsible_unit || null,
+      resolution_date: form.resolution_date || null,
       created_by: currentUser?.id ?? null,
       updated_at: new Date().toISOString(),
     };
@@ -305,11 +312,29 @@ export function ProjectRisksPanel({ projectId }: Props) {
 
                 {isExpanded && (
                   <div className="border-t bg-muted/20 p-3 space-y-3 text-sm">
-                    <div className="grid grid-cols-3 gap-3 text-center">
+                    {/* 8-field grid matching dashboard reference */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { label: 'Challenge Identified', value: risk.title },
+                        { label: 'Support Needed',       value: risk.contingency_plan || '—' },
+                        { label: 'Responsible Unit',     value: risk.responsible_unit || '—' },
+                        { label: 'Action Required',      value: risk.mitigation_plan || '—' },
+                        { label: 'Deadline',             value: risk.due_date && isValid(parseISO(risk.due_date)) ? format(parseISO(risk.due_date), 'dd MMM yyyy') : '—' },
+                        { label: 'Follow-up Status',     value: STATUS_CFG[risk.status]?.label ?? risk.status },
+                        { label: 'Resolution Date',      value: risk.resolution_date && isValid(parseISO(risk.resolution_date)) ? format(parseISO(risk.resolution_date), 'dd MMM yyyy') : 'Pending' },
+                        { label: 'Risk Level',           value: getRiskLevel(risk.risk_score).label },
+                      ].map(d => (
+                        <div key={d.label} className="bg-background rounded-lg p-2 border">
+                          <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">{d.label}</p>
+                          <p className="text-xs font-semibold mt-0.5 leading-snug">{d.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center pt-1">
                       {[
                         { label: 'Likelihood', value: LIKELIHOOD_OPTS.find(o => o.value === risk.likelihood)?.label ?? risk.likelihood },
                         { label: 'Impact',     value: IMPACT_OPTS.find(o => o.value === risk.impact)?.label ?? risk.impact },
-                        { label: 'Due Date',   value: risk.due_date && isValid(parseISO(risk.due_date)) ? format(parseISO(risk.due_date), 'dd MMM yyyy') : '—' },
+                        { label: 'Score',      value: String(risk.risk_score) },
                       ].map(d => (
                         <div key={d.label} className="bg-background rounded p-2 border">
                           <p className="text-xs text-muted-foreground">{d.label}</p>
@@ -319,18 +344,6 @@ export function ProjectRisksPanel({ projectId }: Props) {
                     </div>
                     {risk.description && (
                       <div><p className="text-xs font-medium text-muted-foreground mb-1">Description</p><p>{risk.description}</p></div>
-                    )}
-                    {risk.mitigation_plan && (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 border border-blue-100 dark:border-blue-800">
-                        <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Mitigation Plan</p>
-                        <p>{risk.mitigation_plan}</p>
-                      </div>
-                    )}
-                    {risk.contingency_plan && (
-                      <div className="bg-amber-50 dark:bg-amber-900/20 rounded p-2 border border-amber-100 dark:border-amber-800">
-                        <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Contingency Plan</p>
-                        <p>{risk.contingency_plan}</p>
-                      </div>
                     )}
                   </div>
                 )}
@@ -409,13 +422,25 @@ export function ProjectRisksPanel({ projectId }: Props) {
                 <Input type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
               </div>
             </div>
-            <div>
-              <Label>Mitigation Plan</Label>
-              <Textarea value={form.mitigation_plan} onChange={e => setForm(p => ({ ...p, mitigation_plan: e.target.value }))} rows={2} placeholder="How will this risk be reduced or prevented?" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Responsible Unit</Label>
+                <Input value={form.responsible_unit} onChange={e => setForm(p => ({ ...p, responsible_unit: e.target.value }))}
+                  placeholder="e.g. Operations, Logistics" data-testid="input-responsible-unit" />
+              </div>
+              <div>
+                <Label>Resolution Date</Label>
+                <Input type="date" value={form.resolution_date} onChange={e => setForm(p => ({ ...p, resolution_date: e.target.value }))}
+                  data-testid="input-resolution-date" />
+              </div>
             </div>
             <div>
-              <Label>Contingency Plan</Label>
-              <Textarea value={form.contingency_plan} onChange={e => setForm(p => ({ ...p, contingency_plan: e.target.value }))} rows={2} placeholder="What to do if the risk occurs?" />
+              <Label>Action Required (Mitigation Plan)</Label>
+              <Textarea value={form.mitigation_plan} onChange={e => setForm(p => ({ ...p, mitigation_plan: e.target.value }))} rows={2} placeholder="What specific action is needed?" />
+            </div>
+            <div>
+              <Label>Support Needed (Contingency Plan)</Label>
+              <Textarea value={form.contingency_plan} onChange={e => setForm(p => ({ ...p, contingency_plan: e.target.value }))} rows={2} placeholder="What support or backup plan is needed?" />
             </div>
           </div>
           <DialogFooter>

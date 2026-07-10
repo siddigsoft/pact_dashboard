@@ -30,6 +30,7 @@ interface Risk {
   id: string; title: string; category: string; risk_score: number;
   status: string; owner_id: string | null; mitigation_plan: string | null;
   contingency_plan: string | null; due_date: string | null; updated_at: string;
+  responsible_unit: string | null; resolution_date: string | null;
 }
 interface MilestoneLite { id: string; title: string; status: string; due_date: string | null; }
 interface MmpLite { id: string; name?: string; status?: string; }
@@ -152,7 +153,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     const crmId = (project as any).crmOpportunityId;
     Promise.all([
       supabase.from('project_risks')
-        .select('id,title,category,risk_score,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at')
+        .select('id,title,category,risk_score,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at,responsible_unit,resolution_date')
         .eq('project_id', project.id).order('risk_score', { ascending: false }),
       supabase.from('project_milestones')
         .select('id,title,status,due_date')
@@ -709,6 +710,53 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                 )}
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* ── OVERVIEW: Top Challenge Block (always visible, matches reference design) ── */}
+        {activeTab === 'overview' && topRisk && (
+          <div className={`rounded-xl border overflow-hidden ${topRiskMeta.bg} ${topRiskMeta.border}`}>
+            {/* Block header */}
+            <div className="px-4 py-2.5 border-b border-current/10 flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${topRiskMeta.color}`} />
+              <span className="text-xs font-bold text-foreground">Top Challenge</span>
+              <Badge variant="outline" className={`ml-1 text-[9px] font-bold ${topRiskMeta.color} border-current`}>
+                {topRiskMeta.label} · Score {topRisk.risk_score}
+              </Badge>
+              {openRisks.length > 1 && (
+                <button onClick={() => setActiveTab('risks')}
+                  className={`ml-auto text-[10px] font-semibold ${topRiskMeta.color} hover:underline flex items-center gap-0.5`}>
+                  +{openRisks.length - 1} more risks →
+                </button>
+              )}
+            </div>
+            {/* 8-field grid — exactly matching the reference design */}
+            <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { label: 'Challenge Identified', value: topRisk.title,                            icon: <AlertTriangle className="h-3 w-3" /> },
+                { label: 'Support Needed',        value: topRisk.contingency_plan || '—',          icon: <Headphones className="h-3 w-3" /> },
+                { label: 'Responsible Unit',       value: topRisk.responsible_unit || '—',          icon: <Users className="h-3 w-3" /> },
+                { label: 'Action Required',        value: topRisk.mitigation_plan || '—',           icon: <ClipboardList className="h-3 w-3" /> },
+                { label: 'Deadline',               value: topRisk.due_date && safeParseISO(topRisk.due_date)
+                    ? format(parseISO(topRisk.due_date), 'd MMM yyyy') : '—',                      icon: <Calendar className="h-3 w-3" /> },
+                { label: 'Follow-up Status',       value: FOLLOW_UP_LABELS[topRisk.status] ?? topRisk.status, icon: <RefreshCw className="h-3 w-3" />, highlight: true },
+                { label: 'Resolution Date',        value: topRisk.resolution_date && safeParseISO(topRisk.resolution_date)
+                    ? format(parseISO(topRisk.resolution_date), 'd MMM yyyy') : 'Pending',         icon: <CalendarCheck className="h-3 w-3" /> },
+                { label: 'Risk Level',             value: topRiskMeta.label,                       icon: <ShieldAlert className="h-3 w-3" />, highlight: true },
+              ].map(cell => (
+                <div key={cell.label}
+                  className="bg-white/60 dark:bg-black/20 rounded-lg px-3 py-2 border border-white/40 dark:border-white/10">
+                  <div className={`flex items-center gap-1 mb-1 ${topRiskMeta.color} opacity-70`}>
+                    {cell.icon}
+                    <p className="text-[9px] font-bold uppercase tracking-wider">{cell.label}</p>
+                  </div>
+                  <p className={`text-xs font-bold leading-snug line-clamp-2 ${
+                    (cell as any).highlight ? topRiskMeta.color : 'text-foreground'}`}>
+                    {cell.value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
