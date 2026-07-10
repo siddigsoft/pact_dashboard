@@ -23,7 +23,7 @@ import {
   Activity, Milestone, Layers, Link2, CheckSquare, Square,
   GitBranch, ExternalLink, Briefcase, MapPin, DollarSign,
   Calendar, LayoutDashboard, BarChart2, TriangleAlert,
-  Plus, Edit2, Trash2, Loader2, Flame, ChevronDown, ChevronUp,
+  Plus, Edit2, Trash2, Loader2, Flame, ChevronDown, ChevronUp, Zap,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -196,6 +196,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const [selectedRiskIds, setSelectedRiskIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState('closed');
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const hasAutoDetectedRef = useRef<string | null>(null);
 
   const refreshRisks = useCallback(async () => {
     const { data } = await supabase
@@ -379,6 +380,130 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     });
     return () => { alive = false; };
   }, [project.id]);
+
+  /* ── Auto-risk detection ────────────────────────────────────────────── */
+  useEffect(() => {
+    if (loading || hasAutoDetectedRef.current === project.id) return;
+    hasAutoDetectedRef.current = project.id;
+
+    const now2 = new Date();
+
+    // Derive values needed for rules
+    const acts: any[] = (project as any).activities || [];
+    const overdueActsCount = acts.filter((a: any) => {
+      if (a.status === 'completed' || a.status === 'cancelled') return false;
+      const e = a.endDate ? new Date(a.endDate) : null;
+      return e ? e < now2 : false;
+    }).length;
+
+    const overdueMsCount = milestones.filter(m =>
+      m.status !== 'completed' && m.due_date && new Date(m.due_date) < now2
+    ).length;
+
+    const bTotal = (project as any).budget?.total ?? 0;
+    const bAlloc = (project as any).budget?.allocated ?? 0;
+    const bPct   = bTotal > 0 ? Math.round((bAlloc / bTotal) * 100) : 0;
+
+    const projEnd = (project as any).endDate ? new Date((project as any).endDate) : null;
+    const daysLeft = projEnd
+      ? Math.ceil((projEnd.getTime() - now2.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    const tCount = (project as any).team?.teamComposition?.length ||
+                   (project as any).team?.members?.length || 0;
+
+    // Build triggered rules
+    const triggered: Array<{ category: string; title: string; score: number; mitigation: string }> = [];
+
+    // Rule 1 — Schedule: deadline approaching within 14 days
+    if (
+      daysLeft !== null && daysLeft >= 0 && daysLeft <= 14 &&
+      (project as any).status !== 'completed' && (project as any).status !== 'cancelled'
+    ) {
+      triggered.push({
+        category: 'schedule',
+        title: `Project deadline in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
+        score: daysLeft <= 3 ? 20 : daysLeft <= 7 ? 15 : 9,
+        mitigation: 'Review remaining activities and milestones. Escalate any blockers immediately to project leadership.',
+      });
+    }
+
+    // Rule 2 — Financial: high budget utilization
+    if (bTotal > 0 && bPct >= 85) {
+      triggered.push({
+        category: 'financial',
+        title: `Budget at ${bPct}% utilization`,
+        score: bPct >= 95 ? 20 : 12,
+        mitigation: 'Review expenditure against remaining deliverables. Seek budget extension or reduce remaining scope.',
+      });
+    }
+
+    // Rule 3 — Delivery: 3+ overdue activities
+    if (overdueActsCount >= 3) {
+      triggered.push({
+        category: 'operational',
+        title: `${overdueActsCount} activities are overdue`,
+        score: overdueActsCount >= 7 ? 16 : 10,
+        mitigation: 'Review overdue activities with activity owners. Reassign or reprioritize tasks to recover the schedule.',
+      });
+    }
+
+    // Rule 4 — Milestone: any overdue milestone
+    if (overdueMsCount >= 1) {
+      triggered.push({
+        category: 'external',
+        title: `${overdueMsCount} milestone${overdueMsCount > 1 ? 's are' : ' is'} past due`,
+        score: 15,
+        mitigation: 'Review overdue milestones with stakeholders. Update milestone dates or accelerate delivery.',
+      });
+    }
+
+    // Rule 5 — Resource: no team on active project
+    if (tCount === 0 && (project as any).status === 'active') {
+      triggered.push({
+        category: 'resource',
+        title: 'No team members assigned to this project',
+        score: 12,
+        mitigation: 'Assign team members via the Team tab to ensure project accountability and task ownership.',
+      });
+    }
+
+    if (triggered.length === 0) return;
+
+    // Dedup — skip categories already auto-flagged (any status)
+    const autoCategories = new Set(
+      risks.filter((r: Risk) => r.responsible_unit === '__auto__').map((r: Risk) => r.category)
+    );
+    const toCreate = triggered.filter(r => !autoCategories.has(r.category));
+    if (toCreate.length === 0) return;
+
+    supabase.from('project_risks').insert(
+      toCreate.map(r => ({
+        project_id: project.id,
+        title: r.title,
+        category: r.category,
+        risk_score: r.score,
+        likelihood: null,
+        impact: null,
+        status: 'open',
+        mitigation_plan: r.mitigation,
+        contingency_plan: null,
+        due_date: null,
+        responsible_unit: '__auto__',
+        created_by: null,
+        updated_at: new Date().toISOString(),
+      }))
+    ).then(({ error }) => {
+      if (!error) {
+        refreshRisks();
+        toast({
+          title: `${toCreate.length} risk${toCreate.length > 1 ? 's' : ''} auto-detected`,
+          description: toCreate.map(r => r.title).join(' · '),
+        });
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, project.id]);
 
   const now = useMemo(() => new Date(), []);
   const weekNumber  = getISOWeek(now);
@@ -1331,7 +1456,14 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                             </div>
                             {/* Title + meta */}
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold leading-snug">{r.title}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-xs font-semibold leading-snug">{r.title}</p>
+                                {r.responsible_unit === '__auto__' && (
+                                  <span className="inline-flex items-center gap-0.5 text-[8px] font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                                    <Zap className="h-2 w-2" /> Auto
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className="text-[9px] capitalize text-muted-foreground border rounded px-1.5 py-0.5">{r.category}</span>
                                 <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-medium', statusCfg.badge)}>{statusCfg.label}</span>
