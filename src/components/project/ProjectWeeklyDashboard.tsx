@@ -10,11 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
-  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, LabelList,
 } from 'recharts';
 import {
   Flag, Calendar, Target, AlertTriangle,
   CheckCircle, TrendingUp, Clock3, ShieldAlert,
+  Headphones, Users, ClipboardList, CalendarClock,
+  RefreshCw, CalendarCheck, ShieldCheck,
 } from 'lucide-react';
 
 interface Risk {
@@ -362,9 +364,51 @@ export function ProjectWeeklyDashboard({ project }: Props) {
                     stroke="#6366f1"
                     strokeWidth={2}
                     fill="url(#pgGrad)"
-                    dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }}
+                    dot={(props: any) => {
+                      const isLast = props.index === progressOverTime.length - 1;
+                      return (
+                        <circle
+                          key={props.index}
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={isLast ? 4 : 3}
+                          fill="#6366f1"
+                          stroke={isLast ? '#fff' : 'none'}
+                          strokeWidth={isLast ? 2 : 0}
+                        />
+                      );
+                    }}
                     activeDot={{ r: 5, strokeWidth: 0 }}
-                  />
+                  >
+                    <LabelList
+                      dataKey="progress"
+                      position="top"
+                      formatter={(v: number) => `${v}%`}
+                      style={{ fontSize: 9, fill: '#6366f1', fontWeight: 700 }}
+                      content={(props: any) => {
+                        const { x, y, value, index } = props;
+                        if (index !== progressOverTime.length - 1 || value === 0) return null;
+                        return (
+                          <g key={index}>
+                            <rect
+                              x={x - 16} y={y - 20}
+                              width={32} height={16}
+                              rx={4} fill="#6366f1"
+                            />
+                            <text
+                              x={x} y={y - 8}
+                              textAnchor="middle"
+                              fill="#fff"
+                              fontSize={9}
+                              fontWeight={700}
+                            >
+                              {value}%
+                            </text>
+                          </g>
+                        );
+                      }}
+                    />
+                  </Area>
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -385,32 +429,59 @@ export function ProjectWeeklyDashboard({ project }: Props) {
             </div>
             <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3">
               {[
-                { label: 'Challenge Identified', value: topRisk.title },
-                { label: 'Support Needed',       value: topRisk.contingency_plan || '—' },
-                { label: 'Responsible Unit',      value: topRisk.category ? topRisk.category.charAt(0).toUpperCase() + topRisk.category.slice(1) : '—' },
-                { label: 'Action Required',       value: topRisk.mitigation_plan || '—' },
+                {
+                  label: 'Challenge Identified',
+                  value: topRisk.title,
+                  icon: <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />,
+                },
+                {
+                  label: 'Support Needed',
+                  value: topRisk.contingency_plan || '—',
+                  icon: <Headphones className="h-3 w-3 text-indigo-500 flex-shrink-0" />,
+                },
+                {
+                  label: 'Responsible Unit',
+                  value: topRisk.category ? topRisk.category.charAt(0).toUpperCase() + topRisk.category.slice(1) : '—',
+                  icon: <Users className="h-3 w-3 text-blue-500 flex-shrink-0" />,
+                },
+                {
+                  label: 'Action Required',
+                  value: topRisk.mitigation_plan || '—',
+                  icon: <ClipboardList className="h-3 w-3 text-violet-500 flex-shrink-0" />,
+                },
                 {
                   label: 'Deadline',
                   value: topRisk.due_date && isValid(parseISO(topRisk.due_date))
                     ? format(parseISO(topRisk.due_date), 'd MMM yyyy')
                     : '—',
+                  icon: <CalendarClock className="h-3 w-3 text-rose-500 flex-shrink-0" />,
                 },
                 {
                   label: 'Follow-up Status',
                   value: FOLLOW_UP_LABELS[topRisk.status] ?? topRisk.status,
                   highlight: topRisk.status === 'open',
+                  icon: <RefreshCw className="h-3 w-3 text-indigo-500 flex-shrink-0" />,
                 },
                 {
                   label: 'Resolution Date',
                   value: ['mitigated', 'closed', 'accepted'].includes(topRisk.status) && isValid(parseISO(topRisk.updated_at))
                     ? format(parseISO(topRisk.updated_at), 'd MMM yyyy')
                     : 'Pending',
+                  icon: <CalendarCheck className="h-3 w-3 text-teal-500 flex-shrink-0" />,
                 },
-                { label: 'Risk Level', value: topRiskMeta.label, riskColor: topRiskMeta.color },
+                {
+                  label: 'Risk Level',
+                  value: topRiskMeta.label,
+                  riskColor: topRiskMeta.color,
+                  icon: <ShieldCheck className={`h-3 w-3 flex-shrink-0 ${topRiskMeta.color}`} />,
+                },
               ].map(cell => (
                 <div key={cell.label} className="space-y-0.5">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{cell.label}</p>
-                  <p className={`text-xs font-medium leading-snug ${cell.riskColor ?? ''} ${cell.highlight ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    {cell.icon}
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{cell.label}</p>
+                  </div>
+                  <p className={`text-xs font-medium leading-snug pl-4 ${cell.riskColor ?? ''} ${cell.highlight ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>
                     {cell.value}
                   </p>
                 </div>
