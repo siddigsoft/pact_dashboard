@@ -2706,8 +2706,10 @@ export function ProjectFieldTasksPanel({
           board:    { icon: '⊞',  text: 'Kanban board view',          tip: 'Columns represent workflow stages. Drag a task card to a different column to update its status instantly. Best for sprint-style planning.' },
           timeline: { icon: '📅', text: 'Week-by-week timeline view', tip: 'Each column is one week. Tasks appear as horizontal bars spanning their start–end dates. Great for spotting scheduling conflicts.' },
           gantt:    { icon: '📊', text: 'Gantt chart view',           tip: 'Full Gantt with per-task bars. Bars scale to the project date range. Tasks without dates appear as single-day markers.' },
+          by_stage: { icon: '🗂️', text: 'By Stage view',              tip: 'All tasks grouped under their linked project stage. Completed stages are locked — only open stages allow new tasks. Use stage "Add Task" buttons to link work to a phase.' },
         };
         const g = guides[viewMode];
+        if (!g) return null;
         return (
           <div className="flex items-start gap-2 rounded-lg bg-[#1D3461]/5 dark:bg-[#1D3461]/20 border border-[#1D3461]/10 px-3 py-2">
             <span className="text-base flex-shrink-0">{g.icon}</span>
@@ -2810,8 +2812,8 @@ export function ProjectFieldTasksPanel({
         </div>
       )}
 
-      {/* ── Filters ── */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* ── Filters (hidden in By Stage mode — that view shows all tasks per stage) ── */}
+      {viewMode !== 'by_stage' && <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-40">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input placeholder="Search tasks…" value={search} onChange={e => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
