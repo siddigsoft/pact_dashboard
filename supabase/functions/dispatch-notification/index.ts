@@ -816,7 +816,11 @@ serve(async (req) => {
       const categoryEnabled = recipientPrefs && prefColumn ? recipientPrefs[prefColumn] !== false : true
       const effectiveEmail = (recipientPrefs?.notification_email as string | null) || recipient.email
 
-      if (nodemailerTransporter && effectiveEmail && send_email && userEmailEnabled && categoryEnabled) {
+      // Project events always send email regardless of per-user preference toggles
+      const isProjectEvent = event_type.startsWith('project_')
+      const emailAllowed = isProjectEvent || (userEmailEnabled && categoryEnabled)
+
+      if (nodemailerTransporter && effectiveEmail && send_email && emailAllowed) {
         try {
           const allRecipientRoles = recipients.map(r => r.role).filter(Boolean)
           const emailHtml = generateEventEmailHtml(
