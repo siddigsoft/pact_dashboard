@@ -37,20 +37,39 @@ export function StageAttachments({ projectId, stageId, currentUserId, canEdit }:
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast({ title: 'File too large', description: 'Maximum file size is 20 MB', variant: 'destructive' });
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    const oversized = files.filter(f => f.size > 20 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast({
+        title: 'File too large',
+        description: `${oversized.map(f => f.name).join(', ')} exceed the 20 MB limit`,
+        variant: 'destructive',
+      });
+      if (inputRef.current) inputRef.current.value = '';
       return;
     }
-    try {
-      await uploadFile(file, currentUserId);
-      toast({ title: 'File uploaded successfully' });
-    } catch (err: any) {
-      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
-    } finally {
-      if (inputRef.current) inputRef.current.value = '';
+
+    let successCount = 0;
+    const errors: string[] = [];
+    for (const file of files) {
+      try {
+        await uploadFile(file, currentUserId);
+        successCount++;
+      } catch (err: any) {
+        errors.push(`${file.name}: ${err.message}`);
+      }
     }
+
+    if (successCount > 0) {
+      toast({ title: successCount === 1 ? 'File uploaded' : `${successCount} files uploaded` });
+    }
+    if (errors.length > 0) {
+      toast({ title: 'Some uploads failed', description: errors.join('\n'), variant: 'destructive' });
+    }
+
+    if (inputRef.current) inputRef.current.value = '';
   };
 
   const handleDelete = async (id: string) => {
@@ -79,6 +98,7 @@ export function StageAttachments({ projectId, stageId, currentUserId, canEdit }:
             <input
               ref={inputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={handleUpload}
               accept="*/*"
@@ -89,20 +109,21 @@ export function StageAttachments({ projectId, stageId, currentUserId, canEdit }:
               className="h-6 text-xs px-2"
               onClick={() => inputRef.current?.click()}
               disabled={isUploading}
+              data-testid={`btn-upload-attachment-${stageId}`}
             >
               {isUploading ? (
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
               ) : (
                 <Upload className="h-3 w-3 mr-1" />
               )}
-              Upload
+              {isUploading ? 'Uploading…' : 'Upload'}
             </Button>
           </>
         )}
       </div>
 
       {attachments.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">No attachments yet</p>
+        <p className="text-xs text-muted-foreground italic">No attachments yet. Click Upload to add one or more files.</p>
       ) : (
         <div className="space-y-1.5">
           {attachments.map(att => (
@@ -131,6 +152,7 @@ export function StageAttachments({ projectId, stageId, currentUserId, canEdit }:
                     size="icon"
                     className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
                     onClick={() => handleDelete(att.id)}
+                    data-testid={`btn-delete-attachment-${att.id}`}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>

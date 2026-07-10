@@ -386,6 +386,17 @@ const ASSESSMENT_FLOW: FlowStage[] = [
     typicalDurationDays: 7,
   },
   {
+    id: 'finance_fund_approvals',
+    label: 'Finance & Fund Approvals',
+    description: 'Obtain budget approval, fund release authorisation, and financial sign-off before report dissemination.',
+    linkedActions: [
+      { label: 'Finance', route: '/finance', icon: 'finance' },
+      { label: 'Documents', route: '/documents', icon: 'docs' },
+    ],
+    keyOutputs: ['Budget approval memo', 'Fund release authorisation', 'Finance sign-off letter'],
+    typicalDurationDays: 5,
+  },
+  {
     id: 'report_validation',
     label: 'Report Writing & Validation',
     description: 'Write the assessment report, validate findings with stakeholders, and finalise.',

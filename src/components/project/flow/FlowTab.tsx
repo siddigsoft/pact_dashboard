@@ -627,6 +627,15 @@ export function FlowTab({
   const [customEntries, setCustomEntries] = useState<CustomStageEntry[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
+  // Key outputs inline editing
+  const [outputsState, setOutputsState] = useState<Record<string, { items: string[]; inputVal: string }>>({});
+  const [outputsSaving, setOutputsSaving] = useState<string | null>(null);
+
+  // Report Risk dialog
+  const [riskStageId, setRiskStageId] = useState<string | null>(null);
+  const [riskForm, setRiskForm] = useState({ title: '', risk_score: 3, mitigation_plan: '' });
+  const [savingRisk, setSavingRisk] = useState(false);
+
   const resolvedEntry = (stageId: string): CustomStageEntry | undefined =>
     (customFlowStages ?? []).find(e => e.id === stageId);
 
@@ -681,6 +690,51 @@ export function FlowTab({
       setEditOpen(false);
     } catch (err: any) {
       toast({ title: 'Failed to reset', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  // Save custom outputs for a specific stage via updateCustomStages
+  const saveOutputsForStage = async (stageId: string, outputs: string[]) => {
+    setOutputsSaving(stageId);
+    try {
+      const existing = (customFlowStages ?? []) as CustomStageEntry[];
+      const base: CustomStageEntry[] = existing.length > 0
+        ? existing
+        : allDefaultStages.map(s => ({ id: s.id }));
+      const hasEntry = base.some(e => e.id === stageId);
+      const updated: CustomStageEntry[] = hasEntry
+        ? base.map(e => e.id === stageId ? { ...e, customOutputs: outputs } : e)
+        : [...base, { id: stageId, customOutputs: outputs }];
+      await updateCustomStages(updated);
+      setOutputsState(prev => ({ ...prev, [stageId]: { items: outputs, inputVal: '' } }));
+    } catch (err: any) {
+      toast({ title: 'Failed to save outputs', description: err.message, variant: 'destructive' });
+    } finally {
+      setOutputsSaving(null);
+    }
+  };
+
+  // Quick Risk Report handler
+  const handleSaveRisk = async () => {
+    if (!riskForm.title.trim() || !riskStageId) return;
+    setSavingRisk(true);
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { error } = await supabase.from('project_risks').insert({
+        project_id: projectId,
+        title: riskForm.title.trim(),
+        risk_score: riskForm.risk_score,
+        mitigation_plan: riskForm.mitigation_plan || null,
+        status: 'open',
+      });
+      if (error) throw error;
+      toast({ title: 'Risk reported', description: 'The risk has been logged for this project.' });
+      setRiskStageId(null);
+      setRiskForm({ title: '', risk_score: 3, mitigation_plan: '' });
+    } catch (err: any) {
+      toast({ title: 'Failed to report risk', description: err.message, variant: 'destructive' });
+    } finally {
+      setSavingRisk(false);
     }
   };
 
@@ -1193,20 +1247,121 @@ export function FlowTab({
                       </div>
                     )}
 
-                    {/* Key outputs */}
-                    {allOutputs.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                          <ListChecks className="h-3.5 w-3.5" /> Key Outputs
+                    {/* Key Outputs — editable */}
+                    {(() => {
+                      const editing = outputsState[stage.id];
+                      const currentItems: string[] = editing?.items ?? allOutputs;
+                      const inputVal = editing?.inputVal ?? '';
+                      const isSaving = outputsSaving === stage.id;
+                      const showEdit = canEditFlow;
+
+                      const startEdit = () => {
+                        if (!editing) {
+                          setOutputsState(prev => ({ ...prev, [stage.id]: { items: allOutputs, inputVal: '' } }));
+                        }
+                      };
+
+                      const addOutput = async () => {
+                        const val = (editing?.inputVal ?? '').trim();
+                        if (!val) return;
+                        const newItems = [...currentItems, val];
+                        await saveOutputsForStage(stage.id, newItems);
+                      };
+
+                      const removeOutput = async (idx: number) => {
+                        const newItems = currentItems.filter((_, i) => i !== idx);
+                        await saveOutputsForStage(stage.id, newItems);
+                      };
+
+                      if (currentItems.length === 0 && !showEdit) return null;
+
+                      return (
+                        <div>
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                            <ListChecks className="h-3.5 w-3.5" /> Key Outputs
+                            {showEdit && (
+                              <button
+                                onClick={startEdit}
+                                className="ml-1 text-[10px] text-blue-500 hover:text-blue-700 font-normal normal-case tracking-normal underline underline-offset-2"
+                                data-testid={`btn-edit-outputs-${stage.id}`}
+                              >
+                                edit
+                              </button>
+                            )}
+                            {isSaving && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                          </div>
+
+                          {currentItems.length === 0 && (
+                            <p className="text-xs text-muted-foreground italic mb-2">No key outputs defined yet.</p>
+                          )}
+
+                          <ul className="space-y-1.5">
+                            {currentItems.map((output, oi) => (
+                              <li key={oi} className="flex items-start gap-2 text-sm text-muted-foreground group/out">
+                                <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
+                                <span className="flex-1">{output}</span>
+                                {showEdit && (
+                                  <button
+                                    onClick={() => removeOutput(oi)}
+                                    disabled={isSaving}
+                                    className="opacity-0 group-hover/out:opacity-100 transition-opacity text-destructive hover:text-red-700 ml-1 flex-shrink-0"
+                                    title="Remove output"
+                                    data-testid={`btn-remove-output-${stage.id}-${oi}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+
+                          {showEdit && (
+                            <div className="flex items-center gap-1.5 mt-2">
+                              <Input
+                                value={inputVal}
+                                onChange={e => setOutputsState(prev => ({
+                                  ...prev,
+                                  [stage.id]: { items: currentItems, inputVal: e.target.value },
+                                }))}
+                                onFocus={startEdit}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOutput(); } }}
+                                placeholder="Add a key output…"
+                                className="h-7 text-xs flex-1"
+                                disabled={isSaving}
+                                data-testid={`input-new-output-${stage.id}`}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs px-2"
+                                onClick={addOutput}
+                                disabled={isSaving || !inputVal.trim()}
+                                data-testid={`btn-add-output-${stage.id}`}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        <ul className="space-y-1.5">
-                          {allOutputs.map((output, oi) => (
-                            <li key={oi} className="flex items-start gap-2 text-sm text-muted-foreground">
-                              <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
-                              <span>{output}</span>
-                            </li>
-                          ))}
-                        </ul>
+                      );
+                    })()}
+
+                    {/* Report Risk — always visible for editors */}
+                    {canEditFlow && (
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                          onClick={() => {
+                            setRiskStageId(stage.id);
+                            setRiskForm({ title: '', risk_score: 3, mitigation_plan: '' });
+                          }}
+                          data-testid={`btn-report-risk-${stage.id}`}
+                        >
+                          <Flag className="h-3.5 w-3.5 mr-1.5" />
+                          Report Risk
+                        </Button>
                       </div>
                     )}
 
@@ -1383,6 +1538,79 @@ export function FlowTab({
         isSaving={isSavingCustom} onSave={handleSaveCustom} onReset={handleResetCustom}
         getStageStatus={getStageStatus}
       />
+
+      {/* ── Report Risk Dialog ───────────────────────────────────── */}
+      <Dialog open={!!riskStageId} onOpenChange={open => { if (!open) setRiskStageId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Flag className="h-4 w-4" /> Report a Risk
+            </DialogTitle>
+            <DialogDescription>
+              Log a risk or challenge for this project. It will appear in the Risks tab.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <Label className="text-xs font-semibold mb-1 block">Risk / Challenge *</Label>
+              <Input
+                value={riskForm.title}
+                onChange={e => setRiskForm(p => ({ ...p, title: e.target.value }))}
+                placeholder="Describe the risk or challenge…"
+                data-testid="input-risk-title"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1 block">Risk Level (1 = Low · 5 = Critical)</Label>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRiskForm(p => ({ ...p, risk_score: n }))}
+                    className={`h-8 w-8 rounded-md border text-sm font-bold transition-all ${
+                      riskForm.risk_score === n
+                        ? n <= 2 ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/40 dark:border-green-500'
+                        : n === 3 ? 'bg-amber-100 border-amber-500 text-amber-700 dark:bg-amber-900/40 dark:border-amber-500'
+                        : 'bg-red-100 border-red-500 text-red-700 dark:bg-red-900/40 dark:border-red-500'
+                        : 'border-muted-foreground/20 text-muted-foreground hover:border-muted-foreground/50'
+                    }`}
+                    data-testid={`btn-risk-score-${n}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <span className="text-xs text-muted-foreground ml-1">
+                  {riskForm.risk_score <= 2 ? 'Low' : riskForm.risk_score === 3 ? 'Medium' : riskForm.risk_score === 4 ? 'High' : 'Critical'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1 block">Mitigation / Action Required</Label>
+              <Textarea
+                value={riskForm.mitigation_plan}
+                onChange={e => setRiskForm(p => ({ ...p, mitigation_plan: e.target.value }))}
+                placeholder="What action is needed to address this risk?"
+                rows={3}
+                data-testid="textarea-risk-mitigation"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRiskStageId(null)}>Cancel</Button>
+            <Button
+              onClick={handleSaveRisk}
+              disabled={savingRisk || !riskForm.title.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="btn-submit-risk"
+            >
+              {savingRisk ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Flag className="h-4 w-4 mr-1" />}
+              Report Risk
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
