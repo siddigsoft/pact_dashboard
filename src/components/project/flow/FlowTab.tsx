@@ -1250,30 +1250,38 @@ export function FlowTab({
                     {/* Key Outputs — editable */}
                     {(() => {
                       const editing = outputsState[stage.id];
-                      const currentItems: string[] = editing?.items ?? allOutputs;
+                      // customItems = only user-added outputs (never mix with stage.keyOutputs)
+                      const customItems: string[] = editing?.items ?? (entry?.customOutputs ?? []);
+                      const defaultItems: string[] = stage.keyOutputs ?? [];
                       const inputVal = editing?.inputVal ?? '';
                       const isSaving = outputsSaving === stage.id;
                       const showEdit = canEditFlow;
+                      const hasAny = customItems.length > 0 || defaultItems.length > 0;
 
+                      // Only init edit state with custom outputs — never mix in defaults
                       const startEdit = () => {
                         if (!editing) {
-                          setOutputsState(prev => ({ ...prev, [stage.id]: { items: allOutputs, inputVal: '' } }));
+                          setOutputsState(prev => ({
+                            ...prev,
+                            [stage.id]: { items: entry?.customOutputs ?? [], inputVal: '' },
+                          }));
                         }
                       };
 
                       const addOutput = async () => {
                         const val = (editing?.inputVal ?? '').trim();
                         if (!val) return;
-                        const newItems = [...currentItems, val];
+                        const newItems = [...customItems, val];
                         await saveOutputsForStage(stage.id, newItems);
                       };
 
+                      // Only custom items have remove buttons — index is within customItems
                       const removeOutput = async (idx: number) => {
-                        const newItems = currentItems.filter((_, i) => i !== idx);
+                        const newItems = customItems.filter((_, i) => i !== idx);
                         await saveOutputsForStage(stage.id, newItems);
                       };
 
-                      if (currentItems.length === 0 && !showEdit) return null;
+                      if (!hasAny && !showEdit) return null;
 
                       return (
                         <div>
@@ -1291,14 +1299,22 @@ export function FlowTab({
                             {isSaving && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
                           </div>
 
-                          {currentItems.length === 0 && (
+                          {!hasAny && (
                             <p className="text-xs text-muted-foreground italic mb-2">No key outputs defined yet.</p>
                           )}
 
                           <ul className="space-y-1.5">
-                            {currentItems.map((output, oi) => (
-                              <li key={oi} className="flex items-start gap-2 text-sm text-muted-foreground group/out">
+                            {/* Default (hardcoded) outputs — always read-only */}
+                            {defaultItems.map((output, oi) => (
+                              <li key={`def-${oi}`} className="flex items-start gap-2 text-sm text-muted-foreground">
                                 <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
+                                <span className="flex-1">{output}</span>
+                              </li>
+                            ))}
+                            {/* User-added custom outputs — removable */}
+                            {customItems.map((output, oi) => (
+                              <li key={`cus-${oi}`} className="flex items-start gap-2 text-sm text-muted-foreground group/out">
+                                <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-blue-400')} />
                                 <span className="flex-1">{output}</span>
                                 {showEdit && (
                                   <button
@@ -1321,7 +1337,7 @@ export function FlowTab({
                                 value={inputVal}
                                 onChange={e => setOutputsState(prev => ({
                                   ...prev,
-                                  [stage.id]: { items: currentItems, inputVal: e.target.value },
+                                  [stage.id]: { items: customItems, inputVal: e.target.value },
                                 }))}
                                 onFocus={startEdit}
                                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOutput(); } }}

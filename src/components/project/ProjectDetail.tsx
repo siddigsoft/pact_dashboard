@@ -1129,6 +1129,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 projectType={project.projectType}
                 currentUserId={currentUser?.id}
                 canEdit={!project.archived && canArchive}
+                customFlowStages={(project as any).customFlowStages ?? null}
               />
 
               {/* Activity Timeline */}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle, Circle, ChevronDown, ChevronUp, ClipboardList, Loader2 } from 'lucide-react';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
-import { getProjectFlow } from '@/config/projectFlows';
+import { getProjectFlow, getEffectiveStages } from '@/config/projectFlows';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useProjectDeliverablesChecklist } from '@/hooks/useStageData';
@@ -11,6 +11,7 @@ interface ProjectDeliverablesChecklistProps {
   projectType: string;
   currentUserId?: string;
   canEdit?: boolean;
+  customFlowStages?: any[] | null;
 }
 
 export function ProjectDeliverablesChecklist({
@@ -18,26 +19,45 @@ export function ProjectDeliverablesChecklist({
   projectType,
   currentUserId,
   canEdit = true,
+  customFlowStages,
 }: ProjectDeliverablesChecklistProps) {
   const { toast } = useToast();
   const config = getProjectTypeConfig(projectType);
-  const flow = getProjectFlow(projectType);
+
+  // Effective stages honour custom renames / reorder / new stages
+  const effectiveStages = useMemo(
+    () => getEffectiveStages(projectType, customFlowStages),
+    [projectType, customFlowStages],
+  );
+
+  // stageId → effective label (custom label when renamed, else default)
+  const stageIdToLabel = useMemo(
+    () => new Map(effectiveStages.map(s => [s.id, s.label])),
+    [effectiveStages],
+  );
 
   const deliverableDefs = useMemo(() => {
-    const stageByLabel = new Map(flow.stages.map(s => [s.label, s]));
-    const firstStage = flow.stages[0];
+    // Use raw flow only to resolve the default stageId for each deliverable phase
+    const defaultFlow = getProjectFlow(projectType);
+    const stageByDefaultLabel = new Map(defaultFlow.stages.map(s => [s.label, s]));
+    const fallbackStage = effectiveStages[0] ?? defaultFlow.stages[0];
+
     return config.deliverables.map(d => {
-      const phase = d.phase ?? 'General';
-      const stage = stageByLabel.get(phase) ?? firstStage;
+      const rawPhase = d.phase ?? 'General';
+      const defaultStage = stageByDefaultLabel.get(rawPhase);
+      const stageId = defaultStage?.id ?? fallbackStage?.id ?? 'planning';
+      // Display the effective (custom) label — falls back to the hardcoded phase if
+      // no effective stage with that id exists (e.g. the stage was not customised)
+      const displayPhase = stageIdToLabel.get(stageId) ?? rawPhase;
       return {
         id: d.id,
         label: d.label,
-        phase,
-        stageId: stage?.id ?? 'planning',
-        stageLabel: stage?.label ?? phase,
+        phase: displayPhase,
+        stageId,
+        stageLabel: displayPhase,
       };
     });
-  }, [config.deliverables, flow.stages]);
+  }, [config.deliverables, effectiveStages, stageIdToLabel, projectType]);
 
   const { items, isLoading, toggleItem } = useProjectDeliverablesChecklist(projectId, deliverableDefs);
 
@@ -60,6 +80,7 @@ export function ProjectDeliverablesChecklist({
   const totalCount = items.length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
+  // Group by the effective (possibly renamed) phase label
   const phases = Array.from(new Set(items.map(d => d.phase))).filter(Boolean);
 
   if (deliverableDefs.length === 0) return null;
