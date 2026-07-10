@@ -23,7 +23,7 @@ import {
   Activity, Milestone, Layers, Link2, CheckSquare, Square,
   GitBranch, ExternalLink, Briefcase, MapPin, DollarSign,
   Calendar, LayoutDashboard, BarChart2, TriangleAlert,
-  Plus, Edit2, Trash2, Loader2, X, Flame, Circle,
+  Plus, Edit2, Trash2, Loader2, X, Flame,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 /* ─── Types ──────────────────────────────────────────────────────────── */
 interface Risk {
   id: string; title: string; category: string; risk_score: number;
+  likelihood: string | null; impact: string | null;
   status: string; owner_id: string | null; mitigation_plan: string | null;
   contingency_plan: string | null; due_date: string | null; updated_at: string;
   responsible_unit: string | null; resolution_date: string | null;
@@ -195,7 +196,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const refreshRisks = useCallback(async () => {
     const { data } = await supabase
       .from('project_risks')
-      .select('id,title,category,risk_score,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at,responsible_unit,resolution_date')
+      .select('id,title,category,risk_score,likelihood,impact,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at,responsible_unit,resolution_date')
       .eq('project_id', project.id)
       .order('risk_score', { ascending: false });
     if (data) setRisks(data as Risk[]);
@@ -213,8 +214,8 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
       title: r.title,
       description: '',
       category: r.category,
-      likelihood: 'medium',
-      impact: 'moderate',
+      likelihood: r.likelihood ?? 'medium',
+      impact: r.impact ?? 'moderate',
       status: r.status,
       mitigation_plan: r.mitigation_plan ?? '',
       contingency_plan: r.contingency_plan ?? '',
@@ -271,7 +272,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     const crmId = (project as any).crmOpportunityId;
     Promise.all([
       supabase.from('project_risks')
-        .select('id,title,category,risk_score,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at,responsible_unit,resolution_date')
+        .select('id,title,category,risk_score,likelihood,impact,status,owner_id,mitigation_plan,contingency_plan,due_date,updated_at,responsible_unit,resolution_date')
         .eq('project_id', project.id).order('risk_score', { ascending: false }),
       supabase.from('project_milestones')
         .select('id,title,status,due_date')
