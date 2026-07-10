@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   format, getISOWeek, startOfISOWeek, endOfISOWeek,
-  parseISO, isValid, subWeeks,
+  parseISO, isValid, subWeeks, differenceInDays,
 } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { Project } from '@/types/project';
@@ -16,7 +16,7 @@ import {
   Flag, Calendar, Target, AlertTriangle,
   CheckCircle, TrendingUp, Clock3, ShieldAlert,
   Headphones, Users, ClipboardList, CalendarClock,
-  RefreshCw, CalendarCheck, ShieldCheck,
+  RefreshCw, CalendarCheck, ShieldCheck, Wallet,
 } from 'lucide-react';
 
 interface Risk {
@@ -42,11 +42,19 @@ interface Props {
 }
 
 function getRiskMeta(score: number): { label: string; color: string; bg: string } {
-  if (score >= 17) return { label: 'Critical', color: 'text-red-600 dark:text-red-400',   bg: 'bg-red-50 dark:bg-red-950/30' };
+  if (score >= 17) return { label: 'Critical', color: 'text-red-600 dark:text-red-400',      bg: 'bg-red-50 dark:bg-red-950/30' };
   if (score >= 10) return { label: 'High',     color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-950/30' };
   if (score >= 5)  return { label: 'Medium',   color: 'text-amber-600 dark:text-amber-400',   bg: 'bg-amber-50 dark:bg-amber-950/30' };
   return              { label: 'Low',      color: 'text-green-600 dark:text-green-400',   bg: 'bg-green-50 dark:bg-green-950/30' };
 }
+
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  draft:     { label: 'Draft',     color: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  active:    { label: 'Active',    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  onHold:    { label: 'On Hold',   color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
+  completed: { label: 'Completed', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' },
+  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+};
 
 const FOLLOW_UP_LABELS: Record<string, string> = {
   open:      'In Progress',
@@ -82,13 +90,23 @@ export function ProjectWeeklyDashboard({ project }: Props) {
     return () => { alive = false; };
   }, [project.id]);
 
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
 
   const weekNumber  = getISOWeek(now);
   const weekStart   = startOfISOWeek(now);
   const weekEnd     = endOfISOWeek(now);
   const periodLabel = `Week ${weekNumber}`;
   const periodRange = `${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`;
+
+  // Days remaining from project.endDate
+  const daysRemaining = useMemo(() => {
+    if (!project.endDate) return null;
+    try {
+      const end = parseISO(project.endDate);
+      if (!isValid(end)) return null;
+      return differenceInDays(end, now);
+    } catch { return null; }
+  }, [project.endDate, now]);
 
   const activities       = project.activities || [];
   const totalActs        = activities.length;
@@ -103,8 +121,8 @@ export function ProjectWeeklyDashboard({ project }: Props) {
     ? Math.round((completedMilestones / totalMilestones) * 100)
     : 0;
 
-  const openRisks  = risks.filter(r => r.status === 'open');
-  const topRisk    = openRisks[0] ?? null;
+  const openRisks   = risks.filter(r => r.status === 'open');
+  const topRisk     = openRisks[0] ?? null;
   const topRiskMeta = topRisk
     ? getRiskMeta(topRisk.risk_score)
     : { label: 'None', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' };
@@ -113,21 +131,36 @@ export function ProjectWeeklyDashboard({ project }: Props) {
     (a: any) => a.status !== 'completed' && a.status !== 'cancelled',
   ).length;
 
+  // Budget from project.budget
+  const budget    = (project as any).budget ?? null;
+  const budgetTotal     = budget?.total     ?? 0;
+  const budgetAllocated = budget?.allocated ?? 0;
+  const budgetCurrency  = budget?.currency  ?? 'USD';
+  const budgetUsedPct   = budgetTotal > 0 ? Math.round((budgetAllocated / budgetTotal) * 100) : 0;
+
+  // FIX: use activity.endDate (completed acts) as the completion proxy
+  // since ProjectActivity has no updatedAt field.
   const progressOverTime = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => {
-      const ref    = subWeeks(now, 5 - i);
-      const wEnd   = endOfISOWeek(ref);
-      const wNum   = getISOWeek(ref);
-      const done   = activities.filter((a: any) => {
-        if (a.status !== 'completed' || !a.updatedAt) return false;
+      const ref  = subWeeks(now, 5 - i);
+      const wEnd = endOfISOWeek(ref);
+      const wNum = getISOWeek(ref);
+      const done = activities.filter((a: any) => {
+        if (a.status !== 'completed') return false;
+        // Use endDate as proxy for when the activity was completed
+        const dateStr = a.endDate || a.updatedAt;
+        if (!dateStr) return true; // no date — assume completed before now, count in last week only
         try {
-          const d = parseISO(a.updatedAt);
+          const d = parseISO(dateStr);
           return isValid(d) && d <= wEnd;
         } catch { return false; }
       }).length;
-      return { week: `W${wNum}`, progress: totalActs > 0 ? Math.round((done / totalActs) * 100) : 0 };
+      return {
+        week: `W${wNum}`,
+        progress: totalActs > 0 ? Math.round((done / totalActs) * 100) : 0,
+      };
     });
-  }, [activities, totalActs]);
+  }, [activities, totalActs, now]);
 
   const donutData = [
     { name: 'Completed',   value: completedActs,  color: '#6366f1' },
@@ -137,6 +170,11 @@ export function ProjectWeeklyDashboard({ project }: Props) {
 
   const pct = (n: number) =>
     totalActs > 0 ? Math.round((n / totalActs) * 100) : 0;
+
+  // Unique gradient ID per project to avoid SVG ID collision
+  const gradId = `pgGrad-${project.id}`;
+
+  const statusMeta = STATUS_META[project.status ?? ''] ?? STATUS_META['draft'];
 
   if (loading) {
     return (
@@ -161,6 +199,9 @@ export function ProjectWeeklyDashboard({ project }: Props) {
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-indigo-300" />
           <span className="text-white font-semibold text-sm">Weekly Project Dashboard</span>
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-1 ${statusMeta.color}`}>
+            {statusMeta.label}
+          </span>
         </div>
         <span className="text-white/50 text-xs hidden sm:block">
           {periodLabel} · {periodRange}
@@ -180,21 +221,37 @@ export function ProjectWeeklyDashboard({ project }: Props) {
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Project Name</p>
-                <p className="font-semibold text-sm leading-tight truncate">{project.name}</p>
+                <p className="font-semibold text-sm leading-tight line-clamp-2">{project.name}</p>
+                {(project as any).projectCode && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{(project as any).projectCode}</p>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Reporting Period */}
+          {/* Reporting Period + Days Remaining */}
           <Card className="border bg-muted/30">
             <CardContent className="p-3 flex items-start gap-2.5">
               <div className="p-1.5 rounded-md bg-indigo-500/10 mt-0.5 flex-shrink-0">
                 <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Reporting Period</p>
                 <p className="font-semibold text-sm">{periodLabel}</p>
                 <p className="text-[10px] text-muted-foreground">{periodRange}</p>
+                {daysRemaining !== null && (
+                  <p className={`text-[10px] font-semibold mt-1 ${
+                    daysRemaining < 0 ? 'text-red-600 dark:text-red-400' :
+                    daysRemaining <= 14 ? 'text-amber-600 dark:text-amber-400' :
+                    'text-emerald-600 dark:text-emerald-400'
+                  }`}>
+                    {daysRemaining < 0
+                      ? `${Math.abs(daysRemaining)}d overdue`
+                      : daysRemaining === 0
+                        ? 'Due today'
+                        : `${daysRemaining}d remaining`}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -276,6 +333,37 @@ export function ProjectWeeklyDashboard({ project }: Props) {
           </div>
         </div>
 
+        {/* ── Budget bar (only if budget data exists) ────────────────── */}
+        {budgetTotal > 0 && (
+          <Card className="border bg-muted/30">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+                <span className="text-xs font-semibold text-muted-foreground">Budget Utilisation</span>
+                <span className={`ml-auto text-xs font-bold ${
+                  budgetUsedPct > 90 ? 'text-red-600 dark:text-red-400' :
+                  budgetUsedPct > 75 ? 'text-amber-600 dark:text-amber-400' :
+                  'text-indigo-600 dark:text-indigo-400'
+                }`}>{budgetUsedPct}%</span>
+              </div>
+              <Progress value={budgetUsedPct} className="h-2" />
+              <div className="flex items-center justify-between mt-1.5 text-[10px] text-muted-foreground">
+                <span>Allocated: <span className="font-semibold text-foreground">
+                  {budgetAllocated.toLocaleString()} {budgetCurrency}
+                </span></span>
+                <span>Total: <span className="font-semibold text-foreground">
+                  {budgetTotal.toLocaleString()} {budgetCurrency}
+                </span></span>
+                <span>Remaining: <span className={`font-semibold ${
+                  budget?.remaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {(budget?.remaining ?? budgetTotal - budgetAllocated).toLocaleString()} {budgetCurrency}
+                </span></span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* ── Row 2: Donut + Progress over time ─────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
@@ -283,58 +371,62 @@ export function ProjectWeeklyDashboard({ project }: Props) {
           <Card className="border bg-muted/30">
             <CardContent className="p-3">
               <p className="text-xs font-semibold text-muted-foreground mb-2">Implementation Progress</p>
-              <div className="flex items-center gap-4">
-                <div className="relative h-[90px] w-[90px] flex-shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={donutData.length ? donutData : [{ name: 'empty', value: 1, color: '#e2e8f0' }]}
-                        innerRadius="62%"
-                        outerRadius="82%"
-                        dataKey="value"
-                        strokeWidth={0}
-                        startAngle={90}
-                        endAngle={-270}
-                      >
-                        {(donutData.length
-                          ? donutData
-                          : [{ color: '#e2e8f0' }]
-                        ).map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-lg font-bold leading-none">{overallProgress}%</span>
-                    <span className="text-[9px] text-muted-foreground">of plan</span>
+              {totalActs === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
+                  <CheckCircle className="h-4 w-4 text-slate-300" />
+                  No activities yet
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <div className="relative h-[90px] w-[90px] flex-shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={donutData}
+                          innerRadius="62%"
+                          outerRadius="82%"
+                          dataKey="value"
+                          strokeWidth={0}
+                          startAngle={90}
+                          endAngle={-270}
+                        >
+                          {donutData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-lg font-bold leading-none">{overallProgress}%</span>
+                      <span className="text-[9px] text-muted-foreground">of plan</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs flex-1">
+                    {[
+                      { label: 'Completed',   n: completedActs,  color: 'bg-indigo-500' },
+                      { label: 'In Progress', n: inProgressActs,  color: 'bg-violet-500' },
+                      { label: 'Not Started', n: notStartedActs,  color: 'bg-slate-300 dark:bg-slate-600' },
+                    ].map(row => (
+                      <div key={row.label} className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full flex-shrink-0 ${row.color}`} />
+                        <span className="text-muted-foreground flex-1">{row.label}</span>
+                        <span className="font-semibold">{pct(row.n)}%</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="space-y-2 text-xs flex-1">
-                  {[
-                    { label: 'Completed',   n: completedActs,  color: 'bg-indigo-500' },
-                    { label: 'In Progress', n: inProgressActs,  color: 'bg-violet-500' },
-                    { label: 'Not Started', n: notStartedActs,  color: 'bg-slate-300 dark:bg-slate-600' },
-                  ].map(row => (
-                    <div key={row.label} className="flex items-center gap-1.5">
-                      <span className={`h-2 w-2 rounded-full flex-shrink-0 ${row.color}`} />
-                      <span className="text-muted-foreground flex-1">{row.label}</span>
-                      <span className="font-semibold">{pct(row.n)}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Progress over time line chart */}
+          {/* Progress over time area chart */}
           <Card className="border bg-muted/30 md:col-span-2">
             <CardContent className="p-3">
               <p className="text-xs font-semibold text-muted-foreground mb-2">Progress Over Time</p>
-              <ResponsiveContainer width="100%" height={100}>
-                <AreaChart data={progressOverTime} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <ResponsiveContainer width="100%" height={108}>
+                <AreaChart data={progressOverTime} margin={{ top: 28, right: 12, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="pgGrad" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.25} />
                       <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
                     </linearGradient>
@@ -363,7 +455,7 @@ export function ProjectWeeklyDashboard({ project }: Props) {
                     dataKey="progress"
                     stroke="#6366f1"
                     strokeWidth={2}
-                    fill="url(#pgGrad)"
+                    fill={`url(#${gradId})`}
                     dot={(props: any) => {
                       const isLast = props.index === progressOverTime.length - 1;
                       return (
@@ -383,25 +475,13 @@ export function ProjectWeeklyDashboard({ project }: Props) {
                     <LabelList
                       dataKey="progress"
                       position="top"
-                      formatter={(v: number) => `${v}%`}
-                      style={{ fontSize: 9, fill: '#6366f1', fontWeight: 700 }}
                       content={(props: any) => {
                         const { x, y, value, index } = props;
                         if (index !== progressOverTime.length - 1 || value === 0) return null;
                         return (
                           <g key={index}>
-                            <rect
-                              x={x - 16} y={y - 20}
-                              width={32} height={16}
-                              rx={4} fill="#6366f1"
-                            />
-                            <text
-                              x={x} y={y - 8}
-                              textAnchor="middle"
-                              fill="#fff"
-                              fontSize={9}
-                              fontWeight={700}
-                            >
+                            <rect x={x - 16} y={y - 22} width={32} height={16} rx={4} fill="#6366f1" />
+                            <text x={x} y={y - 10} textAnchor="middle" fill="#fff" fontSize={9} fontWeight={700}>
                               {value}%
                             </text>
                           </g>
@@ -415,7 +495,7 @@ export function ProjectWeeklyDashboard({ project }: Props) {
           </Card>
         </div>
 
-        {/* ── Rows 3–4: Challenge block from top open risk ─────────── */}
+        {/* ── Challenge block from top open risk ────────────────────── */}
         {topRisk ? (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-muted/60 px-3 py-2 border-b flex items-center gap-1.5">
@@ -441,7 +521,9 @@ export function ProjectWeeklyDashboard({ project }: Props) {
                 },
                 {
                   label: 'Responsible Unit',
-                  value: topRisk.category ? topRisk.category.charAt(0).toUpperCase() + topRisk.category.slice(1) : '—',
+                  value: topRisk.category
+                    ? topRisk.category.charAt(0).toUpperCase() + topRisk.category.slice(1)
+                    : '—',
                   icon: <Users className="h-3 w-3 text-blue-500 flex-shrink-0" />,
                 },
                 {
@@ -464,7 +546,8 @@ export function ProjectWeeklyDashboard({ project }: Props) {
                 },
                 {
                   label: 'Resolution Date',
-                  value: ['mitigated', 'closed', 'accepted'].includes(topRisk.status) && isValid(parseISO(topRisk.updated_at))
+                  value: ['mitigated', 'closed', 'accepted'].includes(topRisk.status) &&
+                    isValid(parseISO(topRisk.updated_at))
                     ? format(parseISO(topRisk.updated_at), 'd MMM yyyy')
                     : 'Pending',
                   icon: <CalendarCheck className="h-3 w-3 text-teal-500 flex-shrink-0" />,
@@ -481,7 +564,7 @@ export function ProjectWeeklyDashboard({ project }: Props) {
                     {cell.icon}
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{cell.label}</p>
                   </div>
-                  <p className={`text-xs font-medium leading-snug pl-4 ${cell.riskColor ?? ''} ${cell.highlight ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>
+                  <p className={`text-xs font-medium leading-snug pl-4 ${(cell as any).riskColor ?? ''} ${(cell as any).highlight ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>
                     {cell.value}
                   </p>
                 </div>
