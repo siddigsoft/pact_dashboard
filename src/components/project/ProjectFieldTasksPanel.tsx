@@ -2634,7 +2634,7 @@ export function ProjectFieldTasksPanel({
               ['board',    Columns,          'Board',    'Kanban board — drag tasks between To Do / In Progress / Done'],
               ['timeline', CalendarDays,     'Timeline', 'Week-by-week visual timeline — spot scheduling gaps'],
               ['gantt',    GanttChartSquare, 'Gantt',    'Gantt chart — see start/end bars for full project planning'],
-              ['by_stage', Layers,           'By Stage', 'Tasks grouped under each project stage — see what's done, locked, and pending per phase'],
+              ['by_stage', Layers,           'By Stage', "Tasks grouped under each project stage — see what's done, locked, and pending per phase"],
             ] as const).map(([mode, Icon, label, hint]) => (
               <button
                 key={mode}
