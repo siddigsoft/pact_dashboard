@@ -1260,20 +1260,23 @@ export function FlowTab({
                     {/* Key Outputs — editable */}
                     {(() => {
                       const editing = outputsState[stage.id];
-                      // customItems = only user-added outputs (never mix with stage.keyOutputs)
-                      const customItems: string[] = editing?.items ?? (entry?.customOutputs ?? []);
                       const defaultItems: string[] = stage.keyOutputs ?? [];
+                      // De-dup: old data may have saved defaults into customOutputs before the fix
+                      const defaultSet = new Set(defaultItems.map(s => s.trim().toLowerCase()));
+                      const deduped = (entry?.customOutputs ?? []).filter(o => !defaultSet.has(o.trim().toLowerCase()));
+                      // customItems = only truly user-added outputs
+                      const customItems: string[] = editing?.items ?? deduped;
                       const inputVal = editing?.inputVal ?? '';
                       const isSaving = outputsSaving === stage.id;
                       const showEdit = canEditFlow;
                       const hasAny = customItems.length > 0 || defaultItems.length > 0;
 
-                      // Only init edit state with custom outputs — never mix in defaults
+                      // Only init edit state with de-duped custom outputs
                       const startEdit = () => {
                         if (!editing) {
                           setOutputsState(prev => ({
                             ...prev,
-                            [stage.id]: { items: entry?.customOutputs ?? [], inputVal: '' },
+                            [stage.id]: { items: deduped, inputVal: '' },
                           }));
                         }
                       };
