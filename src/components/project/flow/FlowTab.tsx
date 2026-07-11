@@ -693,6 +693,27 @@ export function FlowTab({
     }
   };
 
+  // Save dates for a specific stage via updateCustomStages
+  const [dateSaving, setDateSaving] = useState<string | null>(null);
+  const saveDatesForStage = async (stageId: string, patch: { plannedStart?: string | null; plannedEnd?: string | null; dueDate?: string | null }) => {
+    setDateSaving(stageId);
+    try {
+      const existing = (customFlowStages ?? []) as CustomStageEntry[];
+      const base: CustomStageEntry[] = existing.length > 0
+        ? existing
+        : allDefaultStages.map(s => ({ id: s.id }));
+      const hasEntry = base.some(e => e.id === stageId);
+      const updated: CustomStageEntry[] = hasEntry
+        ? base.map(e => e.id === stageId ? { ...e, ...patch } : e)
+        : [...base, { id: stageId, ...patch }];
+      await updateCustomStages(updated);
+    } catch (err: any) {
+      toast({ title: 'Failed to save dates', description: err.message, variant: 'destructive' });
+    } finally {
+      setDateSaving(null);
+    }
+  };
+
   // Save custom outputs for a specific stage via updateCustomStages
   const saveOutputsForStage = async (stageId: string, outputs: string[]) => {
     setOutputsSaving(stageId);
@@ -1207,6 +1228,54 @@ export function FlowTab({
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-5 border-t border-border/50">
                     {displayDesc && <p className="text-sm text-muted-foreground pt-3 leading-relaxed">{displayDesc}</p>}
+
+                    {/* ── Inline stage dates ── */}
+                    {canEditFlow && (
+                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          <Calendar className="h-3.5 w-3.5" />
+                          Dates
+                          {dateSaving === stage.id && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                        </div>
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="font-medium w-8">Start</span>
+                          <input
+                            type="date"
+                            className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                            value={plannedStart ?? ''}
+                            onChange={e => saveDatesForStage(stage.id, { plannedStart: e.target.value || null })}
+                            data-testid={`date-start-${stage.id}`}
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="font-medium w-6">End</span>
+                          <input
+                            type="date"
+                            className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                            value={plannedEnd ?? ''}
+                            onChange={e => saveDatesForStage(stage.id, { plannedEnd: e.target.value || null })}
+                            data-testid={`date-end-${stage.id}`}
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="font-medium w-7 text-orange-600">Due</span>
+                          <input
+                            type="date"
+                            className="h-7 rounded-md border border-orange-200 bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                            value={dueDate ?? ''}
+                            onChange={e => saveDatesForStage(stage.id, { dueDate: e.target.value || null })}
+                            data-testid={`date-due-${stage.id}`}
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {!canEditFlow && (plannedStart || plannedEnd || dueDate) && (
+                      <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {plannedStart && <span>{fmtDate(plannedStart)}{plannedEnd ? ` → ${fmtDate(plannedEnd)}` : ''}</span>}
+                        {dueDate && <span className={cn('font-medium', overdue ? 'text-red-600' : 'text-orange-600')}>Due {fmtDate(dueDate)}</span>}
+                      </div>
+                    )}
 
                     {/* Blocked by dependencies warning */}
                     {blocked && (

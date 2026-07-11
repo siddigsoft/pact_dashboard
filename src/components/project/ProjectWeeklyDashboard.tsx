@@ -1181,45 +1181,50 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
         {/* ── TEAM TAB ── */}
         {activeTab === 'team' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Workload */}
+            {/* Team Roster */}
             <Card className="border bg-muted/20 rounded-xl">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Users className="h-3.5 w-3.5 text-blue-500" />
-                  <span className="text-xs font-bold">Team Workload</span>
+                  <span className="text-xs font-bold">Team Members</span>
                   {teamCount > 0 && <Badge variant="outline" className="ml-auto text-[9px] px-1.5">{teamCount} members</Badge>}
                 </div>
-                {workloadData.length === 0 ? (
+                {teamComposition.length === 0 ? (
                   <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
                     <Users className="h-10 w-10 text-muted/40" />
-                    <p className="text-sm">No workload data</p>
+                    <p className="text-sm text-center">No team members assigned yet.<br/>Add members via Edit Project.</p>
                   </div>
                 ) : (
-                  <>
-                    <ResponsiveContainer width="100%" height={Math.max(100, workloadData.length * 30)}>
-                      <BarChart data={workloadData} layout="vertical"
-                        margin={{ top: 0, right: 36, left: 4, bottom: 0 }}>
-                        <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`}
-                          tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }}
-                          axisLine={false} tickLine={false} width={60} />
-                        <Tooltip formatter={(v: number) => [`${v}%`, 'Workload']}
-                          contentStyle={{ fontSize: 11, borderRadius: 10 }} />
-                        <Bar dataKey="workload" radius={[0, 4, 4, 0]} maxBarSize={16}>
-                          {workloadData.map((d, i) => (
-                            <Cell key={i} fill={d.workload >= 90 ? '#ef4444' : d.workload >= 70 ? '#f59e0b' : '#6366f1'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                    <div className="flex items-center gap-4 mt-2 pt-2 border-t flex-wrap">
-                      {[{ c:'bg-red-400', l:'≥90% overloaded'}, { c:'bg-amber-400', l:'≥70% high'}, { c:'bg-indigo-400', l:'Normal'}].map(l => (
-                        <span key={l.l} className="flex items-center gap-1 text-[9px] text-muted-foreground">
-                          <span className={`h-2 w-2 rounded-full ${l.c}`} />{l.l}
-                        </span>
-                      ))}
-                    </div>
-                  </>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {teamComposition.map((m: any, i: number) => {
+                      const wl = m.workload ?? 0;
+                      const wlColor = wl >= 90 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                   : wl >= 70 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                   : wl > 0   ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                                   : 'bg-muted text-muted-foreground';
+                      const isManager = m.isPM || m.role?.toLowerCase().includes('manager') || i === 0;
+                      const initials = (m.name ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+                      return (
+                        <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg bg-background border border-border/40 hover:border-border transition-colors">
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 ${isManager ? 'bg-[#1D3461]' : 'bg-slate-500'}`}>
+                            {initials}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-xs font-semibold truncate leading-none">{m.name ?? '—'}</p>
+                              {isManager && <span className="text-[8px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded px-1 font-bold uppercase tracking-wide flex-shrink-0">PM</span>}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 capitalize truncate">{(m.role ?? 'Team Member').replace(/_/g, ' ')}</p>
+                          </div>
+                          {wl > 0 && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${wlColor}`}>
+                              {wl}%
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>
