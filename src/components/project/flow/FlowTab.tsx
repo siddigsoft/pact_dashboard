@@ -714,6 +714,27 @@ export function FlowTab({
     }
   };
 
+  // Save % complete for a specific stage inline
+  const [percentSaving, setPercentSaving] = useState<string | null>(null);
+  const savePercentForStage = async (stageId: string, pct: number | null) => {
+    setPercentSaving(stageId);
+    try {
+      const existing = (customFlowStages ?? []) as CustomStageEntry[];
+      const base: CustomStageEntry[] = existing.length > 0
+        ? existing
+        : allDefaultStages.map(s => ({ id: s.id }));
+      const hasEntry = base.some(e => e.id === stageId);
+      const updated: CustomStageEntry[] = hasEntry
+        ? base.map(e => e.id === stageId ? { ...e, percentComplete: pct } : e)
+        : [...base, { id: stageId, percentComplete: pct }];
+      await updateCustomStages(updated);
+    } catch (err: any) {
+      toast({ title: 'Failed to save progress', description: err.message, variant: 'destructive' });
+    } finally {
+      setPercentSaving(null);
+    }
+  };
+
   // Save custom outputs for a specific stage via updateCustomStages
   const saveOutputsForStage = async (stageId: string, outputs: string[]) => {
     setOutputsSaving(stageId);
@@ -1290,17 +1311,36 @@ export function FlowTab({
                       </div>
                     )}
 
-                    {/* % Complete bar (when manually set) */}
-                    {percentComplete !== null && status !== 'completed' && status !== 'skipped' && (
+                    {/* % Complete — inline editable for editors, read-only otherwise */}
+                    {status !== 'completed' && status !== 'skipped' && (
                       <div className="space-y-1 pt-1">
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                          <span className="flex items-center gap-1 font-medium"><Percent className="h-3 w-3" /> Progress</span>
-                          <span className="font-semibold">{percentComplete}%</span>
+                          <span className="flex items-center gap-1 font-medium">
+                            <Percent className="h-3 w-3" /> Progress
+                            {percentSaving === stage.id && <Loader2 className="h-2.5 w-2.5 animate-spin ml-1" />}
+                          </span>
+                          {canEditFlow ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={5}
+                                value={percentComplete ?? 0}
+                                onChange={e => savePercentForStage(stage.id, parseInt(e.target.value))}
+                                className="w-24 h-1.5 accent-[#1D3461] cursor-pointer"
+                                data-testid={`slider-percent-${stage.id}`}
+                              />
+                              <span className="font-semibold w-8 text-right">{percentComplete ?? 0}%</span>
+                            </div>
+                          ) : (
+                            <span className="font-semibold">{percentComplete ?? 0}%</span>
+                          )}
                         </div>
                         <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                           <div
                             className="h-full rounded-full bg-gradient-to-r from-[#0F2041] to-[#1D3461] transition-all duration-500"
-                            style={{ width: `${percentComplete}%` }}
+                            style={{ width: `${percentComplete ?? 0}%` }}
                           />
                         </div>
                       </div>

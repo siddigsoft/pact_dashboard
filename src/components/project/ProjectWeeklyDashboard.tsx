@@ -101,7 +101,7 @@ const RISK_STATUS_CFG: Record<string, { label: string; badge: string }> = {
 const BLANK_RISK = {
   title: '', description: '', category: 'operational', likelihood: 'medium',
   impact: 'moderate', status: 'open', mitigation_plan: '', contingency_plan: '',
-  due_date: '', responsible_unit: '',
+  due_date: '', responsible_unit: '', owner_id: '',
 };
 function healthMeta(score: number) {
   if (score >= 80) return { label: 'Excellent', color: '#10b981', ring: 'text-emerald-500', bg: 'bg-emerald-500', track: 'bg-emerald-100 dark:bg-emerald-950/40' };
@@ -226,6 +226,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
       contingency_plan: r.contingency_plan ?? '',
       due_date: r.due_date ?? '',
       responsible_unit: r.responsible_unit ?? '',
+      owner_id: r.owner_id ?? '',
     });
     setRiskDialogOpen(true);
   }
@@ -289,6 +290,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
       contingency_plan: riskForm.contingency_plan || null,
       due_date: riskForm.due_date || null,
       responsible_unit: riskForm.responsible_unit || null,
+      owner_id: riskForm.owner_id || null,
       created_by: currentUser?.id ?? null,
       updated_at: new Date().toISOString(),
     };
@@ -1231,6 +1233,37 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
 
             {/* Deliverables + Linked Systems */}
             <div className="space-y-3">
+              {/* Workload chart */}
+              {workloadData.length > 0 && (
+                <Card className="border bg-muted/20 rounded-xl">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="h-3.5 w-3.5 text-indigo-500" />
+                      <span className="text-xs font-bold">Workload Overview</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={Math.max(70, workloadData.length * 22)}>
+                      <BarChart data={workloadData} layout="vertical" margin={{ top: 0, right: 32, left: 4, bottom: 0 }}>
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={56} />
+                        <Tooltip formatter={(v: number) => [`${v}%`, 'Workload']} contentStyle={{ fontSize: 11, borderRadius: 10 }} />
+                        <Bar dataKey="workload" radius={[0, 4, 4, 0]} maxBarSize={12}>
+                          {workloadData.map((d, i) => (
+                            <Cell key={i} fill={d.workload >= 90 ? '#ef4444' : d.workload >= 70 ? '#f59e0b' : '#6366f1'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                      {[{ c: 'bg-red-400', l: '≥90% overloaded' }, { c: 'bg-amber-400', l: '≥70% high' }, { c: 'bg-indigo-400', l: 'Normal' }].map(l => (
+                        <span key={l.l} className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                          <span className={`h-2 w-2 rounded-full ${l.c}`} />{l.l}
+                        </span>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Deliverables */}
               {deliverableEntries.length > 0 && (
                 <Card className="border bg-muted/20 rounded-xl">
@@ -1662,6 +1695,27 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                 data-testid="input-risk-responsible-unit"
               />
             </div>
+          </div>
+
+          {/* Risk Owner — pick from team members */}
+          <div className="space-y-1.5">
+            <Label>Risk Owner</Label>
+            <Select
+              value={riskForm.owner_id}
+              onValueChange={v => setRiskForm(p => ({ ...p, owner_id: v === '__none__' ? '' : v }))}
+            >
+              <SelectTrigger data-testid="select-risk-owner">
+                <SelectValue placeholder="Assign an owner…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No owner</SelectItem>
+                {teamComposition.filter((m: any) => m.userId).map((m: any) => (
+                  <SelectItem key={m.userId} value={m.userId}>
+                    {m.name}{m.role ? ` · ${m.role.replace(/_/g, ' ')}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
