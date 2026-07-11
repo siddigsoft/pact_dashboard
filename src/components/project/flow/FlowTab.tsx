@@ -1457,6 +1457,7 @@ export function FlowTab({
                           currentUserId={currentUserId}
                           assignedByName={currentUser?.fullName ?? 'A manager'}
                           canEdit={canEditFlow}
+                          notifyUserIds={currentUserId ? [currentUserId] : []}
                         />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">

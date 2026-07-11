@@ -23,6 +23,8 @@ interface Props {
   currentUserId?: string;
   assignedByName?: string;
   canEdit: boolean;
+  /** User IDs to notify (email + in-app) when an assignee clicks Acknowledge */
+  notifyUserIds?: string[];
 }
 
 function useProfileSearch(query: string) {
@@ -89,7 +91,7 @@ async function sendAssignmentNotification(
 
 export function StageAssignees({
   projectId, stageId, stageLabel = 'Stage', projectName = 'Project',
-  currentUserId, assignedByName = 'A manager', canEdit,
+  currentUserId, assignedByName = 'A manager', canEdit, notifyUserIds = [],
 }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -135,6 +137,32 @@ export function StageAssignees({
     try {
       await acknowledgeAssignment(assigneeId, currentUserId);
       toast({ title: 'Stage assignment acknowledged', description: `You confirmed your assignment to "${stageLabel}"` });
+
+      // Notify managers/assigners — exclude the current user who just acknowledged
+      const recipients = notifyUserIds.filter(id => id !== currentUserId);
+      if (recipients.length > 0) {
+        const myName = myAssignment?.fullName ?? assignedByName;
+        supabase.functions.invoke('dispatch-notification', {
+          body: {
+            event_type: 'project_stage_acknowledged',
+            entity_type: 'project',
+            entity_id: projectId,
+            priority: 'normal',
+            recipient_ids: recipients,
+            title_en: `Stage assignment confirmed`,
+            title_ar: `تم تأكيد التعيين`,
+            message_en: `${myName} confirmed their assignment to "${stageLabel}" in project "${projectName}"`,
+            message_ar: `قام ${myName} بتأكيد تعيينه في "${stageLabel}" في مشروع "${projectName}"`,
+            action_url: `/projects/${projectId}`,
+            send_email: true,
+            metadata: {
+              project_name: projectName,
+              stage: stageLabel,
+              actor: myName,
+            },
+          },
+        }).catch(() => {});
+      }
     } catch {
       toast({ title: 'Failed to acknowledge', variant: 'destructive' });
     }
