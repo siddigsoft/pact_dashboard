@@ -105,6 +105,8 @@ interface Props {
   projectEnd?: string;
   allDefaultStages: FlowStage[];
   customFlowStages?: CustomStageEntry[];
+  /** All project team member user IDs (PM + members) for sending acknowledgement notifications */
+  teamUserIds?: string[];
 }
 
 // ── Formatters ─────────────────────────────────────────────────────────────
@@ -572,7 +574,7 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
 
 export function FlowTab({
   flow, projectName, projectType, projectCode, projectId, currentUserId,
-  projectStart, projectEnd, allDefaultStages, customFlowStages,
+  projectStart, projectEnd, allDefaultStages, customFlowStages, teamUserIds,
 }: Props) {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -1566,7 +1568,7 @@ export function FlowTab({
                           currentUserId={currentUserId}
                           assignedByName={currentUser?.fullName ?? 'A manager'}
                           canEdit={canEditFlow}
-                          notifyUserIds={currentUserId ? [currentUserId] : []}
+                          notifyUserIds={(teamUserIds ?? []).filter(id => id !== currentUserId)}
                         />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">

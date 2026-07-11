@@ -1571,6 +1571,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             projectEnd={project.endDate}
             allDefaultStages={flow.flowDef}
             customFlowStages={(project.customFlowStages ?? []) as any}
+            teamUserIds={[
+              project.team?.projectManager,
+              ...((project.team as any)?.teamComposition ?? []).map((m: any) => m?.userId),
+            ].filter((id): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))}
           />
         </TabsContent>
         <TabsContent value="field_tasks" className="mt-4">

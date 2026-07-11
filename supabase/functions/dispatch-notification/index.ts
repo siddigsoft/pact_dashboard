@@ -121,6 +121,7 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'project_risk_added':         { title_en: 'New Risk Logged',                      title_ar: 'تم تسجيل مخاطرة جديدة',                      category: 'system',       priority: 'high'   },
   'project_risk_updated':       { title_en: 'Risk Status Updated',                  title_ar: 'تم تحديث حالة المخاطرة',                     category: 'system',       priority: 'normal' },
   'project_status_changed':     { title_en: 'Project Status Changed',               title_ar: 'تغيرت حالة المشروع',                         category: 'system',       priority: 'normal' },
+  'project_stage_acknowledged': { title_en: 'Stage Assignment Confirmed',           title_ar: 'تم تأكيد التعيين في المرحلة',                 category: 'assignments',  priority: 'normal' },
   // CRM — full lifecycle
   'crm_opportunity_stage_changed': { title_en: 'Opportunity Stage Updated',        title_ar: 'تم تحديث مرحلة الفرصة',                      category: 'system',       priority: 'normal' },
   'crm_opportunity_won':        { title_en: 'Opportunity Won!',                     title_ar: 'تم الفوز بالفرصة!',                          category: 'system',       priority: 'normal' },
@@ -222,6 +223,7 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'project_risk_added':          'email_notify_project_milestones',
   'project_risk_updated':        'email_notify_project_milestones',
   'project_status_changed':      'email_notify_project_milestones',
+  'project_stage_acknowledged':  'email_notify_project_milestones',
   // New leave events
   'leave_request_cancelled':     'email_notify_approval_needed',
   'leave_balance_updated':       'email_notify_system',
@@ -396,7 +398,7 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
   }
   if ([
     'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',
-    'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
+    'project_stage_assigned', 'project_stage_acknowledged', 'project_stalled', 'project_milestone_overdue',
     'project_created', 'project_completed', 'project_archived', 'project_member_added', 'project_member_removed',
     'project_health_changed', 'project_budget_exceeded', 'project_stage_deadline_reminder',
     'project_milestone_completed', 'project_status_changed',
