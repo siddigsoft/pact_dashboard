@@ -250,10 +250,10 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
         title_en: isAdd ? `New Risk Logged: ${project.name}` : `Risk Updated: ${project.name}`,
         title_ar: isAdd ? `تم تسجيل مخاطرة جديدة: ${project.name}` : `تم تحديث مخاطرة: ${project.name}`,
         message_en: isAdd
-          ? `${currentUser?.fullName ?? 'A team member'} logged a new ${riskPayload.category} risk "${riskPayload.title}" (score: ${riskPayload.risk_score}) in "${project.name}"`
+          ? `${currentUser?.fullName ?? 'A team member'} logged a new ${riskPayload.category} risk "${riskPayload.title}" (score: ${displayScore}) in "${project.name}"`
           : `${currentUser?.fullName ?? 'A team member'} updated risk "${riskPayload.title}" — status: ${riskPayload.status} in "${project.name}"`,
         message_ar: isAdd
-          ? `سجّل ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} مخاطرة جديدة "${riskPayload.title}" (درجة: ${riskPayload.risk_score}) في مشروع "${project.name}"`
+          ? `سجّل ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} مخاطرة جديدة "${riskPayload.title}" (درجة: ${displayScore}) في مشروع "${project.name}"`
           : `حدّث ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} المخاطرة "${riskPayload.title}" — الحالة: ${riskPayload.status} في مشروع "${project.name}"`,
         triggered_by: currentUser?.id,
         triggered_by_name: currentUser?.fullName,
@@ -263,7 +263,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
           project_name: project.name,
           risk_title: riskPayload.title,
           category: riskPayload.category,
-          risk_score: riskPayload.risk_score,
+          risk_score: displayScore,
           status: riskPayload.status,
           due_date: riskPayload.due_date ?? undefined,
           responsible_unit: riskPayload.responsible_unit ?? undefined,
@@ -277,13 +277,13 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     setRiskSaving(true);
     const lScore = LIKELIHOOD_OPTS.find(o => o.value === riskForm.likelihood)?.score ?? 3;
     const iScore = IMPACT_OPTS.find(o => o.value === riskForm.impact)?.score ?? 3;
+    const displayScore = lScore * iScore; // local only — risk_score is a generated column in DB
     const payload: any = {
       project_id: project.id,
       title: riskForm.title.trim(),
       category: riskForm.category,
       likelihood: riskForm.likelihood,
       impact: riskForm.impact,
-      risk_score: lScore * iScore,
       status: riskForm.status,
       mitigation_plan: riskForm.mitigation_plan || null,
       contingency_plan: riskForm.contingency_plan || null,
@@ -482,7 +482,6 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
         project_id: project.id,
         title: r.title,
         category: r.category,
-        risk_score: r.score,
         likelihood: null,
         impact: null,
         status: 'open',

@@ -720,10 +720,20 @@ export function FlowTab({
     setSavingRisk(true);
     try {
       const { supabase } = await import('@/integrations/supabase/client');
+      // Map picker score (1-5) to likelihood/impact — risk_score is a generated column
+      const SCORE_MAP: Record<number, { likelihood: string; impact: string }> = {
+        1: { likelihood: 'very_low', impact: 'negligible' },
+        2: { likelihood: 'low',      impact: 'minor' },
+        3: { likelihood: 'medium',   impact: 'moderate' },
+        4: { likelihood: 'high',     impact: 'major' },
+        5: { likelihood: 'very_high',impact: 'critical' },
+      };
+      const lh = SCORE_MAP[riskForm.risk_score] ?? SCORE_MAP[3];
       const { error } = await supabase.from('project_risks').insert({
         project_id: projectId,
         title: riskForm.title.trim(),
-        risk_score: riskForm.risk_score,
+        likelihood: lh.likelihood,
+        impact: lh.impact,
         mitigation_plan: riskForm.mitigation_plan || null,
         status: 'open',
       });
