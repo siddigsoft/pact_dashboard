@@ -1,9 +1,9 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, Users, Shield, Lock, Building2, Award, DollarSign,
   CheckSquare, ClipboardList, Settings, Activity, Info,
-  ChevronRight,
+  ChevronRight, ChevronDown,
 } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
@@ -109,6 +109,19 @@ export default function AdminHub() {
 
   const Panel = PanelMap[activeTab];
 
+  const [dropOpen, setDropOpen] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => { setDropOpen(false); }, [activeSection.id]);
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
 
@@ -200,39 +213,74 @@ export default function AdminHub() {
           })}
         </div>
 
-        {/* ── Level 3: Sub-tab strip ── */}
+        {/* ── Level 3: Sub-tab dropdown ── */}
         <div
-          className="flex items-center overflow-x-auto scrollbar-none border-t"
-          style={{ borderColor: `${activeSection.color}30`, backgroundColor: `${activeSection.color}08` }}
+          className="relative px-4 py-2 border-t flex items-center gap-3"
+          style={{ borderColor: `${activeSection.color}30`, backgroundColor: `${activeSection.color}0a` }}
+          ref={dropRef}
         >
-          {activeSection.tabs.map(tab => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setTab(tab.id)}
-                className={cn(
-                  'relative flex items-center gap-1.5 px-4 py-2.5 text-[12.5px] font-medium whitespace-nowrap',
-                  'transition-all duration-100',
-                  isActive
-                    ? 'text-white'
-                    : 'text-gray-400 hover:text-gray-200',
-                )}
+          {/* Dropdown trigger */}
+          <button
+            onClick={() => setDropOpen(v => !v)}
+            className={cn(
+              'flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm',
+              dropOpen
+                ? 'bg-white/10 border-white/20 text-white'
+                : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white',
+            )}
+          >
+            <activeTabDef.icon className="h-4 w-4 shrink-0" style={{ color: activeSection.color }} />
+            <span className="truncate">{activeTabDef.label}</span>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 ml-auto opacity-60 transition-transform duration-150', dropOpen && 'rotate-180')} />
+          </button>
+
+          {/* Position counter */}
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400 shrink-0">
+            <span className="px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${activeSection.color}22`, color: activeSection.color }}>
+              {activeSection.tabs.findIndex(t => t.id === activeTab) + 1} / {activeSection.tabs.length}
+            </span>
+            <span className="opacity-50">{activeSection.label}</span>
+          </div>
+
+          {/* Dropdown panel */}
+          {dropOpen && (
+            <div
+              className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-2xl overflow-hidden z-50"
+              style={{
+                background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
+                borderColor: `${activeSection.color}35`,
+                boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px ${activeSection.color}25`,
+              }}
+            >
+              <div
+                className="px-4 py-2.5 border-b flex items-center gap-2"
+                style={{ borderColor: `${activeSection.color}25`, backgroundColor: `${activeSection.color}12` }}
               >
-                {isActive && (
-                  <span
-                    className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                    style={{ backgroundColor: activeSection.color }}
-                  />
-                )}
-                <tab.icon
-                  className={cn('h-3.5 w-3.5 transition-colors', isActive ? 'opacity-100' : 'opacity-60')}
-                  style={isActive ? { color: activeSection.color } : {}}
-                />
-                {tab.label}
-              </button>
-            );
-          })}
+                <activeSection.icon className="h-4 w-4 shrink-0" style={{ color: activeSection.color }} />
+                <span className="text-[12px] font-bold text-white tracking-wide">{activeSection.label}</span>
+                <span className="ml-auto text-[10px] text-gray-400">{activeSection.tabs.length} pages</span>
+              </div>
+              <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {activeSection.tabs.map(tab => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => { setTab(tab.id); setDropOpen(false); }}
+                      className={cn(
+                        'flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100',
+                        isActive ? 'text-white' : 'text-gray-400 hover:text-gray-100 hover:bg-white/5',
+                      )}
+                      style={isActive ? { backgroundColor: `${activeSection.color}28`, outline: `1px solid ${activeSection.color}50` } : {}}
+                    >
+                      <tab.icon className="h-4 w-4 shrink-0 mt-0.5" style={{ color: isActive ? activeSection.color : undefined, opacity: isActive ? 1 : 0.55 }} />
+                      <span className="text-[12px] font-medium leading-tight">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
