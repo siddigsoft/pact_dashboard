@@ -21,6 +21,8 @@ import { NavBadgeCountsProvider } from "@/context/NavBadgeCountsContext";
 import { normalizeRole } from "@/utils/roleMapping";
 import { PAGE_DEFS } from "@/pages/PageAccessControl";
 import { PageAccessModal } from "@/components/access/PageAccessModal";
+import { PageAccessDenied } from "@/components/access/PageAccessDenied";
+import { usePageAccessGuard } from "@/hooks/usePageAccessGuard";
 import { Shield } from "lucide-react";
 
 interface MainLayoutContentProps {
@@ -54,6 +56,9 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
   const currentSlug = pathToSlug(location.pathname);
   const currentPageDef = currentSlug ? PAGE_DEFS.find(p => p.slug === currentSlug) : null;
+
+  // ── Page access guard ───────────────────────────────────────────────────
+  const { isBlocked: pageIsBlocked, isChecking: pageIsChecking, pageLabel } = usePageAccessGuard();
 
   const getPageTitle = () => {
     const path = location.pathname;
@@ -119,7 +124,15 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             {isMobile && <GlobalRefreshBar />}
             <div className={`global-scrollable flex-1 flex flex-col relative z-0 min-w-0 min-h-0 ${isMobile ? 'px-1 pb-12 pt-0.5 bg-gray-50 dark:bg-gray-900' : 'bg-transparent px-3 py-3 lg:px-5 lg:py-4'}`}>
               <div className="w-full rounded-2xl border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
-                {children || <Outlet />}
+                {pageIsChecking ? (
+                  <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : pageIsBlocked ? (
+                  <PageAccessDenied pageLabel={pageLabel} reason="blocked" />
+                ) : (
+                  children || <Outlet />
+                )}
               </div>
             </div>
             {isMobile && <MobileBottomNav />}

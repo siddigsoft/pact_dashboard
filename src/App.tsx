@@ -234,6 +234,7 @@ const Offboarding = lazy(() => import('./pages/Offboarding'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
+import { PageAccessDenied } from './components/access/PageAccessDenied';
 import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { Toaster as HotToaster } from 'react-hot-toast';
@@ -285,10 +286,15 @@ const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   </ErrorBoundary>
 );
 
+/** Renders the "Access Restricted" screen for role-based blocks (not DB overrides). */
+const PageRoleDenied = ({ pageLabel }: { pageLabel?: string }) => (
+  <PageAccessDenied pageLabel={pageLabel} reason="role" />
+);
+
 const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { isSuperAdmin } = useAuthorization();
   if (!isSuperAdmin()) {
-    return <Navigate to="/dashboard" replace />;
+    return <PageRoleDenied pageLabel="Super Admin Area" />;
   }
   return <>{children}</>;
 };
@@ -296,7 +302,7 @@ const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
 const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { hasAnyRole } = useAuthorization();
   if (!hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
-    return <Navigate to="/dashboard" replace />;
+    return <PageRoleDenied pageLabel="Finance Administration" />;
   }
   return <>{children}</>;
 };
@@ -306,7 +312,7 @@ const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
 const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   const { hasAnyRole } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  if (!allowed) return <Navigate to="/dashboard" replace />;
+  if (!allowed) return <PageRoleDenied pageLabel="Pre-Funding Management" />;
   return <>{children}</>;
 };
 
