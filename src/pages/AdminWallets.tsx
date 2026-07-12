@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { WalletCard } from '@/components/wallet/WalletCard';
 import { supabase } from '@/integrations/supabase/client';
 import { adminListWallets } from '@/context/wallet/supabase';
-import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2, ChevronDown, ChevronRight, MapPin, Calendar, Settings, Download, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2, ChevronDown, ChevronRight, MapPin, Calendar, Settings, Download, FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, PlayCircle, Info } from 'lucide-react';
+import { backfillWalletTransactionForSite } from '@/utils/wallet-transactions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -36,6 +37,19 @@ const AdminWallets: FC = () => {
   }>({ open: false, userId: '', userName: '', currentBalance: 0 });
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
+
+  // ── Backfill state ─────────────────────────────────────────────────────────
+  const [backfillScan, setBackfillScan] = useState<{
+    scanned: boolean;
+    missing: { id: string; siteName: string; userName: string; fee: number }[];
+    totalCompleted: number;
+    alreadyCredited: number;
+    noFee: number;
+    noUser: number;
+  } | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState({ current: 0, total: 0, succeeded: 0, failed: 0, skipped: 0 });
+
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -174,6 +188,95 @@ const AdminWallets: FC = () => {
     await load();
     setSyncingAll(false);
     setSyncProgress({ current: 0, total: 0 });
+  };
+
+  // ── Scan for completed sites missing wallet credits ────────────────────────
+  const scanMissingFees = async () => {
+    setBackfillScan(null);
+    try {
+      // Fetch ALL completed entries (in batches to avoid row limits)
+      let allEntries: any[] = [];
+      let offset = 0;
+      const BATCH = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost, profiles:accepted_by(full_name, email)')
+          .eq('status', 'completed')
+          .range(offset, offset + BATCH - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allEntries = allEntries.concat(data);
+        if (data.length < BATCH) break;
+        offset += BATCH;
+      }
+
+      const totalCompleted = allEntries.length;
+
+      // Fetch all site_visit_ids that already have earning-type wallet transactions
+      const { data: existingTxs } = await supabase
+        .from('wallet_transactions')
+        .select('site_visit_id')
+        .in('type', ['earning', 'site_visit_fee'])
+        .not('site_visit_id', 'is', null);
+
+      const creditedIds = new Set((existingTxs || []).map((t: any) => t.site_visit_id).filter(Boolean));
+
+      let alreadyCredited = 0;
+      let noFee = 0;
+      let noUser = 0;
+      const missing: { id: string; siteName: string; userName: string; fee: number }[] = [];
+
+      for (const e of allEntries) {
+        const fee = (Number(e.enumerator_fee || 0) + Number(e.transport_fee || 0)) || Number(e.cost || 0);
+        const userId = e.accepted_by || e.visit_completed_by;
+        const userName = (e.profiles as any)?.full_name || (e.profiles as any)?.email || userId || 'Unknown';
+
+        if (creditedIds.has(e.id)) { alreadyCredited++; continue; }
+        if (!userId)  { noUser++; continue; }
+        if (fee <= 0) { noFee++;  continue; }
+
+        missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, fee });
+      }
+
+      setBackfillScan({ scanned: true, missing, totalCompleted, alreadyCredited, noFee, noUser });
+    } catch (err: any) {
+      toast({ title: 'Scan Failed', description: err?.message || 'Unknown error', variant: 'destructive' });
+    }
+  };
+
+  // ── Run backfill for all missing sites ─────────────────────────────────────
+  const runBackfillAll = async () => {
+    if (!backfillScan || backfillScan.missing.length === 0) return;
+    setBackfilling(true);
+    const total = backfillScan.missing.length;
+    let succeeded = 0, failed = 0, skipped = 0;
+    setBackfillProgress({ current: 0, total, succeeded, failed, skipped });
+
+    for (let i = 0; i < backfillScan.missing.length; i++) {
+      const site = backfillScan.missing[i];
+      try {
+        const result = await backfillWalletTransactionForSite(site.id);
+        if (result.success) succeeded++;
+        else if (result.message?.includes('already')) skipped++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+      setBackfillProgress({ current: i + 1, total, succeeded, failed, skipped });
+    }
+
+    // Re-scan to show updated state
+    await scanMissingFees();
+    await load();
+
+    toast({
+      title: 'Backfill Complete',
+      description: `${succeeded} wallets credited · ${skipped} already done · ${failed} failed`,
+      variant: failed > 0 ? 'destructive' : 'default',
+    });
+
+    setBackfilling(false);
   };
 
   const load = async () => {
@@ -423,6 +526,118 @@ const AdminWallets: FC = () => {
           <DataFreshnessBadge />
         </div>
       </div>
+
+      {/* ── Wallet Backfill Panel ── */}
+      <Card className="border-amber-300 dark:border-amber-600 bg-amber-50/40 dark:bg-amber-950/10">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">
+                Missing Wallet Credits — Site Visits
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Completed site visits are only credited automatically when finished through the app. Historical or admin-completed visits may be missing. Run a scan to find and backfill them.
+              </p>
+
+              {/* Scan result */}
+              {backfillScan && (
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="bg-background rounded-lg border px-3 py-2">
+                    <div className="text-muted-foreground">Total Completed</div>
+                    <div className="font-bold text-base">{backfillScan.totalCompleted}</div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                    <div className="text-muted-foreground">Already Credited</div>
+                    <div className="font-bold text-base text-green-700 dark:text-green-400">{backfillScan.alreadyCredited}</div>
+                  </div>
+                  <div className={`rounded-lg border px-3 py-2 ${backfillScan.missing.length > 0 ? 'bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700' : 'bg-background'}`}>
+                    <div className="text-muted-foreground">Missing Credits</div>
+                    <div className={`font-bold text-base ${backfillScan.missing.length > 0 ? 'text-red-700 dark:text-red-400' : ''}`}>{backfillScan.missing.length}</div>
+                  </div>
+                  <div className="bg-background rounded-lg border px-3 py-2">
+                    <div className="text-muted-foreground">No Fee / No User</div>
+                    <div className="font-bold text-base text-muted-foreground">{backfillScan.noFee + backfillScan.noUser}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress bar during backfill */}
+              {backfilling && backfillProgress.total > 0 && (
+                <div className="mt-3 space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Crediting wallets… {backfillProgress.current}/{backfillProgress.total}</span>
+                    <span className="text-green-600">{backfillProgress.succeeded} credited · {backfillProgress.failed} failed</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-2 bg-green-500 rounded-full transition-all"
+                      style={{ width: `${Math.round((backfillProgress.current / backfillProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Preview list of first 10 missing */}
+              {backfillScan && backfillScan.missing.length > 0 && !backfilling && (
+                <div className="mt-3 rounded-lg border bg-background overflow-hidden">
+                  <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                    Preview — first {Math.min(10, backfillScan.missing.length)} of {backfillScan.missing.length} sites missing credit
+                  </div>
+                  <div className="divide-y max-h-48 overflow-y-auto">
+                    {backfillScan.missing.slice(0, 10).map(s => (
+                      <div key={s.id} className="px-3 py-1.5 flex justify-between text-xs">
+                        <span className="truncate mr-2 text-foreground/80">{s.siteName}</span>
+                        <span className="flex-shrink-0 text-muted-foreground">{s.userName} · <span className="font-medium text-amber-700 dark:text-amber-400">{s.fee.toLocaleString()} SDG</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {backfillScan && backfillScan.missing.length === 0 && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  All completed sites have wallet credits — nothing to backfill.
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={scanMissingFees}
+                disabled={backfilling}
+                data-testid="button-scan-missing-fees"
+                className="border-amber-400 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+              >
+                {backfillScan === null ? (
+                  <><Search className="h-3.5 w-3.5 mr-1.5" />Scan Now</>
+                ) : (
+                  <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-scan</>
+                )}
+              </Button>
+              {backfillScan && backfillScan.missing.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={runBackfillAll}
+                  disabled={backfilling}
+                  data-testid="button-run-backfill"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {backfilling ? (
+                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{backfillProgress.current}/{backfillProgress.total}</>
+                  ) : (
+                    <><PlayCircle className="h-3.5 w-3.5 mr-1.5" />Credit {backfillScan.missing.length} Sites</>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
