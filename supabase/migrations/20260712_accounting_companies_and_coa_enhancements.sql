@@ -92,8 +92,8 @@ CREATE TABLE IF NOT EXISTS acct_fiscal_positions (
 CREATE TABLE IF NOT EXISTS acct_fiscal_position_tax_map (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   fiscal_position_id  UUID NOT NULL REFERENCES acct_fiscal_positions(id) ON DELETE CASCADE,
-  tax_source_id       UUID REFERENCES acct_taxes(id) ON DELETE SET NULL,
-  tax_dest_id         UUID REFERENCES acct_taxes(id) ON DELETE SET NULL,
+  tax_source_id       UUID,  -- references acct_taxes when that table exists
+  tax_dest_id         UUID,  -- references acct_taxes when that table exists
   notes               TEXT
 );
 
