@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FC, Fragment } from 'react';
 import { useWallet } from '@/context/wallet/WalletContext';
+import { useUser } from '@/context/user/UserContext';
 import { useNavigate } from 'react-router-dom';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +38,9 @@ const AdminWallets: FC = () => {
   }>({ open: false, userId: '', userName: '', currentBalance: 0 });
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
+
+  // All users from context — bypasses RLS so we see all 221 users regardless
+  const { users } = useUser();
 
   // ── Backfill state ─────────────────────────────────────────────────────────
   const [backfillScan, setBackfillScan] = useState<{
@@ -307,9 +311,90 @@ const AdminWallets: FC = () => {
   };
 
   const load = async () => {
-    const data = await adminListWallets();
-    setRows(data || []);
-    const c = data && data[0]?.balances ? Object.keys(data[0].balances)[0] : 'SDG';
+    // Fetch wallets (may be RLS-limited; we expand the list using all users below)
+    const walletData = await adminListWallets({ pageSize: 500 });
+
+    // Also fetch wallet_transactions for ALL users so we can compute per-user totals
+    const { data: allTx } = await supabase
+      .from('wallet_transactions')
+      .select('id, wallet_id, user_id, type, amount, site_visit_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5000);
+
+    const txList: any[] = allTx || [];
+
+    // Build maps
+    const walletByUserId = new Map((walletData || []).map((w: any) => [w.user_id, w]));
+
+    const earnedByUser: Record<string, number> = {};
+    const withdrawnByUser: Record<string, number> = {};
+    const txCountByUser: Record<string, number> = {};
+    const siteVisitsByUser: Record<string, number> = {};
+    const walletIdByUser: Record<string, string> = {};
+
+    txList.forEach((tx: any) => {
+      const uid = tx.user_id;
+      if (!uid) return;
+      if (tx.wallet_id) walletIdByUser[uid] = tx.wallet_id;
+      txCountByUser[uid] = (txCountByUser[uid] || 0) + 1;
+      if (tx.site_visit_id) siteVisitsByUser[uid] = (siteVisitsByUser[uid] || 0) + 1;
+      const amt = Number(tx.amount || 0);
+      if (tx.type === 'earning' || tx.type === 'site_visit_fee' || tx.type === 'adjustment' || amt > 0) {
+        earnedByUser[uid] = (earnedByUser[uid] || 0) + Math.abs(amt);
+      }
+      if (tx.type === 'withdrawal' || amt < 0) {
+        withdrawnByUser[uid] = (withdrawnByUser[uid] || 0) + Math.abs(amt);
+      }
+    });
+
+    // Build merged rows: all users from context + wallet data merged on top
+    const activeUsers = (users || []).filter(
+      (u: any) => u.isApproved || u.profileStatus === 'approved' || u.profileStatus === 'active'
+    );
+    const coveredIds = new Set(activeUsers.map((u: any) => u.id));
+
+    const buildRow = (userId: string, name?: string, email?: string) => {
+      const w: any = walletByUserId.get(userId);
+      const balance = w?.balances
+        ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0)
+        : 0;
+      const storedEarned = Number(w?.total_earned || 0);
+      const storedWithdrawn = Number(w?.total_withdrawn || 0);
+      return {
+        ...(w || {}),
+        id: w?.id || walletIdByUser[userId] || null,
+        user_id: userId,
+        owner_name: w?.owner_name || name || email || userId,
+        profiles: w?.profiles || { full_name: name, email },
+        balances: w?.balances || { SDG: 0 },
+        totalEarned: Math.max(storedEarned, earnedByUser[userId] || 0),
+        totalWithdrawn: Math.max(storedWithdrawn, withdrawnByUser[userId] || 0),
+        _txCount: txCountByUser[userId] || 0,
+        _siteVisits: siteVisitsByUser[userId] || 0,
+        _hasWallet: !!w,
+        _balance: balance,
+      };
+    };
+
+    const merged: any[] = activeUsers.map((u: any) => buildRow(u.id, u.name || u.full_name, u.email));
+
+    // Also include any wallet whose owner isn't in the active-users list
+    (walletData || []).forEach((w: any) => {
+      if (!coveredIds.has(w.user_id)) {
+        merged.push(buildRow(w.user_id));
+      }
+    });
+
+    // Sort: wallets with balance/earnings first, then alphabetically
+    merged.sort((a, b) => {
+      const aScore = (a._balance || 0) + (a.totalEarned || 0);
+      const bScore = (b._balance || 0) + (b.totalEarned || 0);
+      if (bScore !== aScore) return bScore - aScore;
+      return (a.owner_name || '').localeCompare(b.owner_name || '');
+    });
+
+    setRows(merged);
+    const c = walletData && walletData[0]?.balances ? Object.keys(walletData[0].balances)[0] : 'SDG';
     setCurrency(c);
   };
 
@@ -350,12 +435,17 @@ const AdminWallets: FC = () => {
 
   const handleExportCSV = async (wallet: any) => {
     try {
-      const transactions = transactionDetails[wallet.id] || [];
+      const wId = wallet.id;
+      if (!wId) {
+        toast({ title: 'No wallet yet', description: 'This user has no wallet transactions to export.', variant: 'destructive' });
+        return;
+      }
+      const transactions = transactionDetails[wId] || [];
       if (transactions.length === 0) {
-        await loadTransactionDetails(wallet.id);
+        await loadTransactionDetails(wId);
       }
       // Transform Supabase snake_case to camelCase WalletTransaction format
-      const txs = (transactionDetails[wallet.id] || []).map((tx: any) => ({
+      const txs = (transactionDetails[wId] || []).map((tx: any) => ({
         id: tx.id,
         walletId: tx.wallet_id,
         userId: tx.user_id,
@@ -396,12 +486,17 @@ const AdminWallets: FC = () => {
 
   const handleExportPDF = async (wallet: any) => {
     try {
-      const transactions = transactionDetails[wallet.id] || [];
+      const wId = wallet.id;
+      if (!wId) {
+        toast({ title: 'No wallet yet', description: 'This user has no wallet transactions to export.', variant: 'destructive' });
+        return;
+      }
+      const transactions = transactionDetails[wId] || [];
       if (transactions.length === 0) {
-        await loadTransactionDetails(wallet.id);
+        await loadTransactionDetails(wId);
       }
       // Transform Supabase snake_case to camelCase WalletTransaction format
-      const txs = (transactionDetails[wallet.id] || []).map((tx: any) => ({
+      const txs = (transactionDetails[wId] || []).map((tx: any) => ({
         id: tx.id,
         walletId: tx.wallet_id,
         userId: tx.user_id,
@@ -441,12 +536,15 @@ const AdminWallets: FC = () => {
   };
   
 
-  useEffect(() => { load(); }, []);
+  // Re-run load whenever the users list is ready/updated
+  useEffect(() => {
+    if (users && users.length > 0) { load(); }
+  }, [users]);
 
   useEffect(() => {
     const id = setInterval(() => { load(); }, 60000);
     return () => clearInterval(id);
-  }, []);
+  }, [users]);
 
   useEffect(() => {
     const ch = supabase
@@ -800,12 +898,14 @@ const AdminWallets: FC = () => {
                 </TableHeader>
                 <TableBody>
                   {filtered.map(wallet => {
+                    const rowKey = wallet.user_id || wallet.id;
+                    const walletId = wallet.id; // may be null if no wallet row yet
                     const balance = (wallet.balances?.[currency] || 0);
                     const earned = Number(wallet.totalEarned || 0);
                     const withdrawn = Number(wallet.totalWithdrawn || 0);
                     const isActive = balance > 0 || earned > 0;
-                    const isExpanded = expandedWallets.has(wallet.id);
-                    const transactions = transactionDetails[wallet.id] || [];
+                    const isExpanded = walletId ? expandedWallets.has(walletId) : false;
+                    const transactions = walletId ? (transactionDetails[walletId] || []) : [];
                     
                     const breakdown = wallet.breakdown || {};
                     const siteVisitFees = Number(breakdown.earning || 0) + Number(breakdown.site_visit_fee || 0);
@@ -815,7 +915,7 @@ const AdminWallets: FC = () => {
                     const withdrawals = Number(breakdown.withdrawal || 0);
                     
                     return (
-                      <Fragment key={wallet.id}>
+                      <Fragment key={rowKey}>
                         <TableRow 
                           className="hover-elevate"
                           data-testid={`wallet-row-${wallet.user_id}`}
@@ -826,9 +926,10 @@ const AdminWallets: FC = () => {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6"
+                                disabled={!walletId}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  toggleWalletExpansion(wallet.id);
+                                  if (walletId) toggleWalletExpansion(walletId);
                                 }}
                               >
                                 {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -1055,9 +1156,9 @@ const AdminWallets: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map(wallet => (
             <WalletCard
-              key={wallet.id}
+              key={wallet.user_id || wallet.id}
               wallet={{
-                id: wallet.id,
+                id: wallet.id || wallet.user_id,
                 userId: wallet.user_id,
                 userName: wallet.owner_name || wallet.profiles?.full_name || wallet.profiles?.username,
                 userEmail: wallet.profiles?.email,
