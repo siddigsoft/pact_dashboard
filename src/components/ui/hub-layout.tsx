@@ -1,5 +1,6 @@
+import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Info, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { ConnectedPagesBar } from './connected-pages-bar';
 
 export interface HubSection {
@@ -40,7 +41,30 @@ export function HubLayout({
   children, overviewContent,
 }: HubLayoutProps) {
   const activeSection = sections.find(s => s.id === activeSectionId) ?? null;
+  const activeTab = activeSection?.tabs.find(t => t.id === activeTabId) ?? null;
   const accent = activeSection?.color ?? sections[0]?.color ?? '#3b82f6';
+
+  const [dropOpen, setDropOpen] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setDropOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Close dropdown when section changes
+  useEffect(() => { setDropOpen(false); }, [activeSectionId]);
+
+  const handleTabSelect = (tabId: string) => {
+    onTabClick(tabId);
+    setDropOpen(false);
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -56,17 +80,12 @@ export function HubLayout({
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg transition-all duration-300"
-              style={{
-                background: accent,
-                boxShadow: `0 0 16px ${accent}55`,
-              }}
+              style={{ background: accent, boxShadow: `0 0 16px ${accent}55` }}
             >
               <HubIcon style={{ width: 18, height: 18, color: 'white' }} />
             </div>
             <div className="min-w-0">
-              <h1 className="text-[17px] font-bold text-white tracking-tight leading-tight">
-                {title}
-              </h1>
+              <h1 className="text-[17px] font-bold text-white tracking-tight leading-tight">{title}</h1>
               <div className="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400 flex-wrap">
                 {sections.map((s, i) => (
                   <span key={s.id} className="flex items-center gap-1">
@@ -79,9 +98,7 @@ export function HubLayout({
                     </span>
                   </span>
                 ))}
-                {sections.length === 0 && (
-                  <span className="opacity-50">{subtitle}</span>
-                )}
+                {sections.length === 0 && <span className="opacity-50">{subtitle}</span>}
               </div>
             </div>
           </div>
@@ -114,10 +131,7 @@ export function HubLayout({
                     style={{ backgroundColor: s.color }}
                   />
                 )}
-                <s.icon
-                  className="h-4 w-4 transition-colors shrink-0"
-                  style={isActive ? { color: s.color } : {}}
-                />
+                <s.icon className="h-4 w-4 transition-colors shrink-0" style={isActive ? { color: s.color } : {}} />
                 <span>{s.label}</span>
                 <span
                   className={cn(
@@ -133,59 +147,110 @@ export function HubLayout({
           })}
         </div>
 
-        {/* ── Level 3: Sub-tab strip ── */}
+        {/* ── Level 3: Sub-tab dropdown bar ── */}
         {activeSection && (
           <div
-            className="flex items-center overflow-x-auto scrollbar-none border-t"
-            style={{
-              borderColor: `${accent}30`,
-              backgroundColor: `${accent}08`,
-            }}
+            className="relative px-4 py-2 border-t flex items-center gap-3"
+            style={{ borderColor: `${accent}30`, backgroundColor: `${accent}0a` }}
+            ref={dropRef}
           >
-            {activeSection.tabs.map(tab => {
-              const isActive = activeTabId === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabClick(tab.id)}
-                  className={cn(
-                    'relative flex items-center gap-1.5 px-4 py-2.5 text-[12.5px] font-medium whitespace-nowrap',
-                    'transition-all duration-100',
-                    isActive ? 'text-white' : 'text-gray-400 hover:text-gray-200',
-                  )}
+            {/* Dropdown trigger button */}
+            <button
+              onClick={() => setDropOpen(v => !v)}
+              className={cn(
+                'flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm',
+                dropOpen
+                  ? 'bg-white/10 border-white/20 text-white'
+                  : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white',
+              )}
+            >
+              {activeTab ? (
+                <>
+                  <activeTab.icon className="h-4 w-4 shrink-0" style={{ color: accent }} />
+                  <span className="truncate">{activeTab.label}</span>
+                </>
+              ) : (
+                <>
+                  <activeSection.icon className="h-4 w-4 shrink-0 opacity-50" />
+                  <span className="text-gray-400">Select a page…</span>
+                </>
+              )}
+              <ChevronDown
+                className={cn('h-4 w-4 shrink-0 ml-auto transition-transform duration-150 opacity-60', dropOpen && 'rotate-180')}
+              />
+            </button>
+
+            {/* Tab count + current position pill */}
+            {activeTab && (
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400 shrink-0">
+                <span
+                  className="px-2 py-1 rounded-full font-medium"
+                  style={{ backgroundColor: `${accent}22`, color: accent }}
                 >
-                  {isActive && (
-                    <span
-                      className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full"
-                      style={{ backgroundColor: accent }}
-                    />
-                  )}
-                  <tab.icon
-                    className={cn('h-3.5 w-3.5 transition-colors', isActive ? 'opacity-100' : 'opacity-60')}
-                    style={isActive ? { color: accent } : {}}
-                  />
-                  {tab.label}
-                </button>
-              );
-            })}
+                  {(activeSection.tabs.findIndex(t => t.id === activeTabId) + 1)} / {activeSection.tabs.length}
+                </span>
+                <span className="opacity-50">{activeSection.label}</span>
+              </div>
+            )}
+
+            {/* ── Dropdown panel ── */}
+            {dropOpen && (
+              <div
+                className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-2xl overflow-hidden z-50"
+                style={{
+                  background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
+                  borderColor: `${accent}35`,
+                  boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px ${accent}25`,
+                }}
+              >
+                {/* Panel header */}
+                <div
+                  className="px-4 py-2.5 border-b flex items-center gap-2"
+                  style={{ borderColor: `${accent}25`, backgroundColor: `${accent}12` }}
+                >
+                  <activeSection.icon className="h-4 w-4 shrink-0" style={{ color: accent }} />
+                  <span className="text-[12px] font-bold text-white tracking-wide">{activeSection.label}</span>
+                  <span className="ml-auto text-[10px] text-gray-400">{activeSection.tabs.length} pages</span>
+                </div>
+
+                {/* Tab grid */}
+                <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-[55vh] overflow-y-auto">
+                  {activeSection.tabs.map(tab => {
+                    const isActive = activeTabId === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => handleTabSelect(tab.id)}
+                        className={cn(
+                          'flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100 group',
+                          isActive
+                            ? 'text-white'
+                            : 'text-gray-400 hover:text-gray-100 hover:bg-white/5',
+                        )}
+                        style={isActive ? { backgroundColor: `${accent}28`, outline: `1px solid ${accent}50` } : {}}
+                      >
+                        <tab.icon
+                          className="h-4 w-4 shrink-0 mt-0.5"
+                          style={{ color: isActive ? accent : undefined, opacity: isActive ? 1 : 0.55 }}
+                        />
+                        <span className="text-[12px] font-medium leading-tight">{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* ── Description strip ── */}
-      {activeTabDescription && (
+      {activeTabDescription && !dropOpen && (
         <div
-          className="flex items-start gap-3 px-5 py-2.5 border-b border-l-[3px]"
-          style={{
-            borderLeftColor: accent,
-            backgroundColor: `${accent}08`,
-            borderBottomColor: `${accent}20`,
-          }}
+          className="flex items-start gap-3 px-5 py-2 border-b border-l-[3px] text-[12px] text-muted-foreground"
+          style={{ borderLeftColor: accent, backgroundColor: `${accent}08`, borderBottomColor: `${accent}20` }}
         >
-          <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: accent }} />
-          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-            {activeTabDescription}
-          </p>
+          <p className="leading-relaxed">{activeTabDescription}</p>
         </div>
       )}
 
