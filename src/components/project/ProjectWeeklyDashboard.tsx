@@ -721,6 +721,20 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
             <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
             {statusMeta.label}
           </span>
+          {/* Health badge */}
+          <span
+            className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border"
+            style={{
+              backgroundColor: `${health.color}22`,
+              borderColor: `${health.color}55`,
+              color: health.color,
+            }}
+          >
+            <Activity className="h-3 w-3" />
+            Health {healthScore}/100
+            <span className="opacity-70">·</span>
+            {overallProgress}%
+          </span>
         </div>
         <div className="flex items-center gap-2 text-white/60 text-xs">
           <Calendar className="h-3.5 w-3.5" />
