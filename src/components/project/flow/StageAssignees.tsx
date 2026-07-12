@@ -110,11 +110,9 @@ export function StageAssignees({
     try {
       await addAssignee(userId);
       qc.invalidateQueries({ queryKey: ['all_stage_assignees', projectId] });
-      if (userId !== currentUserId) {
-        sendAssignmentNotification(
-          userId, userName, stageLabel, projectName, projectId, assignedByName,
-        ).catch(() => {});
-      }
+      sendAssignmentNotification(
+        userId, userName, stageLabel, projectName, projectId, assignedByName,
+      ).catch(() => {});
       toast({ title: `${userName} assigned to "${stageLabel}"` });
       setSearch('');
       setOpen(false);
