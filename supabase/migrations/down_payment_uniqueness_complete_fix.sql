@@ -16,7 +16,6 @@ SELECT
     'NO-ENTRY:' || LOWER(TRIM(COALESCE(site_name,''))) || '::' || COALESCE(hub_id::text, 'no-hub')
   )                                                             AS site_key,
   site_name,
-  mmp_name,
   hub_name,
   COUNT(*)                                                      AS duplicate_count,
   ARRAY_AGG(id            ORDER BY created_at)                  AS request_ids,
@@ -25,7 +24,7 @@ SELECT
   ARRAY_AGG(created_at::date ORDER BY created_at)               AS created_dates
 FROM down_payment_requests
 WHERE status NOT IN ('cancelled', 'rejected', 'deleted')
-GROUP BY 1, 2, 3, 4
+GROUP BY 1, 2, 3
 HAVING COUNT(*) > 1
 ORDER BY duplicate_count DESC;
 
