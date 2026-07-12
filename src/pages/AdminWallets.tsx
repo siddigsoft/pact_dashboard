@@ -218,6 +218,7 @@ const AdminWallets: FC = () => {
       // 'wfp_confirmed' is the current fee trigger; 'completed' is the legacy value.
       // 'submitted' and 'verified' are included for historical records.
       // Only safe scalar columns — no FK embeds on text columns.
+      // accepted_by is text (not uuid) but may contain a valid UUID; we validate below.
       const FEE_STATUSES = ['wfp_confirmed', 'completed', 'submitted', 'verified'];
       let allEntries: any[] = [];
       let offset = 0;
@@ -225,7 +226,7 @@ const AdminWallets: FC = () => {
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, visit_completed_by, enumerator_fee, transport_fee, cost')
+          .select('id, site_name, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost')
           .in('status', FEE_STATUSES)
           .range(offset, offset + BATCH - 1);
         if (error) throw error;
@@ -238,6 +239,7 @@ const AdminWallets: FC = () => {
       const totalCompleted = allEntries.length;
 
       // Step 3: Batch-fetch profile names for visit_completed_by UUIDs
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const userIds = [...new Set(allEntries.map((e: any) => e.visit_completed_by).filter(Boolean))];
       const profileMap: Record<string, string> = {};
       if (userIds.length > 0) {
@@ -262,17 +264,19 @@ const AdminWallets: FC = () => {
         if (creditedIds.has(e.id)) { alreadyCredited++; continue; }
         if (fee <= 0)              { noFee++;           continue; }
 
-        // visit_completed_by is the reliable UUID field; entries where it's null
-        // may still have accepted_by — backfillWalletTransactionForSite handles that internally
-        const userId = e.visit_completed_by;
-        const userName = userId ? (profileMap[userId] || userId) : 'Assigned (no profile)';
+        // Resolve the payee: visit_completed_by (uuid) takes priority;
+        // fall back to accepted_by (text field) only when it contains a valid UUID.
+        const visitCompletedBy = e.visit_completed_by && uuidRegex.test(String(e.visit_completed_by).trim())
+          ? String(e.visit_completed_by).trim() : null;
+        const acceptedBy = e.accepted_by && uuidRegex.test(String(e.accepted_by).trim())
+          ? String(e.accepted_by).trim() : null;
+        const effectiveUserId = visitCompletedBy || acceptedBy;
 
-        if (!userId) {
-          // Still add to missing — backfill will try accepted_by internally
-          missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName: 'Assigned user', fee });
-        } else {
-          missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, fee });
-        }
+        // No valid payee UUID in either field → count as no-user, skip backfill
+        if (!effectiveUserId) { noUser++; continue; }
+
+        const userName = profileMap[effectiveUserId] || effectiveUserId;
+        missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, fee });
       }
 
       setBackfillScan({ scanned: true, missing, totalCompleted, alreadyCredited, noFee, noUser });
@@ -730,7 +734,7 @@ CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_tra
 
               {/* Scan result */}
               {backfillScan && (
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                   <div className="bg-background rounded-lg border px-3 py-2">
                     <div className="text-muted-foreground">Total Completed</div>
                     <div className="font-bold text-base">{backfillScan.totalCompleted}</div>
@@ -744,8 +748,12 @@ CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_tra
                     <div className={`font-bold text-base ${backfillScan.missing.length > 0 ? 'text-red-700 dark:text-red-400' : ''}`}>{backfillScan.missing.length}</div>
                   </div>
                   <div className="bg-background rounded-lg border px-3 py-2">
-                    <div className="text-muted-foreground">No Fee / No User</div>
-                    <div className="font-bold text-base text-muted-foreground">{backfillScan.noFee + backfillScan.noUser}</div>
+                    <div className="text-muted-foreground">No Fee</div>
+                    <div className="font-bold text-base text-muted-foreground">{backfillScan.noFee}</div>
+                  </div>
+                  <div className="bg-background rounded-lg border px-3 py-2">
+                    <div className="text-muted-foreground">No Payee</div>
+                    <div className="font-bold text-base text-muted-foreground">{backfillScan.noUser}</div>
                   </div>
                 </div>
               )}
@@ -755,7 +763,11 @@ CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_tra
                 <div className="mt-3 space-y-1">
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Crediting wallets… {backfillProgress.current}/{backfillProgress.total}</span>
-                    <span className="text-green-600">{backfillProgress.succeeded} credited · {backfillProgress.failed} failed</span>
+                    <span>
+                      <span className="text-green-600">{backfillProgress.succeeded} credited</span>
+                      {backfillProgress.skipped > 0 && <span className="ml-2 text-muted-foreground">{backfillProgress.skipped} skipped</span>}
+                      {backfillProgress.failed > 0 && <span className="ml-2 text-red-500">{backfillProgress.failed} failed</span>}
+                    </span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div
