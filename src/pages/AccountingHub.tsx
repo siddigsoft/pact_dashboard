@@ -5,7 +5,7 @@ import {
   BarChart3, Receipt, FileText, Landmark, BarChart, Package, Zap, Lock,
   ArrowLeftRight, Wallet, Heart, ShieldAlert, RotateCcw, Building2,
   PiggyBank, Activity, Search, Settings2, Clock, CreditCard, Award,
-  CalendarDays, Info,
+  CalendarDays, Info, Bell, MapPin, LayoutGrid, Link2, BarChart2, Users, List,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -50,14 +50,33 @@ const GLAuditPanel            = lazy(() => import('./AccountingGLAudit'));
 const FinanceAuditTrailPanel  = lazy(() => import('./FinanceAuditTrail'));
 const AccountingSettingsPanel = lazy(() => import('./AccountingSettings'));
 
+// ── New panels (2026-07-12 expansion) ─────────────────────────────────────────
+const CompaniesPanel            = lazy(() => import('./AccountingCompanies'));
+const JournalItemsPanel         = lazy(() => import('./AccountingJournalItems'));
+const PartnerLedgerPanel        = lazy(() => import('./AccountingPartnerLedger'));
+const AgedReceivablePanel       = lazy(() => import('./AccountingAgedReceivable'));
+const UnrealizedGLPanel         = lazy(() => import('./AccountingUnrealizedGL'));
+const DeprecSchedulePanel       = lazy(() => import('./AccountingDepreciationSchedule'));
+const AnalyticReportPanel       = lazy(() => import('./AccountingAnalyticReport'));
+const FiscalPositionsPanel      = lazy(() => import('./AccountingFiscalPositions'));
+const AnalyticPlansPanel        = lazy(() => import('./AccountingAnalyticPlans'));
+const LockDatesPanel            = lazy(() => import('./AccountingLockDates'));
+const LoansPanel                = lazy(() => import('./AccountingLoans'));
+const DeferredItemsPanel        = lazy(() => import('./AccountingDeferredItems'));
+const PaymentTermsPanel         = lazy(() => import('./AccountingPaymentTerms'));
+const FollowUpLevelsPanel       = lazy(() => import('./AccountingFollowUpLevels'));
+const ProjectLinksPanel         = lazy(() => import('./AccountingProjectLinks'));
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AcctSection = 'core' | 'fin-ops' | 'p2p' | 'controls' | 'advanced';
 type AcctTab =
-  | 'finance-dashboard' | 'coa' | 'journals' | 'trial-balance' | 'ledger' | 'reports' | 'fiscal-years' | 'search'
-  | 'bank-recon' | 'budget-variance' | 'cash-flow' | 'fixed-assets' | 'gl-bridge' | 'budget-planning'
-  | 'vendors' | 'purchase-requisitions' | 'purchase-orders' | 'grn' | 'ap-invoices' | 'cheque-register' | 'ap-aging'
-  | 'period-close' | 'tax' | 'multi-currency' | 'budget-encumbrance' | 'donor-reports' | 'sod' | 'aml' | 'intercompany' | 'funds'
-  | 'cash-flow-forecast' | 'grants' | 'cost-allocation' | 'depreciation-run' | 'consolidation' | 'gl-audit' | 'finance-audit-trail' | 'settings';
+  | 'finance-dashboard' | 'coa' | 'journals' | 'journal-items' | 'trial-balance' | 'ledger' | 'reports' | 'fiscal-years' | 'search'
+  | 'bank-recon' | 'budget-variance' | 'cash-flow' | 'fixed-assets' | 'gl-bridge' | 'budget-planning' | 'loans' | 'deferred-items'
+  | 'vendors' | 'purchase-requisitions' | 'purchase-orders' | 'grn' | 'ap-invoices' | 'cheque-register' | 'ap-aging' | 'payment-terms' | 'follow-up-levels'
+  | 'period-close' | 'tax' | 'multi-currency' | 'budget-encumbrance' | 'donor-reports' | 'sod' | 'aml' | 'intercompany' | 'funds' | 'fiscal-positions' | 'lock-dates' | 'analytic-plans'
+  | 'cash-flow-forecast' | 'grants' | 'cost-allocation' | 'depreciation-run' | 'consolidation' | 'gl-audit' | 'finance-audit-trail' | 'settings'
+  | 'partner-ledger' | 'aged-receivable' | 'unrealized-gl' | 'depreciation-schedule' | 'analytic-report'
+  | 'companies' | 'project-links';
 
 interface TabDef { id: AcctTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: AcctSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -76,8 +95,16 @@ const SECTIONS: SectionDef[] = [
         description: 'Define and manage the full chart of accounts — account codes, types (asset, liability, equity, income, expense), hierarchies, and active status.',
       },
       {
+        id: 'companies', label: 'Companies', icon: Building2,
+        description: 'Manage company entities — each company has its own Chart of Accounts, functional currency, and fiscal calendar for consolidated or subsidiary reporting.',
+      },
+      {
         id: 'journals', label: 'Journal Entries', icon: Receipt,
         description: 'Create, review, and post manual journal entries with debit/credit lines, narrative descriptions, and supporting document attachments.',
+      },
+      {
+        id: 'journal-items', label: 'Journal Items', icon: List,
+        description: 'Flat view of every individual journal line across all entries — filter by date, account, DR/CR, source module, and status with paginated results.',
       },
       {
         id: 'trial-balance', label: 'Trial Balance', icon: TrendingUp,
@@ -129,6 +156,18 @@ const SECTIONS: SectionDef[] = [
         id: 'gl-bridge', label: 'GL Bridge Engine', icon: Zap,
         description: 'Automatically generate and post journal entries from operational modules (payroll, advances, P2P) into the General Ledger without manual re-entry.',
       },
+      {
+        id: 'loans', label: 'Loans', icon: PiggyBank,
+        description: 'Track received and given loans with principal, interest rate, payment frequency, amortization schedule, and outstanding balance monitoring.',
+      },
+      {
+        id: 'deferred-items', label: 'Deferred Revenue & Expense', icon: Clock,
+        description: 'Spread recognition of prepaid expenses or advance revenue across multiple accounting periods using straight-line or manual recognition schedules.',
+      },
+      {
+        id: 'depreciation-schedule', label: 'Depreciation Schedule', icon: Package,
+        description: 'View projected monthly depreciation for each active fixed asset, with opening NBV, monthly charge, and closing NBV for the selected forecast horizon.',
+      },
     ],
   },
   {
@@ -162,6 +201,22 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'ap-aging', label: 'AP Aging', icon: Clock,
         description: 'View outstanding payables grouped by due-date buckets (current, 30, 60, 90+ days) to prioritize payments and avoid late penalties.',
+      },
+      {
+        id: 'payment-terms', label: 'Payment Terms', icon: CreditCard,
+        description: 'Define invoice payment terms (net 30, 2/10 net 30, etc.) with multiple lines for percentage, fixed amount, or balance due on specific day offsets.',
+      },
+      {
+        id: 'follow-up-levels', label: 'Follow-up Levels', icon: Bell,
+        description: 'Configure escalating AR dunning levels — when to send reminders, which action to take (email/letter/phone), and what template to use.',
+      },
+      {
+        id: 'aged-receivable', label: 'Aged Receivable', icon: Clock,
+        description: 'View outstanding AP invoice balances grouped by vendor and overdue bucket (current, 31–60, 61–90, 90+ days) as of any selected date.',
+      },
+      {
+        id: 'partner-ledger', label: 'Partner Ledger', icon: Users,
+        description: 'Drill into all receivable/payable transactions grouped by vendor or partner, with running balance and full source traceability.',
       },
     ],
   },
@@ -205,6 +260,18 @@ const SECTIONS: SectionDef[] = [
         id: 'funds', label: 'Funds', icon: Landmark,
         description: 'Define restricted and unrestricted fund accounts, track balances by funding source, and enforce that spending stays within each fund\'s rules.',
       },
+      {
+        id: 'fiscal-positions', label: 'Fiscal Positions', icon: MapPin,
+        description: 'Map taxes and accounts per jurisdiction or entity type — auto-applied when a vendor or customer is from a different tax territory.',
+      },
+      {
+        id: 'lock-dates', label: 'Lock Dates', icon: Lock,
+        description: 'Prevent posting or editing of entries before a specific date — supports all-users lock, tax lock, and hard lock with explicit unlock flow.',
+      },
+      {
+        id: 'analytic-plans', label: 'Analytic Plans', icon: LayoutGrid,
+        description: 'Manage analytic plans and analytic accounts for multi-dimensional cost tracking across projects, departments, and donors.',
+      },
     ],
   },
   {
@@ -242,6 +309,18 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'settings', label: 'Accounting Settings', icon: Settings2,
         description: 'Configure accounting defaults including posting rules, default account mappings, approval thresholds, rounding rules, and notification preferences.',
+      },
+      {
+        id: 'unrealized-gl', label: 'Unrealized Currency G/L', icon: ArrowLeftRight,
+        description: 'Revalue foreign-currency balances at current exchange rates and view the unrealized gain or loss on each account as of any selected date.',
+      },
+      {
+        id: 'analytic-report', label: 'Analytic Report', icon: BarChart2,
+        description: 'Cross-dimensional P&L grouped by fund, project, or function — filter by period, fund, and project to produce donor-ready variance reports.',
+      },
+      {
+        id: 'project-links', label: 'Project ↔ Account Links', icon: Link2,
+        description: 'Link GL accounts to projects for multi-COA dimension tracking — each project can map expense, revenue, asset, and clearing accounts from any company COA.',
       },
     ],
   },
@@ -336,6 +415,21 @@ export default function AccountingHub() {
         {tab === 'gl-audit'             && <Suspense fallback={<PanelLoader />}><GLAuditPanel /></Suspense>}
         {tab === 'finance-audit-trail'  && <Suspense fallback={<PanelLoader />}><FinanceAuditTrailPanel /></Suspense>}
         {tab === 'settings'             && <Suspense fallback={<PanelLoader />}><AccountingSettingsPanel /></Suspense>}
+        {tab === 'companies'            && <Suspense fallback={<PanelLoader />}><CompaniesPanel /></Suspense>}
+        {tab === 'journal-items'        && <Suspense fallback={<PanelLoader />}><JournalItemsPanel /></Suspense>}
+        {tab === 'partner-ledger'       && <Suspense fallback={<PanelLoader />}><PartnerLedgerPanel /></Suspense>}
+        {tab === 'aged-receivable'      && <Suspense fallback={<PanelLoader />}><AgedReceivablePanel /></Suspense>}
+        {tab === 'unrealized-gl'        && <Suspense fallback={<PanelLoader />}><UnrealizedGLPanel /></Suspense>}
+        {tab === 'depreciation-schedule'&& <Suspense fallback={<PanelLoader />}><DeprecSchedulePanel /></Suspense>}
+        {tab === 'analytic-report'      && <Suspense fallback={<PanelLoader />}><AnalyticReportPanel /></Suspense>}
+        {tab === 'fiscal-positions'     && <Suspense fallback={<PanelLoader />}><FiscalPositionsPanel /></Suspense>}
+        {tab === 'analytic-plans'       && <Suspense fallback={<PanelLoader />}><AnalyticPlansPanel /></Suspense>}
+        {tab === 'lock-dates'           && <Suspense fallback={<PanelLoader />}><LockDatesPanel /></Suspense>}
+        {tab === 'loans'                && <Suspense fallback={<PanelLoader />}><LoansPanel /></Suspense>}
+        {tab === 'deferred-items'       && <Suspense fallback={<PanelLoader />}><DeferredItemsPanel /></Suspense>}
+        {tab === 'payment-terms'        && <Suspense fallback={<PanelLoader />}><PaymentTermsPanel /></Suspense>}
+        {tab === 'follow-up-levels'     && <Suspense fallback={<PanelLoader />}><FollowUpLevelsPanel /></Suspense>}
+        {tab === 'project-links'        && <Suspense fallback={<PanelLoader />}><ProjectLinksPanel /></Suspense>}
       </div>
     </HubLayout>
   );

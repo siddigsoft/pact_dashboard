@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -7,6 +7,7 @@ import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,10 +15,11 @@ import { Switch } from '@/components/ui/switch';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Loader2, Search, Download, RefreshCw, BookOpen,
-  ChevronRight, ChevronDown, Plus, Pencil, Trash2, Globe,
+  Loader2, Search, Download, RefreshCw, BookOpen, Upload,
+  ChevronRight, ChevronDown, Plus, Pencil, Trash2, Globe, Building2, CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react';
 import { ACCT_TYPE_LABELS, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
@@ -36,6 +38,22 @@ interface Account {
   is_postable: boolean;
   version: number;
   country_id: string | null;
+  company_id: string | null;
+  allow_reconciliation: boolean;
+  account_currency: string | null;
+  notes: string | null;
+  deprecated: boolean;
+  account_tags: string[];
+}
+
+interface Company { id: string; name_en: string; currency_code: string }
+
+// ── Odoo-compatible import row ──────────────────────────────────────────────
+interface ImportRow {
+  code: string; name_en: string; name_ar: string; account_type: string; subtype: string;
+  allow_reconciliation: boolean; account_currency: string; company_code: string;
+  is_active: boolean; notes: string;
+  _status: 'new' | 'update' | 'error'; _msg: string;
 }
 
 interface Country {
@@ -58,6 +76,8 @@ const TYPE_TONE: Record<Account['account_type'], string> = {
   expense:   'bg-amber-50 text-amber-700 border-amber-200',
 };
 
+const CURRENCIES = ['USD','SDG','EUR','GBP','SAR','AED','EGP','ETB','KES','UGX','TZS','NGN','XAF'];
+
 const BLANK_FORM = {
   code: '',
   name_en: '',
@@ -68,6 +88,11 @@ const BLANK_FORM = {
   is_active: true,
   is_postable: true,
   country_id: '' as string,
+  company_id: '' as string,
+  allow_reconciliation: false,
+  account_currency: '' as string,
+  notes: '' as string,
+  deprecated: false,
 };
 
 type FormState = typeof BLANK_FORM;
@@ -86,6 +111,7 @@ export default function AccountingCOA() {
 
   const [rows, setRows]               = useState<Account[]>([]);
   const [countries, setCountries]     = useState<Country[]>([]);
+  const [companies, setCompanies]     = useState<Company[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
   const [search, setSearch]           = useState('');
@@ -93,6 +119,7 @@ export default function AccountingCOA() {
   const [activeFilter, setActiveFilter]     = useState<string>('all');
   const [postableFilter, setPostableFilter] = useState<string>('all');
   const [countryFilter, setCountryFilter]   = useState<string>('all');
+  const [companyFilter, setCompanyFilter]   = useState<string>('all');
   const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
 
@@ -114,24 +141,36 @@ export default function AccountingCOA() {
   const [deleteBlocked, setDeleteBlocked]   = useState(false);
   const [deleteUsageMsg, setDeleteUsageMsg] = useState('');
 
+  // ── import states ─────────────────────────────────────────
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen]   = useState(false);
+  const [importRows, setImportRows]   = useState<ImportRow[]>([]);
+  const [importing, setImporting]     = useState(false);
+
   // ── load ──────────────────────────────────────────────────
   const load = async () => {
     setLoading(true);
     setError(null);
-    const [acctRes, ctrRes] = await Promise.all([
+    const [acctRes, ctrRes, coRes] = await Promise.all([
       supabase
         .from('acct_accounts')
-        .select('id, code, name_en, name_ar, account_type, subtype, parent_id, is_active, is_postable, version, country_id')
+        .select('id, code, name_en, name_ar, account_type, subtype, parent_id, is_active, is_postable, version, country_id, company_id, allow_reconciliation, account_currency, notes, deprecated, account_tags')
         .order('code', { ascending: true }),
       supabase
         .from('countries')
         .select('id, code, name_en, name_ar, currency_code, currency_symbol, flag_emoji')
         .eq('is_active', true)
         .order('name_en'),
+      supabase
+        .from('companies' as any)
+        .select('id, name_en, currency_code')
+        .eq('is_active', true)
+        .order('name_en'),
     ]);
     if (acctRes.error) setError(acctRes.error.message);
     setRows((acctRes.data ?? []) as Account[]);
     setCountries((ctrRes.data ?? []) as Country[]);
+    setCompanies(((coRes.data ?? []) as Company[]));
     setLoading(false);
   };
 
@@ -147,6 +186,7 @@ export default function AccountingCOA() {
       if (postableFilter === 'postable' && !r.is_postable) return false;
       if (postableFilter === 'header' && r.is_postable) return false;
       if (countryFilter !== 'all' && r.country_id !== countryFilter) return false;
+      if (companyFilter !== 'all' && r.company_id !== companyFilter) return false;
       if (q) {
         return r.code.toLowerCase().includes(q)
           || r.name_en.toLowerCase().includes(q)
@@ -155,7 +195,7 @@ export default function AccountingCOA() {
       }
       return true;
     });
-  }, [rows, search, typeFilter, activeFilter, postableFilter, countryFilter]);
+  }, [rows, search, typeFilter, activeFilter, postableFilter, countryFilter, companyFilter]);
 
   const childrenOf = useMemo(() => {
     const map = new Map<string | null, Account[]>();
@@ -188,12 +228,110 @@ export default function AccountingCOA() {
 
   // ── export ────────────────────────────────────────────────
   const exportCsv = () => {
-    const header = ['Code', 'Name (EN)', 'Name (AR)', 'Type', 'Subtype', 'Active', 'Postable', 'Parent ID', 'Country', 'Version'];
+    const header = [
+      'Code', 'Name (EN)', 'Name (AR)', 'Type', 'Subtype',
+      'Allow Reconciliation', 'Account Currency', 'Company', 'Country',
+      'Active', 'Postable', 'Deprecated', 'Notes', 'Parent Code', 'Version',
+    ];
+    const codeOf = (id: string | null) => rows.find(r => r.id === id)?.code ?? '';
     const body = filtered.map(r => {
       const ctr = countries.find(c => c.id === r.country_id);
-      return [r.code, r.name_en, r.name_ar, r.account_type, r.subtype, r.is_active ? 'Yes' : 'No', r.is_postable ? 'Yes' : 'No', r.parent_id ?? '', ctr?.code ?? '', r.version];
+      const co  = companies.find(c => c.id === r.company_id);
+      return [
+        r.code, r.name_en, r.name_ar ?? '', r.account_type, r.subtype ?? '',
+        r.allow_reconciliation ? 'Yes' : 'No', r.account_currency ?? '', co?.name_en ?? '', ctr?.code ?? '',
+        r.is_active ? 'Yes' : 'No', r.is_postable ? 'Yes' : 'No', r.deprecated ? 'Yes' : 'No',
+        r.notes ?? '', codeOf(r.parent_id), r.version,
+      ];
     });
     downloadCsv(`chart-of-accounts-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  };
+
+  const exportExcel = () => {
+    const codeOf = (id: string | null) => rows.find(r => r.id === id)?.code ?? '';
+    const data = filtered.map(r => {
+      const ctr = countries.find(c => c.id === r.country_id);
+      const co  = companies.find(c => c.id === r.company_id);
+      return {
+        Code: r.code, 'Name (EN)': r.name_en, 'Name (AR)': r.name_ar ?? '',
+        Type: r.account_type, Subtype: r.subtype ?? '',
+        'Allow Reconciliation': r.allow_reconciliation ? 'Yes' : 'No',
+        'Account Currency': r.account_currency ?? '', Company: co?.name_en ?? '', Country: ctr?.code ?? '',
+        Active: r.is_active ? 'Yes' : 'No', Postable: r.is_postable ? 'Yes' : 'No',
+        Deprecated: r.deprecated ? 'Yes' : 'No', Notes: r.notes ?? '',
+        'Parent Code': codeOf(r.parent_id), Version: r.version,
+      };
+    });
+    exportToExcel(data, `chart-of-accounts-${new Date().toISOString().slice(0, 10)}`);
+  };
+
+  // ── CSV/XLSX import parse ──────────────────────────────────
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const text = await file.text();
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) { toast({ title: 'File is empty', variant: 'destructive' }); return; }
+    const header = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+    const idx = (name: string) => header.findIndex(h => h.includes(name));
+    const iCode = idx('code'); const iNameEn = idx('name (en)'); const iNameAr = idx('name (ar)');
+    const iType = idx('type'); const iSubtype = idx('subtype'); const iRecon = idx('reconciliation');
+    const iCurr = idx('currency'); const iCo = idx('company'); const iActive = idx('active');
+    const iNotes = idx('notes');
+    const existing = new Map(rows.map(r => [r.code, r]));
+    const parsed: ImportRow[] = lines.slice(1).map(line => {
+      const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim());
+      const code = cols[iCode] ?? '';
+      const accountType = (cols[iType] ?? 'expense').toLowerCase();
+      const validTypes = ['asset','liability','equity','revenue','expense'];
+      let _status: ImportRow['_status'] = existing.has(code) ? 'update' : 'new';
+      let _msg = '';
+      if (!code) { _status = 'error'; _msg = 'Missing code'; }
+      else if (!validTypes.includes(accountType)) { _status = 'error'; _msg = `Unknown type: ${accountType}`; }
+      return {
+        code,
+        name_en: cols[iNameEn] ?? '',
+        name_ar: cols[iNameAr] ?? '',
+        account_type: accountType,
+        subtype: cols[iSubtype] ?? 'general',
+        allow_reconciliation: (cols[iRecon] ?? '').toLowerCase() === 'yes',
+        account_currency: cols[iCurr] ?? '',
+        company_code: cols[iCo] ?? '',
+        is_active: (cols[iActive] ?? 'yes').toLowerCase() !== 'no',
+        notes: cols[iNotes] ?? '',
+        _status, _msg,
+      };
+    });
+    setImportRows(parsed);
+    setImportOpen(true);
+  };
+
+  const executeImport = async () => {
+    const valid = importRows.filter(r => r._status !== 'error');
+    if (!valid.length) return;
+    setImporting(true);
+    let ok = 0; let fail = 0;
+    for (const r of valid) {
+      const co = companies.find(c => c.name_en.toLowerCase() === r.company_code.toLowerCase());
+      const payload = {
+        code: r.code, name_en: r.name_en, name_ar: r.name_ar || null,
+        account_type: r.account_type, subtype: r.subtype || 'general',
+        allow_reconciliation: r.allow_reconciliation,
+        account_currency: r.account_currency || null,
+        company_id: co?.id ?? null,
+        is_active: r.is_active, notes: r.notes || null,
+      };
+      const { error: err } = r._status === 'update'
+        ? await supabase.from('acct_accounts').update(payload).eq('code', r.code)
+        : await supabase.from('acct_accounts').insert({ ...payload, version: 1, is_postable: true });
+      if (err) fail++; else ok++;
+    }
+    setImporting(false);
+    setImportOpen(false);
+    setImportRows([]);
+    toast({ title: `Import complete — ${ok} succeeded, ${fail} failed` });
+    await load();
   };
 
   const toggle = (id: string) => {
@@ -215,15 +353,20 @@ export default function AccountingCOA() {
   const openEdit = (acct: Account) => {
     setEditTarget(acct);
     setForm({
-      code:         acct.code,
-      name_en:      acct.name_en,
-      name_ar:      acct.name_ar ?? '',
-      account_type: acct.account_type,
-      subtype:      acct.subtype ?? '',
-      parent_id:    acct.parent_id ?? '',
-      is_active:    acct.is_active,
-      is_postable:  acct.is_postable,
-      country_id:   acct.country_id ?? '',
+      code:                 acct.code,
+      name_en:              acct.name_en,
+      name_ar:              acct.name_ar ?? '',
+      account_type:         acct.account_type,
+      subtype:              acct.subtype ?? '',
+      parent_id:            acct.parent_id ?? '',
+      is_active:            acct.is_active,
+      is_postable:          acct.is_postable,
+      country_id:           acct.country_id ?? '',
+      company_id:           acct.company_id ?? '',
+      allow_reconciliation: acct.allow_reconciliation ?? false,
+      account_currency:     acct.account_currency ?? '',
+      notes:                acct.notes ?? '',
+      deprecated:           acct.deprecated ?? false,
     });
     setFormOpen(true);
   };
@@ -238,15 +381,20 @@ export default function AccountingCOA() {
     }
     setSaving(true);
     const payload = {
-      code:         form.code.trim(),
-      name_en:      form.name_en.trim(),
-      name_ar:      form.name_ar.trim() || null,
-      account_type: form.account_type,
-      subtype:      form.subtype.trim() || 'general',
-      parent_id:    form.parent_id || null,
-      is_active:    form.is_active,
-      is_postable:  form.is_postable,
-      country_id:   form.country_id || null,
+      code:                 form.code.trim(),
+      name_en:              form.name_en.trim(),
+      name_ar:              form.name_ar.trim() || null,
+      account_type:         form.account_type,
+      subtype:              form.subtype.trim() || 'general',
+      parent_id:            form.parent_id || null,
+      is_active:            form.is_active,
+      is_postable:          form.is_postable,
+      country_id:           form.country_id || null,
+      company_id:           form.company_id || null,
+      allow_reconciliation: form.allow_reconciliation,
+      account_currency:     form.account_currency || null,
+      notes:                form.notes.trim() || null,
+      deprecated:           form.deprecated,
     };
 
     let err;
@@ -392,20 +540,6 @@ export default function AccountingCOA() {
     );
   };
 
-  const exportExcel = () => {
-    const data = filtered.map(r => ({
-      'Code': r.code,
-      'Name (EN)': r.name_en,
-      'Name (AR)': r.name_ar,
-      'Type': ACCT_TYPE_LABELS[r.account_type]?.en ?? r.account_type,
-      'Subtype': r.subtype,
-      'Postable': r.is_postable ? 'Yes' : 'No',
-      'Active': r.is_active ? 'Yes' : 'No',
-      'Country': countries.find(c => c.id === r.country_id)?.name_en ?? 'Global'
-    }));
-    exportToExcel(data, 'Chart of Accounts', `coa-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
-
   // ── guards ────────────────────────────────────────────────
   if (!authReady || !isAuthenticated) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -429,11 +563,29 @@ export default function AccountingCOA() {
             Postable accounts feed every journal line. Headers organise the hierarchy.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           {canManage && (
             <Button size="sm" onClick={openAdd} data-testid="button-add-account">
               <Plus className="w-4 h-4 mr-1" /> Add Account
             </Button>
+          )}
+          {canManage && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.txt"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <Button
+                variant="outline" size="sm"
+                onClick={() => fileRef.current?.click()}
+                data-testid="button-import-coa"
+              >
+                <Upload className="w-4 h-4 mr-1" /> Import CSV
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" onClick={() => void load()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
@@ -468,7 +620,7 @@ export default function AccountingCOA() {
         <CardContent className="space-y-3">
 
           {/* Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
             <div className="relative sm:col-span-2">
               <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
               <Input
@@ -501,6 +653,19 @@ export default function AccountingCOA() {
                   <SelectItem key={c.id} value={c.id}>
                     {c.flag_emoji ?? ''} {c.name_en} ({c.code})
                   </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={companyFilter} onValueChange={setCompanyFilter}>
+              <SelectTrigger data-testid="select-company-filter">
+                <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Company" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All companies</SelectItem>
+                {companies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name_en}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -660,29 +825,80 @@ export default function AccountingCOA() {
               </div>
             </div>
 
-            {/* Country */}
+            {/* Country + Company */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="f-country">Country</Label>
+                <Select
+                  value={form.country_id || '__none__'}
+                  onValueChange={v => setField('country_id', v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger id="f-country" data-testid="select-form-country">
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Unassigned —</SelectItem>
+                    {countries.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.flag_emoji ?? ''} {c.name_en} ({c.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="f-company">Company</Label>
+                <Select
+                  value={form.company_id || '__none__'}
+                  onValueChange={v => setField('company_id', v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger id="f-company" data-testid="select-form-company">
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Unassigned —</SelectItem>
+                    {companies.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name_en}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Account Currency */}
             <div className="space-y-1">
-              <Label htmlFor="f-country">Country</Label>
+              <Label htmlFor="f-currency">Account Currency <span className="text-muted-foreground text-[11px]">(leave blank to use company default)</span></Label>
               <Select
-                value={form.country_id || '__none__'}
-                onValueChange={v => setField('country_id', v === '__none__' ? '' : v)}
+                value={form.account_currency || '__none__'}
+                onValueChange={v => setField('account_currency', v === '__none__' ? '' : v)}
               >
-                <SelectTrigger id="f-country" data-testid="select-form-country">
-                  <SelectValue placeholder="Select country" />
+                <SelectTrigger id="f-currency" data-testid="select-form-currency">
+                  <SelectValue placeholder="Use company default" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">— Unassigned —</SelectItem>
-                  {countries.map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.flag_emoji ?? ''} {c.name_en} ({c.code})
-                    </SelectItem>
+                  <SelectItem value="__none__">— Use company default —</SelectItem>
+                  {CURRENCIES.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
+            {/* Notes */}
+            <div className="space-y-1">
+              <Label htmlFor="f-notes">Notes</Label>
+              <Textarea
+                id="f-notes"
+                placeholder="Optional internal notes…"
+                value={form.notes}
+                onChange={e => setField('notes', e.target.value)}
+                rows={2}
+                data-testid="textarea-notes"
+              />
+            </div>
+
             {/* Toggles */}
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-2">
                 <Switch
                   id="f-active"
@@ -699,7 +915,25 @@ export default function AccountingCOA() {
                   onCheckedChange={v => setField('is_postable', v)}
                   data-testid="switch-is-postable"
                 />
-                <Label htmlFor="f-postable">Postable (accepts journal lines)</Label>
+                <Label htmlFor="f-postable">Postable</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="f-recon"
+                  checked={form.allow_reconciliation}
+                  onCheckedChange={v => setField('allow_reconciliation', v)}
+                  data-testid="switch-allow-reconciliation"
+                />
+                <Label htmlFor="f-recon">Allow Reconciliation</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="f-deprecated"
+                  checked={form.deprecated}
+                  onCheckedChange={v => setField('deprecated', v)}
+                  data-testid="switch-deprecated"
+                />
+                <Label htmlFor="f-deprecated">Deprecated</Label>
               </div>
             </div>
           </div>
@@ -711,6 +945,89 @@ export default function AccountingCOA() {
               {editTarget ? 'Save Changes' : 'Create Account'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ════════════════════════════════════════════════════
+          IMPORT PREVIEW DIALOG
+      ════════════════════════════════════════════════════ */}
+      <Dialog open={importOpen} onOpenChange={open => { if (!open) { setImportOpen(false); setImportRows([]); } }}>
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col" data-testid="dialog-import-coa">
+          <DialogHeader>
+            <DialogTitle>Import Preview — {importRows.length} rows</DialogTitle>
+            <DialogDescription>
+              Review before importing. Rows marked <span className="text-rose-600 font-medium">Error</span> will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="overflow-auto flex-1 border rounded">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8"></TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name (EN)</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Subtype</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Currency</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Note</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {importRows.map((r, i) => (
+                  <TableRow key={i} className={r._status === 'error' ? 'bg-rose-50' : r._status === 'update' ? 'bg-amber-50' : ''}>
+                    <TableCell>
+                      {r._status === 'error'  && <XCircle className="w-4 h-4 text-rose-500" />}
+                      {r._status === 'update' && <AlertCircle className="w-4 h-4 text-amber-500" />}
+                      {r._status === 'new'    && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{r.code}</TableCell>
+                    <TableCell className="text-xs">{r.name_en}</TableCell>
+                    <TableCell className="text-xs">{r.account_type}</TableCell>
+                    <TableCell className="text-xs">{r.subtype}</TableCell>
+                    <TableCell className="text-xs">{r.company_code}</TableCell>
+                    <TableCell className="text-xs">{r.account_currency}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn('text-[10px]',
+                          r._status === 'error'  ? 'border-rose-300 text-rose-700 bg-rose-50' :
+                          r._status === 'update' ? 'border-amber-300 text-amber-700 bg-amber-50' :
+                          'border-emerald-300 text-emerald-700 bg-emerald-50'
+                        )}
+                      >
+                        {r._status === 'new' ? 'New' : r._status === 'update' ? 'Update' : 'Error'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-[10px] text-muted-foreground">{r._msg}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 text-sm text-muted-foreground">
+            <span>
+              <span className="text-emerald-700 font-medium">{importRows.filter(r => r._status === 'new').length} new</span>
+              {' · '}
+              <span className="text-amber-700 font-medium">{importRows.filter(r => r._status === 'update').length} update</span>
+              {' · '}
+              <span className="text-rose-700 font-medium">{importRows.filter(r => r._status === 'error').length} skip</span>
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setImportOpen(false); setImportRows([]); }}>Cancel</Button>
+              <Button
+                onClick={() => void executeImport()}
+                disabled={importing || importRows.every(r => r._status === 'error')}
+                data-testid="button-confirm-import"
+              >
+                {importing && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                Import {importRows.filter(r => r._status !== 'error').length} rows
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
