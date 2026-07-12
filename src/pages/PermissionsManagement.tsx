@@ -456,9 +456,16 @@ const PermissionsManagement = () => {
         .eq('user_id', userPermissions.userId)
         .maybeSingle();
 
+      // Strip any screen entries whose screenId is no longer in PAGE_DEFS.
+      // This prevents orphan slugs from accumulating in the DB whenever a page
+      // is removed from PAGE_DEFS (the UI already shows only SYSTEM_SCREENS, but
+      // an in-memory race or stale state could otherwise slip stale IDs through).
+      const validSlugSet = new Set(SYSTEM_SCREENS.map(s => s.screenId));
+      const cleanedScreens = userPermissions.screens.filter(s => validSlugSet.has(s.screenId));
+
       let error;
       const payload = {
-        screens: userPermissions.screens,
+        screens: cleanedScreens,
         updated_at: new Date().toISOString(),
         updated_by: currentUser.id,
       };
