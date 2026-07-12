@@ -65,6 +65,7 @@ const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
           entityType: 'project',
           entityId: projectId,
           actionUrl: `/projects/${projectId}`,
+          sendEmail: true,
           triggeredBy: currentUserId,
           triggeredByName: authorName,
         });
