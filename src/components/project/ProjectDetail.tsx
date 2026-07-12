@@ -1546,14 +1546,45 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Costs & Expenses</h2>
           </div>
+
+          {/* Budget reference banner — shows main project budget alongside cost-tracking budget */}
+          {budgetSummary && budgetSummary.total != null && (
+            (() => {
+              const costBs = getBudgetSummary(projectBudget);
+              const hasCostBudget = costBs && costBs.total != null && costBs.total > 0;
+              const currencyMismatch = hasCostBudget && costBs!.currency !== budgetSummary.currency;
+              return (
+                <div className="flex items-start gap-3 rounded-lg border bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 px-4 py-3 text-sm">
+                  <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-blue-800 dark:text-blue-300 leading-tight">
+                      Project Budget: {budgetSummary.currency} {budgetSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    {hasCostBudget && (
+                      <p className="text-blue-600/80 dark:text-blue-400/80 text-xs mt-0.5">
+                        Cost-tracking budget{currencyMismatch ? ` (${costBs!.currency})` : ''}: {costBs!.currency} {costBs!.total!.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencyMismatch && <span className="ml-1 text-amber-600 dark:text-amber-400">· Different currency — utilisation % tracks {costBs!.currency} costs only</span>}
+                      </p>
+                    )}
+                    {!hasCostBudget && (
+                      <p className="text-blue-600/70 dark:text-blue-400/70 text-xs mt-0.5">No cost-tracking budget set — go to the Budget tab to create one</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          )}
+
           <ProjectCostTab
             projectId={project.id}
             projectName={project.name}
             budgetTotalCents={(() => {
               const bs = getBudgetSummary(projectBudget);
-              return bs?.total ? bs.total * 100 : null;
+              if (bs?.total && bs.total > 0) return bs.total * 100;
+              // Fallback to main project budget when no project_budgets entry exists
+              return budgetSummary?.total ? budgetSummary.total * 100 : null;
             })()}
-            currency={getBudgetSummary(projectBudget)?.currency || 'SDG'}
+            currency={getBudgetSummary(projectBudget)?.currency || budgetSummary?.currency || 'SDG'}
           />
         </TabsContent>
 
@@ -1622,7 +1653,59 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             ].filter((id): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))}
           />
         </TabsContent>
-        <TabsContent value="field_tasks" className="mt-4">
+        <TabsContent value="field_tasks" className="mt-4 space-y-6">
+          {/* ── Project Activities (from flow stages) ── */}
+          {project.activities && project.activities.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-base font-semibold">Project Activities</h3>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                  {project.activities.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {project.activities.map((activity) => {
+                  const statusCfg: Record<string, { label: string; color: string; dot: string }> = {
+                    completed:   { label: 'Completed',   color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',  dot: 'bg-green-500' },
+                    in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',    dot: 'bg-blue-500' },
+                    not_started: { label: 'Not Started', color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',   dot: 'bg-slate-400' },
+                    cancelled:   { label: 'Cancelled',   color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',        dot: 'bg-red-500' },
+                  };
+                  const s = statusCfg[activity.status ?? 'not_started'] ?? statusCfg.not_started;
+                  const subTotal = activity.subActivities?.length ?? 0;
+                  const subDone = activity.subActivities?.filter((sa: any) => sa.status === 'completed').length ?? 0;
+                  return (
+                    <div key={activity.id} className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3 hover:shadow-sm transition-shadow">
+                      <span className={`mt-1.5 h-2.5 w-2.5 rounded-full flex-shrink-0 ${s.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-sm leading-tight">{activity.name}</p>
+                          <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${s.color}`}>
+                            {s.label}
+                          </span>
+                        </div>
+                        {activity.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{activity.description}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                          {activity.startDate && <span>Start: {activity.startDate}</span>}
+                          {activity.endDate   && <span>End: {activity.endDate}</span>}
+                          {subTotal > 0 && (
+                            <span className="flex items-center gap-1">
+                              <CheckSquare className="h-3 w-3" />
+                              {subDone}/{subTotal} sub-tasks
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Field Tasks (dedicated field operations) ── */}
           <ProjectFieldTasksPanel
             projectId={project.id}
             projectName={project.name}
