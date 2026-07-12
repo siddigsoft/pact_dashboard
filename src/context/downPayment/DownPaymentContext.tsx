@@ -1387,6 +1387,30 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const request = requests.find(r => r.id === requestId);
       if (!request) continue;
 
+      // ── Sibling-approval guard (bulk path) ──────────────────────────────────
+      // Skip any request that already has an approved/paid sibling for the same
+      // site entry — bulk-approving it would cause double payment.
+      if (request.mmpSiteEntryId) {
+        const { data: siblingCheck } = await supabase
+          .from('down_payment_requests')
+          .select('id, status, requested_amount')
+          .eq('mmp_site_entry_id', request.mmpSiteEntryId)
+          .neq('id', request.id)
+          .not('status', 'in', '("cancelled","rejected","deleted","fully_paid")')
+          .limit(1);
+        const blockedSibling = (siblingCheck || []).find(s =>
+          ['approved', 'pending_admin', 'partially_paid'].includes(s.status)
+        );
+        if (blockedSibling) {
+          failed++;
+          console.warn(
+            `[BulkApprove] Skipping ${requestId} — sibling ${blockedSibling.id} already "${blockedSibling.status}" for same site entry.`
+          );
+          continue;
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       const approvedAmount = calculateApprovedAmount(
         request.requestedAmount,
         data.approvalType,
