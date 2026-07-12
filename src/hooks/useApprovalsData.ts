@@ -19,6 +19,7 @@ interface WithdrawalRow {
 interface CostRow {
   id: string;
   submitted_by: string | null;
+  submitter_role: string | null;
   amount_cents: number | null;
   expense_category: string | null;
   description: string | null;
@@ -241,16 +242,28 @@ export function useApprovalsData({
       }
 
       // ── 3. Cost submissions — tier1_status: pending (Supervisor review) ─
-      // Visible to: Supervisor (hub-scoped), Admin, FOM
+      // Visible to: Supervisor (hub-scoped, coordinator-tier only), Admin, FOM
+      // Supervisors are T1 approvers ONLY for Coordinator/Enumerator/DataCollector subs.
+      // Their own submissions (3-tier, T1=FOM) and FOM subs must be excluded from the bell.
       if (roleIsSupervisor || roleIsAdmin || roleIsFOM) {
         let costQuery = supabase
           .from('operational_cost_submissions')
-          .select('id, submitted_by, amount_cents, expense_category, description, hub_id, created_at')
+          .select('id, submitted_by, submitter_role, amount_cents, expense_category, description, hub_id, created_at')
           .eq('tier1_status', 'pending')
           .order('created_at', { ascending: true });
 
         if (roleIsSupervisor && !roleIsAdmin && hubId) {
-          costQuery = costQuery.eq('hub_id', hubId);
+          // Hub scope + only coordinator-tier roles (Supervisor is T1 for these)
+          costQuery = costQuery
+            .eq('hub_id', hubId)
+            .in('submitter_role', [
+              'coordinator', 'Coordinator',
+              'enumerator', 'Enumerator',
+              'data_collector', 'Data Collector', 'datacollector',
+              'field_staff', 'Field Staff', 'fieldstaff',
+              'field_worker', 'Field Worker', 'fieldworker',
+              'field_agent', 'Field Agent', 'fieldagent',
+            ]);
         }
 
         const { data: costs } = await costQuery;
@@ -285,7 +298,7 @@ export function useApprovalsData({
       if (roleIsFOM || roleIsAdmin) {
         const { data: tier2Costs } = await supabase
           .from('operational_cost_submissions')
-          .select('id, submitted_by, amount_cents, expense_category, description, hub_id, created_at')
+          .select('id, submitted_by, submitter_role, amount_cents, expense_category, description, hub_id, created_at')
           .eq('tier1_status', 'approved')
           .eq('tier2_status', 'pending')
           .order('created_at', { ascending: true });
