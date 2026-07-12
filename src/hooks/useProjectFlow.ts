@@ -529,7 +529,8 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       const allTeamMembers = [
         project.team?.projectManager,
         ...(project.team?.members ?? []),
-        ...(project.team?.teamComposition?.map(m => m.name) ?? []),
+        // Use userId (UUID) — name-based lookup is unreliable due to display name mismatches
+        ...(project.team?.teamComposition?.map(m => m.userId).filter(Boolean) ?? []),
       ].filter((n): n is string => !!n && n !== currentUser.id && n !== currentUser.fullName);
       const uniqueTeamMembers = [...new Set(allTeamMembers)];
 

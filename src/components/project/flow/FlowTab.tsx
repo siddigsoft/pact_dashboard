@@ -1368,21 +1368,38 @@ export function FlowTab({
                       </div>
                     )}
 
-                    {/* Key Outputs — editable */}
+                    {/* Key Outputs — editable (defaults can be hidden via ~~rm~~: sentinel) */}
                     {(() => {
+                      // Sentinel prefix used to mark a removed default output
+                      const RM = '~~rm~~:';
                       const editing = outputsState[stage.id];
-                      const defaultItems: string[] = stage.keyOutputs ?? [];
-                      // De-dup: old data may have saved defaults into customOutputs before the fix
-                      const defaultSet = new Set(defaultItems.map(s => s.trim().toLowerCase()));
-                      const deduped = (entry?.customOutputs ?? []).filter(o => !defaultSet.has(o.trim().toLowerCase()));
-                      // customItems = only truly user-added outputs
+                      const allDefaultItems: string[] = stage.keyOutputs ?? [];
+
+                      // Sentinels stored in customOutputs mark defaults the user removed
+                      const rawCustom = entry?.customOutputs ?? [];
+                      const removedDefaultKeys = new Set(
+                        rawCustom
+                          .filter(o => o.startsWith(RM))
+                          .map(o => o.slice(RM.length).trim().toLowerCase())
+                      );
+                      // Visible defaults = all defaults except those the user removed
+                      const visibleDefaults = allDefaultItems.filter(
+                        d => !removedDefaultKeys.has(d.trim().toLowerCase())
+                      );
+                      // De-dup real custom items (strip sentinels + duplicates of defaults)
+                      const defaultSet = new Set(allDefaultItems.map(s => s.trim().toLowerCase()));
+                      const deduped = rawCustom.filter(
+                        o => !o.startsWith(RM) && !defaultSet.has(o.trim().toLowerCase())
+                      );
+
+                      // In edit mode, show what's currently in the editing buffer; otherwise deduped
                       const customItems: string[] = editing?.items ?? deduped;
                       const inputVal = editing?.inputVal ?? '';
                       const isSaving = outputsSaving === stage.id;
                       const showEdit = canEditFlow;
-                      const hasAny = customItems.length > 0 || defaultItems.length > 0;
+                      const isEditing = !!editing;
+                      const hasAny = visibleDefaults.length > 0 || customItems.length > 0 || allDefaultItems.length > 0;
 
-                      // Only init edit state with de-duped custom outputs
                       const startEdit = () => {
                         if (!editing) {
                           setOutputsState(prev => ({
@@ -1395,14 +1412,28 @@ export function FlowTab({
                       const addOutput = async () => {
                         const val = (editing?.inputVal ?? '').trim();
                         if (!val) return;
-                        const newItems = [...customItems, val];
-                        await saveOutputsForStage(stage.id, newItems);
+                        // Preserve existing sentinels + add new item
+                        const sentinels = rawCustom.filter(o => o.startsWith(RM));
+                        await saveOutputsForStage(stage.id, [...sentinels, ...customItems, val]);
                       };
 
-                      // Only custom items have remove buttons — index is within customItems
-                      const removeOutput = async (idx: number) => {
+                      // Remove a user-added custom item (never a sentinel)
+                      const removeCustom = async (idx: number) => {
+                        const sentinels = rawCustom.filter(o => o.startsWith(RM));
                         const newItems = customItems.filter((_, i) => i !== idx);
-                        await saveOutputsForStage(stage.id, newItems);
+                        await saveOutputsForStage(stage.id, [...sentinels, ...newItems]);
+                      };
+
+                      // Remove a default item by adding a sentinel
+                      const removeDefault = async (text: string) => {
+                        const sentinel = `${RM}${text}`;
+                        const existing = rawCustom.filter(o => o !== sentinel);
+                        await saveOutputsForStage(stage.id, [...existing, sentinel]);
+                        // Also update local state so it disappears immediately
+                        setOutputsState(prev => ({
+                          ...prev,
+                          [stage.id]: { items: customItems, inputVal: editing?.inputVal ?? '' },
+                        }));
                       };
 
                       if (!hasAny && !showEdit) return null;
@@ -1411,7 +1442,7 @@ export function FlowTab({
                         <div>
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                             <ListChecks className="h-3.5 w-3.5" /> Key Outputs
-                            {showEdit && (
+                            {showEdit && !isEditing && (
                               <button
                                 onClick={startEdit}
                                 className="ml-1 text-[10px] text-blue-500 hover:text-blue-700 font-normal normal-case tracking-normal underline underline-offset-2"
@@ -1419,6 +1450,11 @@ export function FlowTab({
                               >
                                 edit
                               </button>
+                            )}
+                            {showEdit && isEditing && (
+                              <span className="ml-1 text-[10px] text-blue-500 font-normal normal-case tracking-normal">
+                                editing — hover item to delete
+                              </span>
                             )}
                             {isSaving && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
                           </div>
@@ -1428,11 +1464,22 @@ export function FlowTab({
                           )}
 
                           <ul className="space-y-1.5">
-                            {/* Default (hardcoded) outputs — always read-only */}
-                            {defaultItems.map((output, oi) => (
-                              <li key={`def-${oi}`} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            {/* Default outputs — removable in edit mode via sentinel */}
+                            {visibleDefaults.map((output, oi) => (
+                              <li key={`def-${oi}`} className="flex items-start gap-2 text-sm text-muted-foreground group/out">
                                 <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
                                 <span className="flex-1">{output}</span>
+                                {showEdit && (
+                                  <button
+                                    onClick={() => removeDefault(output)}
+                                    disabled={isSaving}
+                                    className="opacity-0 group-hover/out:opacity-100 transition-opacity text-destructive hover:text-red-700 ml-1 flex-shrink-0"
+                                    title="Remove this output"
+                                    data-testid={`btn-remove-default-${stage.id}-${oi}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
                               </li>
                             ))}
                             {/* User-added custom outputs — removable */}
@@ -1442,7 +1489,7 @@ export function FlowTab({
                                 <span className="flex-1">{output}</span>
                                 {showEdit && (
                                   <button
-                                    onClick={() => removeOutput(oi)}
+                                    onClick={() => removeCustom(oi)}
                                     disabled={isSaving}
                                     className="opacity-0 group-hover/out:opacity-100 transition-opacity text-destructive hover:text-red-700 ml-1 flex-shrink-0"
                                     title="Remove output"
