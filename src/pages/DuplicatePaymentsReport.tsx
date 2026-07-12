@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  AlertTriangle, Search, Download, RefreshCw, ChevronDown, ChevronUp,
+  AlertTriangle, Search, RefreshCw, ChevronDown, ChevronUp,
   MapPin, Building2, Calendar, DollarSign, Copy, Shield,
-  FileSpreadsheet, Info, Users,
+  FileSpreadsheet, Info, X,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
@@ -52,47 +52,101 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DuplicateGroup {
-  groupKey:   string;
-  siteName:   string;
-  mmpName:    string;
-  hubName:    string;
-  hubId:      string;
-  monthKey:   string; // "YYYY-MM"
-  monthLabel: string; // "May 2026"
-  requests:   DownPaymentRequest[];
+  groupKey:      string;
+  siteName:      string;
+  mmpName:       string;
+  hubName:       string;
+  hubId:         string;
+  stateName:     string;
+  monthKey:      string;
+  monthLabel:    string;
+  requests:      DownPaymentRequest[];
   totalExposure: number;
   paidExposure:  number;
-  severity:   'critical' | 'high' | 'medium'; // critical=paid duplicates, high=approved, medium=pending
+  severity:      'critical' | 'high' | 'medium';
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function DuplicatePaymentsReport() {
   const { requests, loading, refreshRequests } = useDownPayment();
-  const { currentUser } = useUser();
-  const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
 
-  const [search,         setSearch]         = useState('');
-  const [hubFilter,      setHubFilter]      = useState('all');
-  const [monthFilter,    setMonthFilter]    = useState('all');
-  const [severityFilter, setSeverityFilter] = useState('all');
-  const [expandedKeys,   setExpandedKeys]   = useState<Set<string>>(new Set());
+  // ── Filter state ────────────────────────────────────────────────────────────
+  const [search,           setSearch]           = useState('');
+  const [hubFilter,        setHubFilter]        = useState('all');
+  const [stateFilter,      setStateFilter]      = useState('all');
+  const [mmpFilter,        setMmpFilter]        = useState('all');
+  const [enumeratorFilter, setEnumeratorFilter] = useState('all');
+  const [monthFilter,      setMonthFilter]      = useState('all');
+  const [severityFilter,   setSeverityFilter]   = useState('all');
+  const [expandedKeys,     setExpandedKeys]     = useState<Set<string>>(new Set());
 
   const toggleExpand = (key: string) =>
     setExpandedKeys(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  // ── Build duplicate groups ─────────────────────────────────────────────────
+  // ── Active requests (drop cancelled/rejected/deleted) ─────────────────────
+  const activeRequests = useMemo<DownPaymentRequest[]>(() =>
+    requests.filter(r => !['cancelled', 'rejected', 'deleted'].includes(r.status)),
+  [requests]);
+
+  // ── Cascaded filter option lists ───────────────────────────────────────────
+  const hubOptions = useMemo(() =>
+    [...new Set(activeRequests.map(r => r.hubName).filter(Boolean))].sort() as string[],
+  [activeRequests]);
+
+  const stateOptions = useMemo(() => {
+    const base = hubFilter !== 'all'
+      ? activeRequests.filter(r => r.hubName === hubFilter)
+      : activeRequests;
+    return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
+  }, [activeRequests, hubFilter]);
+
+  const mmpOptions = useMemo(() => {
+    let base = activeRequests;
+    if (hubFilter   !== 'all') base = base.filter(r => r.hubName   === hubFilter);
+    if (stateFilter !== 'all') base = base.filter(r => r.stateName === stateFilter);
+    return [...new Set(base.map(r => r.mmpName).filter(Boolean))].sort() as string[];
+  }, [activeRequests, hubFilter, stateFilter]);
+
+  const enumeratorOptions = useMemo(() => {
+    let base = activeRequests;
+    if (hubFilter   !== 'all') base = base.filter(r => r.hubName   === hubFilter);
+    if (stateFilter !== 'all') base = base.filter(r => r.stateName === stateFilter);
+    if (mmpFilter   !== 'all') base = base.filter(r => r.mmpName   === mmpFilter);
+    const seen = new Map<string, string>();
+    base.forEach(r => {
+      if (r.requestedBy && !seen.has(r.requestedBy as string)) {
+        seen.set(r.requestedBy as string, r.requestedByName ?? r.requestedBy as string);
+      }
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeRequests, hubFilter, stateFilter, mmpFilter]);
+
+  // ── Step 1: filter individual requests by hub/state/mmp/enumerator/month ──
+  const preFilteredRequests = useMemo<DownPaymentRequest[]>(() => {
+    return activeRequests.filter(r => {
+      if (hubFilter        !== 'all' && r.hubName   !== hubFilter)                      return false;
+      if (stateFilter      !== 'all' && r.stateName !== stateFilter)                    return false;
+      if (mmpFilter        !== 'all' && r.mmpName   !== mmpFilter)                      return false;
+      if (enumeratorFilter !== 'all' && r.requestedBy !== enumeratorFilter)             return false;
+      if (monthFilter !== 'all') {
+        const mk = r.requestedAt
+          ? format(parseISO(r.requestedAt), 'yyyy-MM')
+          : r.createdAt ? format(parseISO(r.createdAt), 'yyyy-MM') : '';
+        if (mk !== monthFilter) return false;
+      }
+      return true;
+    });
+  }, [activeRequests, hubFilter, stateFilter, mmpFilter, enumeratorFilter, monthFilter]);
+
+  // ── Step 2: build duplicate groups from pre-filtered requests ──────────────
   const allGroups = useMemo<DuplicateGroup[]>(() => {
-    // Group by mmpSiteEntryId (exact) or siteName+hubId (legacy)
     const map = new Map<string, DownPaymentRequest[]>();
 
-    for (const r of requests) {
-      // Skip already-cancelled/rejected/deleted — user wants to see ALL active duplicates
-      if (['cancelled', 'rejected', 'deleted'].includes(r.status)) continue;
-
+    for (const r of preFilteredRequests) {
       const monthKey = r.requestedAt
         ? format(parseISO(r.requestedAt), 'yyyy-MM')
-        : format(parseISO(r.createdAt ?? new Date().toISOString()), 'yyyy-MM');
+        : r.createdAt ? format(parseISO(r.createdAt), 'yyyy-MM') : 'unknown';
 
       const groupKey = r.mmpSiteEntryId
         ? `entry::${r.mmpSiteEntryId}`
@@ -105,12 +159,12 @@ export default function DuplicatePaymentsReport() {
     const groups: DuplicateGroup[] = [];
 
     for (const [groupKey, reqs] of map.entries()) {
-      if (reqs.length < 2) continue; // Not a duplicate
+      if (reqs.length < 2) continue;
 
       const sample   = reqs[0];
       const monthKey = sample.requestedAt
         ? format(parseISO(sample.requestedAt), 'yyyy-MM')
-        : format(parseISO(sample.createdAt ?? new Date().toISOString()), 'yyyy-MM');
+        : sample.createdAt ? format(parseISO(sample.createdAt), 'yyyy-MM') : 'unknown';
 
       const totalExposure = reqs.reduce((s, r) => s + (r.requestedAmount ?? 0), 0);
       const paidExposure  = reqs
@@ -127,8 +181,9 @@ export default function DuplicatePaymentsReport() {
         mmpName:    sample.mmpName    ?? '—',
         hubName:    sample.hubName    ?? '—',
         hubId:      sample.hubId      ?? '',
+        stateName:  sample.stateName  ?? '—',
         monthKey,
-        monthLabel: format(parseISO(`${monthKey}-01`), 'MMMM yyyy'),
+        monthLabel: monthKey !== 'unknown' ? format(parseISO(`${monthKey}-01`), 'MMMM yyyy') : '—',
         requests:   reqs.sort((a, b) => (a.requestedAt ?? '').localeCompare(b.requestedAt ?? '')),
         totalExposure,
         paidExposure,
@@ -140,41 +195,38 @@ export default function DuplicatePaymentsReport() {
       const sv = { critical: 0, high: 1, medium: 2 };
       return sv[a.severity] - sv[b.severity] || b.totalExposure - a.totalExposure;
     });
-  }, [requests]);
+  }, [preFilteredRequests]);
 
-  // ── Filter options ─────────────────────────────────────────────────────────
-  const hubOptions = useMemo(() => {
-    const hubs = [...new Set(allGroups.map(g => g.hubName).filter(Boolean))].sort();
-    return hubs;
-  }, [allGroups]);
-
+  // ── Month options derived from all active requests (not pre-filtered) ──────
   const monthOptions = useMemo(() => {
-    const months = [...new Set(allGroups.map(g => g.monthKey))].sort().reverse();
+    const months = [...new Set(activeRequests.map(r => {
+      if (r.requestedAt) return format(parseISO(r.requestedAt), 'yyyy-MM');
+      if (r.createdAt)   return format(parseISO(r.createdAt),   'yyyy-MM');
+      return null;
+    }).filter(Boolean))].sort().reverse() as string[];
     return months;
-  }, [allGroups]);
+  }, [activeRequests]);
 
-  // ── Apply filters ──────────────────────────────────────────────────────────
+  // ── Step 3: apply severity + search on groups ──────────────────────────────
   const filteredGroups = useMemo(() => {
     const q = search.toLowerCase().trim();
     return allGroups.filter(g => {
-      if (hubFilter      !== 'all' && g.hubName  !== hubFilter)      return false;
-      if (monthFilter    !== 'all' && g.monthKey !== monthFilter)     return false;
-      if (severityFilter !== 'all' && g.severity !== severityFilter)  return false;
+      if (severityFilter !== 'all' && g.severity !== severityFilter) return false;
       if (q && !g.siteName.toLowerCase().includes(q) && !g.mmpName.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [allGroups, hubFilter, monthFilter, severityFilter, search]);
+  }, [allGroups, severityFilter, search]);
 
-  // ── Summary stats ──────────────────────────────────────────────────────────
+  // ── Summary cards — based on filteredGroups (reflect all active filters) ──
   const stats = useMemo(() => {
-    const totalSites      = allGroups.length;
-    const totalExtra      = allGroups.reduce((s, g) => s + g.requests.length - 1, 0);
-    const totalExposure   = allGroups.reduce((s, g) => s + g.totalExposure, 0);
-    const paidExposure    = allGroups.reduce((s, g) => s + g.paidExposure,  0);
-    const criticalCount   = allGroups.filter(g => g.severity === 'critical').length;
-    const highCount       = allGroups.filter(g => g.severity === 'high').length;
+    const totalSites    = filteredGroups.length;
+    const totalExtra    = filteredGroups.reduce((s, g) => s + g.requests.length - 1, 0);
+    const totalExposure = filteredGroups.reduce((s, g) => s + g.totalExposure, 0);
+    const paidExposure  = filteredGroups.reduce((s, g) => s + g.paidExposure,  0);
+    const criticalCount = filteredGroups.filter(g => g.severity === 'critical').length;
+    const highCount     = filteredGroups.filter(g => g.severity === 'high').length;
     return { totalSites, totalExtra, totalExposure, paidExposure, criticalCount, highCount };
-  }, [allGroups]);
+  }, [filteredGroups]);
 
   // ── Excel export ───────────────────────────────────────────────────────────
   const handleExport = () => {
@@ -184,13 +236,14 @@ export default function DuplicatePaymentsReport() {
         'Site Name':         g.siteName,
         'MMP Name':          g.mmpName,
         'Hub':               g.hubName,
+        'State':             g.stateName,
         'Month':             g.monthLabel,
         'Severity':          g.severity.toUpperCase(),
         'Total Requests':    g.requests.length,
         'Position in Group': i + 1,
         'Request ID':        r.id,
         'Status':            STATUS_LABEL[r.status] ?? r.status,
-        'Requested By':      r.requestedByName ?? r.requestedBy ?? '—',
+        'Enumerator':        r.requestedByName ?? r.requestedBy ?? '—',
         'Role':              r.requesterRole ?? '—',
         'Requested Date':    r.requestedAt ? format(parseISO(r.requestedAt), 'yyyy-MM-dd') : '—',
         'Requested Amount':  r.requestedAmount ?? 0,
@@ -200,7 +253,6 @@ export default function DuplicatePaymentsReport() {
         'Justification':     r.justification ?? '—',
       }))
     );
-
     exportToExcel(rows, `Duplicate_Payments_Report_${format(new Date(), 'yyyy-MM-dd')}`);
     toast({ title: 'Exported', description: `${rows.length} rows exported to Excel.` });
   };
@@ -213,6 +265,25 @@ export default function DuplicatePaymentsReport() {
   const severityLabel = (s: DuplicateGroup['severity']) =>
     s === 'critical' ? '⚠ PAID DUPLICATE' : s === 'high' ? '⚠ APPROVED DUPLICATE' : 'PENDING DUPLICATE';
 
+  const hasAnyFilter = hubFilter !== 'all' || stateFilter !== 'all' || mmpFilter !== 'all'
+    || enumeratorFilter !== 'all' || monthFilter !== 'all' || severityFilter !== 'all' || search;
+
+  const clearFilters = () => {
+    setHubFilter('all'); setStateFilter('all'); setMmpFilter('all');
+    setEnumeratorFilter('all'); setMonthFilter('all'); setSeverityFilter('all'); setSearch('');
+  };
+
+  // Auto-reset downstream filters when upstream changes
+  const handleHubChange = (v: string) => {
+    setHubFilter(v); setStateFilter('all'); setMmpFilter('all'); setEnumeratorFilter('all');
+  };
+  const handleStateChange = (v: string) => {
+    setStateFilter(v); setMmpFilter('all'); setEnumeratorFilter('all');
+  };
+  const handleMmpChange = (v: string) => {
+    setMmpFilter(v); setEnumeratorFilter('all');
+  };
+
   if (loading) {
     return (
       <div className="p-6 space-y-4">
@@ -222,7 +293,7 @@ export default function DuplicatePaymentsReport() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-5">
 
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-3 justify-between">
@@ -256,7 +327,7 @@ export default function DuplicatePaymentsReport() {
         </span>
       </div>
 
-      {/* ── Summary cards ── */}
+      {/* ── Summary cards — update with filters ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-red-200">
           <CardContent className="p-4">
@@ -295,58 +366,103 @@ export default function DuplicatePaymentsReport() {
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search site or MMP name…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
-          />
+      <div className="space-y-2">
+        {/* Row 1: search + severity + clear */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search site or MMP name…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-8 h-8 text-sm"
+              data-testid="input-duplicate-search"
+            />
+          </div>
+          <Select value={severityFilter} onValueChange={setSeverityFilter}>
+            <SelectTrigger className="h-8 w-[175px] text-xs" data-testid="select-severity-filter">
+              <SelectValue placeholder="All severities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All severities</SelectItem>
+              <SelectItem value="critical">⚠ Paid duplicates</SelectItem>
+              <SelectItem value="high">Approved duplicates</SelectItem>
+              <SelectItem value="medium">Pending only</SelectItem>
+            </SelectContent>
+          </Select>
+          {hasAnyFilter && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={clearFilters} data-testid="button-clear-filters">
+              <X className="h-3 w-3" /> Clear all
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground ml-auto">
+            Showing {filteredGroups.length} duplicate sites
+          </span>
         </div>
-        <Select value={severityFilter} onValueChange={setSeverityFilter}>
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue placeholder="All severities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All severities</SelectItem>
-            <SelectItem value="critical">⚠ Paid duplicates</SelectItem>
-            <SelectItem value="high">Approved duplicates</SelectItem>
-            <SelectItem value="medium">Pending only</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={hubFilter} onValueChange={setHubFilter}>
-          <SelectTrigger className="h-8 w-[150px] text-xs">
-            <SelectValue placeholder="All hubs" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All hubs</SelectItem>
-            {hubOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={monthFilter} onValueChange={setMonthFilter}>
-          <SelectTrigger className="h-8 w-[150px] text-xs">
-            <SelectValue placeholder="All months" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All months</SelectItem>
-            {monthOptions.map(m => (
-              <SelectItem key={m} value={m}>
-                {format(parseISO(`${m}-01`), 'MMMM yyyy')}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {(hubFilter !== 'all' || monthFilter !== 'all' || severityFilter !== 'all' || search) && (
-          <Button variant="ghost" size="sm" className="h-8 text-xs"
-            onClick={() => { setHubFilter('all'); setMonthFilter('all'); setSeverityFilter('all'); setSearch(''); }}>
-            Clear
-          </Button>
-        )}
-        <span className="text-xs text-muted-foreground ml-auto">
-          Showing {filteredGroups.length} of {allGroups.length} duplicate sites
-        </span>
+
+        {/* Row 2: Hub → State → MMP → Enumerator → Month */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Hub */}
+          <Select value={hubFilter} onValueChange={handleHubChange}>
+            <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-hub-filter">
+              <SelectValue placeholder="All hubs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All hubs</SelectItem>
+              {hubOptions.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* State */}
+          <Select value={stateFilter} onValueChange={handleStateChange} disabled={stateOptions.length === 0}>
+            <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-state-filter">
+              <SelectValue placeholder="All states" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All states</SelectItem>
+              {stateOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* MMP */}
+          <Select value={mmpFilter} onValueChange={handleMmpChange} disabled={mmpOptions.length === 0}>
+            <SelectTrigger className="h-8 w-[165px] text-xs" data-testid="select-mmp-filter">
+              <SelectValue placeholder="All MMPs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All MMPs</SelectItem>
+              {mmpOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Enumerator */}
+          <Select value={enumeratorFilter} onValueChange={setEnumeratorFilter} disabled={enumeratorOptions.length === 0}>
+            <SelectTrigger className="h-8 w-[175px] text-xs" data-testid="select-enumerator-filter">
+              <SelectValue placeholder="All enumerators" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All enumerators</SelectItem>
+              {enumeratorOptions.map(e => (
+                <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Month */}
+          <Select value={monthFilter} onValueChange={setMonthFilter}>
+            <SelectTrigger className="h-8 w-[145px] text-xs" data-testid="select-month-filter">
+              <SelectValue placeholder="All months" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All months</SelectItem>
+              {monthOptions.map(m => (
+                <SelectItem key={m} value={m}>
+                  {format(parseISO(`${m}-01`), 'MMMM yyyy')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* ── No results ── */}
@@ -355,13 +471,15 @@ export default function DuplicatePaymentsReport() {
           <CardContent className="py-12 text-center">
             <Shield className="h-10 w-10 mx-auto mb-3 text-emerald-500 opacity-60" />
             <p className="text-sm font-medium text-muted-foreground">
-              {allGroups.length === 0 ? 'No duplicate requests found — all sites have a single active request.' : 'No results match the current filters.'}
+              {allGroups.length === 0
+                ? 'No duplicate requests found for the selected filters.'
+                : 'No results match the current filters.'}
             </p>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Duplicate groups table ── */}
+      {/* ── Duplicate groups ── */}
       {filteredGroups.length > 0 && (
         <div className="space-y-3">
           {filteredGroups.map(group => (
@@ -378,6 +496,7 @@ export default function DuplicatePaymentsReport() {
                 type="button"
                 className="w-full text-left"
                 onClick={() => toggleExpand(group.groupKey)}
+                data-testid={`button-expand-${group.groupKey}`}
               >
                 <CardContent className={`p-4 ${
                   group.severity === 'critical' ? 'bg-red-50/40 dark:bg-red-950/20' :
@@ -400,14 +519,19 @@ export default function DuplicatePaymentsReport() {
                         </Badge>
                       </div>
                       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        {group.mmpName && group.mmpName !== '—' && (
+                        {group.mmpName !== '—' && (
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3 w-3" />{group.mmpName}
                           </span>
                         )}
-                        {group.hubName && group.hubName !== '—' && (
+                        {group.hubName !== '—' && (
                           <span className="flex items-center gap-1">
                             <Building2 className="h-3 w-3" />{group.hubName}
+                          </span>
+                        )}
+                        {group.stateName !== '—' && (
+                          <span className="flex items-center gap-1 text-muted-foreground/70">
+                            {group.stateName}
                           </span>
                         )}
                         <span className="flex items-center gap-1">
@@ -425,7 +549,9 @@ export default function DuplicatePaymentsReport() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <span className="text-xs text-muted-foreground">{expandedKeys.has(group.groupKey) ? 'Hide' : 'Details'}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {expandedKeys.has(group.groupKey) ? 'Hide' : 'Details'}
+                      </span>
                       {expandedKeys.has(group.groupKey)
                         ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
                         : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
@@ -442,7 +568,7 @@ export default function DuplicatePaymentsReport() {
                       <TableRow className="text-xs bg-muted/30">
                         <TableHead className="py-2 text-xs">#</TableHead>
                         <TableHead className="py-2 text-xs">Request ID</TableHead>
-                        <TableHead className="py-2 text-xs">Requested By</TableHead>
+                        <TableHead className="py-2 text-xs">Enumerator</TableHead>
                         <TableHead className="py-2 text-xs">Role</TableHead>
                         <TableHead className="py-2 text-xs">Date Submitted</TableHead>
                         <TableHead className="py-2 text-xs text-right">Requested (SDG)</TableHead>
@@ -468,27 +594,24 @@ export default function DuplicatePaymentsReport() {
                               {r.id.substring(0, 8).toUpperCase()}
                             </TableCell>
                             <TableCell className="py-2">
-                              <span className="flex items-center gap-1">
-                                <Users className="h-3 w-3 text-muted-foreground" />
-                                {r.requestedByName ?? r.requestedBy ?? '—'}
-                              </span>
+                              {r.requestedByName ?? r.requestedBy ?? '—'}
                             </TableCell>
                             <TableCell className="py-2 capitalize text-muted-foreground">
                               {r.requesterRole ?? '—'}
                             </TableCell>
-                            <TableCell className="py-2">
-                              {r.requestedAt ? format(parseISO(r.requestedAt), 'dd MMM yyyy') : '—'}
+                            <TableCell className="py-2 text-muted-foreground whitespace-nowrap">
+                              {r.requestedAt ? format(parseISO(r.requestedAt), 'MMM dd, yyyy') : '—'}
                             </TableCell>
-                            <TableCell className="py-2 text-right font-mono font-medium">
+                            <TableCell className="py-2 text-right font-medium">
                               {(r.requestedAmount ?? 0).toLocaleString()}
                             </TableCell>
-                            <TableCell className={`py-2 text-right font-mono font-medium ${isPaid ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'}`}>
-                              {isPaid ? (r.totalPaidAmount ?? 0).toLocaleString() : '—'}
+                            <TableCell className={`py-2 text-right font-medium ${isPaid ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'}`}>
+                              {(r.totalPaidAmount ?? 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="py-2">
                               <StatusBadge status={r.status} />
                             </TableCell>
-                            <TableCell className="py-2 max-w-[200px] truncate text-muted-foreground">
+                            <TableCell className="py-2 max-w-[200px] truncate text-muted-foreground" title={r.justification ?? ''}>
                               {r.justification ?? '—'}
                             </TableCell>
                           </TableRow>
@@ -496,18 +619,6 @@ export default function DuplicatePaymentsReport() {
                       })}
                     </TableBody>
                   </Table>
-                  <div className={`px-4 py-2 text-xs flex justify-between border-t ${
-                    group.severity === 'critical' ? 'bg-red-50/30 text-red-700' : 'bg-muted/20 text-muted-foreground'
-                  }`}>
-                    <span>
-                      {group.requests.length} requests for this site
-                      {group.severity === 'critical' && ' — FINANCE REVIEW REQUIRED for actual cash disbursements'}
-                    </span>
-                    <span className="font-medium">
-                      Total: SDG {group.totalExposure.toLocaleString()}
-                      {group.paidExposure > 0 && ` · Paid: SDG ${group.paidExposure.toLocaleString()}`}
-                    </span>
-                  </div>
                 </div>
               )}
             </Card>
@@ -516,34 +627,13 @@ export default function DuplicatePaymentsReport() {
       )}
 
       {/* ── Legend ── */}
-      <Card className="bg-muted/20">
-        <CardContent className="p-4">
-          <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">How to read this report</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="flex items-start gap-2">
-              <span className="w-2 h-2 rounded-full bg-red-500 mt-1 flex-shrink-0" />
-              <div>
-                <div className="font-medium">Paid Duplicate (Critical)</div>
-                <div className="text-muted-foreground">At least one request is fully/partially paid. Physical cash may have been disbursed multiple times. Finance team must verify actual payments against field receipts.</div>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="w-2 h-2 rounded-full bg-orange-500 mt-1 flex-shrink-0" />
-              <div>
-                <div className="font-medium">Approved Duplicate (High)</div>
-                <div className="text-muted-foreground">One or more requests are approved but not yet paid. Cancel the extra approved requests before payment is made to prevent double disbursement.</div>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="w-2 h-2 rounded-full bg-yellow-500 mt-1 flex-shrink-0" />
-              <div>
-                <div className="font-medium">Pending Duplicate (Medium)</div>
-                <div className="text-muted-foreground">Multiple requests pending approval for the same site. Safe to cancel the extras now before any approval happens.</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="rounded-md border border-muted bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground/70">Finance Reconciliation Guide</p>
+        <p>• <strong>#1</strong> (green) = earliest request for this site — likely the intended payment</p>
+        <p>• <strong>#2+</strong> (red) = duplicate requests — review with finance team before any payment</p>
+        <p>• Paid duplicates (red rows) require immediate attention — verify if cash went out twice</p>
+        <p>• This report is read-only. Contact your finance manager to cancel duplicates once confirmed.</p>
+      </div>
     </div>
   );
 }
