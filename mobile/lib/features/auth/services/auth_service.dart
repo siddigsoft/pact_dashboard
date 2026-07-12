@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../../../core/offline/hive_manager.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../permissions/permission_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -55,7 +55,13 @@ class AuthService {
     );
 
     if (response.user == null) return null;
-    return await fetchProfile(response.user!.id);
+    final user = await fetchProfile(response.user!.id);
+    if (user != null) {
+      // Sync permission overrides immediately after login so the route guard
+      // has fresh data before the user navigates anywhere.
+      await PermissionService.syncForUser(user.id);
+    }
+    return user;
   }
 
   Future<UserModel?> fetchProfile(String userId) async {
@@ -75,7 +81,16 @@ class AuthService {
     }
   }
 
+  /// Refreshes the permission cache if it is stale.  Call from the splash
+  /// screen or after returning from background so offline guards stay current.
+  Future<void> refreshPermissionsIfStale(String userId) async {
+    if (PermissionService.isStale()) {
+      await PermissionService.syncForUser(userId);
+    }
+  }
+
   Future<void> signOut() async {
+    PermissionService.clear();
     await _client.auth.signOut();
     await HiveManager.clearAll();
   }

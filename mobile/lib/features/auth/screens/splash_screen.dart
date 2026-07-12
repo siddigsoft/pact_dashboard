@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/offline/hive_manager.dart';
+import '../../permissions/permission_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -42,11 +43,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       final user = await authService.fetchProfile(authService.currentAuthUser!.id);
       if (user != null) {
         ref.read(currentUserProvider.notifier).setUser(user);
+
+        // Sync permission overrides so the GoRouter redirect guard has
+        // up-to-date data for the current user.  If the device is offline,
+        // the call fails silently and the existing Hive cache is used.
+        await authService.refreshPermissionsIfStale(user.id);
+
         if (mounted) context.go(AppRoutes.dashboard);
       } else {
         if (mounted) context.go(AppRoutes.login);
       }
     } catch (_) {
+      // Network unavailable — fall back to cached user profile.
+      // The existing permission cache (if any) will continue to gate routes.
       final cached = HiveManager.getItem(HiveManager.userBox, 'current_user');
       if (cached != null && mounted) {
         context.go(AppRoutes.dashboard);

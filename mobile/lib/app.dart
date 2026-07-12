@@ -5,6 +5,7 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/splash_screen.dart';
 import 'features/auth/screens/login_screen.dart';
+import 'features/auth/screens/blocked_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/site_visits/screens/site_visit_detail_screen.dart';
 import 'features/site_visits/screens/complete_visit_screen.dart';
@@ -27,15 +28,33 @@ import 'features/communication/screens/communication_screen.dart';
 import 'features/calendar/screens/calendar_screen.dart';
 import 'features/expenses/screens/my_expenses_screen.dart';
 import 'features/profile/screens/profile_screen.dart';
+import 'features/permissions/permission_service.dart';
+
+// Routes that are always allowed — skip the permission check for these.
+const _openRoutes = {AppRoutes.splash, AppRoutes.login, AppRoutes.blocked};
 
 final _router = GoRouter(
   initialLocation: AppRoutes.splash,
+  redirect: (context, state) {
+    final path = state.uri.path;
+
+    // Never gate auth / system routes.
+    if (_openRoutes.contains(path)) return null;
+
+    // Check the locally-cached permission overrides (Hive — synchronous).
+    // If the admin has explicitly blocked this route for the current user,
+    // redirect to the blocked screen regardless of their role.
+    if (PermissionService.isRouteBlocked(path)) return AppRoutes.blocked;
+
+    return null;
+  },
   routes: [
-    GoRoute(path: AppRoutes.splash, builder: (_, __) => const SplashScreen()),
-    GoRoute(path: AppRoutes.login, builder: (_, __) => const LoginScreen()),
+    GoRoute(path: AppRoutes.splash,   builder: (_, __) => const SplashScreen()),
+    GoRoute(path: AppRoutes.login,    builder: (_, __) => const LoginScreen()),
+    GoRoute(path: AppRoutes.blocked,  builder: (_, __) => const BlockedScreen()),
     GoRoute(path: AppRoutes.dashboard, builder: (_, __) => const DashboardScreen()),
-    GoRoute(path: AppRoutes.myTasks, builder: (_, __) => const TasksScreen()),
-    GoRoute(path: AppRoutes.mmp, builder: (_, __) => const MmpScreen()),
+    GoRoute(path: AppRoutes.myTasks,  builder: (_, __) => const TasksScreen()),
+    GoRoute(path: AppRoutes.mmp,      builder: (_, __) => const MmpScreen()),
     GoRoute(
       path: '/mmp/:id',
       builder: (_, state) => MmpDetailScreen(mmpId: state.pathParameters['id']!),
@@ -49,21 +68,21 @@ final _router = GoRouter(
       path: '/site-visits/:id/complete',
       builder: (_, state) => CompleteVisitScreen(visitId: state.pathParameters['id']!),
     ),
-    GoRoute(path: AppRoutes.costSubmission, builder: (_, __) => const CostSubmissionScreen()),
-    GoRoute(path: AppRoutes.approvals, builder: (_, __) => const ApprovalsScreen()),
-    GoRoute(path: AppRoutes.wallet, builder: (_, __) => const WalletScreen()),
-    GoRoute(path: AppRoutes.notifications, builder: (_, __) => const NotificationsScreen()),
-    GoRoute(path: AppRoutes.calendar, builder: (_, __) => const CalendarScreen()),
-    GoRoute(path: AppRoutes.myExpenses, builder: (_, __) => const MyExpensesScreen()),
-    GoRoute(path: AppRoutes.siteVerification, builder: (_, __) => const SiteVerificationScreen()),
-    GoRoute(path: AppRoutes.sitesForVerification, builder: (_, __) => const SitesForVerificationScreen()),
-    GoRoute(path: AppRoutes.financeHub, builder: (_, __) => const FinanceHubScreen()),
-    GoRoute(path: AppRoutes.programmeHub, builder: (_, __) => const ProgrammeHubScreen()),
-    GoRoute(path: AppRoutes.crm, builder: (_, __) => const CrmScreen()),
-    GoRoute(path: AppRoutes.analytics, builder: (_, __) => const AnalyticsScreen()),
-    GoRoute(path: AppRoutes.communication, builder: (_, __) => const CommunicationScreen()),
-    GoRoute(path: AppRoutes.profile, builder: (_, __) => const ProfileScreen()),
-    GoRoute(path: AppRoutes.cyclClose, builder: (_, __) => const CycleCloseScreen()),
+    GoRoute(path: AppRoutes.costSubmission,      builder: (_, __) => const CostSubmissionScreen()),
+    GoRoute(path: AppRoutes.approvals,           builder: (_, __) => const ApprovalsScreen()),
+    GoRoute(path: AppRoutes.wallet,              builder: (_, __) => const WalletScreen()),
+    GoRoute(path: AppRoutes.notifications,       builder: (_, __) => const NotificationsScreen()),
+    GoRoute(path: AppRoutes.calendar,            builder: (_, __) => const CalendarScreen()),
+    GoRoute(path: AppRoutes.myExpenses,          builder: (_, __) => const MyExpensesScreen()),
+    GoRoute(path: AppRoutes.siteVerification,    builder: (_, __) => const SiteVerificationScreen()),
+    GoRoute(path: AppRoutes.sitesForVerification,builder: (_, __) => const SitesForVerificationScreen()),
+    GoRoute(path: AppRoutes.financeHub,          builder: (_, __) => const FinanceHubScreen()),
+    GoRoute(path: AppRoutes.programmeHub,        builder: (_, __) => const ProgrammeHubScreen()),
+    GoRoute(path: AppRoutes.crm,                 builder: (_, __) => const CrmScreen()),
+    GoRoute(path: AppRoutes.analytics,           builder: (_, __) => const AnalyticsScreen()),
+    GoRoute(path: AppRoutes.communication,       builder: (_, __) => const CommunicationScreen()),
+    GoRoute(path: AppRoutes.profile,             builder: (_, __) => const ProfileScreen()),
+    GoRoute(path: AppRoutes.cyclClose,           builder: (_, __) => const CycleCloseScreen()),
   ],
 );
 

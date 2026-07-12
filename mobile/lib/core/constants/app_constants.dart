@@ -45,6 +45,7 @@ class AppRoutes {
   // Auth
   static const String splash = '/';
   static const String login = '/login';
+  static const String blocked = '/blocked';
 
   // Main
   static const String dashboard = '/dashboard';

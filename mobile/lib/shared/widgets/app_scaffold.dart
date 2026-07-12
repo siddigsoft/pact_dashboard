@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/models/user_model.dart';
 import '../../features/auth/services/auth_service.dart';
+import '../../features/permissions/permission_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import 'offline_banner.dart';
@@ -67,10 +68,12 @@ class _RoleBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
-    final items = _navItems();
+    final items = _navItems().where((i) => !PermissionService.isRouteBlocked(i.route)).toList();
 
     int currentIndex = items.indexWhere((i) => location.startsWith(i.route));
     if (currentIndex < 0) currentIndex = 0;
+
+    if (items.isEmpty) return const SizedBox.shrink();
 
     return NavigationBar(
       selectedIndex: currentIndex,
@@ -182,31 +185,31 @@ class _AppDrawer extends ConsumerWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                _DrawerTile(Icons.home_outlined, 'Dashboard', AppRoutes.dashboard, context),
-                _DrawerTile(Icons.check_circle_outline, 'My Tasks', AppRoutes.myTasks, context),
+                _drawerTile(Icons.home_outlined, 'Dashboard', AppRoutes.dashboard, context),
+                _drawerTile(Icons.check_circle_outline, 'My Tasks', AppRoutes.myTasks, context),
                 if (!user.isDataCollector && !user.isDataTeam)
-                  _DrawerTile(Icons.receipt_outlined, 'Cost Submission', AppRoutes.costSubmission, context),
-                _DrawerTile(Icons.location_on_outlined, 'MMP / My Sites', AppRoutes.mmp, context),
-                _DrawerTile(Icons.map_outlined, 'Field Ops Hub', AppRoutes.fieldOps, context),
+                  _drawerTile(Icons.receipt_outlined, 'Cost Submission', AppRoutes.costSubmission, context),
+                _drawerTile(Icons.location_on_outlined, 'MMP / My Sites', AppRoutes.mmp, context),
+                _drawerTile(Icons.map_outlined, 'Field Ops Hub', AppRoutes.fieldOps, context),
                 if (!user.isDataCollector && !user.isDataTeam)
-                  _DrawerTile(Icons.account_balance_wallet_outlined, 'My Wallet', AppRoutes.wallet, context),
+                  _drawerTile(Icons.account_balance_wallet_outlined, 'My Wallet', AppRoutes.wallet, context),
                 if (user.isDataCollector)
-                  _DrawerTile(Icons.account_balance_wallet_outlined, 'My Wallet', AppRoutes.wallet, context),
+                  _drawerTile(Icons.account_balance_wallet_outlined, 'My Wallet', AppRoutes.wallet, context),
                 if (user.isSupervisor || user.isFOM)
-                  _DrawerTile(Icons.inbox_outlined, 'Approvals Hub', AppRoutes.approvals, context),
+                  _drawerTile(Icons.inbox_outlined, 'Approvals Hub', AppRoutes.approvals, context),
                 if (user.isFOM) ...[
-                  _DrawerTile(Icons.attach_money, 'Finance Hub', AppRoutes.financeHub, context),
-                  _DrawerTile(Icons.folder_outlined, 'Programme Hub', AppRoutes.programmeHub, context),
-                  _DrawerTile(Icons.handshake_outlined, 'CRM', AppRoutes.crm, context),
-                  _DrawerTile(Icons.bar_chart, 'Analytics', AppRoutes.analytics, context),
+                  _drawerTile(Icons.attach_money, 'Finance Hub', AppRoutes.financeHub, context),
+                  _drawerTile(Icons.folder_outlined, 'Programme Hub', AppRoutes.programmeHub, context),
+                  _drawerTile(Icons.handshake_outlined, 'CRM', AppRoutes.crm, context),
+                  _drawerTile(Icons.bar_chart, 'Analytics', AppRoutes.analytics, context),
                 ],
                 if (user.isDataTeam)
-                  _DrawerTile(Icons.bar_chart, 'Analytics', AppRoutes.analytics, context),
-                _DrawerTile(Icons.chat_outlined, 'Communication', AppRoutes.communication, context),
-                _DrawerTile(Icons.calendar_today_outlined, 'Calendar', AppRoutes.calendar, context),
-                _DrawerTile(Icons.notifications_outlined, 'Notifications', AppRoutes.notifications, context),
+                  _drawerTile(Icons.bar_chart, 'Analytics', AppRoutes.analytics, context),
+                _drawerTile(Icons.chat_outlined, 'Communication', AppRoutes.communication, context),
+                _drawerTile(Icons.calendar_today_outlined, 'Calendar', AppRoutes.calendar, context),
+                _drawerTile(Icons.notifications_outlined, 'Notifications', AppRoutes.notifications, context),
                 const Divider(),
-                _DrawerTile(Icons.person_outline, 'My Profile', AppRoutes.profile, context),
+                _drawerTile(Icons.person_outline, 'My Profile', AppRoutes.profile, context),
                 ListTile(
                   leading: const Icon(Icons.logout, color: AppColors.error),
                   title: const Text('Sign Out', style: TextStyle(color: AppColors.error)),
@@ -224,15 +227,17 @@ class _AppDrawer extends ConsumerWidget {
       ),
     );
   }
-}
 
-Widget _DrawerTile(IconData icon, String title, String route, BuildContext context) {
-  return ListTile(
-    leading: Icon(icon, size: 22),
-    title: Text(title, style: const TextStyle(fontSize: 14)),
-    onTap: () {
-      Navigator.pop(context);
-      context.go(route);
-    },
-  );
+  /// Returns null (hidden) when the route is blocked by a permission override.
+  Widget _drawerTile(IconData icon, String title, String route, BuildContext context) {
+    if (PermissionService.isRouteBlocked(route)) return const SizedBox.shrink();
+    return ListTile(
+      leading: Icon(icon, size: 22),
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      onTap: () {
+        Navigator.pop(context);
+        context.go(route);
+      },
+    );
+  }
 }
