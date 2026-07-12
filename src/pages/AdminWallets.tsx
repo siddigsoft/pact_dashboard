@@ -12,7 +12,6 @@ import { WalletCard } from '@/components/wallet/WalletCard';
 import { supabase } from '@/integrations/supabase/client';
 import { adminListWallets } from '@/context/wallet/supabase';
 import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2, ChevronDown, ChevronRight, MapPin, Calendar, Settings, Download, FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, PlayCircle, Info } from 'lucide-react';
-import { backfillWalletTransactionForSite } from '@/utils/wallet-transactions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -314,12 +313,25 @@ const AdminWallets: FC = () => {
     for (let i = 0; i < backfillScan.missing.length; i++) {
       const site = backfillScan.missing[i];
       try {
-        const result = await backfillWalletTransactionForSite(site.id);
-        if (result.success) succeeded++;
-        else if (result.message?.includes('already')) skipped++;
-        else {
+        // Use SECURITY DEFINER RPC — bypasses all RLS policies server-side.
+        // The RPC runs as the DB owner regardless of the calling user's role.
+        const { data: rpcResult, error: rpcError } = await supabase
+          .rpc('admin_backfill_site_visit_credit', { p_site_visit_id: site.id });
+
+        if (rpcError) {
           failed++;
-          if (!firstError) firstError = result.error || result.message || 'Unknown error';
+          if (!firstError) firstError = rpcError.message || 'RPC call failed';
+        } else if (rpcResult?.success) {
+          if (rpcResult?.skipped) skipped++;
+          else succeeded++;
+        } else {
+          // Check if the RPC returned success:false for "already" reasons
+          const msg: string = rpcResult?.message || 'Unknown error from RPC';
+          if (msg.toLowerCase().includes('already')) skipped++;
+          else {
+            failed++;
+            if (!firstError) firstError = msg;
+          }
         }
       } catch (err: any) {
         failed++;
@@ -724,19 +736,42 @@ const AdminWallets: FC = () => {
                   </ol>
                 </div>
               </div>
-              <pre className="text-xs bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono select-all">{`-- Run this in Supabase SQL Editor to enable admin wallet access
--- wallets: SELECT, INSERT, UPDATE
+              <pre className="text-xs bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono select-all">{`-- ── STEP 1: RLS bypass policies (enables admin to read all wallets) ──
 DROP POLICY IF EXISTS "Admins can view all wallets" ON wallets;
 CREATE POLICY "Admins can view all wallets" ON wallets FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
 DROP POLICY IF EXISTS "Admins can create wallets for any user" ON wallets;
 CREATE POLICY "Admins can create wallets for any user" ON wallets FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
 DROP POLICY IF EXISTS "Admins can update any wallet" ON wallets;
 CREATE POLICY "Admins can update any wallet" ON wallets FOR UPDATE USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
--- wallet_transactions: SELECT, INSERT
 DROP POLICY IF EXISTS "Admins can view all wallet transactions" ON wallet_transactions;
 CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
 DROP POLICY IF EXISTS "Admins can create wallet transactions for any user" ON wallet_transactions;
-CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_transactions FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));`}</pre>
+CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_transactions FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
+
+-- ── STEP 2: Backfill RPC (SECURITY DEFINER — bypasses ALL RLS for backfill) ──
+CREATE OR REPLACE FUNCTION public.admin_backfill_site_visit_credit(p_site_visit_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_entry RECORD; v_user_id uuid; v_amount numeric; v_wallet RECORD; v_wallet_id uuid; v_cb numeric; v_nb numeric; v_tx_id uuid;
+BEGIN
+  SELECT id,site_name,site_code,accepted_by,visit_completed_by,enumerator_fee,transport_fee,cost INTO v_entry FROM public.mmp_site_entries WHERE id=p_site_visit_id;
+  IF NOT FOUND THEN RETURN jsonb_build_object('success',false,'message','Site entry not found'); END IF;
+  v_user_id := COALESCE(v_entry.visit_completed_by::uuid, CASE WHEN v_entry.accepted_by ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN v_entry.accepted_by::uuid ELSE NULL END);
+  IF v_user_id IS NULL THEN RETURN jsonb_build_object('success',false,'message','No valid payee UUID'); END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id=v_user_id) THEN RETURN jsonb_build_object('success',false,'message',format('Payee %s not in profiles',v_user_id)); END IF;
+  v_amount := COALESCE(v_entry.enumerator_fee,0)+COALESCE(v_entry.transport_fee,0); IF v_amount<=0 THEN v_amount:=COALESCE(v_entry.cost,0); END IF;
+  IF v_amount<=0 THEN RETURN jsonb_build_object('success',false,'message','No fee amount'); END IF;
+  IF EXISTS (SELECT 1 FROM public.wallet_transactions WHERE site_visit_id=p_site_visit_id OR related_site_visit_id=p_site_visit_id) THEN RETURN jsonb_build_object('success',true,'message','Already credited','skipped',true); END IF;
+  SELECT id,COALESCE((balances->>'SDG')::numeric,0),COALESCE(total_earned,0) INTO v_wallet_id,v_cb,v_cb FROM public.wallets WHERE user_id=v_user_id;
+  IF NOT FOUND THEN INSERT INTO public.wallets(user_id,balances,total_earned) VALUES(v_user_id,jsonb_build_object('SDG',0),0) RETURNING id INTO v_wallet_id; v_cb:=0; END IF;
+  SELECT COALESCE((balances->>'SDG')::numeric,0) INTO v_cb FROM public.wallets WHERE id=v_wallet_id;
+  v_nb:=v_cb+v_amount;
+  INSERT INTO public.wallet_transactions(wallet_id,user_id,type,amount,amount_cents,currency,site_visit_id,related_site_visit_id,description,balance_before,balance_after,metadata)
+  VALUES(v_wallet_id,v_user_id,'earning',v_amount,ROUND(v_amount*100)::bigint,'SDG',p_site_visit_id,p_site_visit_id,format('Site visit fee: %s',COALESCE(v_entry.site_name,'?')),v_cb,v_nb,jsonb_build_object('backfill',true,'enumerator_fee',v_entry.enumerator_fee,'transport_fee',v_entry.transport_fee)) RETURNING id INTO v_tx_id;
+  UPDATE public.wallets SET balances=jsonb_set(COALESCE(balances,'{}'::jsonb),'{SDG}',to_jsonb(v_nb)),total_earned=COALESCE(total_earned,0)+v_amount,balance_cents=ROUND(v_nb*100)::bigint,total_earned_cents=COALESCE(total_earned_cents,0)+ROUND(v_amount*100)::bigint,updated_at=now() WHERE id=v_wallet_id;
+  RETURN jsonb_build_object('success',true,'message',format('Credited %s SDG',v_amount),'tx_id',v_tx_id,'amount',v_amount);
+EXCEPTION WHEN OTHERS THEN RETURN jsonb_build_object('success',false,'message',SQLERRM,'detail',SQLSTATE);
+END; $$;
+GRANT EXECUTE ON FUNCTION public.admin_backfill_site_visit_credit(uuid) TO authenticated;`}</pre>
             </div>
           </CardContent>
         </Card>
