@@ -6,6 +6,7 @@ import {
   ArrowLeftRight, Wallet, Heart, ShieldAlert, RotateCcw, Building2,
   PiggyBank, Activity, Search, Settings2, Clock, CreditCard, Award,
   CalendarDays, Info, Bell, MapPin, LayoutGrid, Link2, BarChart2, Users, List,
+  Send, Percent, Tag, Scale, CheckSquare, LayoutTemplate,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -67,6 +68,26 @@ const PaymentTermsPanel         = lazy(() => import('./AccountingPaymentTerms'))
 const FollowUpLevelsPanel       = lazy(() => import('./AccountingFollowUpLevels'));
 const ProjectLinksPanel         = lazy(() => import('./AccountingProjectLinks'));
 
+// ── Phase 2 panels (2026-07-12 AR / Expenses / Cash expansion) ───────────────
+const CustomerInvoicesPanel     = lazy(() => import('./AccountingCustomerInvoices'));
+const CustomerPaymentsPanel     = lazy(() => import('./AccountingCustomerPayments'));
+const ExpenseReportsPanel       = lazy(() => import('./AccountingExpenseReports'));
+const PettyCashPanel            = lazy(() => import('./AccountingPettyCash'));
+const RecurringJournalsPanel    = lazy(() => import('./AccountingRecurringJournals'));
+const JournalTemplatesPanel     = lazy(() => import('./AccountingJournalTemplates'));
+const WithholdingTaxPanel       = lazy(() => import('./AccountingWithholdingTax'));
+const WireTransfersPanel        = lazy(() => import('./AccountingWireTransfers'));
+const PerDiemRatesPanel         = lazy(() => import('./AccountingPerDiemRates'));
+const ExpenseCategoriesPanel    = lazy(() => import('./AccountingExpenseCategories'));
+const PLByDepartmentPanel       = lazy(() => import('./AccountingPLByDepartment'));
+const BudgetUtilizationPanel    = lazy(() => import('./AccountingBudgetUtilization'));
+const KPIRatiosPanel            = lazy(() => import('./AccountingKPIRatios'));
+const DonorStatementPanel       = lazy(() => import('./AccountingDonorStatement'));
+const OutstandingChecksPanel    = lazy(() => import('./AccountingOutstandingChecks'));
+const TaxReturnPanel            = lazy(() => import('./AccountingTaxReturn'));
+const BSComparisonPanel         = lazy(() => import('./AccountingBalanceSheetComparison'));
+const AssetRevaluationPanel     = lazy(() => import('./AccountingAssetRevaluation'));
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AcctSection = 'core' | 'fin-ops' | 'p2p' | 'controls' | 'advanced';
 type AcctTab =
@@ -76,7 +97,13 @@ type AcctTab =
   | 'period-close' | 'tax' | 'multi-currency' | 'budget-encumbrance' | 'donor-reports' | 'sod' | 'aml' | 'intercompany' | 'funds' | 'fiscal-positions' | 'lock-dates' | 'analytic-plans'
   | 'cash-flow-forecast' | 'grants' | 'cost-allocation' | 'depreciation-run' | 'consolidation' | 'gl-audit' | 'finance-audit-trail' | 'settings'
   | 'partner-ledger' | 'aged-receivable' | 'unrealized-gl' | 'depreciation-schedule' | 'analytic-report'
-  | 'companies' | 'project-links';
+  | 'companies' | 'project-links'
+  | 'customer-invoices' | 'customer-payments' | 'wire-transfers' | 'petty-cash' | 'outstanding-checks'
+  | 'expense-reports' | 'expense-categories' | 'per-diem-rates'
+  | 'recurring-journals' | 'journal-templates'
+  | 'withholding-tax' | 'tax-return'
+  | 'pl-by-department' | 'budget-utilization' | 'kpi-ratios' | 'donor-statement' | 'bs-comparison'
+  | 'asset-revaluation';
 
 interface TabDef { id: AcctTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: AcctSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -126,6 +153,14 @@ const SECTIONS: SectionDef[] = [
         id: 'search', label: 'Accounting Search', icon: Search,
         description: 'Search across all transactions, journal entries, and accounts simultaneously by keyword, amount, date, or reference number.',
       },
+      {
+        id: 'recurring-journals', label: 'Recurring Journals', icon: RotateCcw,
+        description: 'Define and schedule journal entries that repeat automatically — daily, weekly, monthly, or quarterly — for rent, subscriptions, depreciation, and other fixed charges.',
+      },
+      {
+        id: 'journal-templates', label: 'Journal Templates', icon: LayoutTemplate,
+        description: 'Save common multi-line journal entry patterns as reusable templates to speed up posting and reduce errors on routine transactions.',
+      },
     ],
   },
   {
@@ -167,6 +202,30 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'depreciation-schedule', label: 'Depreciation Schedule', icon: Package,
         description: 'View projected monthly depreciation for each active fixed asset, with opening NBV, monthly charge, and closing NBV for the selected forecast horizon.',
+      },
+      {
+        id: 'customer-invoices', label: 'Customer Invoices', icon: FileText,
+        description: 'Issue and track AR invoices to donors, partners, and governments — with due dates, partial payments, and aging status for outstanding balances.',
+      },
+      {
+        id: 'customer-payments', label: 'Customer Payments', icon: CreditCard,
+        description: 'Record payments received from customers and donors via bank transfer, cheque, cash, or mobile money and apply them to open invoices.',
+      },
+      {
+        id: 'wire-transfers', label: 'Wire / SWIFT Transfers', icon: Send,
+        description: 'Log and track international wire transfers with beneficiary details, SWIFT references, exchange rates, bank charges, and processing status.',
+      },
+      {
+        id: 'petty-cash', label: 'Petty Cash / Cash Boxes', icon: Wallet,
+        description: 'Manage per-office cash floats — record payments out and top-ups in, track running balances, and confirm counts via cash count sheets.',
+      },
+      {
+        id: 'outstanding-checks', label: 'Outstanding Checks', icon: CheckSquare,
+        description: 'Monitor all issued but uncleared cheques, detect stale items beyond a configurable age threshold, and clear or void them against bank records.',
+      },
+      {
+        id: 'asset-revaluation', label: 'Asset Revaluation', icon: Package,
+        description: 'Adjust fixed asset carrying values to fair market value, record revaluation surpluses or impairment losses, and post GL entries to the revaluation reserve.',
       },
     ],
   },
@@ -217,6 +276,18 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'partner-ledger', label: 'Partner Ledger', icon: Users,
         description: 'Drill into all receivable/payable transactions grouped by vendor or partner, with running balance and full source traceability.',
+      },
+      {
+        id: 'expense-reports', label: 'Expense Reports', icon: Receipt,
+        description: 'Submit and approve employee expense claims with per-diem support, multi-currency lines, advance deduction, and GL posting on approval.',
+      },
+      {
+        id: 'expense-categories', label: 'Expense Categories', icon: Tag,
+        description: 'Configure the expense category tree used in expense reports and petty cash — with receipt requirements, per-category spending limits, and bilingual labels.',
+      },
+      {
+        id: 'per-diem-rates', label: 'Per Diem Rates', icon: MapPin,
+        description: 'Set daily subsistence allowance rates by country and city, including accommodation, meals, and transport breakdowns, with effective date ranges.',
       },
     ],
   },
@@ -272,6 +343,14 @@ const SECTIONS: SectionDef[] = [
         id: 'analytic-plans', label: 'Analytic Plans', icon: LayoutGrid,
         description: 'Manage analytic plans and analytic accounts for multi-dimensional cost tracking across projects, departments, and donors.',
       },
+      {
+        id: 'withholding-tax', label: 'Withholding Tax', icon: Percent,
+        description: 'Configure WHT rates by type and jurisdiction, record deductions on vendor payments, and track remittance status to the tax authority.',
+      },
+      {
+        id: 'tax-return', label: 'Tax Return Summary', icon: FileText,
+        description: 'Generate quarterly VAT/sales tax return summaries with output/input tax breakdown and a withholding tax schedule ready for filing.',
+      },
     ],
   },
   {
@@ -309,6 +388,26 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'settings', label: 'Accounting Settings', icon: Settings2,
         description: 'Configure accounting defaults including posting rules, default account mappings, approval thresholds, rounding rules, and notification preferences.',
+      },
+      {
+        id: 'pl-by-department', label: 'P&L by Department', icon: BarChart3,
+        description: 'Segmented income statement comparing revenue and expenses by analytic account / cost center for any fiscal year and quarter combination.',
+      },
+      {
+        id: 'budget-utilization', label: 'Budget Utilization', icon: PiggyBank,
+        description: 'Traffic-light view of budget consumption by account, department, or project — instantly spot over-budget, at-risk, and under-utilized lines.',
+      },
+      {
+        id: 'kpi-ratios', label: 'Financial KPI Ratios', icon: BarChart2,
+        description: 'Auto-calculated liquidity, leverage, margin, efficiency, and cash runway ratios drawn from posted GL entries for quick financial health assessment.',
+      },
+      {
+        id: 'donor-statement', label: 'Donor Statement', icon: Heart,
+        description: 'Generate a full transaction statement for any donor or partner over a custom date range, showing invoices issued, payments received, and outstanding balance.',
+      },
+      {
+        id: 'bs-comparison', label: 'Balance Sheet Comparison', icon: Scale,
+        description: 'Side-by-side balance sheet for two fiscal years with variance amounts and percentage change — assets, liabilities, and equity in one view.',
       },
       {
         id: 'unrealized-gl', label: 'Unrealized Currency G/L', icon: ArrowLeftRight,
@@ -430,6 +529,25 @@ export default function AccountingHub() {
         {tab === 'payment-terms'        && <Suspense fallback={<PanelLoader />}><PaymentTermsPanel /></Suspense>}
         {tab === 'follow-up-levels'     && <Suspense fallback={<PanelLoader />}><FollowUpLevelsPanel /></Suspense>}
         {tab === 'project-links'        && <Suspense fallback={<PanelLoader />}><ProjectLinksPanel /></Suspense>}
+        {/* Phase 2 — AR / Expenses / Cash / Templates / WHT / Reports */}
+        {tab === 'customer-invoices'    && <Suspense fallback={<PanelLoader />}><CustomerInvoicesPanel /></Suspense>}
+        {tab === 'customer-payments'    && <Suspense fallback={<PanelLoader />}><CustomerPaymentsPanel /></Suspense>}
+        {tab === 'wire-transfers'       && <Suspense fallback={<PanelLoader />}><WireTransfersPanel /></Suspense>}
+        {tab === 'petty-cash'           && <Suspense fallback={<PanelLoader />}><PettyCashPanel /></Suspense>}
+        {tab === 'outstanding-checks'   && <Suspense fallback={<PanelLoader />}><OutstandingChecksPanel /></Suspense>}
+        {tab === 'asset-revaluation'    && <Suspense fallback={<PanelLoader />}><AssetRevaluationPanel /></Suspense>}
+        {tab === 'expense-reports'      && <Suspense fallback={<PanelLoader />}><ExpenseReportsPanel /></Suspense>}
+        {tab === 'expense-categories'   && <Suspense fallback={<PanelLoader />}><ExpenseCategoriesPanel /></Suspense>}
+        {tab === 'per-diem-rates'       && <Suspense fallback={<PanelLoader />}><PerDiemRatesPanel /></Suspense>}
+        {tab === 'recurring-journals'   && <Suspense fallback={<PanelLoader />}><RecurringJournalsPanel /></Suspense>}
+        {tab === 'journal-templates'    && <Suspense fallback={<PanelLoader />}><JournalTemplatesPanel /></Suspense>}
+        {tab === 'withholding-tax'      && <Suspense fallback={<PanelLoader />}><WithholdingTaxPanel /></Suspense>}
+        {tab === 'tax-return'           && <Suspense fallback={<PanelLoader />}><TaxReturnPanel /></Suspense>}
+        {tab === 'pl-by-department'     && <Suspense fallback={<PanelLoader />}><PLByDepartmentPanel /></Suspense>}
+        {tab === 'budget-utilization'   && <Suspense fallback={<PanelLoader />}><BudgetUtilizationPanel /></Suspense>}
+        {tab === 'kpi-ratios'           && <Suspense fallback={<PanelLoader />}><KPIRatiosPanel /></Suspense>}
+        {tab === 'donor-statement'      && <Suspense fallback={<PanelLoader />}><DonorStatementPanel /></Suspense>}
+        {tab === 'bs-comparison'        && <Suspense fallback={<PanelLoader />}><BSComparisonPanel /></Suspense>}
       </div>
     </HubLayout>
   );
