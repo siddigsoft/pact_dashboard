@@ -926,8 +926,8 @@ const CostSubmission = () => {
 
   const canTier1Approve = (oc: OperationalCostSubmission): boolean => {
     if (oc.tier1_status !== 'pending') return false;
+    if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin || isAdmin) return true;
-    if (oc.submitted_by === currentUser?.id) return false;
     // Coordinator: T1 = Hub Supervisor (same hub only)
     if (hasFourTiers(oc)) {
       if (!isSupervisor) return false;
@@ -947,8 +947,8 @@ const CostSubmission = () => {
     // CD submissions are single-tier — no T2
     if (isCDSubmission(oc)) return false;
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
+    if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin || isAdmin) return true;
-    if (oc.submitted_by === currentUser?.id) return false;
     // Coordinator: T2 = FOM
     if (hasFourTiers(oc)) return isFOM;
     // Supervisor: T2 = Country Director
@@ -962,8 +962,8 @@ const CostSubmission = () => {
     if (!hasT3) return false;
     if (oc.tier2_status !== 'approved') return false;
     if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
+    if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin || isAdmin) return true;
-    if (oc.submitted_by === currentUser?.id) return false;
     // Coordinator: T3 = Country Director
     if (hasFourTiers(oc)) return isCountryDirector;
     // Supervisor: T3 = Admin/SuperAdmin (handled above)
@@ -974,6 +974,7 @@ const CostSubmission = () => {
     if (!hasFourTiers(oc)) return false;
     if (oc.tier3_status !== 'approved') return false;
     if (oc.tier4_status !== 'pending' && oc.tier4_status !== null) return false;
+    if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin) return true;
     return isAdmin;
   };
@@ -1076,7 +1077,8 @@ const CostSubmission = () => {
         .from('operational_cost_submissions')
         .update(updates)
         .eq('request_group_id', groupId)
-        .eq(tierStatusKey, 'pending');
+        .eq(tierStatusKey, 'pending')
+        .neq('submitted_by', currentUser.id);  // never approve own submissions, even in a batch
 
       /* append new docs to each submission's supporting_documents */
       if (!error && newDocs.length > 0) {
