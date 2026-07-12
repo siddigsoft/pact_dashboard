@@ -1025,11 +1025,11 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests]);
 
   const byMMP = useMemo(() => {
-    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests, originalBudget: number }> = {};
     filteredRequests.forEach(req => {
       const mmpKey = req.mmpName || 'Unknown MMP';
       if (!grouped[mmpKey]) {
-        grouped[mmpKey] = { id: mmpKey, name: mmpKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+        grouped[mmpKey] = { id: mmpKey, name: mmpKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [], originalBudget: 0 };
       }
       grouped[mmpKey].requests++;
       grouped[mmpKey].totalRequested += req.requestedAmount;
@@ -1040,6 +1040,19 @@ function AdvanceRequestsReportContent() {
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[mmpKey].pending++;
       }
+    });
+    // Compute original transportation budget per MMP using unique site entries only —
+    // avoids double-counting when the same site has more than one active request.
+    Object.values(grouped).forEach(group => {
+      const seenEntryIds = new Set<string>();
+      group.originalBudget = group.items.reduce((sum, req) => {
+        const key = req.mmpSiteEntryId;
+        if (key) {
+          if (seenEntryIds.has(key)) return sum;
+          seenEntryIds.add(key);
+        }
+        return sum + (req.totalTransportationBudget || 0);
+      }, 0);
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
   }, [filteredRequests]);
@@ -3587,28 +3600,39 @@ function AdvanceRequestsReportContent() {
                       <TableRow>
                         <TableHead>MMP</TableHead>
                         <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">MMP Budget (SDG)</TableHead>
                         <TableHead className="text-right">Total Requested (SDG)</TableHead>
                         <TableHead className="text-right">Total Approved (SDG)</TableHead>
                         <TableHead className="text-right">Pending</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {byMMP.map((mmp, idx) => (
-                        <TableRow key={idx} data-testid={`row-mmp-${idx}`}>
+                      {byMMP.map((mmp, idx) => {
+                        const isOver = mmp.originalBudget > 0 && mmp.totalRequested > mmp.originalBudget;
+                        return (
+                        <TableRow key={idx} data-testid={`row-mmp-${idx}`} className={isOver ? 'bg-red-50 dark:bg-red-950/20' : ''}>
                           <TableCell className="font-medium">{mmp.name}</TableCell>
                           <TableCell className="text-right">{mmp.requests}</TableCell>
-                          <TableCell className="text-right font-mono">{mmp.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-muted-foreground">
+                            {mmp.originalBudget > 0 ? mmp.originalBudget.toLocaleString() : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            <span className={isOver ? 'text-red-600 font-bold' : ''}>{mmp.totalRequested.toLocaleString()}</span>
+                            {isOver && <span className="ml-1 text-xs text-red-500">⚠ Over budget</span>}
+                          </TableCell>
                           <TableCell className="text-right font-mono text-green-600">{mmp.totalApproved.toLocaleString()}</TableCell>
                           <TableCell className="text-right">
                             {mmp.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{mmp.pending}</Badge>}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                     <tfoot>
                       <TableRow className="bg-muted/50 font-bold border-t-2">
                         <TableCell className="font-bold">Subtotal</TableCell>
                         <TableCell className="text-right font-bold">{byMMP.reduce((sum, m) => sum + m.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-muted-foreground">{byMMP.reduce((sum, m) => sum + m.originalBudget, 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono font-bold">{byMMP.reduce((sum, m) => sum + m.totalRequested, 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono font-bold text-green-600">{byMMP.reduce((sum, m) => sum + m.totalApproved, 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right font-bold">{byMMP.reduce((sum, m) => sum + m.pending, 0)}</TableCell>

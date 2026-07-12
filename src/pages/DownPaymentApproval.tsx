@@ -82,6 +82,7 @@ type GroupRow = {
   totalPaid: number;
   totalRemaining: number;
   pending: number;
+  originalBudget: number;
   items: DownPaymentRequest[];
 };
 
@@ -190,6 +191,7 @@ function GroupedSummaryTable({
               <TableHead className="w-6" />
               <TableHead>{groupLabel}</TableHead>
               <TableHead className="text-right">Requests</TableHead>
+              {groupLabel === 'MMP' && <TableHead className="text-right">MMP Budget (SDG)</TableHead>}
               <TableHead className="text-right">Total Requested (SDG)</TableHead>
               <TableHead className="text-right">Total Approved (SDG)</TableHead>
               <TableHead className="text-right">Total Paid (SDG)</TableHead>
@@ -198,11 +200,13 @@ function GroupedSummaryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(row => (
+            {rows.map(row => {
+              const isOver = groupLabel === 'MMP' && row.originalBudget > 0 && row.totalRequested > row.originalBudget;
+              return (
               <>
                 <TableRow
                   key={row.key}
-                  className="cursor-pointer hover:bg-muted/50 select-none"
+                  className={`cursor-pointer hover:bg-muted/50 select-none${isOver ? ' bg-red-50 dark:bg-red-950/20' : ''}`}
                   onClick={() => setExpandedKey(expandedKey === row.key ? null : row.key)}
                   data-testid={`row-group-${row.key}`}
                 >
@@ -213,7 +217,15 @@ function GroupedSummaryTable({
                   </TableCell>
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell className="text-right">{row.requests}</TableCell>
-                  <TableCell className="text-right font-mono">{row.totalRequested.toLocaleString()}</TableCell>
+                  {groupLabel === 'MMP' && (
+                    <TableCell className="text-right font-mono text-muted-foreground">
+                      {row.originalBudget > 0 ? row.originalBudget.toLocaleString() : '—'}
+                    </TableCell>
+                  )}
+                  <TableCell className="text-right font-mono">
+                    <span className={isOver ? 'text-red-600 font-bold' : ''}>{row.totalRequested.toLocaleString()}</span>
+                    {isOver && <span className="ml-1 text-xs text-red-500">⚠</span>}
+                  </TableCell>
                   <TableCell className="text-right font-mono text-green-600">{row.totalApproved.toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono text-emerald-600">{row.totalPaid.toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono">
@@ -229,7 +241,7 @@ function GroupedSummaryTable({
                 {/* ─── Expanded sub-table ─── */}
                 {expandedKey === row.key && (
                   <TableRow key={`${row.key}-expanded`}>
-                    <TableCell colSpan={7} className="p-0 bg-muted/20">
+                    <TableCell colSpan={groupLabel === 'MMP' ? 8 : 7} className="p-0 bg-muted/20">
                       <div className="border-l-4 border-primary/30 pl-0">
                         <Table>
                           <TableHeader>
@@ -282,13 +294,17 @@ function GroupedSummaryTable({
                   </TableRow>
                 )}
               </>
-            ))}
+              );
+            })}
           </TableBody>
           <tfoot>
             <TableRow className="bg-muted/50 border-t-2">
               <TableCell />
               <TableCell className="font-bold">Subtotal</TableCell>
               <TableCell className="text-right font-bold">{rows.reduce((s, r) => s + r.requests, 0)}</TableCell>
+              {groupLabel === 'MMP' && (
+                <TableCell className="text-right font-mono font-bold text-muted-foreground">{rows.reduce((s, r) => s + r.originalBudget, 0).toLocaleString()}</TableCell>
+              )}
               <TableCell className="text-right font-mono font-bold">{rows.reduce((s, r) => s + r.totalRequested, 0).toLocaleString()}</TableCell>
               <TableCell className="text-right font-mono font-bold text-green-600">{rows.reduce((s, r) => s + r.totalApproved, 0).toLocaleString()}</TableCell>
               <TableCell className="text-right font-mono font-bold text-emerald-600">{rows.reduce((s, r) => s + r.totalPaid, 0).toLocaleString()}</TableCell>
@@ -724,7 +740,7 @@ export default function DownPaymentApproval() {
     const map: Record<string, GroupRow> = {};
     filteredRequests.forEach(req => {
       const k = keyFn(req) || 'Unknown';
-      if (!map[k]) map[k] = { key: k, name: k, requests: 0, totalRequested: 0, totalApproved: 0, totalPaid: 0, totalRemaining: 0, pending: 0, items: [] };
+      if (!map[k]) map[k] = { key: k, name: k, requests: 0, totalRequested: 0, totalApproved: 0, totalPaid: 0, totalRemaining: 0, pending: 0, originalBudget: 0, items: [] };
       map[k].requests++;
       map[k].totalRequested += req.requestedAmount;
       map[k].totalPaid += req.totalPaidAmount || 0;
@@ -732,6 +748,19 @@ export default function DownPaymentApproval() {
       map[k].items.push(req);
       if (['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'].includes(req.status)) map[k].totalApproved += (req.approvedAmount || req.requestedAmount);
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) map[k].pending++;
+    });
+    // Compute original transportation budget per group, deduplicating by mmpSiteEntryId
+    // so that duplicate requests for the same site don't inflate the original total.
+    Object.values(map).forEach(group => {
+      const seen = new Set<string>();
+      group.originalBudget = group.items.reduce((sum, req) => {
+        const key = req.mmpSiteEntryId;
+        if (key) {
+          if (seen.has(key)) return sum;
+          seen.add(key);
+        }
+        return sum + (req.totalTransportationBudget || 0);
+      }, 0);
     });
     return Object.values(map).sort((a, b) => b.totalRequested - a.totalRequested);
   }

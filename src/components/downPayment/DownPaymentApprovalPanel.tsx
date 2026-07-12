@@ -426,12 +426,18 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
   const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
 
-  // Sites with more than one active (non-cancelled, non-rejected) request — used to flag duplicates
+  // Sites with more than one active (non-cancelled, non-rejected) request — used to flag duplicates.
+  // Uses mmpSiteEntryId as the primary key so that the same site name in two DIFFERENT MMPs
+  // (e.g. Village A in January vs February) is NOT flagged as a duplicate.
+  // Falls back to "mmpName::siteName" composite key when no entry ID is present.
   const duplicateSiteNames = useMemo(() => {
     const active = requests.filter(r => !['cancelled', 'rejected', 'deleted'].includes(r.status));
     const counts = new Map<string, number>();
-    active.forEach(r => { if (r.siteName) counts.set(r.siteName, (counts.get(r.siteName) || 0) + 1); });
-    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([name]) => name));
+    active.forEach(r => {
+      const key = r.mmpSiteEntryId ?? `${r.mmpName ?? ''}::${r.siteName}`;
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
   }, [requests]);
 
   // Resolve a user display name — prefers stored name, falls back to users list lookup
@@ -2253,12 +2259,18 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     const isNotReceived = receiptConfirmation?.denied === true && !receiptConfirmation?.confirmed;
     const isConfirmed = receiptConfirmation?.confirmed === true;
 
-    const isDuplicate = duplicateSiteNames.has(request.siteName);
+    const dupKey = request.mmpSiteEntryId ?? `${request.mmpName ?? ''}::${request.siteName}`;
+    const isDuplicate = duplicateSiteNames.has(dupKey);
     const requesterName = resolveUserName(request.requestedBy, request.requestedByName);
 
-    // All OTHER active requests for the same site (siblings)
+    // All OTHER active requests for the same site entry (siblings).
+    // Match by mmpSiteEntryId when available so cross-MMP same-name sites are not confused.
     const sitemates = isDuplicate
-      ? requests.filter(r => r.id !== request.id && r.siteName === request.siteName && !['cancelled', 'rejected', 'deleted'].includes(r.status))
+      ? requests.filter(r => {
+          if (r.id === request.id || ['cancelled', 'rejected', 'deleted'].includes(r.status)) return false;
+          if (request.mmpSiteEntryId) return r.mmpSiteEntryId === request.mmpSiteEntryId;
+          return r.siteName === request.siteName && (r.mmpName ?? '') === (request.mmpName ?? '');
+        })
       : [];
 
     const [showDuplicatePanel, setShowDuplicatePanel] = useState(false);
