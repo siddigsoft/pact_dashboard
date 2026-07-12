@@ -42,6 +42,11 @@ const AdminWallets: FC = () => {
   // All users from context — bypasses RLS so we see all 221 users regardless
   const { users } = useUser();
 
+  // ── SQL bypass pre-flight ───────────────────────────────────────────────────
+  // Detects whether the admin RLS bypass SQL has been applied.
+  // If not applied, the admin can only see their own wallet (1 row) and backfill writes fail.
+  const [sqlReady, setSqlReady] = useState<boolean | null>(null); // null = checking
+
   // ── Backfill state ─────────────────────────────────────────────────────────
   const [backfillScan, setBackfillScan] = useState<{
     scanned: boolean;
@@ -536,6 +541,18 @@ const AdminWallets: FC = () => {
   };
   
 
+  // Pre-flight: check whether admin RLS bypass SQL has been applied.
+  // We ask for 2 wallet rows — if only 1 comes back the admin can only see their own wallet.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('wallets')
+        .select('id')
+        .limit(2);
+      setSqlReady((data?.length ?? 0) > 1);
+    })();
+  }, []);
+
   // Re-run load whenever the users list is ready/updated
   useEffect(() => {
     if (users && users.length > 0) { load(); }
@@ -654,6 +671,49 @@ const AdminWallets: FC = () => {
           <DataFreshnessBadge />
         </div>
       </div>
+
+      {/* ── SQL Pre-flight Warning ── */}
+      {sqlReady === false && (
+        <Card className="border-red-400 dark:border-red-600 bg-red-50/60 dark:bg-red-950/20">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm text-red-800 dark:text-red-300">
+                    ⚠️ Database Permission Setup Required Before Backfill
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    The admin permission policies have not been applied to the database yet. Without them, the backfill cannot read or write other users' wallet data — every credit attempt will fail.
+                  </p>
+                  <p className="text-xs font-semibold text-red-700 dark:text-red-400 mt-2">
+                    Steps to fix (takes ~30 seconds):
+                  </p>
+                  <ol className="text-xs text-muted-foreground mt-1 space-y-0.5 list-decimal list-inside">
+                    <li>Open Supabase Dashboard → SQL Editor</li>
+                    <li>Paste and run the SQL below</li>
+                    <li>Reload this page — the warning will disappear</li>
+                    <li>Then run the backfill</li>
+                  </ol>
+                </div>
+              </div>
+              <pre className="text-xs bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono select-all">{`-- Run this in Supabase SQL Editor to enable admin wallet access
+-- wallets: SELECT, INSERT, UPDATE
+DROP POLICY IF EXISTS "Admins can view all wallets" ON wallets;
+CREATE POLICY "Admins can view all wallets" ON wallets FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
+DROP POLICY IF EXISTS "Admins can create wallets for any user" ON wallets;
+CREATE POLICY "Admins can create wallets for any user" ON wallets FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
+DROP POLICY IF EXISTS "Admins can update any wallet" ON wallets;
+CREATE POLICY "Admins can update any wallet" ON wallets FOR UPDATE USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
+-- wallet_transactions: SELECT, INSERT
+DROP POLICY IF EXISTS "Admins can view all wallet transactions" ON wallet_transactions;
+CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
+DROP POLICY IF EXISTS "Admins can create wallet transactions for any user" ON wallet_transactions;
+CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_transactions FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));`}</pre>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Wallet Backfill Panel ── */}
       <Card className="border-amber-300 dark:border-amber-600 bg-amber-50/40 dark:bg-amber-950/10">

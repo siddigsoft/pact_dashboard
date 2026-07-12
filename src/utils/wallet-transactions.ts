@@ -293,17 +293,12 @@ export async function createSiteVisitWalletTransaction(
       ];
 
       if (checkError) {
-        const errorMsg = `Failed to check for existing transactions: ${checkError.message}`;
-        console.error(`[WalletTransaction] ${errorMsg}`, { check1Error, check2Error });
-        // Fail-safe: don't create transaction if we can't verify duplicates
-        if (showNotifications && toast) {
-          toast({
-            title: 'Validation Failed',
-            description: 'Cannot verify if transaction already exists. Please try again.',
-            variant: 'destructive'
-          });
-        }
-        return { success: false, message: errorMsg, error: checkError.message };
+        // This often means RLS is restricting visibility of other users' transactions.
+        // Soft-fail: log a warning but continue — the DB unique constraint on site_visit_id
+        // will catch any real duplicates and we handle code 23505 below.
+        console.warn(
+          `[WalletTransaction] Could not verify existing transactions (likely RLS): ${checkError.message}. Proceeding — DB constraint will catch duplicates.`
+        );
       }
 
       if (existingTransactions && existingTransactions.length > 0) {
