@@ -196,6 +196,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const [selectedRiskIds, setSelectedRiskIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState('closed');
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [taskCounts, setTaskCounts] = useState<Record<string, { project: number; overall: number }>>({});
   const hasAutoDetectedRef = useRef<string | null>(null);
 
   const refreshRisks = useCallback(async () => {
@@ -353,6 +354,38 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
       setSelectedRiskIds(new Set(riskIds));
     }
   }
+
+  /* ── Task-count fetch: project-specific + overall per team member ─── */
+  useEffect(() => {
+    const userIds = teamComposition.map((m: any) => m.userId).filter(Boolean);
+    if (!userIds.length) return;
+    let alive = true;
+    (async () => {
+      const [projRes, allProjRes, personalRes] = await Promise.all([
+        supabase.from('project_field_tasks')
+          .select('assigned_to')
+          .eq('project_id', project.id)
+          .neq('status', 'completed')
+          .in('assigned_to', userIds),
+        supabase.from('project_field_tasks')
+          .select('assigned_to')
+          .neq('status', 'completed')
+          .in('assigned_to', userIds),
+        supabase.from('personal_tasks')
+          .select('assigned_to')
+          .neq('status', 'completed')
+          .in('assigned_to', userIds),
+      ]);
+      if (!alive) return;
+      const counts: Record<string, { project: number; overall: number }> = {};
+      for (const uid of userIds) counts[uid] = { project: 0, overall: 0 };
+      for (const r of projRes.data ?? [])    if (r.assigned_to) counts[r.assigned_to].project  += 1;
+      for (const r of allProjRes.data ?? []) if (r.assigned_to) counts[r.assigned_to].overall  += 1;
+      for (const r of personalRes.data ?? []) if (r.assigned_to) counts[r.assigned_to].overall += 1;
+      setTaskCounts(counts);
+    })();
+    return () => { alive = false; };
+  }, [project.id, teamComposition]);
 
   useEffect(() => {
     let alive = true;
@@ -571,10 +604,17 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
   const teamCount = teamComposition.length || teamMembers.length;
   const workloadData = useMemo(() =>
     teamComposition
-      .filter(m => m.name && (m.workload ?? 0) > 0)
-      .map(m => ({ name: m.name.split(' ')[0], workload: m.workload, role: m.role ?? '' }))
-      .sort((a, b) => b.workload - a.workload).slice(0, 10),
-  [teamComposition]);
+      .filter((m: any) => m.name && m.userId)
+      .map((m: any) => ({
+        name: m.name.split(' ')[0],
+        role: m.role ?? '',
+        project: taskCounts[m.userId]?.project ?? 0,
+        overall: taskCounts[m.userId]?.overall ?? 0,
+      }))
+      .filter(d => d.project > 0 || d.overall > 0)
+      .sort((a, b) => b.overall - a.overall)
+      .slice(0, 10),
+  [teamComposition, taskCounts]);
 
   /* ── Deliverables ── */
   const deliverablesState: Record<string, boolean> = (project as any).team?.deliverablesState ?? {};
@@ -1240,21 +1280,26 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                     <div className="flex items-center gap-2 mb-2">
                       <Activity className="h-3.5 w-3.5 text-indigo-500" />
                       <span className="text-xs font-bold">Workload Overview</span>
+                      <span className="text-[9px] text-muted-foreground ml-auto">open tasks</span>
                     </div>
-                    <ResponsiveContainer width="100%" height={Math.max(70, workloadData.length * 22)}>
-                      <BarChart data={workloadData} layout="vertical" margin={{ top: 0, right: 32, left: 4, bottom: 0 }}>
-                        <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <ResponsiveContainer width="100%" height={Math.max(80, workloadData.length * 36)}>
+                      <BarChart data={workloadData} layout="vertical" margin={{ top: 0, right: 36, left: 4, bottom: 0 }} barCategoryGap="30%">
+                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={56} />
-                        <Tooltip formatter={(v: number) => [`${v}%`, 'Workload']} contentStyle={{ fontSize: 11, borderRadius: 10 }} />
-                        <Bar dataKey="workload" radius={[0, 4, 4, 0]} maxBarSize={12}>
-                          {workloadData.map((d, i) => (
-                            <Cell key={i} fill={d.workload >= 90 ? '#ef4444' : d.workload >= 70 ? '#f59e0b' : '#6366f1'} />
-                          ))}
+                        <Tooltip
+                          contentStyle={{ fontSize: 11, borderRadius: 10 }}
+                          formatter={(v: number, key: string) => [v, key === 'project' ? 'This Project' : 'Overall (all projects)']}
+                        />
+                        <Bar dataKey="project" name="This Project" fill="#6366f1" radius={[0, 4, 4, 0]} maxBarSize={10}>
+                          <LabelList dataKey="project" position="right" style={{ fontSize: 9, fill: '#6366f1', fontWeight: 700 }} />
+                        </Bar>
+                        <Bar dataKey="overall" name="Overall" fill="#94a3b8" radius={[0, 4, 4, 0]} maxBarSize={10}>
+                          <LabelList dataKey="overall" position="right" style={{ fontSize: 9, fill: '#64748b', fontWeight: 700 }} />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                      {[{ c: 'bg-red-400', l: '≥90% overloaded' }, { c: 'bg-amber-400', l: '≥70% high' }, { c: 'bg-indigo-400', l: 'Normal' }].map(l => (
+                      {[{ c: 'bg-indigo-400', l: 'This project' }, { c: 'bg-slate-400', l: 'Overall (all projects)' }].map(l => (
                         <span key={l.l} className="flex items-center gap-1 text-[9px] text-muted-foreground">
                           <span className={`h-2 w-2 rounded-full ${l.c}`} />{l.l}
                         </span>
