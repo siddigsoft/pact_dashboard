@@ -325,8 +325,10 @@ DO $$ DECLARE t TEXT; BEGIN
     'acct_deferred_items','acct_deferred_recognition_lines',
     'acct_payment_terms','acct_payment_term_lines','acct_follow_up_levels'
   ] LOOP
-    EXECUTE format('CREATE POLICY IF NOT EXISTS "auth_read_%s" ON %I FOR SELECT USING (auth.role() = ''authenticated'')', t, t);
-    EXECUTE format('CREATE POLICY IF NOT EXISTS "auth_write_%s" ON %I FOR ALL USING (auth.role() = ''authenticated'')', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_read_%s" ON %I', t, t);
+    EXECUTE format('CREATE POLICY "auth_read_%s" ON %I FOR SELECT USING (auth.role() = ''authenticated'')', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_write_%s" ON %I', t, t);
+    EXECUTE format('CREATE POLICY "auth_write_%s" ON %I FOR ALL USING (auth.role() = ''authenticated'')', t, t);
   END LOOP;
 END $$;
 
