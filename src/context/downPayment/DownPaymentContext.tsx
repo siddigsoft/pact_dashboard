@@ -340,23 +340,54 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
 
       // ── Duplicate guard (server-side) ────────────────────────────────────────
-      // Check for any active (non-cancelled, non-rejected) request for the same
-      // mmp_site_entry_id before inserting. This prevents double-submissions from
-      // both the UI (coordinator on-behalf-of + DC submitting themselves) and any
-      // race-condition double-click scenario.
-      if (request.mmpSiteEntryId) {
-        const { data: existingActive } = await supabase
-          .from('down_payment_requests')
-          .select('id, status, requested_by, requested_amount')
-          .eq('mmp_site_entry_id', request.mmpSiteEntryId)
-          .not('status', 'in', '("cancelled","rejected","deleted")')
-          .limit(1);
+      // Block any active (non-cancelled, non-rejected, non-deleted) request for
+      // the same site entry. Two paths are checked:
+      //   Path A — by mmp_site_entry_id (precise, preferred)
+      //   Path B — by (site_name, hub_id) as fallback for old rows that have
+      //             mmp_site_entry_id = NULL (e.g. requests created before the
+      //             column was added). Without this fallback those old requests
+      //             were completely invisible to the guard.
+      {
+        let duplicateFound = false;
+        let duplicateStatus = '';
+        let duplicateAmount = 0;
 
-        if (existingActive && existingActive.length > 0) {
-          const ex = existingActive[0];
+        if (request.mmpSiteEntryId) {
+          // Path A — exact entry id match (covers 99% of cases)
+          const { data: existingActive } = await supabase
+            .from('down_payment_requests')
+            .select('id, status, requested_amount')
+            .eq('mmp_site_entry_id', request.mmpSiteEntryId)
+            .not('status', 'in', '("cancelled","rejected","deleted")')
+            .limit(1);
+          if (existingActive && existingActive.length > 0) {
+            duplicateFound = true;
+            duplicateStatus = existingActive[0].status;
+            duplicateAmount = existingActive[0].requested_amount;
+          }
+        }
+
+        if (!duplicateFound && request.siteName && hubId) {
+          // Path B — name + hub fallback for null-entry-id rows
+          const { data: existingByName } = await supabase
+            .from('down_payment_requests')
+            .select('id, status, requested_amount')
+            .is('mmp_site_entry_id', null)
+            .eq('site_name', request.siteName.trim())
+            .eq('hub_id', hubId)
+            .not('status', 'in', '("cancelled","rejected","deleted")')
+            .limit(1);
+          if (existingByName && existingByName.length > 0) {
+            duplicateFound = true;
+            duplicateStatus = existingByName[0].status;
+            duplicateAmount = existingByName[0].requested_amount;
+          }
+        }
+
+        if (duplicateFound) {
           toastRef.current({
             title: 'Duplicate Request Blocked / تم منع الطلب المكرر',
-            description: `An active advance request (${ex.requested_amount?.toLocaleString() || '?'} SDG — status: ${ex.status?.replace(/_/g, ' ')}) already exists for this site. Cancel or resolve it before submitting a new one.`,
+            description: `An active advance request (${duplicateAmount?.toLocaleString() || '?'} SDG — status: ${duplicateStatus?.replace(/_/g, ' ')}) already exists for this site. Cancel or resolve it before submitting a new one.`,
             variant: 'destructive',
           });
           return false;
@@ -462,7 +493,34 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         (async () => {
           const request = requests.find(r => r.id === data.requestId);
           if (!request) throw new Error('Request not found');
-      
+
+          // ── Sibling-approval guard ────────────────────────────────────────────
+          // Before approving, check whether another request for the same site entry
+          // is already approved or pending admin. If so, warn and block to prevent
+          // double-payment. Supervisors must cancel the sibling first.
+          if (request.mmpSiteEntryId) {
+            const { data: siblings } = await supabase
+              .from('down_payment_requests')
+              .select('id, status, requested_amount')
+              .eq('mmp_site_entry_id', request.mmpSiteEntryId)
+              .neq('id', request.id)
+              .not('status', 'in', '("cancelled","rejected","deleted","fully_paid")')
+              .limit(3);
+            const activeSiblings = (siblings || []).filter(s =>
+              ['approved', 'pending_admin', 'partially_paid'].includes(s.status)
+            );
+            if (activeSiblings.length > 0) {
+              const siblingStatus = activeSiblings[0].status?.replace(/_/g, ' ');
+              toastRef.current({
+                title: 'Duplicate Approval Blocked / تم منع الموافقة المكررة',
+                description: `Another advance for this same site is already "${siblingStatus}" (${activeSiblings[0].requested_amount?.toLocaleString()} SDG). Cancel the existing request first to prevent double payment.`,
+                variant: 'destructive',
+              });
+              return false;
+            }
+          }
+          // ─────────────────────────────────────────────────────────────────────
+
       const approvedAmount = data.customAmount !== undefined 
         ? data.customAmount 
         : request.requestedAmount;
@@ -684,7 +742,30 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         (async () => {
           const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
-      
+
+          // ── Sibling-approval guard ────────────────────────────────────────────
+          if (request.mmpSiteEntryId) {
+            const { data: siblings } = await supabase
+              .from('down_payment_requests')
+              .select('id, status, requested_amount')
+              .eq('mmp_site_entry_id', request.mmpSiteEntryId)
+              .neq('id', request.id)
+              .not('status', 'in', '("cancelled","rejected","deleted","fully_paid")')
+              .limit(3);
+            const activeSiblings = (siblings || []).filter(s =>
+              ['approved', 'partially_paid'].includes(s.status)
+            );
+            if (activeSiblings.length > 0) {
+              toastRef.current({
+                title: 'Duplicate Approval Blocked / تم منع الموافقة المكررة',
+                description: `Another advance for this same site is already "approved" (${activeSiblings[0].requested_amount?.toLocaleString()} SDG). Cancel it first to prevent double payment.`,
+                variant: 'destructive',
+              });
+              return false;
+            }
+          }
+          // ─────────────────────────────────────────────────────────────────────
+
       const approvedAmount = data.customAmount !== undefined 
         ? data.customAmount 
         : (request.approvedAmount || request.requestedAmount);

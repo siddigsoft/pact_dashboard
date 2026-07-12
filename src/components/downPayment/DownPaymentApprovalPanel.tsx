@@ -314,7 +314,7 @@ const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
 export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
   const { toast } = useToast();
 
 
@@ -2238,7 +2238,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     duplicateSiteNames, requests, resolveUserName, selectedIds, toggleSelection,
     openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
     handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
-    isSuperAdmin, markPaidProcessing, userRole, currentUser,
+    isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
   };
 
   // useMemo([], []) → RequestCard has a STABLE function reference on every render.
@@ -2250,10 +2250,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       duplicateSiteNames, requests, resolveUserName, selectedIds, toggleSelection,
       openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
       handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
-      isSuperAdmin, markPaidProcessing, userRole, currentUser,
+      isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
     } = _cardCtxRef.current;
     const [showAuditDetails, setShowAuditDetails] = useState(false);
     const [resending, setResending] = useState(false);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
     const shortId = request.id.substring(0, 8).toUpperCase();
     const receiptConfirmation = (request.metadata as any)?.receipt_confirmation;
     const isNotReceived = receiptConfirmation?.denied === true && !receiptConfirmation?.confirmed;
@@ -2273,13 +2274,18 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         })
       : [];
 
+    // True if any sibling is already progressed past pending_supervisor → double payment risk
+    const hasApprovedSibling = sitemates.some(s =>
+      ['approved', 'pending_admin', 'partially_paid', 'fully_paid'].includes(s.status)
+    );
+
     const [showDuplicatePanel, setShowDuplicatePanel] = useState(false);
 
     return (
     <Card
       key={request.id}
-      className={`hover-elevate${isDuplicate ? ' border-amber-400 dark:border-amber-500' : ''}`}
-      style={isDuplicate ? { background: 'rgba(251,191,36,0.06)' } : undefined}
+      className={`hover-elevate${hasApprovedSibling ? ' border-red-500 dark:border-red-600' : isDuplicate ? ' border-amber-400 dark:border-amber-500' : ''}`}
+      style={hasApprovedSibling ? { background: 'rgba(239,68,68,0.04)' } : isDuplicate ? { background: 'rgba(251,191,36,0.06)' } : undefined}
       data-testid={`card-request-${request.id}`}
     >
       <CardContent className="p-4">
@@ -2287,31 +2293,50 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           {isDuplicate && (
             <div className="space-y-2">
               {/* ── Duplicate warning banner ── */}
-              <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`banner-duplicate-${request.id}`}>
-                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                <span>Duplicate — {sitemates.length} other active advance{sitemates.length !== 1 ? 's' : ''} for this site</span>
-                <span className="opacity-60">/ طلب مكرر</span>
-                <button
-                  type="button"
-                  onClick={() => setShowDuplicatePanel(v => !v)}
-                  className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/50 transition-colors text-amber-700 dark:text-amber-300 font-semibold text-xs"
-                  data-testid={`button-view-duplicates-${request.id}`}
-                >
-                  {showDuplicatePanel ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  {showDuplicatePanel ? 'Hide' : 'View all'}
-                </button>
-              </div>
+              {hasApprovedSibling ? (
+                <div className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-400 dark:border-red-600 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400" data-testid={`banner-duplicate-approved-${request.id}`}>
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-red-600" />
+                  <span className="font-semibold">DOUBLE PAYMENT RISK</span>
+                  <span>— a sibling advance for this site is already approved/in-payment</span>
+                  <span className="opacity-60">/ خطر دفع مزدوج</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowDuplicatePanel(v => !v)}
+                    className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors text-red-700 dark:text-red-300 font-semibold text-xs"
+                    data-testid={`button-view-duplicates-${request.id}`}
+                  >
+                    {showDuplicatePanel ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    {showDuplicatePanel ? 'Hide' : 'View all'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`banner-duplicate-${request.id}`}>
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>Duplicate — {sitemates.length} other pending advance{sitemates.length !== 1 ? 's' : ''} for this site</span>
+                  <span className="opacity-60">/ طلب مكرر</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowDuplicatePanel(v => !v)}
+                    className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/50 transition-colors text-amber-700 dark:text-amber-300 font-semibold text-xs"
+                    data-testid={`button-view-duplicates-${request.id}`}
+                  >
+                    {showDuplicatePanel ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    {showDuplicatePanel ? 'Hide' : 'View all'}
+                  </button>
+                </div>
+              )}
 
               {/* ── Expandable sibling-requests panel ── */}
               {showDuplicatePanel && (
-                <div className="rounded-lg border border-amber-300 dark:border-amber-700 overflow-hidden">
-                  <div className="bg-amber-100/60 dark:bg-amber-950/40 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                <div className={`rounded-lg border overflow-hidden ${hasApprovedSibling ? 'border-red-400 dark:border-red-600' : 'border-amber-300 dark:border-amber-700'}`}>
+                  <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${hasApprovedSibling ? 'bg-red-100/60 dark:bg-red-950/40 text-red-800 dark:text-red-300' : 'bg-amber-100/60 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'}`}>
                     <AlertTriangle className="h-3.5 w-3.5" />
                     All active advances for "{request.siteName}"
+                    {hasApprovedSibling && <span className="ml-1 bg-red-200 dark:bg-red-800/60 text-red-800 dark:text-red-200 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide">⚠ DOUBLE PAYMENT RISK</span>}
                   </div>
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-amber-50/50 dark:bg-amber-950/20 text-xs">
+                      <TableRow className={`text-xs ${hasApprovedSibling ? 'bg-red-50/50 dark:bg-red-950/20' : 'bg-amber-50/50 dark:bg-amber-950/20'}`}>
                         <TableHead className="py-2 text-xs">Requester</TableHead>
                         <TableHead className="py-2 text-xs">Date</TableHead>
                         <TableHead className="py-2 text-xs">Role</TableHead>
@@ -2325,11 +2350,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     </TableHeader>
                     <TableBody>
                       {/* Current request — highlighted */}
-                      <TableRow className="bg-amber-100/40 dark:bg-amber-900/20 text-xs font-medium">
+                      <TableRow className={`text-xs font-medium ${hasApprovedSibling ? 'bg-red-100/40 dark:bg-red-900/20' : 'bg-amber-100/40 dark:bg-amber-900/20'}`}>
                         <TableCell className="py-2">
                           <span className="flex items-center gap-1">
                             {requesterName}
-                            <Badge variant="outline" className="text-[9px] py-0 px-1 border-amber-400 text-amber-700 ml-1">this</Badge>
+                            <Badge variant="outline" className={`text-[9px] py-0 px-1 ml-1 ${hasApprovedSibling ? 'border-red-400 text-red-700' : 'border-amber-400 text-amber-700'}`}>this</Badge>
                           </span>
                         </TableCell>
                         <TableCell className="py-2">{format(new Date(request.requestedAt), 'MMM d, yyyy')}</TableCell>
@@ -2352,34 +2377,56 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                         </TableCell>
                       </TableRow>
                       {/* Sibling requests */}
-                      {sitemates.map(s => (
-                        <TableRow key={s.id} className="text-xs hover:bg-amber-50/30 dark:hover:bg-amber-950/10">
-                          <TableCell className="py-2">{resolveUserName(s.requestedBy, s.requestedByName)}</TableCell>
-                          <TableCell className="py-2">{format(new Date(s.requestedAt), 'MMM d, yyyy')}</TableCell>
-                          <TableCell className="py-2 capitalize">{s.requesterRole}</TableCell>
-                          <TableCell className="py-2 max-w-[130px] truncate">{s.mmpName || '—'}</TableCell>
-                          <TableCell className="py-2 max-w-[120px] truncate text-muted-foreground">{s.activityType || '—'}</TableCell>
-                          <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
-                          <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
-                          <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
-                          <TableCell className="py-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => setDeleteConfirm(s)}
-                              data-testid={`button-delete-duplicate-${s.id}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {sitemates.map(s => {
+                        const siblingIsApproved = ['approved', 'pending_admin', 'partially_paid', 'fully_paid'].includes(s.status);
+                        const canCancelSibling = ['pending_supervisor', 'pending_admin'].includes(s.status);
+                        return (
+                          <TableRow key={s.id} className={`text-xs ${siblingIsApproved ? 'bg-red-50/40 dark:bg-red-950/10 hover:bg-red-50/60' : 'hover:bg-amber-50/30 dark:hover:bg-amber-950/10'}`}>
+                            <TableCell className="py-2">{resolveUserName(s.requestedBy, s.requestedByName)}</TableCell>
+                            <TableCell className="py-2">{format(new Date(s.requestedAt), 'MMM d, yyyy')}</TableCell>
+                            <TableCell className="py-2 capitalize">{s.requesterRole}</TableCell>
+                            <TableCell className="py-2 max-w-[130px] truncate">{s.mmpName || '—'}</TableCell>
+                            <TableCell className="py-2 max-w-[120px] truncate text-muted-foreground">{s.activityType || '—'}</TableCell>
+                            <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
+                            <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
+                            <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
+                            <TableCell className="py-2">
+                              <div className="flex items-center gap-1">
+                                {canCancelSibling && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={cancellingId === s.id}
+                                    className="h-6 px-2 text-amber-700 hover:text-amber-800 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 text-[10px]"
+                                    onClick={async () => {
+                                      setCancellingId(s.id);
+                                      await cancelRequest(s.id);
+                                      setCancellingId(null);
+                                    }}
+                                    data-testid={`button-cancel-duplicate-${s.id}`}
+                                  >
+                                    {cancellingId === s.id ? '…' : 'Cancel'}
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => setDeleteConfirm(s)}
+                                  data-testid={`button-delete-duplicate-${s.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
-                  <div className="bg-amber-50/40 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 flex justify-between">
+                  <div className={`px-3 py-1.5 text-xs flex justify-between ${hasApprovedSibling ? 'bg-red-50/40 dark:bg-red-950/20 text-red-700 dark:text-red-400' : 'bg-amber-50/40 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400'}`}>
                     <span>Total exposure: <strong>SDG {[request, ...sitemates].reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</strong></span>
-                    <span className="opacity-70">Review all requests before approving</span>
+                    <span className="opacity-70">{hasApprovedSibling ? 'Cancel duplicates before approving this request' : 'Review all requests before approving'}</span>
                   </div>
                 </div>
               )}
