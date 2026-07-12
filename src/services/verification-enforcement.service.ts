@@ -5,6 +5,50 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { SignatureMethod } from '@/types/signature';
+import { v4 as uuidv4 } from 'uuid';
+
+// ---------------------------------------------------------------------------
+// Local helpers — avoids circular import back to signature.service
+// ---------------------------------------------------------------------------
+
+async function _generateHash(data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const dataBuffer = encoder.encode(data);
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch { /* fall through */ }
+  }
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    const char = data.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  let fullHash = '';
+  for (let i = 0; i < 8; i++) {
+    const s = data + i + hash;
+    let h = 0;
+    for (let j = 0; j < s.length; j++) { h = ((h << 5) - h) + s.charCodeAt(j); h = h & h; }
+    fullHash += Math.abs(h).toString(16).padStart(8, '0');
+  }
+  return fullHash;
+}
+
+function _generateOTP(length = 6): string {
+  const digits = '0123456789';
+  const arr = new Uint32Array(length);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < length; i++) arr[i] = Math.floor(Math.random() * 4294967296);
+  }
+  let otp = '';
+  for (let i = 0; i < length; i++) otp += digits[arr[i] % digits.length];
+  return otp;
+}
 
 export interface VerificationStatus {
   method: 'phone' | 'email';
@@ -264,7 +308,8 @@ export const VerificationEnforcementService = {
   },
 
   /**
-   * Send verification code for phone or email verification
+   * Send verification code for phone or email verification.
+   * Inlined from SignatureService.createVerificationRequest to avoid circular import.
    */
   async sendVerificationCode(
     userId: string,
@@ -281,26 +326,42 @@ export const VerificationEnforcementService = {
     if (!destination) {
       return {
         success: false,
-        error: method === 'phone'
-          ? 'No phone number registered'
-          : 'No email address registered',
+        error: method === 'phone' ? 'No phone number registered' : 'No email address registered',
       };
     }
 
-    const { SignatureService } = await import('./signature.service');
-
     try {
-      const result = await SignatureService.createVerificationRequest({
-        userId,
+      const otp = _generateOTP(6);
+      const otpHash = await _generateHash(otp);
+      const timestamp = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const requestId = uuidv4();
+
+      const { error } = await supabase.from('verification_requests').insert({
+        id: requestId,
+        user_id: userId,
         method,
         destination,
+        code_hash: otpHash,
+        code_expires_at: expiresAt,
+        attempts: 0,
+        max_attempts: 3,
+        verified: false,
         purpose: 'login',
+        created_at: timestamp,
+        expires_at: expiresAt,
       });
 
-      return {
-        success: true,
-        requestId: result.requestId,
-      };
+      if (error) throw error;
+
+      // Deliver OTP
+      const { OTPDeliveryService } = await import('./otp-delivery.service');
+      const deliveryResult = await OTPDeliveryService.sendOTP(method, destination, otp, 'account verification');
+      if (!deliveryResult.success) {
+        console.warn('[VerificationEnforcementService] OTP delivery failed:', deliveryResult.error);
+      }
+
+      return { success: true, requestId };
     } catch (error) {
       console.error('[VerificationEnforcementService] Error sending verification code:', error);
       return {
@@ -311,7 +372,8 @@ export const VerificationEnforcementService = {
   },
 
   /**
-   * Verify code and mark method as verified
+   * Verify OTP code and mark method as verified.
+   * Inlined from SignatureService.verifyCode to avoid circular import.
    */
   async verifyCodeAndMark(
     userId: string,
@@ -319,21 +381,37 @@ export const VerificationEnforcementService = {
     code: string,
     method: 'phone' | 'email'
   ): Promise<{ success: boolean; error?: string }> {
-    const { SignatureService } = await import('./signature.service');
+    const { data, error } = await supabase
+      .from('verification_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
 
-    const result = await SignatureService.verifyCode(requestId, code);
+    if (error || !data) return { success: false, error: 'Verification request not found' };
+    if (data.verified) return { success: false, error: 'Code already verified' };
+    if (new Date(data.code_expires_at) < new Date()) return { success: false, error: 'Verification code expired' };
+    if (data.attempts >= data.max_attempts) return { success: false, error: 'Maximum attempts exceeded' };
 
-    if (!result.verified) {
-      return { success: false, error: result.error };
+    const codeHash = await _generateHash(code);
+
+    if (codeHash !== data.code_hash) {
+      await supabase
+        .from('verification_requests')
+        .update({ attempts: (data.attempts || 0) + 1 })
+        .eq('id', requestId);
+      return { success: false, error: 'Invalid verification code' };
     }
+
+    await supabase
+      .from('verification_requests')
+      .update({ verified: true, verified_at: new Date().toISOString() })
+      .eq('id', requestId);
 
     const markSuccess = method === 'phone'
       ? await this.markPhoneVerified(userId)
       : await this.markEmailVerified(userId);
 
-    if (!markSuccess) {
-      return { success: false, error: 'Failed to update verification status' };
-    }
+    if (!markSuccess) return { success: false, error: 'Failed to update verification status' };
 
     return { success: true };
   },
