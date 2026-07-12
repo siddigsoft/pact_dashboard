@@ -58,6 +58,7 @@ const AdminWallets: FC = () => {
   } | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillProgress, setBackfillProgress] = useState({ current: 0, total: 0, succeeded: 0, failed: 0, skipped: 0 });
+  const [backfillLastError, setBackfillLastError] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -238,17 +239,29 @@ const AdminWallets: FC = () => {
 
       const totalCompleted = allEntries.length;
 
-      // Step 3: Batch-fetch profile names for visit_completed_by UUIDs
+      // Step 3: Collect all candidate user UUIDs from both fields, then batch-fetch profiles.
+      // We MUST verify each UUID exists in profiles — wallets.user_id has a FK to profiles,
+      // so inserting a wallet or transaction for a non-existent profile causes FK violation.
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const userIds = [...new Set(allEntries.map((e: any) => e.visit_completed_by).filter(Boolean))];
+      const candidateIds = new Set<string>();
+      for (const e of allEntries) {
+        if (e.visit_completed_by && uuidRegex.test(String(e.visit_completed_by).trim()))
+          candidateIds.add(String(e.visit_completed_by).trim());
+        if (e.accepted_by && uuidRegex.test(String(e.accepted_by).trim()))
+          candidateIds.add(String(e.accepted_by).trim());
+      }
       const profileMap: Record<string, string> = {};
-      if (userIds.length > 0) {
+      const validProfileIds = new Set<string>();
+      const candidateArr = [...candidateIds];
+      // Fetch in batches of 500 to stay within URL length limits
+      for (let pi = 0; pi < candidateArr.length; pi += 500) {
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, full_name, email')
-          .in('id', userIds.slice(0, 1000));
+          .in('id', candidateArr.slice(pi, pi + 500));
         for (const p of profiles || []) {
           profileMap[p.id] = p.full_name || p.email || p.id;
+          validProfileIds.add(p.id);
         }
       }
 
@@ -270,9 +283,12 @@ const AdminWallets: FC = () => {
           ? String(e.visit_completed_by).trim() : null;
         const acceptedBy = e.accepted_by && uuidRegex.test(String(e.accepted_by).trim())
           ? String(e.accepted_by).trim() : null;
-        const effectiveUserId = visitCompletedBy || acceptedBy;
+        // Pick the first candidate that actually exists in profiles (FK-safe)
+        const effectiveUserId =
+          (visitCompletedBy && validProfileIds.has(visitCompletedBy) ? visitCompletedBy : null) ||
+          (acceptedBy && validProfileIds.has(acceptedBy) ? acceptedBy : null);
 
-        // No valid payee UUID in either field → count as no-user, skip backfill
+        // No valid payee with a matching profile → count as no-user, skip backfill
         if (!effectiveUserId) { noUser++; continue; }
 
         const userName = profileMap[effectiveUserId] || effectiveUserId;
@@ -289,8 +305,10 @@ const AdminWallets: FC = () => {
   const runBackfillAll = async () => {
     if (!backfillScan || backfillScan.missing.length === 0) return;
     setBackfilling(true);
+    setBackfillLastError(null);
     const total = backfillScan.missing.length;
     let succeeded = 0, failed = 0, skipped = 0;
+    let firstError: string | null = null;
     setBackfillProgress({ current: 0, total, succeeded, failed, skipped });
 
     for (let i = 0; i < backfillScan.missing.length; i++) {
@@ -299,11 +317,16 @@ const AdminWallets: FC = () => {
         const result = await backfillWalletTransactionForSite(site.id);
         if (result.success) succeeded++;
         else if (result.message?.includes('already')) skipped++;
-        else failed++;
-      } catch {
+        else {
+          failed++;
+          if (!firstError) firstError = result.error || result.message || 'Unknown error';
+        }
+      } catch (err: any) {
         failed++;
+        if (!firstError) firstError = err?.message || 'Unknown exception';
       }
       setBackfillProgress({ current: i + 1, total, succeeded, failed, skipped });
+      if (firstError) setBackfillLastError(firstError);
     }
 
     // Re-scan to show updated state
@@ -775,6 +798,17 @@ CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_tra
                       style={{ width: `${Math.round((backfillProgress.current / backfillProgress.total) * 100)}%` }}
                     />
                   </div>
+                  {backfillLastError && (
+                    <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded px-2 py-1 mt-1 font-mono break-all">
+                      First error: {backfillLastError}
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Show last error after backfill finishes */}
+              {!backfilling && backfillLastError && backfillProgress.failed > 0 && (
+                <div className="mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded px-2 py-1 font-mono break-all">
+                  Error detail: {backfillLastError}
                 </div>
               )}
 
