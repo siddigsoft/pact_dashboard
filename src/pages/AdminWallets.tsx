@@ -205,10 +205,11 @@ const AdminWallets: FC = () => {
 
       const creditedIds = new Set((existingTxs || []).map((t: any) => t.site_visit_id).filter(Boolean));
 
-      // Step 2: Fetch completed entries — ONLY safe scalar columns, no FK joins
-      // accepted_by is a text column (not a FK), so we avoid it in select to prevent
-      // PostgREST schema-cache confusion. visit_completed_by IS a proper FK but we
-      // skip the embed syntax and just grab the raw UUID value.
+      // Step 2: Fetch fee-eligible entries — all terminal statuses that should have been paid.
+      // 'wfp_confirmed' is the current fee trigger; 'completed' is the legacy value.
+      // 'submitted' and 'verified' are included for historical records.
+      // Only safe scalar columns — no FK embeds on text columns.
+      const FEE_STATUSES = ['wfp_confirmed', 'completed', 'submitted', 'verified'];
       let allEntries: any[] = [];
       let offset = 0;
       const BATCH = 1000;
@@ -216,7 +217,7 @@ const AdminWallets: FC = () => {
         const { data, error } = await supabase
           .from('mmp_site_entries')
           .select('id, site_name, visit_completed_by, enumerator_fee, transport_fee, cost')
-          .eq('status', 'completed')
+          .in('status', FEE_STATUSES)
           .range(offset, offset + BATCH - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
@@ -455,25 +456,28 @@ const AdminWallets: FC = () => {
     return () => { try { supabase.removeChannel(ch); } catch {} };
   }, []);
 
+  const [showZeroBalance, setShowZeroBalance] = useState(true);
+
   const filtered = useMemo(() => {
-    let filtered = rows.filter(r => {
-      const balance = r.balances?.[currency] || 0;
-      const earned = Number(r.totalEarned || 0);
-      return balance > 0 || earned > 0;
-    });
-    
-    // Apply search filter
+    let result = showZeroBalance
+      ? rows
+      : rows.filter(r => {
+          const balance = r.balances?.[currency] || 0;
+          const earned = Number(r.totalEarned || 0);
+          return balance > 0 || earned > 0;
+        });
+
     if (search) {
       const s = search.toLowerCase();
-      filtered = filtered.filter(r => 
+      result = result.filter(r =>
         (r.owner_name || '').toString().toLowerCase().includes(s) ||
         (r.user_id || '').toString().toLowerCase().includes(s) ||
         (r.profiles?.email || '').toString().toLowerCase().includes(s)
       );
     }
-    
-    return filtered;
-  }, [rows, search, currency]);
+
+    return result;
+  }, [rows, search, currency, showZeroBalance]);
 
   const getBalance = (wallet: any, curr: string) => (wallet.balances?.[curr] || 0) * 100;
 
@@ -696,7 +700,7 @@ const AdminWallets: FC = () => {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
           <Input 
@@ -707,6 +711,15 @@ const AdminWallets: FC = () => {
             data-testid="input-search-wallets"
           />
         </div>
+        <Button
+          variant={showZeroBalance ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setShowZeroBalance(v => !v)}
+          data-testid="button-toggle-zero-balance"
+          className="flex-shrink-0"
+        >
+          {showZeroBalance ? `All Wallets (${rows.length})` : `Active Only (${filtered.length})`}
+        </Button>
         <div className="flex items-center gap-2 border rounded-lg p-1 bg-muted/50">
           <Button 
             variant={viewMode === 'table' ? 'default' : 'ghost'}
