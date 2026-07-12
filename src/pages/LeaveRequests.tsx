@@ -25,6 +25,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useRestrictedAction } from '@/hooks/useRestrictedAction';
+import { PageAccessDenied } from '@/components/access/PageAccessDenied';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { cn } from '@/lib/utils';
 
@@ -103,6 +105,7 @@ export default function LeaveRequests() {
   const { toast } = useToast();
   const { hasAnyRole } = useAuthorization();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
+  const { check: checkLeaveWrite, perms: leavePerms } = useRestrictedAction('leave');
 
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -399,6 +402,7 @@ export default function LeaveRequests() {
 
   const submitReview = async () => {
     if (!reviewDialog) return;
+    if (!checkLeaveWrite('write')) return;
     setSaving(true);
     try {
       // Prefer the multi-tier RPC if the request has an approver chain; the RPC
@@ -511,6 +515,10 @@ export default function LeaveRequests() {
 
   const days = calcDays(form.start_date, form.end_date);
   const leaveTypeCfg = (type: string) => LEAVE_TYPES.find(t => t.value === type) ?? LEAVE_TYPES[0];
+
+  if (leavePerms.hasOverride && (leavePerms.isBlocked || !leavePerms.canRead)) {
+    return <PageAccessDenied pageLabel="Leave Requests" reason="blocked" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -835,7 +843,7 @@ export default function LeaveRequests() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {isAdmin && req.status === 'pending' && (
+                      {isAdmin && req.status === 'pending' && (!leavePerms.hasOverride || leavePerms.canWrite) && (
                         <Button size="sm" onClick={() => openReviewDialog(req)}
                           className="bg-[#1D3461] hover:bg-[#0F2041] text-white h-8 text-xs">
                           Review

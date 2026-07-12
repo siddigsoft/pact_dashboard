@@ -23,6 +23,8 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useRestrictedAction } from '@/hooks/useRestrictedAction';
+import { PageAccessDenied } from '@/components/access/PageAccessDenied';
 import { toDisplayLabel, VISIBLE_ROLE_CODES, normalizeRole } from '@/utils/roleMapping';
 import { sudanStates } from '@/data/sudanStates';
 import { useApproval } from '@/context/approval/ApprovalContext';
@@ -143,8 +145,14 @@ const Users = () => {
     currentUser?.role === 'superAdmin' ||
     currentUser?.role === 'SuperAdmin';
 
+  const { check: checkUsersWrite, perms: usersPerms } = useRestrictedAction('users');
+
   if (!isAdminOrICT && !canManageRoles()) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (usersPerms.hasOverride && (usersPerms.isBlocked || !usersPerms.canRead)) {
+    return <PageAccessDenied pageLabel="User Management" reason="blocked" />;
   }
 
   const getInitials = (name: string | undefined | null): string => {
@@ -317,6 +325,7 @@ const Users = () => {
   };
 
   const handleApproveUser = async (userId: string) => {
+    if (!checkUsersWrite('write')) return;
     setIsLoadingApproval(userId);
     try {
       await approveUser(userId);
@@ -399,6 +408,7 @@ const Users = () => {
   }, [projects]);
 
   const handleRejectUser = async (userId: string) => {
+    if (!checkUsersWrite('write')) return;
     setIsLoadingApproval(userId);
     try {
       await rejectUser(userId);
@@ -616,6 +626,7 @@ const Users = () => {
 
   const executeAction = async () => {
     if (!confirmDialog.userId) return;
+    if (!checkUsersWrite(confirmDialog.action === 'delete' ? 'delete' : 'write')) return;
     const session = await ensureValidSession();
     if (!session.success) return;
     setDeletingUserId(confirmDialog.userId);
@@ -723,7 +734,7 @@ const Users = () => {
         </TableCell>
         <TableCell>
           <div className="flex items-center justify-end gap-1">
-            {!user.isApproved && isAdminOrICT && (
+            {!user.isApproved && isAdminOrICT && (!usersPerms.hasOverride || usersPerms.canWrite) && (
               <>
                 <Button 
                   variant="default" 
@@ -803,19 +814,23 @@ const Users = () => {
                           </DropdownMenuItem>
                         </>
                       )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleDeactivate(user.id)} disabled={deletingUserId === user.id}>
-                        <UserX className="h-4 w-4 mr-2" />
-                        Deactivate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleDelete(user.id)} 
-                        disabled={deletingUserId === user.id}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete User
-                      </DropdownMenuItem>
+                      {(!usersPerms.hasOverride || usersPerms.canDelete) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleDeactivate(user.id)} disabled={deletingUserId === user.id}>
+                            <UserX className="h-4 w-4 mr-2" />
+                            Deactivate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDelete(user.id)} 
+                            disabled={deletingUserId === user.id}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete User
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </>
                   )}
                 </DropdownMenuContent>
@@ -1072,7 +1087,7 @@ const Users = () => {
                               <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="View profile">
                                 <Link to={`/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
                               </Button>
-                              {isAdminOrICT && (
+                              {isAdminOrICT && (!usersPerms.hasOverride || usersPerms.canDelete) && (
                                 <Button
                                   variant="outline"
                                   size="sm"

@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useRestrictedAction } from "@/hooks/useRestrictedAction";
+import { PageAccessDenied } from "@/components/access/PageAccessDenied";
 import { 
   BadgePercent, ClipboardList, DollarSign, ReceiptText, ShieldCheck, 
   CreditCard, ArrowUpDown, FileBarChart, AlertTriangle, FileText,
@@ -81,6 +83,7 @@ const Finance: React.FC = () => {
   const navigate = useNavigate();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const canAccessReconciliation = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin']);
+  const { check: checkFinanceWrite, perms: financePerms } = useRestrictedAction('finance-hub');
 
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
   const { projectBudgets, stats: budgetStats, budgetAlerts, loading: budgetLoading } = useBudget();
@@ -834,10 +837,12 @@ const Finance: React.FC = () => {
   const [paymentActionLoading, setPaymentActionLoading] = useState(false);
 
   const handleApprovePayment = (requestId: string) => {
+    if (!checkFinanceWrite('write')) return;
     setPaymentActionDialog({ open: true, mode: 'approve', requestId });
   };
 
   const handleRejectPayment = (requestId: string) => {
+    if (!checkFinanceWrite('write')) return;
     setPaymentActionDialog({ open: true, mode: 'reject', requestId });
   };
 
@@ -878,6 +883,10 @@ const Finance: React.FC = () => {
   const utilizationRate = totalBudgetCents > 0 ? ((totalSpentCents / totalBudgetCents) * 100) : 0;
 
   const totalExpenseCents = expenseCategories.reduce((s, c) => s + c.total_cents, 0);
+
+  if (financePerms.hasOverride && (financePerms.isBlocked || !financePerms.canRead)) {
+    return <PageAccessDenied pageLabel="Finance Hub" reason="blocked" />;
+  }
 
   return (
     <div className="space-y-5">
@@ -1305,8 +1314,12 @@ const Finance: React.FC = () => {
                             <span className="text-sm font-bold">{formatCurrency(request.amount)}</span>
                           </div>
                           <div className="flex gap-2 mt-2">
-                            <Button size="sm" onClick={() => handleApprovePayment(request.id)} data-testid={`button-approve-${request.id}`}>Approve</Button>
-                            <Button size="sm" variant="outline" onClick={() => handleRejectPayment(request.id)} data-testid={`button-reject-${request.id}`}>Reject</Button>
+                            {(!financePerms.hasOverride || financePerms.canWrite) && (
+                              <>
+                                <Button size="sm" onClick={() => handleApprovePayment(request.id)} data-testid={`button-approve-${request.id}`}>Approve</Button>
+                                <Button size="sm" variant="outline" onClick={() => handleRejectPayment(request.id)} data-testid={`button-reject-${request.id}`}>Reject</Button>
+                              </>
+                            )}
                             <Button size="sm" variant="ghost" onClick={() => navigate('/finance-approval')}>Details</Button>
                           </div>
                         </div>

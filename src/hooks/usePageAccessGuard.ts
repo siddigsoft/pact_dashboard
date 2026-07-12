@@ -1,9 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { normalizeRole } from '@/utils/roleMapping';
-import { supabase } from '@/integrations/supabase/client';
 import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { usePagePermissions } from '@/hooks/usePageManageOverride';
 
 /**
  * Resolves the current pathname to a PAGE_DEFS slug.
@@ -29,7 +28,7 @@ function pathToSlug(pathname: string): string | null {
 }
 
 export interface PageGuardResult {
-  /** True when the current user has an explicit is_blocked=true override for this page. */
+  /** True when the current user is explicitly blocked or stripped of read access for this page. */
   isBlocked: boolean;
   /** True while the DB query is in-flight (avoid flash of denied screen). */
   isChecking: boolean;
@@ -41,7 +40,8 @@ export interface PageGuardResult {
 
 /**
  * Checks whether the currently-authenticated user is blocked from the
- * current page via a `page_access_overrides` row.
+ * current page via a `page_access_overrides` row (is_blocked=true or r:false)
+ * OR via a `user_screen_permissions` row (isVisible=false or read:false).
  *
  * Super Admins are always allowed (never blocked).
  * Unknown routes (no matching slug) are always allowed (fail-open for
@@ -55,27 +55,20 @@ export function usePageAccessGuard(): PageGuardResult {
   const slug = pathToSlug(location.pathname);
   const pageDef = slug ? PAGE_DEFS.find(p => p.slug === slug) : null;
 
-  const enabled = !!currentUser?.id && !!slug && !isSuperAdmin;
+  // Delegate to the full 3-layer resolver.
+  // skip=true for super admins (always allowed) and unknown routes (fail-open).
+  const perms = usePagePermissions(slug ?? '', isSuperAdmin || !slug);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['page-guard', currentUser?.id, slug],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('page_access_overrides')
-        .select('is_blocked')
-        .eq('page_slug', slug!)
-        .eq('user_id', currentUser!.id)
-        .maybeSingle();
-      return data;
-    },
-    enabled,
-    staleTime: 30_000,
-    gcTime: 60_000,
-  });
+  // Blocked when an explicit override exists that removes access:
+  //   • page_access_overrides.is_blocked = true
+  //   • user_screen_permissions.isVisible = false
+  //   • r:false in the notes JSON
+  const isBlocked = !isSuperAdmin && !!slug && perms.hasOverride &&
+    (perms.isBlocked || !perms.canRead);
 
   return {
-    isBlocked: enabled && data?.is_blocked === true,
-    isChecking: enabled && isLoading,
+    isBlocked,
+    isChecking: perms.isLoading,
     pageLabel: pageDef?.label,
     slug,
   };

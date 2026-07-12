@@ -20,6 +20,8 @@ import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } 
 import { usePreFundPaymentGate } from "@/hooks/usePreFundPaymentGate";
 import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { useRestrictedAction } from "@/hooks/useRestrictedAction";
+import { PageAccessDenied } from "@/components/access/PageAccessDenied";
 import { useUser } from "@/context/user/UserContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
@@ -230,6 +232,7 @@ const CostSubmission = () => {
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
+  const { perms: costSubmitPerms } = useRestrictedAction('cost-submission');
 
   // Pre-Fund gate — provides allocation context for auto-linking; does NOT block submission
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
@@ -2785,6 +2788,10 @@ const CostSubmission = () => {
     budgetRemaining: (p as any).budgetRemaining
   }));
 
+  if (costSubmitPerms.hasOverride && (costSubmitPerms.isBlocked || !costSubmitPerms.canRead)) {
+    return <PageAccessDenied pageLabel="Cost Submission" reason="blocked" />;
+  }
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       {cycleContextMmpId && (
@@ -3218,7 +3225,7 @@ const CostSubmission = () => {
         <div className="relative">
           <TabsList className="w-full h-auto p-1.5 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-wrap gap-2 justify-start">
             {/* Submit Request */}
-            {canSubmitOperationalCosts && (
+            {canSubmitOperationalCosts && (!costSubmitPerms.hasOverride || costSubmitPerms.canCreate) && (
               <TabsTrigger 
                 value="submit" 
                 data-testid="tab-submit" 
@@ -3303,7 +3310,7 @@ const CostSubmission = () => {
         </div>
 
         {/* Submit Request Tab - Unified form for all field costs */}
-        {canSubmitOperationalCosts && (
+        {canSubmitOperationalCosts && (!costSubmitPerms.hasOverride || costSubmitPerms.canCreate) && (
           <TabsContent value="submit" className="space-y-4">
 
             {/* ── Pre-Fund allocation notice (soft, non-blocking) ───────────── */}
