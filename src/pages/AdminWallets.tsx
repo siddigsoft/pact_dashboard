@@ -201,7 +201,7 @@ const AdminWallets: FC = () => {
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost, profiles:accepted_by(full_name, email)')
+          .select('id, site_name, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost')
           .eq('status', 'completed')
           .range(offset, offset + BATCH - 1);
         if (error) throw error;
@@ -222,6 +222,23 @@ const AdminWallets: FC = () => {
 
       const creditedIds = new Set((existingTxs || []).map((t: any) => t.site_visit_id).filter(Boolean));
 
+      // Collect all unique user IDs (visit_completed_by is a proper UUID FK; accepted_by is text but also a UUID)
+      const userIds = [...new Set(
+        allEntries.map((e: any) => e.visit_completed_by || e.accepted_by).filter(Boolean)
+      )];
+
+      // Batch-fetch display names for those user IDs
+      const profileMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds.slice(0, 1000));
+        for (const p of profiles || []) {
+          profileMap[p.id] = p.full_name || p.email || p.id;
+        }
+      }
+
       let alreadyCredited = 0;
       let noFee = 0;
       let noUser = 0;
@@ -229,8 +246,8 @@ const AdminWallets: FC = () => {
 
       for (const e of allEntries) {
         const fee = (Number(e.enumerator_fee || 0) + Number(e.transport_fee || 0)) || Number(e.cost || 0);
-        const userId = e.accepted_by || e.visit_completed_by;
-        const userName = (e.profiles as any)?.full_name || (e.profiles as any)?.email || userId || 'Unknown';
+        const userId = e.visit_completed_by || e.accepted_by;
+        const userName = (userId && profileMap[userId]) ? profileMap[userId] : (userId || 'Unknown');
 
         if (creditedIds.has(e.id)) { alreadyCredited++; continue; }
         if (!userId)  { noUser++; continue; }
