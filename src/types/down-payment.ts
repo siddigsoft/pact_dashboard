@@ -217,6 +217,7 @@ export interface DownPaymentFilter {
   activityType?: string;
   dataCollectorId?: string;
   mmpName?: string;
+  projectId?: string;
   dateFrom?: string;
   dateTo?: string;
   amountMin?: number;

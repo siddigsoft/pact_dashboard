@@ -33,6 +33,9 @@ export function filterDownPayments(
     if (filters.mmpName && req.mmpName?.toLowerCase() !== filters.mmpName.toLowerCase()) {
       return false;
     }
+    if (filters.projectId && (req as any).project_id !== filters.projectId) {
+      return false;
+    }
     if (filters.dateFrom && new Date(req.requestedAt) < new Date(filters.dateFrom)) {
       return false;
     }

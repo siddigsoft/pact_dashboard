@@ -440,11 +440,14 @@ export default function DownPaymentApproval() {
 
   const [searchParams] = useSearchParams();
   const cycleContextMmpName = searchParams.get('mmpName') || undefined;
+  const urlProjectId = searchParams.get('project_id') || undefined;
 
   // ── shared full filter (applied to all tabs + approval panel) ───────────
   // Pre-seed from URL param when arriving from cycle-close readiness "Resolve"
+  // or from ProjectCostTab "View All / Add New" button (project_id param)
   const [filters, setFilters] = useState<DownPaymentFilter>(() => ({
     mmpName: cycleContextMmpName,
+    projectId: urlProjectId,
   }));
   const [showFilters, setShowFilters] = useState(true);
 

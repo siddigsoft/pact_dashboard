@@ -10,24 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import {
-  DollarSign,
-  Clock,
-  CheckCircle,
-  XCircle,
-  ExternalLink,
-  Filter,
-  TrendingUp,
-  Receipt,
-  AlertTriangle,
-  Download,
-  Loader2,
-  FileText,
-  BookOpen,
-  RefreshCw,
+  DollarSign, Clock, CheckCircle, XCircle, ExternalLink,
+  Filter, TrendingUp, Receipt, AlertTriangle, Download,
+  Loader2, FileText, BookOpen, RefreshCw, ChevronDown,
+  ChevronUp, CreditCard, Wallet, BarChart2, Plus,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
 
+/* ─── Props ─────────────────────────────────────────────────────────────── */
 interface ProjectCostTabProps {
   projectId: string;
   projectName: string;
@@ -35,6 +26,7 @@ interface ProjectCostTabProps {
   currency?: string;
 }
 
+/* ─── Types ─────────────────────────────────────────────────────────────── */
 interface OperationalCost {
   id: string;
   expense_category: string;
@@ -54,47 +46,32 @@ interface OperationalCost {
   created_at: string;
 }
 
-const EXPENSE_LABELS: Record<string, string> = {
-  permits: 'Permits',
-  incentives: 'Incentives',
-  communications: 'Communications',
-  training: 'Training',
-  general_transport: 'General Transportation',
-  equipment: 'Equipment & Supplies',
-  printing: 'Printing & Materials',
-  meetings: 'Meetings & Events',
-  other: 'Other',
-};
-
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  pending: { label: 'Pending', variant: 'secondary' },
-  under_review: { label: 'Under Review', variant: 'outline' },
-  approved: { label: 'Approved', variant: 'default' },
-  rejected: { label: 'Rejected', variant: 'destructive' },
-  paid: { label: 'Paid', variant: 'default' },
-  reconciled: { label: 'Reconciled', variant: 'default' },
-};
-
-function getDerivedStatus(oc: OperationalCost): string {
-  if (oc.reconciled_at) return 'reconciled';
-  if (oc.paid_at) return 'paid';
-  if (oc.tier2_status === 'approved') return 'approved';
-  if (oc.tier2_status === 'rejected' || oc.tier1_status === 'rejected') return 'rejected';
-  if (oc.tier1_status === 'approved') return 'under_review';
-  return 'pending';
+interface AdvanceRow {
+  id: string;
+  status: string;
+  requested_by: string;
+  site_name: string | null;
+  requested_amount: number;
+  approved_amount: number | null;
+  total_paid_amount: number;
+  justification: string | null;
+  created_at: string;
 }
 
-const formatCurrency = (cents: number, currency: string = 'SDG') => {
-  return `${currency} ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-};
-
-const safeFormatDate = (dateStr: string | null) => {
-  if (!dateStr) return '-';
-  try {
-    const d = parseISO(dateStr);
-    return isValid(d) ? format(d, 'dd MMM yyyy') : '-';
-  } catch { return '-'; }
-};
+interface PreFundRow {
+  id: string;
+  name: string;
+  source: string | null;
+  amount: number;
+  currency: string;
+  available_balance: number;
+  committed_amount: number;
+  paid_amount: number;
+  status: string;
+  project_id: string | null;
+  matching_scope: string;
+  created_at: string;
+}
 
 interface GLLine {
   id: string;
@@ -108,7 +85,109 @@ interface GLLine {
   account_name: string;
 }
 
-function GLBridgeSection({ projectId, projectName, costIds }: { projectId: string; projectName: string; costIds: string[] }) {
+/* ─── Constants ─────────────────────────────────────────────────────────── */
+const EXPENSE_LABELS: Record<string, string> = {
+  permits: 'Permits',
+  incentives: 'Incentives',
+  communications: 'Communications',
+  training: 'Training',
+  general_transport: 'General Transportation',
+  equipment: 'Equipment & Supplies',
+  printing: 'Printing & Materials',
+  meetings: 'Meetings & Events',
+  other: 'Other',
+};
+
+// Maps budget category_allocations keys → expense_category keys (best-effort)
+const BUDGET_CAT_TO_EXPENSE: Record<string, string> = {
+  transportation_and_visit_fees: 'general_transport',
+  permit_fee: 'permits',
+  internet_and_communication_fees: 'communications',
+  training: 'training',
+  incentives: 'incentives',
+  equipment: 'equipment',
+  printing: 'printing',
+  meetings: 'meetings',
+  other: 'other',
+};
+
+// Human labels for budget category keys
+const BUDGET_CAT_LABELS: Record<string, string> = {
+  transportation_and_visit_fees: 'Transportation & Visit Fees',
+  permit_fee: 'Permit Fees',
+  internet_and_communication_fees: 'Internet & Communications',
+  training: 'Training',
+  incentives: 'Incentives',
+  equipment: 'Equipment & Supplies',
+  printing: 'Printing & Materials',
+  meetings: 'Meetings & Events',
+  other: 'Other',
+  site_visits: 'Site Visits',
+  transportation: 'Transportation',
+  allowances: 'Allowances',
+  supplies: 'Supplies',
+  overhead: 'Overhead',
+  field_operations: 'Field Operations',
+  miscellaneous: 'Miscellaneous',
+};
+
+const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  pending: { label: 'Pending', variant: 'secondary' },
+  under_review: { label: 'Under Review', variant: 'outline' },
+  approved: { label: 'Approved', variant: 'default' },
+  rejected: { label: 'Rejected', variant: 'destructive' },
+  paid: { label: 'Paid', variant: 'default' },
+  reconciled: { label: 'Reconciled', variant: 'default' },
+};
+
+const ADV_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:           { label: 'Pending',        cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+  supervisor_review: { label: 'Supervisor',     cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+  approved:          { label: 'Approved',       cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  partially_paid:    { label: 'Partial',        cls: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  fully_paid:        { label: 'Fully Paid',     cls: 'bg-green-100 text-green-700 border-green-200' },
+  rejected:          { label: 'Rejected',       cls: 'bg-red-100 text-red-700 border-red-200' },
+};
+
+const PF_STATUS: Record<string, { label: string; cls: string }> = {
+  draft:            { label: 'Draft',           cls: 'bg-slate-100 text-slate-600' },
+  pending_approval: { label: 'Awaiting Approval', cls: 'bg-amber-100 text-amber-700' },
+  awaiting_receipt: { label: 'Awaiting Receipt', cls: 'bg-sky-100 text-sky-700' },
+  active:           { label: 'Active',          cls: 'bg-emerald-100 text-emerald-700' },
+  low_balance:      { label: 'Low Balance',     cls: 'bg-orange-100 text-orange-700' },
+  paused:           { label: 'Paused',          cls: 'bg-violet-100 text-violet-700' },
+  closed:           { label: 'Closed',          cls: 'bg-slate-100 text-slate-500' },
+};
+
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
+function getDerivedStatus(oc: OperationalCost): string {
+  if (oc.reconciled_at) return 'reconciled';
+  if (oc.paid_at) return 'paid';
+  if (oc.tier2_status === 'approved') return 'approved';
+  if (oc.tier2_status === 'rejected' || oc.tier1_status === 'rejected') return 'rejected';
+  if (oc.tier1_status === 'approved') return 'under_review';
+  return 'pending';
+}
+
+const fmt = (cents: number, cur = 'SDG') =>
+  `${cur} ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+const fmtAmt = (amount: number, cur = 'SDG') =>
+  `${cur} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+const safeDate = (s: string | null) => {
+  if (!s) return '-';
+  try { const d = parseISO(s); return isValid(d) ? format(d, 'dd MMM yyyy') : '-'; }
+  catch { return '-'; }
+};
+
+/* ─── GL Bridge (Phase 5 enhanced) ──────────────────────────────────────── */
+function GLBridgeSection({ projectId, projectName, costIds, advanceIds }: {
+  projectId: string;
+  projectName: string;
+  costIds: string[];
+  advanceIds: string[];
+}) {
   const [glLines, setGlLines] = useState<GLLine[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -116,51 +195,40 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
   const fetchGL = async () => {
     setLoading(true);
     try {
-      // Strategy: look for journal entries whose source_id matches any of this project's op-cost IDs
-      // or whose description_en contains the project name
-      const promises: Promise<any>[] = [];
+      const allSourceIds = [
+        projectId,
+        ...costIds.slice(0, 80),
+        ...advanceIds.slice(0, 20),
+      ];
 
-      // 1. By source_id = projectId (if project is linked directly to JE)
-      promises.push(
-        Promise.resolve(
-          supabase
-            .from('acct_journal_entries')
-            .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
-            .eq('source_id', projectId)
-            .in('status', ['posted', 'draft'])
-            .order('posting_date', { ascending: false })
-            .limit(100)
-        )
-      );
+      const results = await Promise.allSettled([
+        // By source_id (project, cost submissions, advances)
+        supabase
+          .from('acct_journal_entries')
+          .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
+          .in('source_id', allSourceIds.slice(0, 100))
+          .in('status', ['posted', 'draft'])
+          .order('posting_date', { ascending: false })
+          .limit(300),
+        // Phase 5: by project_id on journal lines (graceful — column may not exist yet)
+        supabase
+          .from('acct_journal_lines' as any)
+          .select('id, line_no, debit_credit, functional_amount, description, posting_date, entry_no: acct_journal_entries(entry_no, posting_date, status), account_id, acct_accounts(code, name_en)')
+          .eq('project_id' as any, projectId)
+          .limit(200),
+      ]);
 
-      // 2. By source_id matching any cost submission ID
-      if (costIds.length > 0) {
-        promises.push(
-          Promise.resolve(
-            supabase
-              .from('acct_journal_entries')
-              .select('id, entry_no, posting_date, description_en, source_type, status, acct_journal_lines(id, line_no, debit_credit, functional_amount, description, account_id, acct_accounts(code, name_en))')
-              .in('source_id', costIds.slice(0, 100))
-              .in('status', ['posted', 'draft'])
-              .order('posting_date', { ascending: false })
-              .limit(200)
-          )
-        );
-      }
-
-      const results = await Promise.all(promises.map(p => p.catch(() => ({ data: [] }))));
-
-      // Flatten and deduplicate by line id
       const seen = new Set<string>();
       const lines: GLLine[] = [];
-      for (const res of results) {
-        for (const je of ((res as any).data ?? []) as any[]) {
+
+      // Process result 0: journal entries by source_id
+      if (results[0].status === 'fulfilled') {
+        for (const je of ((results[0].value as any).data ?? []) as any[]) {
           for (const l of (je.acct_journal_lines ?? []) as any[]) {
             if (seen.has(l.id)) continue;
             seen.add(l.id);
             lines.push({
-              id: l.id,
-              line_no: l.line_no,
+              id: l.id, line_no: l.line_no,
               debit_credit: l.debit_credit,
               functional_amount: Number(l.functional_amount ?? 0),
               description: l.description,
@@ -172,11 +240,30 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
           }
         }
       }
+
+      // Process result 1: lines tagged with project_id (Phase 5 analytic dimension)
+      if (results[1].status === 'fulfilled') {
+        for (const l of ((results[1].value as any).data ?? []) as any[]) {
+          if (seen.has(l.id)) continue;
+          seen.add(l.id);
+          const je = Array.isArray(l.acct_journal_entries) ? l.acct_journal_entries[0] : l.acct_journal_entries;
+          if (je?.status && !['posted', 'draft'].includes(je.status)) continue;
+          lines.push({
+            id: l.id, line_no: l.line_no,
+            debit_credit: l.debit_credit,
+            functional_amount: Number(l.functional_amount ?? 0),
+            description: l.description,
+            posting_date: je?.posting_date ?? l.posting_date ?? '',
+            entry_no: je?.entry_no ?? 0,
+            account_code: l.acct_accounts?.code ?? '—',
+            account_name: l.acct_accounts?.name_en ?? '—',
+          });
+        }
+      }
+
       lines.sort((a, b) => b.posting_date.localeCompare(a.posting_date) || a.entry_no - b.entry_no);
       setGlLines(lines);
-    } catch {
-      // Silently ignore — GL tables may not exist in all environments
-    }
+    } catch { /* GL tables may not exist in all environments */ }
     setLoading(false);
     setLoaded(true);
   };
@@ -199,7 +286,7 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
         </div>
         {!loaded && (
           <p className="text-xs text-muted-foreground mt-1">
-            Shows GL journal lines linked to this project or its cost submissions.
+            Shows GL journal lines linked to this project, its cost submissions, and advances.
           </p>
         )}
       </CardHeader>
@@ -207,18 +294,22 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
         <CardContent className="p-4 pt-0 space-y-3">
           {glLines.length === 0 ? (
             <div className="text-center text-muted-foreground text-xs py-6 border border-dashed rounded-lg">
-              No GL journal entries found linked to this project. GL Bridge entries are created when operational costs are posted through the Journals module.
+              No GL journal entries found linked to this project. GL Bridge entries are created when costs or advances are posted through the Journals module.
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-md border p-2.5">
                   <div className="text-muted-foreground">Total Debits</div>
-                  <div className="font-bold text-sm mt-0.5 text-indigo-700 dark:text-indigo-400">{totalDR.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  <div className="font-bold text-sm mt-0.5 text-indigo-700 dark:text-indigo-400">
+                    {totalDR.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </div>
                 </div>
                 <div className="rounded-md border p-2.5">
                   <div className="text-muted-foreground">Total Credits</div>
-                  <div className="font-bold text-sm mt-0.5 text-slate-700 dark:text-slate-300">{totalCR.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  <div className="font-bold text-sm mt-0.5 text-slate-700 dark:text-slate-300">
+                    {totalCR.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </div>
                 </div>
               </div>
               <div className="overflow-x-auto border rounded-lg">
@@ -245,7 +336,9 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
                             {l.debit_credit}
                           </Badge>
                         </td>
-                        <td className="px-3 py-1.5 text-right tabular-nums font-medium">{l.functional_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-medium">
+                          {l.functional_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -259,88 +352,193 @@ function GLBridgeSection({ projectId, projectName, costIds }: { projectId: strin
   );
 }
 
+/* ─── Main Component ─────────────────────────────────────────────────────── */
 export default function ProjectCostTab({ projectId, projectName, budgetTotalCents, currency = 'SDG' }: ProjectCostTabProps) {
   const navigate = useNavigate();
   const { users } = useUser();
+
+  // ── Operational costs
   const [costs, setCosts] = useState<OperationalCost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [costsLoading, setCostsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  useEffect(() => {
-    const fetchCosts = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('operational_cost_submissions')
-          .select('id, expense_category, amount_cents, currency, description, expense_date, vendor, submitted_by, submitted_at, status, tier1_status, tier2_status, paid_at, reconciled_at, reconciled_amount_cents, created_at')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false });
+  // ── Advances (down-payment requests for this project)
+  const [advances, setAdvances] = useState<AdvanceRow[]>([]);
+  const [advancesLoading, setAdvancesLoading] = useState(true);
+  const [advancesOpen, setAdvancesOpen] = useState(true);
 
-        if (error) throw error;
-        setCosts((data as OperationalCost[]) || []);
-      } catch (err) {
-        console.error('Failed to fetch project costs:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCosts();
+  // ── Pre-funding linked to this project
+  const [preFunds, setPreFunds] = useState<PreFundRow[]>([]);
+  const [preFundsLoading, setPreFundsLoading] = useState(true);
+  const [preFundsOpen, setPreFundsOpen] = useState(true);
+
+  // ── Budget category breakdown (Phase 4)
+  const [budgetCatAlloc, setBudgetCatAlloc] = useState<Record<string, number>>({});
+
+  /* ─── Fetch operational costs ─────────────────────────────────────────── */
+  useEffect(() => {
+    let alive = true;
+    setCostsLoading(true);
+    supabase
+      .from('operational_cost_submissions')
+      .select('id, expense_category, amount_cents, currency, description, expense_date, vendor, submitted_by, submitted_at, status, tier1_status, tier2_status, paid_at, reconciled_at, reconciled_amount_cents, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (alive) setCosts((data as OperationalCost[]) || []);
+      })
+      .finally(() => { if (alive) setCostsLoading(false); });
+    return () => { alive = false; };
   }, [projectId]);
 
-  const filteredCosts = useMemo(() => {
-    return costs.filter(c => {
-      if (categoryFilter !== 'all' && c.expense_category !== categoryFilter) return false;
-      if (statusFilter !== 'all' && getDerivedStatus(c) !== statusFilter) return false;
-      return true;
-    });
-  }, [costs, categoryFilter, statusFilter]);
+  /* ─── Fetch advances (down-payment requests) ──────────────────────────── */
+  useEffect(() => {
+    let alive = true;
+    setAdvancesLoading(true);
+    supabase
+      .from('down_payment_requests')
+      .select('id, status, requested_by, site_name, requested_amount, approved_amount, total_paid_amount, justification, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (alive) setAdvances((data as AdvanceRow[]) || []);
+      })
+      .finally(() => { if (alive) setAdvancesLoading(false); });
+    return () => { alive = false; };
+  }, [projectId]);
 
+  /* ─── Fetch pre-funding linked to this project ────────────────────────── */
+  useEffect(() => {
+    let alive = true;
+    setPreFundsLoading(true);
+    supabase
+      .from('pre_fund_requests')
+      .select('id, name, source, amount, currency, available_balance, committed_amount, paid_amount, status, project_id, matching_scope, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (alive) setPreFunds((data as PreFundRow[]) || []);
+      })
+      .finally(() => { if (alive) setPreFundsLoading(false); });
+    return () => { alive = false; };
+  }, [projectId]);
+
+  /* ─── Fetch budget category allocations ───────────────────────────────── */
+  useEffect(() => {
+    supabase
+      .from('project_budgets')
+      .select('category_allocations')
+      .eq('project_id', projectId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.category_allocations && typeof data.category_allocations === 'object') {
+          setBudgetCatAlloc(data.category_allocations as Record<string, number>);
+        }
+      });
+  }, [projectId]);
+
+  /* ─── Derived stats ───────────────────────────────────────────────────── */
   const stats = useMemo(() => {
     const totalSubmitted = costs.reduce((s, c) => s + c.amount_cents, 0);
-    const approved = costs.filter(c => ['approved', 'paid', 'reconciled'].includes(getDerivedStatus(c)));
-    const totalApproved = approved.reduce((s, c) => s + c.amount_cents, 0);
+    const approvedSet = costs.filter(c => ['approved', 'paid', 'reconciled'].includes(getDerivedStatus(c)));
+    const totalApproved = approvedSet.reduce((s, c) => s + c.amount_cents, 0);
     const totalPaid = costs.filter(c => ['paid', 'reconciled'].includes(getDerivedStatus(c))).reduce((s, c) => s + c.amount_cents, 0);
-    const totalReconciled = costs.filter(c => getDerivedStatus(c) === 'reconciled').reduce((s, c) => s + (c.reconciled_amount_cents || c.amount_cents), 0);
     const pendingCount = costs.filter(c => ['pending', 'under_review'].includes(getDerivedStatus(c))).length;
     const rejectedCount = costs.filter(c => getDerivedStatus(c) === 'rejected').length;
-
     const byCategory: Record<string, number> = {};
     costs.forEach(c => {
       const cat = c.expense_category || 'other';
       byCategory[cat] = (byCategory[cat] || 0) + c.amount_cents;
     });
-
-    return { totalSubmitted, totalApproved, totalPaid, totalReconciled, pendingCount, rejectedCount, byCategory, totalCount: costs.length };
+    return { totalSubmitted, totalApproved, totalPaid, pendingCount, rejectedCount, byCategory, totalCount: costs.length };
   }, [costs]);
 
-  const budgetUtilization = useMemo(() => {
+  /* ─── Phase 1: Accurate budget utilization (ops + advances + pre-fund) ── */
+  const utilization = useMemo(() => {
     if (!budgetTotalCents || budgetTotalCents <= 0) return null;
-    const pct = Math.min(100, (stats.totalApproved / budgetTotalCents) * 100);
-    return { percentage: pct, remaining: budgetTotalCents - stats.totalApproved };
-  }, [budgetTotalCents, stats.totalApproved]);
 
+    // Operational costs: approved+paid+reconciled
+    const opsCents = stats.totalApproved;
+
+    // Advances: fully paid (amounts stored as raw numbers, not cents)
+    const advCents = advances
+      .filter(a => ['fully_paid', 'partially_paid'].includes(a.status))
+      .reduce((s, a) => s + (a.total_paid_amount || 0) * 100, 0);
+
+    // Pre-funding disbursed (paid_amount in fund's currency; only include same currency)
+    const pfCents = preFunds
+      .filter(f => f.currency === currency)
+      .reduce((s, f) => s + (f.paid_amount || 0) * 100, 0);
+
+    const totalSpentCents = opsCents + advCents + pfCents;
+    const pct = Math.min(100, (totalSpentCents / budgetTotalCents) * 100);
+    return {
+      pct,
+      totalSpentCents,
+      opsCents,
+      advCents,
+      pfCents,
+      remainingCents: Math.max(0, budgetTotalCents - totalSpentCents),
+    };
+  }, [budgetTotalCents, stats.totalApproved, advances, preFunds, currency]);
+
+  /* ─── Phase 4: Budget vs Actuals by category ─────────────────────────── */
+  const categoryBreakdown = useMemo(() => {
+    const catKeys = Object.keys(budgetCatAlloc).filter(k => (budgetCatAlloc[k] || 0) > 0);
+    if (!catKeys.length) return [];
+
+    return catKeys.map(budgetKey => {
+      const budgetedCents = (budgetCatAlloc[budgetKey] || 0) * 100; // budget stored as currency units
+      const expKey = BUDGET_CAT_TO_EXPENSE[budgetKey];
+      const spentCents = expKey ? (stats.byCategory[expKey] || 0) : 0;
+      const remainingCents = Math.max(0, budgetedCents - spentCents);
+      const pct = budgetedCents > 0 ? Math.min(100, (spentCents / budgetedCents) * 100) : 0;
+      return {
+        key: budgetKey,
+        label: BUDGET_CAT_LABELS[budgetKey] || budgetKey.replace(/_/g, ' '),
+        budgetedCents,
+        spentCents,
+        remainingCents,
+        pct,
+      };
+    }).sort((a, b) => b.spentCents - a.spentCents);
+  }, [budgetCatAlloc, stats.byCategory]);
+
+  /* ─── Helpers ─────────────────────────────────────────────────────────── */
   const getUserName = (userId: string) => {
     const u = users.find(u => u.id === userId);
     return u?.name || u?.email || userId.slice(0, 8);
   };
 
-  const exportToExcelData = () => {
-    const data = filteredCosts.map(c => ({
-      Date: safeFormatDate(c.expense_date || c.submitted_at),
-      Category: EXPENSE_LABELS[c.expense_category] || c.expense_category,
-      Description: c.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '-',
-      Vendor: c.vendor || '-',
-      'Amount (SDG)': (c.amount_cents / 100).toFixed(2),
-      Status: STATUS_CONFIG[getDerivedStatus(c)]?.label || getDerivedStatus(c),
-      'Submitted By': getUserName(c.submitted_by),
-    }));
+  const filteredCosts = useMemo(() =>
+    costs.filter(c => {
+      if (categoryFilter !== 'all' && c.expense_category !== categoryFilter) return false;
+      if (statusFilter !== 'all' && getDerivedStatus(c) !== statusFilter) return false;
+      return true;
+    }),
+  [costs, categoryFilter, statusFilter]);
+
+  const exportData = () => {
     exportToExcel(
-      data,
+      filteredCosts.map(c => ({
+        Date: safeDate(c.expense_date || c.submitted_at),
+        Category: EXPENSE_LABELS[c.expense_category] || c.expense_category,
+        Description: c.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '-',
+        Vendor: c.vendor || '-',
+        [`Amount (${currency})`]: (c.amount_cents / 100).toFixed(2),
+        Status: STATUS_CONFIG[getDerivedStatus(c)]?.label || getDerivedStatus(c),
+        'Submitted By': getUserName(c.submitted_by),
+      })),
       'Project Costs',
-      `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_costs.xlsx`
+      `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_costs.xlsx`,
     );
   };
+
+  const loading = costsLoading;
 
   if (loading) {
     return (
@@ -355,6 +553,8 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
 
   return (
     <div className="space-y-4 mt-4">
+
+      {/* ── KPI Cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card data-testid="stat-total-submitted">
           <CardContent className="p-3">
@@ -362,7 +562,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
               <Receipt className="h-4 w-4 text-blue-500" />
               <span className="text-xs text-muted-foreground">Total Submitted</span>
             </div>
-            <p className="text-lg font-bold">{formatCurrency(stats.totalSubmitted, currency)}</p>
+            <p className="text-lg font-bold">{fmt(stats.totalSubmitted, currency)}</p>
             <p className="text-xs text-muted-foreground">{stats.totalCount} submissions</p>
           </CardContent>
         </Card>
@@ -372,7 +572,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
               <CheckCircle className="h-4 w-4 text-green-500" />
               <span className="text-xs text-muted-foreground">Approved</span>
             </div>
-            <p className="text-lg font-bold text-green-600">{formatCurrency(stats.totalApproved, currency)}</p>
+            <p className="text-lg font-bold text-green-600">{fmt(stats.totalApproved, currency)}</p>
             <p className="text-xs text-muted-foreground">{stats.pendingCount} pending</p>
           </CardContent>
         </Card>
@@ -382,7 +582,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
               <DollarSign className="h-4 w-4 text-emerald-500" />
               <span className="text-xs text-muted-foreground">Paid Out</span>
             </div>
-            <p className="text-lg font-bold text-emerald-600">{formatCurrency(stats.totalPaid, currency)}</p>
+            <p className="text-lg font-bold text-emerald-600">{fmt(stats.totalPaid, currency)}</p>
           </CardContent>
         </Card>
         <Card data-testid="stat-rejected">
@@ -397,7 +597,8 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
         </Card>
       </div>
 
-      {budgetUtilization && (
+      {/* ── Phase 1: Accurate Budget Utilization ────────────────────────── */}
+      {budgetTotalCents && budgetTotalCents > 0 && (
         <Card data-testid="card-budget-utilization">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
@@ -405,26 +606,84 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Budget Utilization</span>
               </div>
-              <span className="text-sm font-bold">{budgetUtilization.percentage.toFixed(1)}%</span>
+              <span className="text-sm font-bold">{utilization ? `${utilization.pct.toFixed(1)}%` : '0.0%'}</span>
             </div>
             <Progress
-              value={budgetUtilization.percentage}
-              className={`h-3 ${budgetUtilization.percentage > 90 ? '[&>*]:bg-red-500' : budgetUtilization.percentage > 70 ? '[&>*]:bg-amber-500' : '[&>*]:bg-green-500'}`}
+              value={utilization?.pct ?? 0}
+              className={`h-3 ${(utilization?.pct ?? 0) > 90 ? '[&>*]:bg-red-500' : (utilization?.pct ?? 0) > 70 ? '[&>*]:bg-amber-500' : '[&>*]:bg-green-500'}`}
             />
             <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-              <span>Approved: {formatCurrency(stats.totalApproved, currency)}</span>
-              <span>Budget: {formatCurrency(budgetTotalCents!, currency)}</span>
+              <span>Total Spent: {fmt(utilization?.totalSpentCents ?? 0, currency)}</span>
+              <span>Budget: {fmt(budgetTotalCents, currency)}</span>
             </div>
-            {budgetUtilization.percentage > 90 && (
+            {/* Breakdown sub-line */}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t pt-2">
+              <span className="flex items-center gap-1">
+                <Receipt className="h-3 w-3 text-blue-400" />
+                Operational: {fmt(utilization?.opsCents ?? 0, currency)}
+              </span>
+              {(utilization?.advCents ?? 0) > 0 && (
+                <span className="flex items-center gap-1">
+                  <CreditCard className="h-3 w-3 text-indigo-400" />
+                  Advances: {fmt(utilization!.advCents, currency)}
+                </span>
+              )}
+              {(utilization?.pfCents ?? 0) > 0 && (
+                <span className="flex items-center gap-1">
+                  <Wallet className="h-3 w-3 text-emerald-400" />
+                  Pre-Funding: {fmt(utilization!.pfCents, currency)}
+                </span>
+              )}
+              <span className="ml-auto font-medium text-foreground">
+                Remaining: {fmt(utilization?.remainingCents ?? budgetTotalCents, currency)}
+              </span>
+            </div>
+            {(utilization?.pct ?? 0) > 90 && (
               <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-600">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                <span>Budget utilization is above 90% - review before approving more costs</span>
+                <span>Budget utilization is above 90% — review before approving more costs</span>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
+      {/* ── Phase 4: Budget vs Actuals by Category ──────────────────────── */}
+      {categoryBreakdown.length > 0 && (
+        <Card data-testid="card-budget-vs-actuals">
+          <CardHeader className="p-3 pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BarChart2 className="h-4 w-4 text-indigo-500" />
+              Budget vs Actuals by Category
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 space-y-2">
+            {categoryBreakdown.map(row => (
+              <div key={row.key} className="space-y-0.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium">{row.label}</span>
+                  <div className="flex items-center gap-3 text-muted-foreground">
+                    <span>Spent: <span className={`font-medium ${row.pct > 90 ? 'text-red-600' : row.pct > 70 ? 'text-amber-600' : 'text-foreground'}`}>{fmt(row.spentCents, currency)}</span></span>
+                    <span>of {fmt(row.budgetedCents, currency)}</span>
+                  </div>
+                </div>
+                <div className="relative h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${row.pct > 90 ? 'bg-red-500' : row.pct > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                    style={{ width: `${row.pct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{row.pct.toFixed(1)}% used</span>
+                  <span>Remaining: {fmt(row.remainingCents, currency)}</span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Spending by Category (from actual submissions) ───────────────── */}
       {Object.keys(stats.byCategory).length > 0 && (
         <Card data-testid="card-category-breakdown">
           <CardHeader className="p-3 pb-2">
@@ -437,7 +696,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
                 .map(([cat, amount]) => (
                   <div key={cat} className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{EXPENSE_LABELS[cat] || cat}</span>
-                    <span className="font-mono font-medium">{formatCurrency(amount, currency)}</span>
+                    <span className="font-mono font-medium">{fmt(amount, currency)}</span>
                   </div>
                 ))}
             </div>
@@ -445,6 +704,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
         </Card>
       )}
 
+      {/* ── Operational Cost Submissions ─────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
         <Filter className="h-4 w-4 text-muted-foreground" />
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -470,11 +730,11 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
           </SelectContent>
         </Select>
         <div className="flex-1" />
-        <Button size="sm" variant="outline" onClick={exportToExcelData} data-testid="button-export-costs">
+        <Button size="sm" variant="outline" onClick={exportData} data-testid="button-export-costs">
           <Download className="h-4 w-4 mr-1.5" />
           Export
         </Button>
-        <Button size="sm" onClick={() => navigate('/cost-submission')} data-testid="button-go-cost-submission">
+        <Button size="sm" onClick={() => navigate(`/cost-submission?project_id=${projectId}`)} data-testid="button-go-cost-submission">
           <ExternalLink className="h-4 w-4 mr-1.5" />
           Cost Submissions
         </Button>
@@ -514,7 +774,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
                     return (
                       <TableRow key={cost.id} data-testid={`row-cost-${cost.id}`}>
                         <TableCell className="text-sm whitespace-nowrap">
-                          {safeFormatDate(cost.expense_date || cost.submitted_at)}
+                          {safeDate(cost.expense_date || cost.submitted_at)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">
@@ -526,7 +786,7 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
                         </TableCell>
                         <TableCell className="text-sm">{getUserName(cost.submitted_by)}</TableCell>
                         <TableCell className="text-right font-mono text-sm font-medium">
-                          {formatCurrency(cost.amount_cents, cost.currency || currency)}
+                          {fmt(cost.amount_cents, cost.currency || currency)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={cfg.variant}>{cfg.label}</Badge>
@@ -541,11 +801,210 @@ export default function ProjectCostTab({ projectId, projectName, budgetTotalCent
         </Card>
       )}
 
-      {/* ── GL Bridge — journal entries linked to this project ─── */}
+      {/* ── Phase 2: Advances & Down-Payments ───────────────────────────── */}
+      <Card data-testid="card-advances">
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-indigo-500" />
+              Advances & Down-Payments
+              {advances.length > 0 && (
+                <Badge variant="outline" className="text-[10px] px-1.5">{advances.length}</Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => navigate(`/down-payment-approval?project_id=${projectId}`)}
+                data-testid="button-go-advances"
+              >
+                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                View All / Add New
+              </Button>
+              <button onClick={() => setAdvancesOpen(o => !o)} className="text-muted-foreground hover:text-foreground">
+                {advancesOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        {advancesOpen && (
+          <CardContent className="p-4 pt-0">
+            {advancesLoading ? (
+              <div className="space-y-2">
+                {[1,2].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : advances.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm border border-dashed rounded-lg">
+                No advances or down-payments linked to this project.
+                <div className="mt-2">
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/down-payment-approval?project_id=${projectId}`)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Request Advance
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Summary row */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {[
+                    { label: 'Total Requested', val: advances.reduce((s, a) => s + a.requested_amount, 0) },
+                    { label: 'Total Paid', val: advances.reduce((s, a) => s + a.total_paid_amount, 0) },
+                    { label: 'Pending/Approved', val: advances.filter(a => ['pending','supervisor_review','approved'].includes(a.status)).reduce((s, a) => s + a.requested_amount, 0) },
+                  ].map(kpi => (
+                    <div key={kpi.label} className="rounded-md border p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">{kpi.label}</p>
+                      <p className="text-sm font-bold mt-0.5">{fmtAmt(kpi.val, currency)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Date</th>
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Requested By</th>
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Site / Purpose</th>
+                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Requested</th>
+                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Paid</th>
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {advances.map((a, i) => {
+                        const sc = ADV_STATUS[a.status] ?? { label: a.status, cls: 'bg-slate-100 text-slate-600' };
+                        return (
+                          <tr key={a.id} className={`border-b ${i % 2 !== 0 ? 'bg-muted/10' : ''}`} data-testid={`row-advance-${a.id}`}>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{safeDate(a.created_at)}</td>
+                            <td className="px-3 py-1.5">{getUserName(a.requested_by)}</td>
+                            <td className="px-3 py-1.5 max-w-[140px] truncate text-muted-foreground">
+                              {a.site_name || a.justification?.slice(0, 40) || '—'}
+                            </td>
+                            <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtAmt(a.requested_amount, currency)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{fmtAmt(a.total_paid_amount, currency)}</td>
+                            <td className="px-3 py-1.5">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${sc.cls}`}>
+                                {sc.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      {/* ── Phase 3: Pre-Funding (Donor Advances) ───────────────────────── */}
+      <Card data-testid="card-prefunding">
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-emerald-500" />
+              Pre-Funding (Donor Advances)
+              {preFunds.length > 0 && (
+                <Badge variant="outline" className="text-[10px] px-1.5">{preFunds.length}</Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => navigate(`/pre-funding?tab=registry&project_id=${projectId}`)}
+                data-testid="button-go-prefunding"
+              >
+                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                View / Manage
+              </Button>
+              <button onClick={() => setPreFundsOpen(o => !o)} className="text-muted-foreground hover:text-foreground">
+                {preFundsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        {preFundsOpen && (
+          <CardContent className="p-4 pt-0">
+            {preFundsLoading ? (
+              <div className="space-y-2">
+                {[1,2].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : preFunds.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm border border-dashed rounded-lg">
+                No pre-funding linked to this project.
+                <div className="mt-2">
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/pre-funding?tab=registry&project_id=${projectId}`)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Link Pre-Funding
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Pre-fund summary */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {[
+                    { label: 'Total Committed', val: preFunds.reduce((s, f) => s + f.amount, 0), cur: preFunds[0]?.currency ?? currency },
+                    { label: 'Disbursed', val: preFunds.reduce((s, f) => s + f.paid_amount, 0), cur: preFunds[0]?.currency ?? currency },
+                    { label: 'Available Balance', val: preFunds.reduce((s, f) => s + f.available_balance, 0), cur: preFunds[0]?.currency ?? currency },
+                  ].map(kpi => (
+                    <div key={kpi.label} className="rounded-md border p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">{kpi.label}</p>
+                      <p className="text-sm font-bold mt-0.5">{fmtAmt(kpi.val, kpi.cur)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Fund Name</th>
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Source / Donor</th>
+                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Total</th>
+                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Disbursed</th>
+                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Balance</th>
+                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preFunds.map((f, i) => {
+                        const sc = PF_STATUS[f.status] ?? { label: f.status, cls: 'bg-slate-100 text-slate-600' };
+                        return (
+                          <tr key={f.id} className={`border-b ${i % 2 !== 0 ? 'bg-muted/10' : ''}`} data-testid={`row-prefund-${f.id}`}>
+                            <td className="px-3 py-1.5 font-medium max-w-[140px] truncate">{f.name}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground max-w-[120px] truncate">{f.source || '—'}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtAmt(f.amount, f.currency)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{fmtAmt(f.paid_amount, f.currency)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums font-medium text-emerald-700 dark:text-emerald-400">
+                              {fmtAmt(f.available_balance, f.currency)}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${sc.cls}`}>
+                                {sc.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      {/* ── Phase 5: GL Bridge (enhanced with advances + project_id dim) ── */}
       <GLBridgeSection
         projectId={projectId}
         projectName={projectName}
         costIds={costs.map(c => c.id)}
+        advanceIds={advances.map(a => a.id)}
       />
     </div>
   );

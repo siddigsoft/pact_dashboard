@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { exportToExcel } from '@/utils/report-export';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -191,6 +192,10 @@ export default function PreFundingRegistry() {
   const isSuper = isSuperAdmin();
   const canManage = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   const canAccess = canManage;
+
+  // Pre-filter by project when arriving from ProjectCostTab "View / Manage" button
+  const [searchParams] = useSearchParams();
+  const urlProjectId = searchParams.get('project_id') || '';
 
   const [funds, setFunds]           = useState<PreFundRequest[]>([]);
   const [periodTypes, setPeriodTypes]= useState<PeriodType[]>([]);
@@ -1047,6 +1052,7 @@ export default function PreFundingRegistry() {
 
   const filtered = funds.filter(f => {
     if (statusFilter !== 'all' && f.status !== statusFilter) return false;
+    if (urlProjectId && (f as any).project_id !== urlProjectId) return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase()) && !(f.source ?? '').toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
