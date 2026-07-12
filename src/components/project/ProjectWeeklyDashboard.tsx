@@ -355,6 +355,10 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     }
   }
 
+  /* ── Team (hoisted: used in the useEffect dependency array below) ── */
+  const teamComposition: any[] = (project as any).team?.teamComposition ?? [];
+  const teamMembers: string[]  = (project as any).team?.members ?? [];
+
   /* ── Task-count fetch: project-specific + overall per team member ─── */
   useEffect(() => {
     const userIds = teamComposition.map((m: any) => m.userId).filter(Boolean);
@@ -598,9 +602,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
     return e ? differenceInDays(e, now) : null;
   }, [project.endDate, now]);
 
-  /* ── Team ── */
-  const teamComposition: any[] = (project as any).team?.teamComposition ?? [];
-  const teamMembers: string[]  = (project as any).team?.members ?? [];
+  /* ── Team counts (teamComposition / teamMembers declared above, hoisted) ── */
   const teamCount = teamComposition.length || teamMembers.length;
   const workloadData = useMemo(() =>
     teamComposition
