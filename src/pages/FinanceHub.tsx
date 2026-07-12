@@ -4,7 +4,7 @@ import {
   Loader2, TrendingUp, FileText, Info,
   DollarSign, CreditCard, BarChart3, ArrowLeftRight,
   RefreshCw, Layers, ClipboardList, CalendarCheck,
-  Activity, Users, Receipt,
+  Activity, Users, Receipt, Copy,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -22,12 +22,14 @@ const ExchangeRatesPanel       = lazy(() => import('./ExchangeRates'));
 const SalaryRetainerPanel      = lazy(() => import('./SalaryRetainerReport'));
 const MonthEndPanel            = lazy(() => import('./MonthEndFinancialSummary'));
 const EnumeratorFeesPanel      = lazy(() => import('./EnumeratorFeesReport'));
+const DuplicatePaymentsPanel   = lazy(() => import('./DuplicatePaymentsReport'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type FinSection = 'operations' | 'reports';
 type FinTab =
   | 'budget' | 'financial-ops' | 'admin-wallets' | 'reconciliation' | 'subscriptions'
-  | 'wallet-reports' | 'advance-report' | 'cost-predictions' | 'exchange-rates' | 'salary-retainer' | 'month-end' | 'enumerator-fees';
+  | 'wallet-reports' | 'advance-report' | 'cost-predictions' | 'exchange-rates'
+  | 'salary-retainer' | 'month-end' | 'enumerator-fees' | 'duplicate-payments';
 
 interface TabDef { id: FinTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: FinSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -70,6 +72,10 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'advance-report', label: 'Transport Advance Report', icon: ClipboardList,
         description: 'Track all transportation advance requests — see who received advances, amounts, travel dates, recovery status, and any outstanding balances.',
+      },
+      {
+        id: 'duplicate-payments', label: 'Duplicate Payments Report', icon: Copy,
+        description: 'Identify all sites that have more than one active advance request — grouped by site, MMP, and month with full status details and Excel export for finance investigation.',
       },
       {
         id: 'cost-predictions', label: 'Cost Predictions', icon: TrendingUp,
@@ -130,7 +136,6 @@ export default function FinanceHub() {
   const section = sectionOfTab(tab);
   const currentSection = SECTIONS.find(s => s.id === section)!;
   const activeTabDef = allTabs.find(t => t.id === tab)!;
-  const accent = currentSection.color;
 
   const activeSectionFirstTab = (s: SectionDef) => s.tabs[0].id;
 
@@ -148,18 +153,19 @@ export default function FinanceHub() {
       onTabClick={id => setTab(id as FinTab)}
     >
       <div className="min-h-[calc(100vh-160px)]">
-        {tab === 'budget'           && <Suspense fallback={<PanelLoader />}><BudgetPanel /></Suspense>}
-        {tab === 'financial-ops'    && <Suspense fallback={<PanelLoader />}><FinancialOpsPanel /></Suspense>}
-        {tab === 'admin-wallets'    && <Suspense fallback={<PanelLoader />}><WalletsAdminPanel /></Suspense>}
-        {tab === 'reconciliation'   && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
-        {tab === 'subscriptions'    && <Suspense fallback={<PanelLoader />}><SubscriptionsPanel /></Suspense>}
-        {tab === 'wallet-reports'   && <Suspense fallback={<PanelLoader />}><WalletReportsPanel /></Suspense>}
-        {tab === 'advance-report'   && <Suspense fallback={<PanelLoader />}><AdvanceReportPanel /></Suspense>}
-        {tab === 'cost-predictions' && <Suspense fallback={<PanelLoader />}><CostPredictionsPanel /></Suspense>}
-        {tab === 'exchange-rates'   && <Suspense fallback={<PanelLoader />}><ExchangeRatesPanel /></Suspense>}
-        {tab === 'salary-retainer'  && <Suspense fallback={<PanelLoader />}><SalaryRetainerPanel /></Suspense>}
-        {tab === 'month-end'        && <Suspense fallback={<PanelLoader />}><MonthEndPanel /></Suspense>}
-        {tab === 'enumerator-fees'  && <Suspense fallback={<PanelLoader />}><EnumeratorFeesPanel /></Suspense>}
+        {tab === 'budget'              && <Suspense fallback={<PanelLoader />}><BudgetPanel /></Suspense>}
+        {tab === 'financial-ops'       && <Suspense fallback={<PanelLoader />}><FinancialOpsPanel /></Suspense>}
+        {tab === 'admin-wallets'       && <Suspense fallback={<PanelLoader />}><WalletsAdminPanel /></Suspense>}
+        {tab === 'reconciliation'      && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
+        {tab === 'subscriptions'       && <Suspense fallback={<PanelLoader />}><SubscriptionsPanel /></Suspense>}
+        {tab === 'wallet-reports'      && <Suspense fallback={<PanelLoader />}><WalletReportsPanel /></Suspense>}
+        {tab === 'advance-report'      && <Suspense fallback={<PanelLoader />}><AdvanceReportPanel /></Suspense>}
+        {tab === 'duplicate-payments'  && <Suspense fallback={<PanelLoader />}><DuplicatePaymentsPanel /></Suspense>}
+        {tab === 'cost-predictions'    && <Suspense fallback={<PanelLoader />}><CostPredictionsPanel /></Suspense>}
+        {tab === 'exchange-rates'      && <Suspense fallback={<PanelLoader />}><ExchangeRatesPanel /></Suspense>}
+        {tab === 'salary-retainer'     && <Suspense fallback={<PanelLoader />}><SalaryRetainerPanel /></Suspense>}
+        {tab === 'month-end'           && <Suspense fallback={<PanelLoader />}><MonthEndPanel /></Suspense>}
+        {tab === 'enumerator-fees'     && <Suspense fallback={<PanelLoader />}><EnumeratorFeesPanel /></Suspense>}
       </div>
     </HubLayout>
   );
