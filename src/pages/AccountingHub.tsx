@@ -87,6 +87,7 @@ const OutstandingChecksPanel    = lazy(() => import('./AccountingOutstandingChec
 const TaxReturnPanel            = lazy(() => import('./AccountingTaxReturn'));
 const BSComparisonPanel         = lazy(() => import('./AccountingBalanceSheetComparison'));
 const AssetRevaluationPanel     = lazy(() => import('./AccountingAssetRevaluation'));
+const ARAgingPanel              = lazy(() => import('./AccountingARAgingReport'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AcctSection = 'core' | 'fin-ops' | 'p2p' | 'controls' | 'advanced';
@@ -98,7 +99,7 @@ type AcctTab =
   | 'cash-flow-forecast' | 'grants' | 'cost-allocation' | 'depreciation-run' | 'consolidation' | 'gl-audit' | 'finance-audit-trail' | 'settings'
   | 'partner-ledger' | 'aged-receivable' | 'unrealized-gl' | 'depreciation-schedule' | 'analytic-report'
   | 'companies' | 'project-links'
-  | 'customer-invoices' | 'customer-payments' | 'wire-transfers' | 'petty-cash' | 'outstanding-checks'
+  | 'customer-invoices' | 'customer-payments' | 'wire-transfers' | 'petty-cash' | 'outstanding-checks' | 'ar-aging'
   | 'expense-reports' | 'expense-categories' | 'per-diem-rates'
   | 'recurring-journals' | 'journal-templates'
   | 'withholding-tax' | 'tax-return'
@@ -222,6 +223,10 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'outstanding-checks', label: 'Outstanding Checks', icon: CheckSquare,
         description: 'Monitor all issued but uncleared cheques, detect stale items beyond a configurable age threshold, and clear or void them against bank records.',
+      },
+      {
+        id: 'ar-aging', label: 'AR Aging Report', icon: Clock,
+        description: 'Outstanding customer invoice balances bucketed by overdue age: current, 1–30, 31–60, 61–90, and 90+ days — generate as of any date with Excel export.',
       },
       {
         id: 'asset-revaluation', label: 'Asset Revaluation', icon: Package,
@@ -548,6 +553,7 @@ export default function AccountingHub() {
         {tab === 'kpi-ratios'           && <Suspense fallback={<PanelLoader />}><KPIRatiosPanel /></Suspense>}
         {tab === 'donor-statement'      && <Suspense fallback={<PanelLoader />}><DonorStatementPanel /></Suspense>}
         {tab === 'bs-comparison'        && <Suspense fallback={<PanelLoader />}><BSComparisonPanel /></Suspense>}
+        {tab === 'ar-aging'             && <Suspense fallback={<PanelLoader />}><ARAgingPanel /></Suspense>}
       </div>
     </HubLayout>
   );

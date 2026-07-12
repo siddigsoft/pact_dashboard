@@ -11,9 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Search, Download, RefreshCw, FileText, DollarSign, Clock, CheckCircle2, Pencil, Trash2, Eye } from 'lucide-react';
+import { Loader2, Plus, Search, Download, RefreshCw, FileText, DollarSign, Clock, CheckCircle2, Pencil, Eye, Printer } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Invoice {
   id: string; invoice_number: string; invoice_date: string; due_date: string | null;
@@ -32,8 +34,92 @@ const STATUS_COLORS: Record<string, string> = {
   void: 'bg-zinc-100 text-zinc-400 border-zinc-200',
 };
 
+const fmtN = (n: number | null | undefined) =>
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(n ?? 0);
 const fmt = (n: number | null | undefined, cur = 'USD') =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(n ?? 0);
+
+function generateInvoicePDF(inv: Invoice) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const w = 210; const margin = 18;
+
+  // Header bar
+  doc.setFillColor(37, 99, 235); doc.rect(0, 0, w, 28, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+  doc.text('PACT COMMAND CENTER', margin, 12);
+  doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+  doc.text('Customer Invoice', margin, 20);
+
+  // Invoice metadata right side
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+  doc.text(inv.invoice_number, w - margin, 12, { align: 'right' });
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text(`Date: ${inv.invoice_date}`, w - margin, 19, { align: 'right' });
+  if (inv.due_date) doc.text(`Due: ${inv.due_date}`, w - margin, 24, { align: 'right' });
+
+  // Customer block
+  doc.setTextColor(30, 41, 59); let y = 38;
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.text('BILL TO', margin, y); y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(inv.customer_name, margin, y); y += 5;
+  if (inv.customer_ref) { doc.setFontSize(9); doc.setTextColor(100, 116, 139); doc.text(`Ref: ${inv.customer_ref}`, margin, y); y += 5; }
+
+  // Status badge
+  doc.setTextColor(30, 41, 59);
+  const statusBg: Record<string, number[]> = { draft: [229,231,235], sent: [219,234,254], partial: [254,243,199], paid: [209,250,229], overdue: [254,226,226] };
+  const bg = statusBg[inv.status] ?? [229,231,235];
+  doc.setFillColor(bg[0], bg[1], bg[2]);
+  doc.roundedRect(w - margin - 28, 34, 28, 7, 1, 1, 'F');
+  doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+  doc.text(inv.status.toUpperCase(), w - margin - 14, 39.5, { align: 'center' });
+
+  // Line items table
+  y = 60;
+  autoTable(doc, {
+    startY: y,
+    head: [['Description', 'Amount']],
+    body: [
+      ['Subtotal', `${inv.currency} ${fmtN(inv.subtotal)}`],
+      ['Tax', `${inv.currency} ${fmtN(inv.tax_amount)}`],
+    ],
+    foot: [['TOTAL', `${inv.currency} ${fmtN(inv.total_amount)}`]],
+    styles: { fontSize: 10, cellPadding: 4 },
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 11 },
+    columnStyles: { 1: { halign: 'right' } },
+    margin: { left: margin, right: margin },
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY + 10;
+
+  // Payment summary
+  doc.setFillColor(241, 245, 249); doc.rect(margin, finalY, w - margin * 2, 22, 'F');
+  doc.setTextColor(30, 41, 59); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text('Amount Paid:', margin + 4, finalY + 8);
+  doc.text(`${inv.currency} ${fmtN(inv.amount_paid)}`, w - margin - 4, finalY + 8, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.text('Balance Due:', margin + 4, finalY + 17);
+  const balance = inv.total_amount - inv.amount_paid;
+  doc.setTextColor(balance > 0 ? 220 : 16, balance > 0 ? 38 : 185, balance > 0 ? 38 : 129);
+  doc.text(`${inv.currency} ${fmtN(balance)}`, w - margin - 4, finalY + 17, { align: 'right' });
+
+  // Notes
+  if (inv.notes) {
+    const ny = finalY + 30;
+    doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'italic');
+    doc.text(`Notes: ${inv.notes}`, margin, ny);
+  }
+
+  // Footer
+  doc.setFillColor(241, 245, 249); doc.rect(0, 280, w, 17, 'F');
+  doc.setTextColor(100, 116, 139); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+  doc.text('Generated by PACT Command Center · Confidential', w / 2, 289, { align: 'center' });
+
+  doc.save(`Invoice-${inv.invoice_number}.pdf`);
+}
 
 export default function AccountingCustomerInvoices() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
@@ -75,7 +161,6 @@ export default function AccountingCustomerInvoices() {
   }, [rows, search, statusFilter]);
 
   const totals = useMemo(() => ({
-    count: filtered.length,
     total: filtered.reduce((s, r) => s + r.total_amount, 0),
     paid: filtered.reduce((s, r) => s + r.amount_paid, 0),
     outstanding: filtered.reduce((s, r) => s + (r.total_amount - r.amount_paid), 0),
@@ -92,14 +177,7 @@ export default function AccountingCustomerInvoices() {
   const handleSave = async () => {
     if (!form.invoice_number.trim() || !form.customer_name.trim()) { toast({ title: 'Invoice number and customer are required', variant: 'destructive' }); return; }
     setSaving(true);
-    const payload = {
-      invoice_number: form.invoice_number.trim(), invoice_date: form.invoice_date,
-      due_date: form.due_date || null, customer_name: form.customer_name.trim(),
-      customer_ref: form.customer_ref || null, currency: form.currency,
-      subtotal: parseFloat(form.subtotal) || 0, tax_amount: parseFloat(form.tax_amount) || 0,
-      total_amount: parseFloat(form.total_amount) || parseFloat(form.subtotal) || 0,
-      notes: form.notes || null, status: form.status,
-    };
+    const payload = { invoice_number: form.invoice_number.trim(), invoice_date: form.invoice_date, due_date: form.due_date || null, customer_name: form.customer_name.trim(), customer_ref: form.customer_ref || null, currency: form.currency, subtotal: parseFloat(form.subtotal) || 0, tax_amount: parseFloat(form.tax_amount) || 0, total_amount: parseFloat(form.total_amount) || parseFloat(form.subtotal) || 0, notes: form.notes || null, status: form.status };
     const { error } = editTarget
       ? await supabase.from('acct_customer_invoices' as any).update(payload).eq('id', editTarget.id)
       : await supabase.from('acct_customer_invoices' as any).insert({ ...payload, amount_paid: 0 });
@@ -116,16 +194,15 @@ export default function AccountingCustomerInvoices() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6 text-blue-600" /> Customer Invoices</h1>
-          <p className="text-sm text-muted-foreground mt-1">AR invoices for donors, partners, and governments</p>
+          <p className="text-sm text-muted-foreground mt-1">AR invoices for donors, partners, and governments — with branded PDF export</p>
         </div>
         <div className="flex gap-2">
-          {canManage && <Button size="sm" onClick={openAdd} data-testid="button-add-invoice"><Plus className="w-4 h-4 mr-1" /> New Invoice</Button>}
+          {canManage && <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-1" /> New Invoice</Button>}
           <Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
           <Button variant="outline" size="sm" onClick={() => exportToExcel(filtered, 'customer-invoices')} disabled={!filtered.length}><Download className="w-4 h-4 mr-1" /> Excel</Button>
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Total Invoiced', value: fmt(totals.total), icon: DollarSign, color: 'text-blue-600' },
@@ -157,11 +234,9 @@ export default function AccountingCustomerInvoices() {
             </Select>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No invoices found.</div>
-          ) : (
+          {loading ? <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div>
+          : filtered.length === 0 ? <div className="text-center py-10 text-muted-foreground text-sm">No invoices found.</div>
+          : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b bg-muted/40 text-xs uppercase text-muted-foreground">
@@ -181,7 +256,7 @@ export default function AccountingCustomerInvoices() {
                       <td className="px-3 py-2 font-mono text-xs font-semibold">{r.invoice_number}</td>
                       <td className="px-3 py-2">{r.customer_name}</td>
                       <td className="px-3 py-2 text-muted-foreground">{r.invoice_date}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{r.due_date ?? '—'}</td>
+                      <td className={cn('px-3 py-2', r.due_date && new Date(r.due_date) < new Date() && r.status !== 'paid' ? 'text-rose-600 font-medium' : 'text-muted-foreground')}>{r.due_date ?? '—'}</td>
                       <td className="px-3 py-2 text-right font-medium">{fmt(r.total_amount, r.currency)}</td>
                       <td className="px-3 py-2 text-right text-emerald-700">{fmt(r.amount_paid, r.currency)}</td>
                       <td className="px-3 py-2 text-right text-amber-700">{fmt(r.total_amount - r.amount_paid, r.currency)}</td>
@@ -191,6 +266,7 @@ export default function AccountingCustomerInvoices() {
                       <td className="px-3 py-2">
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setSelected(r); setViewOpen(true); }} className="p-1 rounded hover:bg-blue-50 text-blue-600" title="View"><Eye className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => generateInvoicePDF(r)} className="p-1 rounded hover:bg-purple-50 text-purple-600" title="Download PDF"><Printer className="w-3.5 h-3.5" /></button>
                           {canManage && <button onClick={() => openEdit(r)} className="p-1 rounded hover:bg-blue-50 text-blue-600" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>}
                         </div>
                       </td>
@@ -203,7 +279,7 @@ export default function AccountingCustomerInvoices() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -221,6 +297,7 @@ export default function AccountingCustomerInvoices() {
               </div>
             </div>
             <div className="space-y-1"><Label>Customer Name *</Label><Input value={form.customer_name} onChange={e => sf('customer_name', e.target.value)} placeholder="UNHCR / WFP / MoH…" /></div>
+            <div className="space-y-1"><Label>Customer Reference</Label><Input value={form.customer_ref} onChange={e => sf('customer_ref', e.target.value)} placeholder="Their PO or ref number" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1"><Label>Invoice Date</Label><Input type="date" value={form.invoice_date} onChange={e => sf('invoice_date', e.target.value)} /></div>
               <div className="space-y-1"><Label>Due Date</Label><Input type="date" value={form.due_date} onChange={e => sf('due_date', e.target.value)} /></div>
@@ -232,7 +309,7 @@ export default function AccountingCustomerInvoices() {
                   <SelectContent>{['USD','SDG','EUR','GBP','SAR'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1"><Label>Subtotal</Label><Input type="number" value={form.subtotal} onChange={e => sf('subtotal', e.target.value)} placeholder="0.00" /></div>
+              <div className="space-y-1"><Label>Subtotal</Label><Input type="number" value={form.subtotal} onChange={e => { sf('subtotal', e.target.value); sf('total_amount', String((parseFloat(e.target.value) || 0) + (parseFloat(form.tax_amount) || 0))); }} placeholder="0.00" /></div>
               <div className="space-y-1"><Label>Tax</Label><Input type="number" value={form.tax_amount} onChange={e => { sf('tax_amount', e.target.value); sf('total_amount', String((parseFloat(form.subtotal) || 0) + (parseFloat(e.target.value) || 0))); }} placeholder="0.00" /></div>
             </div>
             <div className="space-y-1"><Label>Total Amount</Label><Input type="number" value={form.total_amount} onChange={e => sf('total_amount', e.target.value)} placeholder="0.00" /></div>
@@ -245,20 +322,28 @@ export default function AccountingCustomerInvoices() {
         </DialogContent>
       </Dialog>
 
-      {/* View Dialog */}
+      {/* View + PDF Dialog */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Invoice {selected?.invoice_number}</DialogTitle></DialogHeader>
           {selected && (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span className="font-medium">{selected.customer_name}</span></div>
+              {selected.customer_ref && <div className="flex justify-between"><span className="text-muted-foreground">Ref</span><span className="font-mono text-xs">{selected.customer_ref}</span></div>}
               <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{selected.invoice_date}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Due</span><span>{selected.due_date ?? '—'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Due</span><span className={selected.due_date && new Date(selected.due_date) < new Date() && selected.status !== 'paid' ? 'text-rose-600 font-medium' : ''}>{selected.due_date ?? '—'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{fmt(selected.subtotal, selected.currency)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{fmt(selected.tax_amount, selected.currency)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{fmt(selected.total_amount, selected.currency)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span className="text-emerald-700">{fmt(selected.amount_paid, selected.currency)}</span></div>
               <div className="flex justify-between border-t pt-2"><span className="text-muted-foreground font-semibold">Balance Due</span><span className="font-bold text-amber-700">{fmt(selected.total_amount - selected.amount_paid, selected.currency)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Status</span><Badge variant="outline" className={cn('text-[10px]', STATUS_COLORS[selected.status])}>{selected.status}</Badge></div>
               {selected.notes && <div className="pt-1 text-muted-foreground text-xs">{selected.notes}</div>}
+              <div className="pt-3 flex justify-end">
+                <Button size="sm" onClick={() => generateInvoicePDF(selected)} className="gap-1.5">
+                  <Printer className="w-4 h-4" /> Download PDF
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
