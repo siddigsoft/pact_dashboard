@@ -12,26 +12,30 @@ class PermissionService {
   // Maps Flutter route prefixes to the web app's page_slug values used in the
   // page_access_overrides table.  Only field-staff routes are listed here;
   // admin-only routes are not reachable from the Flutter app at all.
+  // Canonical slugs come from PAGE_DEFS in src/pages/PageAccessControl.tsx.
+  // Keep this list in sync whenever new routes are added to the Flutter app.
   static const Map<String, String> _routeToSlug = {
-    '/dashboard': 'dashboard',
-    '/my-tasks': 'my-tasks',
-    '/mmp': 'mmp',
-    '/field-ops': 'field-ops',
-    '/cost-submission': 'cost-submission',
-    '/approvals': 'approvals',
-    '/wallet': 'wallet',
-    '/notifications': 'notifications',
-    '/calendar': 'calendar',
-    '/my-expenses': 'my-expenses',
-    '/communication': 'communication-hub',
-    '/coordinator/sites': 'coordinator',
-    '/site-visits': 'field-ops',
-    '/finance-hub': 'finance-hub',
-    '/programme-hub': 'programme-hub',
-    '/crm': 'crm',
-    '/analytics': 'analytics-hub',
-    '/cycle-close': 'cycle-close',
-    '/profile': 'profile',
+    '/dashboard':                          'dashboard',
+    '/my-tasks':                           'my-tasks',
+    '/mmp':                                'mmp',
+    '/field-ops':                          'field-ops',
+    '/site-visits':                        'site-visits',
+    '/cost-submission':                    'cost-submission',
+    '/approvals':                          'approvals',
+    '/wallet':                             'wallet',
+    '/notifications':                      'notifications',
+    '/calendar':                           'calendar',
+    '/my-expenses':                        'my-expenses',
+    '/communication':                      'communication-hub',
+    '/coordinator/sites':                  'coordinator-sites',
+    '/coordinator/sites-for-verification': 'sites-for-verification',
+    '/cycle-close':                        'cycle-management',
+    '/finance-hub':                        'finance-hub',
+    '/programme-hub':                      'programme-hub',
+    '/crm':                                'crm',
+    '/analytics':                          'analytics-hub',
+    // /profile intentionally omitted — no canonical PAGE_DEF slug exists for
+    // the user profile page; it is not subject to admin access overrides.
   };
 
   // ── Public API ─────────────────────────────────────────────────────────────
