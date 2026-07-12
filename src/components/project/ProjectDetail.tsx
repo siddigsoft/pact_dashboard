@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, isValid, parseISO, differenceInDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -40,6 +40,7 @@ import {
   Flag,
   ShieldAlert,
   History,
+  ChevronDown,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -74,7 +75,7 @@ import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import {
   AlertDialog,
@@ -256,6 +257,13 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [editBudgetOpen, setEditBudgetOpen] = useState(false);
+  const [tabDropOpen, setTabDropOpen] = useState(false);
+  const tabDropRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (tabDropRef.current && !tabDropRef.current.contains(e.target as Node)) setTabDropOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
   const flow = useProjectFlow(project);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const { currentUser } = useUser();
@@ -993,42 +1001,79 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       )}
 
       {/* Project content */}
-      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <div className="w-full overflow-x-auto">
-        <TabsList className="flex flex-row flex-nowrap h-auto w-max min-w-full justify-start">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="activities" data-testid="tab-activities">
-            {typeConfig.tabLabels.planning ?? 'Activities'}
-          </TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="costs" data-testid="tab-costs">Costs</TabsTrigger>
-          <TabsTrigger value="budget">Budget</TabsTrigger>
-          <TabsTrigger value="flow" data-testid="tab-flow">
-            <GitBranch className="h-3.5 w-3.5 mr-1" />{typeConfig.tabLabels.monitoring ?? 'Stages'}
-          </TabsTrigger>
-          <TabsTrigger value="field_tasks" data-testid="tab-field-tasks">
-            <CheckSquare className="h-3.5 w-3.5 mr-1" />Tasks
-          </TabsTrigger>
-          <TabsTrigger value="comments" data-testid="tab-comments">
-            <MessageCircle className="h-3.5 w-3.5 mr-1" />Comments
-          </TabsTrigger>
-          <TabsTrigger value="documents" data-testid="tab-documents">
-            <Paperclip className="h-3.5 w-3.5 mr-1" />{typeConfig.tabLabels.reporting ?? 'Documents'}
-          </TabsTrigger>
-          <TabsTrigger value="calendar" data-testid="tab-calendar">
-            <Calendar className="h-3.5 w-3.5 mr-1" />Calendar
-          </TabsTrigger>
-          <TabsTrigger value="milestones" data-testid="tab-milestones">
-            <Flag className="h-3.5 w-3.5 mr-1" />Milestones
-          </TabsTrigger>
-          <TabsTrigger value="risks" data-testid="tab-risks">
-            <ShieldAlert className="h-3.5 w-3.5 mr-1" />Risks
-          </TabsTrigger>
-          <TabsTrigger value="changelog" data-testid="tab-changelog">
-            <History className="h-3.5 w-3.5 mr-1" />Change Log
-          </TabsTrigger>
-        </TabsList>
-        </div>
+      <Tabs defaultValue="overview" value={activeTab} onValueChange={v => { setActiveTab(v); setTabDropOpen(false); }}>
+        {/* ── Tab dropdown selector ── */}
+        {(() => {
+          const projectTabs = [
+            { value: 'overview',    label: 'Overview',                                    icon: LayoutGrid },
+            { value: 'activities', label: typeConfig.tabLabels.planning ?? 'Activities', icon: Activity },
+            { value: 'team',       label: 'Team',                                         icon: Users },
+            { value: 'costs',      label: 'Costs',                                        icon: DollarSign },
+            { value: 'budget',     label: 'Budget',                                       icon: Wallet },
+            { value: 'flow',       label: typeConfig.tabLabels.monitoring ?? 'Stages',    icon: GitBranch },
+            { value: 'field_tasks',label: 'Tasks',                                        icon: CheckSquare },
+            { value: 'comments',   label: 'Comments',                                     icon: MessageCircle },
+            { value: 'documents',  label: typeConfig.tabLabels.reporting ?? 'Documents',  icon: Paperclip },
+            { value: 'calendar',   label: 'Calendar',                                     icon: Calendar },
+            { value: 'milestones', label: 'Milestones',                                   icon: Flag },
+            { value: 'risks',      label: 'Risks',                                        icon: ShieldAlert },
+            { value: 'changelog',  label: 'Change Log',                                   icon: History },
+          ];
+          const currentTab = projectTabs.find(t => t.value === activeTab) ?? projectTabs[0];
+          const CurrentIcon = currentTab.icon;
+          const idx = projectTabs.findIndex(t => t.value === activeTab);
+          return (
+            <div className="relative px-1 py-2 border-b" ref={tabDropRef}>
+              <div className="flex items-center gap-3">
+                {/* Dropdown trigger */}
+                <button
+                  onClick={() => setTabDropOpen(v => !v)}
+                  className="flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold border bg-background hover:bg-muted transition-all duration-150 min-w-0 max-w-xs"
+                >
+                  <CurrentIcon className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="truncate">{currentTab.label}</span>
+                  <ChevronDown className={`h-4 w-4 shrink-0 ml-auto opacity-50 transition-transform duration-150 ${tabDropOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {/* Position badge */}
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{idx + 1} / {projectTabs.length}</span>
+                  sections
+                </span>
+              </div>
+
+              {/* Dropdown panel */}
+              {tabDropOpen && (
+                <div className="absolute top-full left-1 mt-1 z-50 rounded-xl border bg-popover shadow-2xl overflow-hidden min-w-[340px]">
+                  <div className="px-3 py-2 border-b bg-muted/50 flex items-center gap-2">
+                    <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Project Sections</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">{projectTabs.length} tabs</span>
+                  </div>
+                  <div className="p-2 grid grid-cols-3 gap-1">
+                    {projectTabs.map(tab => {
+                      const Icon = tab.icon;
+                      const isActive = activeTab === tab.value;
+                      return (
+                        <button
+                          key={tab.value}
+                          onClick={() => { setActiveTab(tab.value); setTabDropOpen(false); }}
+                          className={`flex items-start gap-2 px-2.5 py-2 rounded-lg text-left transition-all text-[12px] font-medium ${
+                            isActive
+                              ? 'bg-primary text-primary-foreground'
+                              : 'hover:bg-muted text-foreground'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-80" />
+                          <span className="leading-tight">{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <TabsContent value="overview" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
