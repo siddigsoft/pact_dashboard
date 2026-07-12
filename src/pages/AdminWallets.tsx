@@ -194,14 +194,28 @@ const AdminWallets: FC = () => {
   const scanMissingFees = async () => {
     setBackfillScan(null);
     try {
-      // Fetch ALL completed entries (in batches to avoid row limits)
+      // Step 1: get all site_visit_ids already credited (from wallet_transactions)
+      // Do this first — no mmp_site_entries involved yet
+      const { data: existingTxs, error: txErr } = await supabase
+        .from('wallet_transactions')
+        .select('site_visit_id')
+        .in('type', ['earning', 'site_visit_fee'])
+        .not('site_visit_id', 'is', null);
+      if (txErr) throw txErr;
+
+      const creditedIds = new Set((existingTxs || []).map((t: any) => t.site_visit_id).filter(Boolean));
+
+      // Step 2: Fetch completed entries — ONLY safe scalar columns, no FK joins
+      // accepted_by is a text column (not a FK), so we avoid it in select to prevent
+      // PostgREST schema-cache confusion. visit_completed_by IS a proper FK but we
+      // skip the embed syntax and just grab the raw UUID value.
       let allEntries: any[] = [];
       let offset = 0;
       const BATCH = 1000;
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost')
+          .select('id, site_name, visit_completed_by, enumerator_fee, transport_fee, cost')
           .eq('status', 'completed')
           .range(offset, offset + BATCH - 1);
         if (error) throw error;
@@ -213,21 +227,8 @@ const AdminWallets: FC = () => {
 
       const totalCompleted = allEntries.length;
 
-      // Fetch all site_visit_ids that already have earning-type wallet transactions
-      const { data: existingTxs } = await supabase
-        .from('wallet_transactions')
-        .select('site_visit_id')
-        .in('type', ['earning', 'site_visit_fee'])
-        .not('site_visit_id', 'is', null);
-
-      const creditedIds = new Set((existingTxs || []).map((t: any) => t.site_visit_id).filter(Boolean));
-
-      // Collect all unique user IDs (visit_completed_by is a proper UUID FK; accepted_by is text but also a UUID)
-      const userIds = [...new Set(
-        allEntries.map((e: any) => e.visit_completed_by || e.accepted_by).filter(Boolean)
-      )];
-
-      // Batch-fetch display names for those user IDs
+      // Step 3: Batch-fetch profile names for visit_completed_by UUIDs
+      const userIds = [...new Set(allEntries.map((e: any) => e.visit_completed_by).filter(Boolean))];
       const profileMap: Record<string, string> = {};
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
@@ -239,6 +240,7 @@ const AdminWallets: FC = () => {
         }
       }
 
+      // Step 4: Classify each entry
       let alreadyCredited = 0;
       let noFee = 0;
       let noUser = 0;
@@ -246,14 +248,21 @@ const AdminWallets: FC = () => {
 
       for (const e of allEntries) {
         const fee = (Number(e.enumerator_fee || 0) + Number(e.transport_fee || 0)) || Number(e.cost || 0);
-        const userId = e.visit_completed_by || e.accepted_by;
-        const userName = (userId && profileMap[userId]) ? profileMap[userId] : (userId || 'Unknown');
 
         if (creditedIds.has(e.id)) { alreadyCredited++; continue; }
-        if (!userId)  { noUser++; continue; }
-        if (fee <= 0) { noFee++;  continue; }
+        if (fee <= 0)              { noFee++;           continue; }
 
-        missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, fee });
+        // visit_completed_by is the reliable UUID field; entries where it's null
+        // may still have accepted_by — backfillWalletTransactionForSite handles that internally
+        const userId = e.visit_completed_by;
+        const userName = userId ? (profileMap[userId] || userId) : 'Assigned (no profile)';
+
+        if (!userId) {
+          // Still add to missing — backfill will try accepted_by internally
+          missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName: 'Assigned user', fee });
+        } else {
+          missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, fee });
+        }
       }
 
       setBackfillScan({ scanned: true, missing, totalCompleted, alreadyCredited, noFee, noUser });
