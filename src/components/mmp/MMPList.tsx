@@ -34,7 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
-import { RotateCcw, AlertTriangle, CheckCircle, Pencil } from 'lucide-react';
+import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3 } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
 import MMPProgressDialog from './MMPProgressDialog';
 import {
@@ -331,6 +331,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                     <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
                       <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/view`)}>
                         View Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate(`/mmp/${mmp.id}/full-report`)}
+                        data-testid={`button-full-report-mmp-${mmp.id}`}
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2 text-primary" />
+                        Full Status Report
                       </DropdownMenuItem>
 
                       {(isSuperAdmin || isAdmin || isICT) && (

@@ -21,6 +21,7 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MMP = lazy(() => import('./pages/MMP'));
+const MMPFullReport = lazy(() => import('./pages/MMPFullReport'));
 const MMPUpload = lazy(() => import('./pages/MMPUpload'));
 const MMPDetailView = lazy(() => import('./pages/MMPDetailView'));
 const MMPVerification = lazy(() => import('./pages/MMPVerification'));
@@ -601,6 +602,7 @@ const AppRoutes = () => {
         <Route path="/workspace" element={<WorkspaceHub />} />
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
+        <Route path="/mmp/:mmpId/full-report" element={<MMPFullReport />} />
         <Route path="/integrations" element={<IntegrationsSettings />} />
         <Route path="/subscriptions" element={<Navigate to="/finance-hub?tab=subscriptions" replace />} />
         <Route path="/salary-retainer-report" element={<Navigate to="/finance-hub?tab=salary-retainer" replace />} />
