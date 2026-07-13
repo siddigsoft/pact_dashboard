@@ -212,17 +212,13 @@ const AdminWalletDetail = () => {
           for (const mmpId of mmpIds) {
             const sitesForMmp = sitesResult.data.filter((s: any) => s.mmp_file_id === mmpId);
             const enumCounts = new Map<number, number>();
-            const transCounts = new Map<number, number>();
             for (const s of sitesForMmp) {
               const ef = Number(s.enumerator_fee || 0);
-              const tf = Number(s.transport_fee || 0);
               if (ef > 0) enumCounts.set(ef, (enumCounts.get(ef) || 0) + 1);
-              if (tf > 0) transCounts.set(tf, (transCounts.get(tf) || 0) + 1);
             }
-            const topEnum  = [...enumCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
-            const topTrans = [...transCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
-            if (topEnum > 0 || topTrans > 0) {
-              prefill[mmpId] = { enumRate: topEnum, transRate: topTrans };
+            const topEnum = [...enumCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
+            if (topEnum > 0) {
+              prefill[mmpId] = { enumRate: topEnum, transRate: 0 };
             }
           }
           setMmpRateOverrides(prefill);
@@ -568,10 +564,9 @@ const AdminWalletDetail = () => {
         if (mmpSites.length === 0) continue;
         const siteIds = mmpSites.map(s => s.id);
 
-        // Build the update payload — only overwrite fields the admin explicitly set
+        // Only update enumerator_fee — transport is fixed/already paid
         const updatePayload: Record<string, number> = {};
-        if (ov.enumRate > 0)  updatePayload.enumerator_fee = ov.enumRate;
-        if (ov.transRate > 0) updatePayload.transport_fee  = ov.transRate;
+        if (ov.enumRate > 0) updatePayload.enumerator_fee = ov.enumRate;
 
         const { error } = await supabase
           .from('mmp_site_entries')
@@ -1218,62 +1213,123 @@ const AdminWalletDetail = () => {
           {showRateEditor && (
             <div className="w-full border-t border-slate-700 pt-4 mt-1">
               <p className="text-xs text-slate-400 mb-3">
-                Rates are <span className="text-teal-400 font-semibold">pre-filled</span> from each MMP's site entries. Edit any value and click <strong className="text-teal-400">Apply Rates & Recalculate Wallet</strong> to save the new rates and update the wallet balance — even for already-paid sites.
+                Enumerator rates are <span className="text-teal-400 font-semibold">pre-filled</span> from each MMP's site entries. Change any rate to see the before/after per site, then click <strong className="text-teal-400">Apply Rates & Recalculate Wallet</strong> to update all sites and the wallet balance. Transport fees are not touched here — they are fixed or already paid.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="space-y-3">
                 {mmps.map(m => {
                   const ov = mmpRateOverrides[m.id] || { enumRate: 0, transRate: 0 };
+                  const mmpSites = siteVisits.filter(s => s.mmp_file_id === m.id);
+                  const newRate = ov.enumRate;
                   return (
-                    <div key={m.id} className="rounded-xl bg-slate-900/60 border border-slate-700 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-slate-200 truncate">{m.name}</p>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-slate-500 uppercase tracking-wider">Enum Rate</label>
+                    <div key={m.id} className="rounded-xl bg-slate-900/60 border border-slate-700 overflow-hidden">
+                      {/* MMP header row */}
+                      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 bg-slate-900/40">
+                        <p className="text-xs font-semibold text-slate-100 flex-1 truncate">{m.name}</p>
+                        <span className="text-[10px] text-slate-500">{mmpSites.length} site{mmpSites.length !== 1 ? 's' : ''}</span>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-slate-400 uppercase tracking-wider whitespace-nowrap">Enum Rate ({currency})</label>
                           <Input
                             type="number"
                             min={0}
                             step={100}
-                            placeholder="0"
+                            placeholder="Enter rate"
                             value={ov.enumRate || ''}
                             onChange={e => setMmpRateOverrides(prev => ({
                               ...prev,
                               [m.id]: { ...ov, enumRate: parseFloat(e.target.value) || 0 }
                             }))}
-                            className="h-8 text-xs bg-slate-800 border-slate-600 text-slate-100 mt-0.5"
+                            className="h-8 w-36 text-xs bg-slate-800 border-slate-600 text-slate-100"
                             data-testid={`input-enum-rate-${m.id}`}
                           />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-[10px] text-slate-500 uppercase tracking-wider">Trans Rate</label>
-                          <Input
-                            type="number"
-                            min={0}
-                            step={100}
-                            placeholder="0"
-                            value={ov.transRate || ''}
-                            onChange={e => setMmpRateOverrides(prev => ({
-                              ...prev,
-                              [m.id]: { ...ov, transRate: parseFloat(e.target.value) || 0 }
-                            }))}
-                            className="h-8 text-xs bg-slate-800 border-slate-600 text-slate-100 mt-0.5"
-                            data-testid={`input-trans-rate-${m.id}`}
-                          />
+                          {ov.enumRate > 0 && (
+                            <button
+                              onClick={() => setMmpRateOverrides(prev => ({ ...prev, [m.id]: { ...ov, enumRate: 0 } }))}
+                              className="text-[10px] text-slate-500 hover:text-red-400 px-1"
+                            >✕</button>
+                          )}
                         </div>
                       </div>
-                      {(ov.enumRate > 0 || ov.transRate > 0) && (
-                        <button
-                          onClick={() => setMmpRateOverrides(prev => { const n = { ...prev }; delete n[m.id]; return n; })}
-                          className="text-[10px] text-red-400 hover:text-red-300"
-                        >
-                          Clear
-                        </button>
+                      {/* Sites before/after table */}
+                      {mmpSites.length > 0 && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-700/40">
+                                <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Site</th>
+                                <th className="text-left px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                                <th className="text-right px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Current Fee</th>
+                                {newRate > 0 && <th className="text-right px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-teal-500">New Fee</th>}
+                                {newRate > 0 && <th className="text-right px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-amber-500">Diff</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {mmpSites.map(site => {
+                                const current = Number(site.enumerator_fee || 0);
+                                const diff = newRate > 0 ? newRate - current : null;
+                                const sl = site.status?.toLowerCase();
+                                const isDone = sl === 'completed' || sl === 'verified';
+                                return (
+                                  <tr key={site.id} className="border-b border-slate-700/20 hover:bg-slate-800/40">
+                                    <td className="px-4 py-2 text-slate-200 font-medium truncate max-w-[180px]">{site.site_name}</td>
+                                    <td className="px-3 py-2">
+                                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold ${isDone ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                        {site.status}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-right text-slate-300 font-mono">
+                                      {current > 0 ? currencyFmt(current, currency) : <span className="text-slate-600">—</span>}
+                                    </td>
+                                    {newRate > 0 && (
+                                      <td className="px-4 py-2 text-right text-teal-300 font-mono font-semibold">
+                                        {currencyFmt(newRate, currency)}
+                                      </td>
+                                    )}
+                                    {newRate > 0 && (
+                                      <td className="px-4 py-2 text-right font-mono font-semibold">
+                                        {diff === null || diff === 0
+                                          ? <span className="text-slate-600">—</span>
+                                          : diff > 0
+                                            ? <span className="text-emerald-400">+{currencyFmt(diff, currency)}</span>
+                                            : <span className="text-red-400">{currencyFmt(diff, currency)}</span>}
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                              {/* Total row */}
+                              <tr className="bg-slate-900/50 border-t border-slate-600">
+                                <td colSpan={2} className="px-4 py-2 text-slate-400 font-semibold text-right text-[10px] uppercase tracking-wider">Total</td>
+                                <td className="px-4 py-2 text-right text-slate-200 font-bold font-mono">
+                                  {currencyFmt(mmpSites.reduce((s, x) => s + Number(x.enumerator_fee || 0), 0), currency)}
+                                </td>
+                                {newRate > 0 && (
+                                  <td className="px-4 py-2 text-right text-teal-300 font-bold font-mono">
+                                    {currencyFmt(newRate * mmpSites.length, currency)}
+                                  </td>
+                                )}
+                                {newRate > 0 && (
+                                  <td className="px-4 py-2 text-right font-bold font-mono">
+                                    {(() => {
+                                      const totalDiff = (newRate * mmpSites.length) - mmpSites.reduce((s, x) => s + Number(x.enumerator_fee || 0), 0);
+                                      return totalDiff === 0
+                                        ? <span className="text-slate-600">—</span>
+                                        : totalDiff > 0
+                                          ? <span className="text-emerald-400">+{currencyFmt(totalDiff, currency)}</span>
+                                          : <span className="text-red-400">{currencyFmt(totalDiff, currency)}</span>;
+                                    })()}
+                                  </td>
+                                )}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
                       )}
                     </div>
                   );
                 })}
               </div>
               {/* Apply button */}
-              {Object.values(mmpRateOverrides).some(ov => ov.enumRate > 0 || ov.transRate > 0) && (
+              {Object.values(mmpRateOverrides).some(ov => ov.enumRate > 0) && (
                 <div className="mt-4 flex items-center gap-3">
                   <Button
                     size="sm"
