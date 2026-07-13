@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 const DONE_STATUSES = new Set([
@@ -324,49 +324,158 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   // ── Excel Export ──────────────────────────────────────────────────────────
   const exportExcel = () => {
     if (!stats || !mmp) return;
-    const wb = XLSX.utils.book_new();
+    const now = format(new Date(), 'dd MMM yyyy HH:mm');
+    const mmpTitle = mmp.name || mmp.mmp_id || mmpName || 'MMP';
+    const project = (mmp.project as any)?.name || '—';
+    const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  Generated: ${now}`;
+    const metaLine = `Total: ${stats.total}  •  Covered: ${stats.done} (${stats.coveragePct}%)  •  In Progress: ${stats.inProgress}  •  Attention: ${stats.attention}  •  Pending: ${stats.pending}  •  States: ${stats.stateCount}  •  Coordinators: ${stats.coordCount}`;
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['PACT Command Center — Full MMP Status Report'],
-      [''],
-      ['MMP Name', mmp.name || mmp.mmp_id || ''],
-      ['Project', (mmp.project as any)?.name || ''],
-      ['MMP Status', mmp.status || ''],
-      ['Generated', format(new Date(), 'dd MMM yyyy HH:mm')],
-      [''],
-      ['SUMMARY'],
-      ['Total Sites', stats.total],
-      ['Covered', stats.done],
-      ['Coverage %', `${stats.coveragePct}%`],
-      ['In Progress', stats.inProgress],
-      ['Needs Attention', stats.attention],
-      ['Pending', stats.pending],
-      ['Total States', stats.stateCount],
-      ['Total Coordinators', stats.coordCount],
-      ['Total Fees (SDG)', stats.totalFees],
-    ]), 'Summary');
+    // ── Down Payments breakdown rows ────────────────────────────────────
+    const dpRows: (string | number)[][] = downPayments.map(dp => [
+      dp.site_name || '—',
+      dp.hub_name || '—',
+      (dp.payment_type || '').replace(/_/g, ' ') || '—',
+      (dp.status || '').replace(/_/g, ' '),
+      dp.supervisor_status || '—',
+      dp.admin_status || '—',
+      Number(dp.requested_amount || 0),
+      Number(dp.total_paid_amount || 0),
+      Number(dp.remaining_amount || 0),
+      dp.created_at ? format(new Date(dp.created_at), 'dd MMM yyyy') : '—',
+      dp.fully_paid_at ? format(new Date(dp.fully_paid_at), 'dd MMM yyyy') : '—',
+    ]);
+    const dpTotals: (string | number)[] = [
+      `TOTAL (${downPayments.length})`, '', '', '', '', '',
+      downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0),
+      downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0),
+      downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0),
+      '', '',
+    ];
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['State', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %', 'Coordinators', 'Fees (SDG)'],
-      ...stats.byState.map(s => [s.name, s.total, s.done, s.inProgress, s.attention, s.pending, `${s.coveragePct}%`, s.coordIds.size, s.fees]),
-    ]), 'By State');
+    // ── Cost Submissions breakdown rows ─────────────────────────────────
+    const csRows: (string | number)[][] = costSubmissions.map(cs => [
+      cs.request_title || '—',
+      (cs.expense_category || '').replace(/_/g, ' '),
+      cs.status || '—',
+      cs.tier1_status || '—',
+      cs.tier2_status || '—',
+      Number(cs.amount_cents || 0) / 100,
+      cs.created_at ? format(new Date(cs.created_at), 'dd MMM yyyy') : '—',
+    ]);
+    const csTotals: (string | number)[] = [
+      `TOTAL (${costSubmissions.length})`, '', '', '', '',
+      costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100,
+      '',
+    ];
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Coordinator', 'States Assigned', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %'],
-      ...stats.byCoordinator.map(c => [c.name, c.states.size, c.total, c.done, c.inProgress, c.attention, c.total - c.done - c.inProgress - c.attention, `${c.coveragePct}%`]),
-    ]), 'By Coordinator');
+    // ── Activity rows ───────────────────────────────────────────────────
+    const actRows: (string | number)[][] = activityLogs.map(log => [
+      log.timestamp ? format(new Date(log.timestamp), 'dd MMM yyyy HH:mm') : '—',
+      log.actor_name || 'System',
+      (log.actor_role || '').replace(/_/g, ' '),
+      (log.action || '').replace(/_/g, ' '),
+      log.description || log.details || '—',
+      typeof log.previous_state === 'string' ? log.previous_state
+        : (log.previous_state as any)?.status || '',
+      typeof log.new_state === 'string' ? log.new_state
+        : (log.new_state as any)?.status || '',
+    ]);
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['Site Name', 'Site Code', 'State', 'Locality', 'Status', 'Category', 'Enumerator Fee', 'Transport Fee'],
-      ...entries.map(e => [
-        e.site_name || '', e.site_code || '',
-        e.state || e.hub_office || '', e.locality || '',
-        fmtStatus(e.status), classifyEntry(e.status),
-        e.enumerator_fee || '', e.transport_fee || '',
-      ]),
-    ]), 'All Sites');
+    exportStandardExcel({
+      reportTitle: 'PACT Command Center — Full MMP Status Report',
+      subtitleLine: subtitle,
+      metaLine,
+      filenamePrefix: `MMP-Full-Report-${mmp.mmp_id || mmpId}`,
 
-    XLSX.writeFile(wb, `MMP-Full-Report-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.xlsx`);
+      // ── Main sheet: By State ────────────────────────────────────────
+      mainSheet: {
+        sheetName: 'By State',
+        headers: ['State', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %', 'Coordinators', 'Fees (SDG)'],
+        colWidths: { 0: 28, 1: 10, 2: 10, 3: 14, 4: 12, 5: 10, 6: 13, 7: 14, 8: 14 },
+        rows: stats.byState.map(s => [s.name, s.total, s.done, s.inProgress, s.attention, s.pending, `${s.coveragePct}%`, s.coordIds.size, s.fees]),
+        totalsRow: ['TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending, `${stats.coveragePct}%`, stats.coordCount, stats.totalFees],
+      },
+
+      // ── Summary sheet ────────────────────────────────────────────────
+      summarySheet: {
+        title: 'MMP Summary',
+        colWidths: [30, 20],
+        rows: [
+          ['MMP Name', mmpTitle],
+          ['Project', project],
+          ['MMP ID', mmp.mmp_id || '—'],
+          ['MMP Status', mmp.status || '—'],
+          ['Generated', now],
+          [''],
+          ['Total Sites', stats.total],
+          ['Covered', stats.done],
+          ['Coverage %', `${stats.coveragePct}%`],
+          ['In Progress', stats.inProgress],
+          ['Needs Attention', stats.attention],
+          ['Pending', stats.pending],
+          ['Total States', stats.stateCount],
+          ['Total Coordinators', stats.coordCount],
+          ['Total Site Fees (SDG)', stats.totalFees],
+          [''],
+          ['Down Payment Requests', downPayments.length],
+          ['Total Requested (SDG)', downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0)],
+          ['Total Paid (SDG)', downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0)],
+          ['Remaining Balance (SDG)', downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0)],
+          [''],
+          ['Cost Submissions', costSubmissions.length],
+          ['Total Cost Amount (SDG)', costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
+          ['Approved Costs (SDG)', costSubmissions.filter(c => c.status === 'approved').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
+          ['Activity Log Entries', activityLogs.length],
+        ],
+      },
+
+      // ── Breakdown sheets ─────────────────────────────────────────────
+      breakdownSheets: [
+        {
+          title: 'Coordinator Performance',
+          sheetName: 'By Coordinator',
+          headers: ['Coordinator', 'States Assigned', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %'],
+          colWidths: [30, 16, 10, 10, 14, 12, 10, 13],
+          rows: [
+            ...stats.byCoordinator.map(c => [c.name, c.states.size, c.total, c.done, c.inProgress, c.attention, c.total - c.done - c.inProgress - c.attention, `${c.coveragePct}%`]),
+            ['TOTAL', new Set(stats.byCoordinator.flatMap(c => [...c.states])).size, stats.byCoordinator.reduce((s, c) => s + c.total, 0), stats.byCoordinator.reduce((s, c) => s + c.done, 0), stats.byCoordinator.reduce((s, c) => s + c.inProgress, 0), stats.byCoordinator.reduce((s, c) => s + c.attention, 0), stats.byCoordinator.reduce((s, c) => s + (c.total - c.done - c.inProgress - c.attention), 0), `${stats.coveragePct}%`],
+          ],
+        },
+        {
+          title: 'All Sites',
+          sheetName: 'All Sites',
+          headers: ['Site Name', 'Site Code', 'State', 'Locality', 'Status', 'Category', 'Enumerator Fee (SDG)', 'Transport Fee (SDG)', 'Cost (SDG)'],
+          colWidths: [30, 14, 20, 20, 22, 14, 18, 18, 12],
+          rows: entries.map(e => [
+            e.site_name || '', e.site_code || '',
+            e.state || e.hub_office || '', e.locality || '',
+            fmtStatus(e.status), classifyEntry(e.status),
+            e.enumerator_fee || 0, e.transport_fee || 0, e.cost || 0,
+          ]),
+        },
+        ...(downPayments.length > 0 ? [{
+          title: 'Down Payment Requests',
+          sheetName: 'Down Payments',
+          headers: ['Site Name', 'Hub', 'Type', 'Status', 'Supervisor', 'Admin', 'Requested (SDG)', 'Paid (SDG)', 'Remaining (SDG)', 'Date', 'Fully Paid'],
+          colWidths: [28, 20, 16, 18, 14, 14, 16, 14, 16, 14, 14],
+          rows: [...dpRows, dpTotals],
+        }] : []),
+        ...(costSubmissions.length > 0 ? [{
+          title: 'Operational Cost Submissions',
+          sheetName: 'Cost Submissions',
+          headers: ['Title', 'Category', 'Overall Status', 'Tier 1', 'Tier 2', 'Amount (SDG)', 'Date'],
+          colWidths: [30, 22, 16, 12, 12, 16, 14],
+          rows: [...csRows, csTotals],
+        }] : []),
+        ...(activityLogs.length > 0 ? [{
+          title: 'Activity Log',
+          sheetName: 'Activity',
+          headers: ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State'],
+          colWidths: [18, 24, 18, 22, 40, 18, 18],
+          rows: actRows,
+        }] : []),
+      ],
+    });
   };
 
   // ── Progress bar ──────────────────────────────────────────────────────────
