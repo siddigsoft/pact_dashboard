@@ -39,6 +39,7 @@ const AdminWalletDetail = () => {
   const [editTxAmount, setEditTxAmount] = useState('');
   const [savingTx, setSavingTx] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [applyingRates, setApplyingRates] = useState(false);
   const [downPayments, setDownPayments] = useState<any[]>([]);
   const [mmps, setMmps] = useState<{ id: string; name: string }[]>([]);
   const [selectedMmp, setSelectedMmp] = useState<string>('all');
@@ -523,6 +524,53 @@ const AdminWalletDetail = () => {
     }
   };
 
+  // ── Apply rate overrides to mmp_site_entries then recalculate wallet ────────
+  const applyRatesAndRecalculate = async () => {
+    const overridedMmps = Object.entries(mmpRateOverrides).filter(
+      ([, ov]) => ov.enumRate > 0 || ov.transRate > 0
+    );
+    if (overridedMmps.length === 0) {
+      toast({ title: 'No rates set', description: 'Enter at least one Enum or Trans rate before applying.', variant: 'destructive' });
+      return;
+    }
+    setApplyingRates(true);
+    try {
+      let sitesUpdated = 0;
+      for (const [mmpId, ov] of overridedMmps) {
+        // Get the site IDs for this user in this MMP
+        const mmpSites = siteVisits.filter(s => s.mmp_file_id === mmpId);
+        if (mmpSites.length === 0) continue;
+        const siteIds = mmpSites.map(s => s.id);
+
+        // Build the update payload — only overwrite fields the admin explicitly set
+        const updatePayload: Record<string, number> = {};
+        if (ov.enumRate > 0)  updatePayload.enumerator_fee = ov.enumRate;
+        if (ov.transRate > 0) updatePayload.transport_fee  = ov.transRate;
+
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update(updatePayload)
+          .in('id', siteIds);
+
+        if (error) throw error;
+        sitesUpdated += siteIds.length;
+      }
+
+      toast({
+        title: `${sitesUpdated} site${sitesUpdated !== 1 ? 's' : ''} updated`,
+        description: 'Fee rates saved to site entries. Recalculating wallet…',
+      });
+
+      // Reload site visits so recalculateWalletTotals picks up new fee values
+      await loadWalletData();
+      await recalculateWalletTotals();
+    } catch (err: any) {
+      toast({ title: 'Apply Failed', description: err?.message || 'Could not update site entries.', variant: 'destructive' });
+    } finally {
+      setApplyingRates(false);
+    }
+  };
+
   const recalculateWalletTotals = async () => {
     if (!wallet) return;
     setRecalculating(true);
@@ -954,7 +1002,6 @@ const AdminWalletDetail = () => {
           <div className="flex flex-col gap-1.5">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
               Fee Rate Adjustments
-              <span className="ml-2 text-[10px] text-slate-500 normal-case font-normal tracking-normal">(display-only — does not change wallet)</span>
             </p>
             <Button
               variant="outline"
@@ -971,7 +1018,7 @@ const AdminWalletDetail = () => {
           {showRateEditor && (
             <div className="w-full border-t border-slate-700 pt-4 mt-1">
               <p className="text-xs text-slate-400 mb-3">
-                Set custom display rates per MMP. These are <strong className="text-amber-400">purely informational</strong> — they adjust the fee columns shown in the Transport tab only, with no changes to wallet balances or transactions.
+                Set the correct enumerator and transport rates per MMP. Click <strong className="text-teal-400">Apply Rates & Recalculate Wallet</strong> to save the rates to all of this enumerator's site entries for that MMP and automatically recalculate the wallet balance.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {mmps.map(m => {
@@ -1018,13 +1065,34 @@ const AdminWalletDetail = () => {
                           onClick={() => setMmpRateOverrides(prev => { const n = { ...prev }; delete n[m.id]; return n; })}
                           className="text-[10px] text-red-400 hover:text-red-300"
                         >
-                          Clear overrides
+                          Clear
                         </button>
                       )}
                     </div>
                   );
                 })}
               </div>
+              {/* Apply button */}
+              {Object.values(mmpRateOverrides).some(ov => ov.enumRate > 0 || ov.transRate > 0) && (
+                <div className="mt-4 flex items-center gap-3">
+                  <Button
+                    size="sm"
+                    onClick={applyRatesAndRecalculate}
+                    disabled={applyingRates || recalculating}
+                    className="bg-teal-600 hover:bg-teal-700 text-white h-9 text-xs rounded-xl"
+                    data-testid="button-apply-rates-recalculate"
+                  >
+                    {applyingRates ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Applying…</>
+                    ) : (
+                      'Apply Rates & Recalculate Wallet'
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-slate-500">
+                    Saves the rates above to this enumerator's site entries and updates the wallet balance.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1064,26 +1132,28 @@ const AdminWalletDetail = () => {
             const totalUnpaidEnum      = unpaidFees.reduce((s, r) => s + r.unpaidEnum,      0);
             const grandTotal           = totalUnpaidTransport + totalUnpaidEnum;
             return (
-              <div className="rounded-2xl border border-red-700/60 bg-red-900/20 overflow-hidden shadow-lg shadow-red-900/20">
-                <div className="px-5 py-3 bg-red-900/40 border-b border-red-700/40 flex items-center gap-2">
-                  <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                  <p className="text-sm font-bold text-red-300">Unpaid Fees — {unpaidFees.length} site{unpaidFees.length !== 1 ? 's' : ''}</p>
-                  <span className="ml-auto text-base font-extrabold text-red-300">{currencyFmt(grandTotal, currency)}</span>
+              <div className={panel}>
+                <div className={`${panelHeader} justify-between`}>
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <h3 className="font-semibold text-slate-100 text-sm">Unpaid Fees — {unpaidFees.length} site{unpaidFees.length !== 1 ? 's' : ''}</h3>
+                  </div>
+                  <span className="text-base font-extrabold text-amber-300">{currencyFmt(grandTotal, currency)}</span>
                 </div>
                 <div className="px-5 py-4 grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-orange-300/70 mb-1">Unpaid Transport</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Unpaid Transport</p>
                     <p className="text-xl font-extrabold text-orange-300">{currencyFmt(totalUnpaidTransport, currency)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidTransport > 0).length} site{unpaidFees.filter(r => r.unpaidTransport > 0).length !== 1 ? 's' : ''}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-amber-300/70 mb-1">Unpaid Enum Fee</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Unpaid Enum Fee</p>
                     <p className="text-xl font-extrabold text-amber-300">{currencyFmt(totalUnpaidEnum, currency)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidEnum > 0).length} completed site{unpaidFees.filter(r => r.unpaidEnum > 0).length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
-                <div className="px-5 pb-3">
-                  <p className="text-xs text-slate-500 italic">See the Transport tab for the full breakdown per site.</p>
+                <div className="px-5 pb-4 border-t border-slate-700">
+                  <p className="text-xs text-slate-500 italic pt-3">See the Transport tab for the full breakdown per site.</p>
                 </div>
               </div>
             );
@@ -1400,12 +1470,14 @@ const AdminWalletDetail = () => {
 
           {/* ── Unpaid Fees table ── */}
           {unpaidFees.length > 0 ? (
-            <div className="rounded-2xl border border-red-700/50 overflow-hidden bg-slate-800">
-              <div className="px-5 py-4 bg-red-900/30 border-b border-red-700/40 flex items-center gap-2">
-                <XCircle className="w-4 h-4 text-red-400" />
-                <h3 className="font-semibold text-red-300 text-sm">Unpaid Fees</h3>
-                <span className="text-xs bg-red-500/20 text-red-300 border border-red-500/30 px-2 py-0.5 rounded-full font-medium">{unpaidFees.length} site{unpaidFees.length !== 1 ? 's' : ''}</span>
-                <span className="ml-auto text-sm font-extrabold text-red-300">
+            <div className={panel}>
+              <div className={`${panelHeader} justify-between`}>
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-amber-400" />
+                  <h3 className="font-semibold text-slate-100 text-sm">Unpaid Fees</h3>
+                  <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium">{unpaidFees.length} site{unpaidFees.length !== 1 ? 's' : ''}</span>
+                </div>
+                <span className="text-sm font-extrabold text-amber-300">
                   Total: {currencyFmt(unpaidFees.reduce((s, r) => s + r.totalUnpaid, 0), currency)}
                 </span>
               </div>
@@ -1423,7 +1495,7 @@ const AdminWalletDetail = () => {
                   </TableHeader>
                   <TableBody>
                     {unpaidFees.map(site => (
-                      <TableRow key={site.id} className="border-slate-700/40 hover:bg-red-900/10 transition-colors">
+                      <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
                         <TableCell className="text-slate-100 font-medium text-sm">{site.site_name}</TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
@@ -1463,15 +1535,15 @@ const AdminWalletDetail = () => {
                         </TableCell>
                       </TableRow>
                     ))}
-                    <TableRow className="border-t-2 border-red-700/50 bg-red-900/20">
-                      <TableCell colSpan={3} className="text-red-300 text-right font-bold text-sm py-4">Total Unpaid</TableCell>
+                    <TableRow className="border-t-2 border-slate-600 bg-slate-900/40">
+                      <TableCell colSpan={3} className="text-slate-300 text-right font-bold text-sm py-4">Total Unpaid</TableCell>
                       <TableCell className="text-right font-bold text-orange-400">
                         {currencyFmt(unpaidFees.reduce((s, r) => s + r.unpaidTransport, 0), currency)}
                       </TableCell>
                       <TableCell className="text-right font-bold text-amber-400">
                         {currencyFmt(unpaidFees.reduce((s, r) => s + r.unpaidEnum, 0), currency)}
                       </TableCell>
-                      <TableCell className="text-right font-extrabold text-red-300 text-base">
+                      <TableCell className="text-right font-extrabold text-amber-300 text-base">
                         {currencyFmt(unpaidFees.reduce((s, r) => s + r.totalUnpaid, 0), currency)}
                       </TableCell>
                     </TableRow>
