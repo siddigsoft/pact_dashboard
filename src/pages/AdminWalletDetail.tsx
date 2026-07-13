@@ -521,297 +521,289 @@ const AdminWalletDetail = () => {
   }
 
   const currentBalance = totals.earned - totals.withdrawn;
+  const initials = (userProfile?.full_name || 'U').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+  /* ── shared panel style ── */
+  const panel = 'rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden';
+  const panelHeader = 'px-5 py-4 bg-slate-900/60 border-b border-slate-700 flex items-center gap-2';
+  const thClass = 'text-slate-500 text-[11px] font-semibold uppercase tracking-wider py-3';
 
   return (
-    <div className="space-y-4 p-3 md:p-6" data-testid="page-admin-wallet-detail">
+    <div className="space-y-5 p-3 md:p-6" data-testid="page-admin-wallet-detail">
 
-      {/* Back */}
+      {/* ── Back ── */}
       <button
         onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors font-medium"
         data-testid="button-back"
       >
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> Back to Wallets
       </button>
 
-      {/* ── Header card ── */}
-      <div className="rounded-2xl bg-gradient-to-br from-teal-900/70 via-slate-800/80 to-slate-900 border border-teal-700/40 p-5 md:p-7">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="space-y-1.5">
-            <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide uppercase">
-              {userProfile?.full_name || 'Unknown User'}
-            </h1>
-            <p className="text-sm text-teal-400">{userProfile?.email}</p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {userProfile?.role && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-500/20 text-teal-300 border border-teal-500/30">
-                  {userProfile.role}
-                </span>
-              )}
-              {userProfile?.hub_id && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-600/50 text-slate-300 border border-slate-500/30">
-                  Hub: {userProfile.hub_id}
-                </span>
-              )}
-            </div>
-          </div>
+      {/* ══════════════════════════════════════════════
+          HEADER
+      ══════════════════════════════════════════════ */}
+      <div className="rounded-2xl overflow-hidden border border-teal-800/60 shadow-xl shadow-black/30">
+        {/* top accent strip */}
+        <div className="h-1.5 bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400" />
 
-          {/* Adjust Balance dialog */}
-          <Dialog open={adjOpen} onOpenChange={setAdjOpen}>
-            <DialogTrigger asChild>
-              <Button
-                data-testid="button-adjust-balance"
-                className="bg-teal-600 hover:bg-teal-500 text-white rounded-xl px-5 shrink-0 min-h-10"
-              >
-                Adjust Balance
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-slate-900 border-slate-700">
-              <DialogHeader>
-                <DialogTitle className="text-slate-100">Manual Balance Adjustment</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-2">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-300">Direction</label>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={adjDirection === 'credit' ? 'default' : 'outline'}
-                      onClick={() => setAdjDirection('credit')}
-                      data-testid="button-direction-credit"
-                      className="flex-1"
-                    >
-                      Credit (Add)
-                    </Button>
-                    <Button
-                      variant={adjDirection === 'debit' ? 'default' : 'outline'}
-                      onClick={() => setAdjDirection('debit')}
-                      data-testid="button-direction-debit"
-                      className="flex-1"
-                    >
-                      Debit (Subtract)
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-300">Amount ({currency})</label>
-                  <Input
-                    type="number" min="0" step="0.01"
-                    value={adjAmount} onChange={e => setAdjAmount(e.target.value)}
-                    placeholder="Enter amount"
-                    data-testid="input-adjustment-amount"
-                    className="bg-slate-800 border-slate-600 text-slate-100"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-300">Reason (optional)</label>
-                  <Input
-                    value={adjReason} onChange={e => setAdjReason(e.target.value)}
-                    placeholder="Reason for adjustment"
-                    data-testid="input-adjustment-reason"
-                    className="bg-slate-800 border-slate-600 text-slate-100"
-                  />
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            {/* avatar + info */}
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-teal-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-teal-900/50 select-none">
+                {initials}
+              </div>
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-white leading-tight tracking-wide">
+                  {userProfile?.full_name || 'Unknown User'}
+                </h1>
+                <p className="text-sm text-teal-400 mt-0.5">{userProfile?.email}</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {userProfile?.role && (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                      {userProfile.role}
+                    </span>
+                  )}
+                  {userProfile?.hub_id && (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-700 text-slate-300 border border-slate-600">
+                      Hub: {userProfile.hub_id}
+                    </span>
+                  )}
                 </div>
               </div>
-              <DialogFooter>
+            </div>
+
+            {/* Adjust Balance dialog */}
+            <Dialog open={adjOpen} onOpenChange={setAdjOpen}>
+              <DialogTrigger asChild>
                 <Button
-                  onClick={handleAdjustBalance} disabled={!adjAmount}
-                  data-testid="button-submit-adjustment"
-                  className="bg-teal-600 hover:bg-teal-500"
+                  data-testid="button-adjust-balance"
+                  className="bg-teal-500 hover:bg-teal-400 text-white font-semibold rounded-xl px-6 h-11 shadow-lg shadow-teal-900/40 shrink-0"
                 >
-                  Submit Adjustment
+                  Adjust Balance
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="bg-slate-900 border-slate-700">
+                <DialogHeader>
+                  <DialogTitle className="text-slate-100">Manual Balance Adjustment</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-2">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-300">Direction</label>
+                    <div className="flex gap-2">
+                      <Button variant={adjDirection === 'credit' ? 'default' : 'outline'} onClick={() => setAdjDirection('credit')} data-testid="button-direction-credit" className="flex-1">Credit (Add)</Button>
+                      <Button variant={adjDirection === 'debit' ? 'default' : 'outline'} onClick={() => setAdjDirection('debit')} data-testid="button-direction-debit" className="flex-1">Debit (Subtract)</Button>
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-300">Amount ({currency})</label>
+                    <Input type="number" min="0" step="0.01" value={adjAmount} onChange={e => setAdjAmount(e.target.value)} placeholder="Enter amount" data-testid="input-adjustment-amount" className="bg-slate-800 border-slate-600 text-slate-100" />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-300">Reason (optional)</label>
+                    <Input value={adjReason} onChange={e => setAdjReason(e.target.value)} placeholder="Reason for adjustment" data-testid="input-adjustment-reason" className="bg-slate-800 border-slate-600 text-slate-100" />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleAdjustBalance} disabled={!adjAmount} data-testid="button-submit-adjustment" className="bg-teal-600 hover:bg-teal-500">Submit Adjustment</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
 
-      {/* ── 4 metric cards ── */}
+      {/* ══════════════════════════════════════════════
+          4 METRIC CARDS
+      ══════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Balance */}
-        <div className="rounded-2xl bg-gradient-to-br from-teal-800/60 to-teal-900/80 border border-teal-600/30 p-4 md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-teal-400/80 mb-3">Balance ({currency})</p>
-          <p className="text-2xl md:text-3xl font-bold text-teal-300 leading-none truncate" data-testid="text-balance">
+        <div className="rounded-2xl bg-teal-700 border border-teal-600 p-5 shadow-lg shadow-teal-900/30">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-teal-200/80 mb-3">Balance ({currency})</p>
+          <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-balance">
             {currencyFmt(currentBalance, currency)}
           </p>
         </div>
         {/* Total Earned */}
-        <div className="rounded-2xl bg-gradient-to-br from-teal-800/60 to-slate-800/80 border border-teal-600/30 p-4 md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-teal-400/80 mb-3">Total Earned</p>
-          <p className="text-2xl md:text-3xl font-bold text-teal-300 leading-none truncate" data-testid="text-total-earned">
+        <div className="rounded-2xl bg-emerald-700 border border-emerald-600 p-5 shadow-lg shadow-emerald-900/30">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-200/80 mb-3">Total Earned</p>
+          <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-total-earned">
             {currencyFmt(totals.earned, currency)}
           </p>
         </div>
         {/* Total Withdrawn */}
-        <div className="rounded-2xl bg-gradient-to-br from-purple-900/60 to-slate-800/80 border border-purple-600/30 p-4 md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-purple-400/80 mb-3">Total Withdrawn</p>
-          <p className="text-2xl md:text-3xl font-bold text-purple-300 leading-none truncate" data-testid="text-total-withdrawn">
+        <div className="rounded-2xl bg-violet-700 border border-violet-600 p-5 shadow-lg shadow-violet-900/30">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-violet-200/80 mb-3">Total Withdrawn</p>
+          <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-total-withdrawn">
             {currencyFmt(totals.withdrawn, currency)}
           </p>
         </div>
         {/* Transaction Count */}
-        <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900 border border-slate-600/40 p-4 md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400/80 mb-3">Transaction Count</p>
-          <p className="text-2xl md:text-3xl font-bold text-amber-400 leading-none" data-testid="text-transaction-count">
+        <div className="rounded-2xl bg-slate-700 border border-slate-600 p-5 shadow-lg shadow-slate-900/30">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-300/80 mb-3">Transactions</p>
+          <p className="text-xl md:text-2xl font-extrabold text-amber-400 leading-none" data-testid="text-transaction-count">
             {transactions.length}
           </p>
         </div>
       </div>
 
-      {/* ── Tabbed Content ── */}
+      {/* ══════════════════════════════════════════════
+          TABS
+      ══════════════════════════════════════════════ */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-800/60 border border-slate-700/50 rounded-xl p-1 h-auto">
-          {(['overview','sites','earnings','transactions'] as const).map(tab => (
+        <TabsList className="grid w-full grid-cols-4 bg-slate-800 border border-slate-700 rounded-xl p-1 h-auto gap-1">
+          {[
+            { value: 'overview', label: 'Overview' },
+            { value: 'sites',    label: 'Sites' },
+            { value: 'earnings', label: 'Earnings' },
+            { value: 'transactions', label: 'Transactions' },
+          ].map(({ value, label }) => (
             <TabsTrigger
-              key={tab}
-              value={tab}
-              data-testid={`tab-${tab}`}
-              className="rounded-lg py-2 text-xs md:text-sm capitalize text-slate-400 data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+              key={value}
+              value={value}
+              data-testid={`tab-${value}`}
+              className="rounded-lg py-2 text-xs md:text-sm font-medium text-slate-400 data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow transition-all"
             >
-              {tab}
+              {label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* ── OVERVIEW ── */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Work Statistics */}
-            <div className="rounded-2xl bg-slate-800/60 border border-slate-700/50 p-5">
-              <div className="flex items-center gap-2 mb-4">
+            <div className={panel}>
+              <div className={panelHeader}>
                 <Briefcase className="w-4 h-4 text-teal-400" />
-                <h3 className="font-semibold text-slate-200">Work Statistics</h3>
+                <h3 className="font-semibold text-slate-100 text-sm">Work Statistics</h3>
               </div>
-              <div className="space-y-3">
+              <div className="p-5 space-y-3">
                 {[
-                  { label: 'Total Sites', value: workStats.totalSites, color: 'text-slate-200' },
-                  { label: 'Completed', value: workStats.completedSites, color: 'text-emerald-400' },
-                  { label: 'Pending', value: workStats.pendingSites, color: 'text-amber-400' },
+                  { label: 'Total Sites',      value: workStats.totalSites,      color: 'text-white' },
+                  { label: 'Completed',        value: workStats.completedSites,  color: 'text-emerald-400' },
+                  { label: 'Pending',          value: workStats.pendingSites,    color: 'text-amber-400' },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="flex justify-between items-center">
+                  <div key={label} className="flex justify-between items-center py-1">
                     <span className="text-sm text-slate-400">{label}</span>
-                    <span className={`text-xl font-bold ${color}`}>{value}</span>
+                    <span className={`text-2xl font-bold ${color}`}>{value}</span>
                   </div>
                 ))}
-                <div className="flex justify-between items-center pt-3 border-t border-slate-700/50">
+                <div className="flex justify-between items-center pt-3 border-t border-slate-700">
                   <span className="text-sm text-slate-400">Completion Rate</span>
-                  <span className="text-xl font-bold text-teal-400">{workStats.completionRate.toFixed(1)}%</span>
+                  <span className="text-2xl font-bold text-teal-400">{workStats.completionRate.toFixed(1)}%</span>
                 </div>
               </div>
             </div>
 
-            {/* Financial Summary */}
-            <div className="rounded-2xl bg-slate-800/60 border border-slate-700/50 p-5">
-              <div className="flex items-center gap-2 mb-4">
+            <div className={panel}>
+              <div className={panelHeader}>
                 <TrendingUp className="w-4 h-4 text-teal-400" />
-                <h3 className="font-semibold text-slate-200">Financial Summary</h3>
+                <h3 className="font-semibold text-slate-100 text-sm">Financial Summary</h3>
               </div>
-              <div className="space-y-3">
+              <div className="p-5 space-y-3">
                 {[
-                  { label: 'Current Balance', value: currencyFmt(currentBalance, currency), color: 'text-teal-400' },
-                  { label: 'Total Earned', value: currencyFmt(totals.earned, currency), color: 'text-emerald-400' },
-                  { label: 'Total Withdrawn', value: currencyFmt(totals.withdrawn, currency), color: 'text-purple-400' },
+                  { label: 'Current Balance', value: currencyFmt(currentBalance, currency),   color: 'text-teal-400' },
+                  { label: 'Total Earned',    value: currencyFmt(totals.earned, currency),    color: 'text-emerald-400' },
+                  { label: 'Total Withdrawn', value: currencyFmt(totals.withdrawn, currency), color: 'text-violet-400' },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="flex justify-between items-center">
+                  <div key={label} className="flex justify-between items-center py-1">
                     <span className="text-sm text-slate-400">{label}</span>
-                    <span className={`text-lg font-bold ${color}`}>{value}</span>
+                    <span className={`text-base font-bold ${color}`}>{value}</span>
                   </div>
                 ))}
-                <div className="flex justify-between items-center pt-3 border-t border-slate-700/50">
-                  <span className="text-sm text-slate-400">Net Income</span>
-                  <span className="text-xl font-bold text-teal-300">{currencyFmt(totals.earned - totals.withdrawn, currency)}</span>
+                <div className="flex justify-between items-center pt-3 border-t border-slate-700">
+                  <span className="text-sm font-semibold text-slate-200">Net Balance</span>
+                  <span className="text-xl font-extrabold text-teal-300">{currencyFmt(totals.earned - totals.withdrawn, currency)}</span>
                 </div>
               </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* Sites Tab */}
+        {/* ── SITES ── */}
         <TabsContent value="sites" className="space-y-4">
-          {/* Mini status counters */}
+          {/* Status counter chips */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: 'Credited', count: siteVisits.filter(s => s.isCompleted && s.payment).length, icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-              { label: 'Pending Payment', count: siteVisits.filter(s => s.isCompleted && !s.payment).length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-              { label: 'In Progress', count: siteVisits.filter(s => !s.isCompleted).length, icon: MapPin, color: 'text-slate-300', bg: 'bg-slate-700/40 border-slate-600/30' },
-            ].map(({ label, count, icon: Icon, color, bg }) => (
-              <div key={label} className={`rounded-xl border p-4 flex items-center justify-between ${bg}`}>
+              { label: 'Credited',        count: siteVisits.filter(s => s.isCompleted && s.payment).length,  icon: CheckCircle, bg: 'bg-emerald-600', iconBg: 'bg-emerald-500/30' },
+              { label: 'Pending Payment', count: siteVisits.filter(s => s.isCompleted && !s.payment).length, icon: Clock,        bg: 'bg-amber-600',   iconBg: 'bg-amber-500/30' },
+              { label: 'In Progress',     count: siteVisits.filter(s => !s.isCompleted).length,              icon: MapPin,       bg: 'bg-slate-600',   iconBg: 'bg-slate-500/30' },
+            ].map(({ label, count, icon: Icon, bg, iconBg }) => (
+              <div key={label} className={`rounded-xl ${bg} p-4 flex items-center justify-between shadow`}>
                 <div>
-                  <p className="text-xs text-slate-400 uppercase tracking-wide">{label}</p>
-                  <p className={`text-2xl font-bold mt-0.5 ${color}`}>{count}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{label}</p>
+                  <p className="text-3xl font-extrabold text-white mt-1 leading-none">{count}</p>
                 </div>
-                <Icon className={`w-7 h-7 opacity-40 ${color}`} />
+                <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
+                  <Icon className="w-5 h-5 text-white" />
+                </div>
               </div>
             ))}
           </div>
 
           {/* Sites table */}
-          <div className="rounded-2xl bg-slate-800/60 border border-slate-700/50 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-700/50 flex items-center gap-2">
+          <div className={panel}>
+            <div className={panelHeader}>
               <MapPin className="w-4 h-4 text-teal-400" />
-              <h3 className="font-semibold text-slate-200">Sites Visited ({siteVisits.length})</h3>
-              <span className="text-xs text-slate-500 ml-1">— only completed sites receive payment</span>
+              <h3 className="font-semibold text-slate-100 text-sm">Sites Visited</h3>
+              <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">{siteVisits.length}</span>
+              <span className="text-xs text-slate-600 hidden sm:inline">Only completed sites receive payment</span>
             </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-slate-700/50 hover:bg-transparent">
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Site Name</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Status</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Assigned</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Completed</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide text-right">Enum Fee</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide text-right">Transport</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide text-right">Payment</TableHead>
+                  <TableRow className="border-slate-700 bg-slate-900/40 hover:bg-slate-900/40">
+                    <TableHead className={thClass}>Site Name</TableHead>
+                    <TableHead className={thClass}>Status</TableHead>
+                    <TableHead className={thClass}>Assigned</TableHead>
+                    <TableHead className={thClass}>Completed</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Enum Fee</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Transport</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Payment</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {siteVisits.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-slate-500 h-24">No sites visited yet</TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-slate-500 h-24">No sites visited yet</TableCell></TableRow>
                   ) : siteVisits.map((site) => {
-                    const enumFee = Number(site.enumerator_fee || 0);
-                    const transFee = Number(site.transport_fee || 0);
-                    const totalFee = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
-                    const statusLower = site.status?.toLowerCase();
-                    const isDone = statusLower === 'completed' || statusLower === 'verified';
+                    const enumFee   = Number(site.enumerator_fee || 0);
+                    const transFee  = Number(site.transport_fee  || 0);
+                    const totalFee  = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
+                    const sl        = site.status?.toLowerCase();
+                    const isDone    = sl === 'completed' || sl === 'verified';
                     return (
-                      <TableRow key={site.id} className="border-slate-700/30 hover:bg-slate-700/20">
-                        <TableCell className="text-slate-200 font-medium">{site.site_name}</TableCell>
+                      <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
+                        <TableCell className="text-slate-100 font-medium">{site.site_name}</TableCell>
                         <TableCell>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            isDone ? 'bg-emerald-500/15 text-emerald-400'
-                            : statusLower === 'assigned' ? 'bg-amber-500/15 text-amber-400'
-                            : 'bg-slate-600/40 text-slate-300'
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold ${
+                            isDone        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : sl === 'assigned' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : 'bg-slate-600/60 text-slate-300 border border-slate-600'
                           }`}>
                             {site.status}
                           </span>
                         </TableCell>
-                        <TableCell className="text-slate-400 text-sm">
-                          {site.accepted_at ? new Date(site.accepted_at).toLocaleDateString() : '-'}
+                        <TableCell className="text-slate-400 text-sm">{site.accepted_at ? new Date(site.accepted_at).toLocaleDateString() : '—'}</TableCell>
+                        <TableCell className="text-slate-400 text-sm">{site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}</TableCell>
+                        <TableCell className="text-right text-sm font-medium">
+                          {enumFee > 0 ? <span className="text-teal-300">{currencyFmt(enumFee, currency)}</span> : <span className="text-slate-600">—</span>}
                         </TableCell>
-                        <TableCell className="text-slate-400 text-sm">
-                          {site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '-'}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {enumFee > 0 ? <span className="text-teal-400 font-medium">{currencyFmt(enumFee, currency)}</span> : <span className="text-slate-600">—</span>}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {transFee > 0 ? <span className="text-teal-400 font-medium">{currencyFmt(transFee, currency)}</span> : <span className="text-slate-600">—</span>}
+                        <TableCell className="text-right text-sm font-medium">
+                          {transFee > 0 ? <span className="text-teal-300">{currencyFmt(transFee, currency)}</span> : <span className="text-slate-600">—</span>}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {site.payment ? (
                             <span className="text-emerald-400 font-semibold flex items-center justify-end gap-1">
-                              <CheckCircle className="w-3 h-3" />{currencyFmt(site.payment.amount, currency)}
+                              <CheckCircle className="w-3.5 h-3.5" />{currencyFmt(site.payment.amount, currency)}
                             </span>
                           ) : site.isCompleted ? (
-                            <span className="text-amber-400 flex items-center justify-end gap-1">
-                              <Clock className="w-3 h-3" />{totalFee > 0 ? currencyFmt(totalFee, currency) : 'Pending'}
+                            <span className="text-amber-400 font-medium flex items-center justify-end gap-1">
+                              <Clock className="w-3.5 h-3.5" />{totalFee > 0 ? currencyFmt(totalFee, currency) : 'Pending'}
                             </span>
                           ) : (
-                            <span className="text-slate-600 flex items-center justify-end gap-1">
-                              <XCircle className="w-3 h-3" />Not eligible
+                            <span className="text-slate-600 flex items-center justify-end gap-1 text-xs">
+                              <XCircle className="w-3.5 h-3.5" />Not eligible
                             </span>
                           )}
                         </TableCell>
@@ -819,21 +811,11 @@ const AdminWalletDetail = () => {
                     );
                   })}
                   {siteVisits.length > 0 && (
-                    <TableRow className="border-t border-slate-700/50 bg-slate-800/40 font-semibold">
-                      <TableCell colSpan={4} className="text-slate-400 text-right text-sm">Totals</TableCell>
-                      <TableCell className="text-right text-teal-400 text-sm">
-                        {currencyFmt(siteVisits.reduce((s, v) => s + Number(v.enumerator_fee || 0), 0), currency)}
-                      </TableCell>
-                      <TableCell className="text-right text-teal-400 text-sm">
-                        {currencyFmt(siteVisits.reduce((s, v) => s + Number(v.transport_fee || 0), 0), currency)}
-                      </TableCell>
-                      <TableCell className="text-right text-emerald-400 text-sm">
-                        {currencyFmt(siteVisits.reduce((s, v) => {
-                          const ef = Number(v.enumerator_fee || 0);
-                          const tf = Number(v.transport_fee || 0);
-                          return s + (ef + tf > 0 ? ef + tf : Number(v.cost || 0));
-                        }, 0), currency)}
-                      </TableCell>
+                    <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
+                      <TableCell colSpan={4} className="text-slate-400 text-right text-sm font-semibold py-3">Totals</TableCell>
+                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(siteVisits.reduce((s, v) => s + Number(v.enumerator_fee || 0), 0), currency)}</TableCell>
+                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(siteVisits.reduce((s, v) => s + Number(v.transport_fee || 0), 0), currency)}</TableCell>
+                      <TableCell className="text-right text-emerald-400 font-bold">{currencyFmt(siteVisits.reduce((s, v) => { const ef = Number(v.enumerator_fee || 0); const tf = Number(v.transport_fee || 0); return s + (ef + tf > 0 ? ef + tf : Number(v.cost || 0)); }, 0), currency)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -842,74 +824,65 @@ const AdminWalletDetail = () => {
           </div>
         </TabsContent>
 
-        {/* Earnings Tab */}
+        {/* ── EARNINGS ── */}
         <TabsContent value="earnings" className="space-y-4">
-          <div className="rounded-2xl bg-slate-800/60 border border-slate-700/50 p-5">
-            <div className="flex items-center gap-2 mb-5">
-              <DollarSign className="w-4 h-4 text-teal-400" />
-              <h3 className="font-semibold text-slate-200">Earnings Breakdown by Source</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-              {[
-                { label: 'Site Visit Payments', value: earningsBreakdown.siteVisitEarnings, icon: MapPin, color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20' },
-                { label: 'Bonuses', value: earningsBreakdown.bonuses, icon: TrendingUp, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-                { label: 'Manual Adjustments', value: earningsBreakdown.adjustments, icon: Calendar, color: earningsBreakdown.adjustments >= 0 ? 'text-slate-300' : 'text-red-400', bg: 'bg-slate-700/40 border-slate-600/30' },
-                { label: 'Withdrawals', value: earningsBreakdown.withdrawals, icon: DollarSign, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-              ].map(({ label, value, icon: Icon, color, bg }) => (
-                <div key={label} className={`rounded-xl border p-4 flex items-center justify-between ${bg}`}>
-                  <div>
-                    <p className="text-xs text-slate-400 mb-1">{label}</p>
-                    <p className={`text-2xl font-bold ${color}`}>{currencyFmt(value, currency)}</p>
-                  </div>
-                  <Icon className={`w-10 h-10 opacity-25 ${color}`} />
+          {/* Source cards */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Site Visit Payments', value: earningsBreakdown.siteVisitEarnings, icon: MapPin,     bg: 'bg-teal-700 border-teal-600',     iconBg: 'bg-teal-600/60' },
+              { label: 'Bonuses',             value: earningsBreakdown.bonuses,            icon: TrendingUp, bg: 'bg-amber-700 border-amber-600',   iconBg: 'bg-amber-600/60' },
+              { label: 'Manual Adjustments',  value: earningsBreakdown.adjustments,        icon: Calendar,   bg: 'bg-slate-700 border-slate-600',   iconBg: 'bg-slate-600/60' },
+              { label: 'Withdrawals',         value: earningsBreakdown.withdrawals,         icon: DollarSign, bg: 'bg-violet-700 border-violet-600', iconBg: 'bg-violet-600/60' },
+            ].map(({ label, value, icon: Icon, bg, iconBg }) => (
+              <div key={label} className={`rounded-2xl border p-5 shadow flex items-start justify-between gap-2 ${bg}`}>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/60 mb-2">{label}</p>
+                  <p className="text-xl font-extrabold text-white truncate">{currencyFmt(value, currency)}</p>
                 </div>
-              ))}
+                <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                  <Icon className="w-5 h-5 text-white" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Totals panel */}
+          <div className={panel}>
+            <div className={panelHeader}>
+              <DollarSign className="w-4 h-4 text-teal-400" />
+              <h3 className="font-semibold text-slate-100 text-sm">Summary</h3>
             </div>
-            {/* Totals */}
-            <div className="space-y-2 pt-4 border-t border-slate-700/50">
-              <div className="flex justify-between items-center py-2">
-                <span className="text-slate-400">Total Earned</span>
-                <span className="text-xl font-bold text-emerald-400">
-                  {currencyFmt(earningsBreakdown.siteVisitEarnings + earningsBreakdown.bonuses + earningsBreakdown.adjustments, currency)}
-                </span>
+            <div className="p-5 space-y-1">
+              <div className="flex justify-between items-center py-3 border-b border-slate-700">
+                <span className="text-sm text-slate-400">Total Earned</span>
+                <span className="text-lg font-bold text-emerald-400">{currencyFmt(earningsBreakdown.siteVisitEarnings + earningsBreakdown.bonuses + earningsBreakdown.adjustments, currency)}</span>
               </div>
               {earningsBreakdown.withdrawals > 0 && (
-                <div className="flex justify-between items-center py-2 border-t border-slate-700/30">
-                  <span className="text-slate-400">Total Withdrawn</span>
-                  <span className="text-xl font-bold text-purple-400">−{currencyFmt(earningsBreakdown.withdrawals, currency)}</span>
+                <div className="flex justify-between items-center py-3 border-b border-slate-700">
+                  <span className="text-sm text-slate-400">Total Withdrawn</span>
+                  <span className="text-lg font-bold text-violet-400">− {currencyFmt(earningsBreakdown.withdrawals, currency)}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center py-3 border-t border-slate-700/50">
-                <span className="text-slate-200 font-semibold">Net Balance</span>
-                <span className="text-2xl font-bold text-teal-300">
-                  {currencyFmt(
-                    earningsBreakdown.siteVisitEarnings + earningsBreakdown.bonuses +
-                    earningsBreakdown.adjustments - earningsBreakdown.withdrawals,
-                    currency
-                  )}
+              <div className="flex justify-between items-center pt-4">
+                <span className="text-base font-semibold text-slate-200">Net Balance</span>
+                <span className="text-2xl font-extrabold text-teal-300">
+                  {currencyFmt(earningsBreakdown.siteVisitEarnings + earningsBreakdown.bonuses + earningsBreakdown.adjustments - earningsBreakdown.withdrawals, currency)}
                 </span>
               </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* Transactions Tab */}
+        {/* ── TRANSACTIONS ── */}
         <TabsContent value="transactions">
-          <div className="rounded-2xl bg-slate-800/60 border border-slate-700/50 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between gap-3 flex-wrap">
+          <div className={panel}>
+            <div className={`${panelHeader} justify-between`}>
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-teal-400" />
-                <h3 className="font-semibold text-slate-200">Transaction History</h3>
-                <span className="text-xs bg-slate-700/60 text-slate-400 px-2 py-0.5 rounded-full">{transactions.length}</span>
+                <h3 className="font-semibold text-slate-100 text-sm">Transaction History</h3>
+                <span className="text-xs bg-slate-700 text-slate-400 px-2.5 py-0.5 rounded-full font-medium">{transactions.length}</span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={recalculateWalletTotals}
-                disabled={recalculating || transactions.length === 0}
-                className="border-slate-600 text-slate-300 hover:bg-slate-700/50 text-xs"
-                data-testid="button-recalculate-wallet"
-              >
+              <Button variant="outline" size="sm" onClick={recalculateWalletTotals} disabled={recalculating || transactions.length === 0} className="border-slate-600 text-slate-300 hover:bg-slate-700 text-xs h-8" data-testid="button-recalculate-wallet">
                 {recalculating ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5 mr-1.5" />}
                 Sync & Recalculate
               </Button>
@@ -917,39 +890,31 @@ const AdminWalletDetail = () => {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-slate-700/50 hover:bg-transparent">
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Date</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Type</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide">Description</TableHead>
-                    <TableHead className="text-slate-400 text-xs uppercase tracking-wide text-right">Amount</TableHead>
-                    <TableHead className="w-[70px]" />
+                  <TableRow className="border-slate-700 bg-slate-900/40 hover:bg-slate-900/40">
+                    <TableHead className={thClass}>Date</TableHead>
+                    <TableHead className={thClass}>Type</TableHead>
+                    <TableHead className={thClass}>Description</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Amount</TableHead>
+                    <TableHead className="w-[60px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {transactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-slate-500 h-24">No transactions yet</TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center text-slate-500 h-24">No transactions yet</TableCell></TableRow>
                   ) : transactions.map((txn) => (
-                    <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`} className="border-slate-700/30 hover:bg-slate-700/20">
+                    <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
                       <TableCell className="text-slate-400 text-sm whitespace-nowrap">{new Date(txn.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/60 text-slate-300 capitalize">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-700 text-slate-200 capitalize">
                           {txn.type.replace(/_/g, ' ')}
                         </span>
                       </TableCell>
-                      <TableCell className="text-slate-400 text-sm max-w-[200px] truncate">{txn.description || '—'}</TableCell>
+                      <TableCell className="text-slate-400 text-sm max-w-[220px] truncate">{txn.description || '—'}</TableCell>
                       <TableCell className="text-right">
                         {editingTxId === txn.id ? (
-                          <Input
-                            type="number" value={editTxAmount}
-                            onChange={e => setEditTxAmount(e.target.value)}
-                            className="w-32 ml-auto text-right bg-slate-700 border-slate-500 text-slate-100"
-                            data-testid={`input-tx-amount-${txn.id}`} autoFocus
-                            onKeyDown={e => { if (e.key === 'Enter') saveEditTx(txn.id); if (e.key === 'Escape') cancelEditTx(); }}
-                          />
+                          <Input type="number" value={editTxAmount} onChange={e => setEditTxAmount(e.target.value)} className="w-32 ml-auto text-right bg-slate-700 border-slate-500 text-slate-100" data-testid={`input-tx-amount-${txn.id}`} autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEditTx(txn.id); if (e.key === 'Escape') cancelEditTx(); }} />
                         ) : (
-                          <span className={`font-semibold text-sm ${txn.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          <span className={`font-bold text-sm ${txn.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {txn.amount >= 0 ? '+' : ''}{currencyFmt(txn.amount, txn.currency)}
                           </span>
                         )}
@@ -957,54 +922,45 @@ const AdminWalletDetail = () => {
                       <TableCell className="text-center">
                         {editingTxId === txn.id ? (
                           <div className="flex items-center justify-center gap-1">
-                            <Button size="icon" variant="ghost" onClick={() => saveEditTx(txn.id)} disabled={savingTx} className="h-7 w-7 text-emerald-400" data-testid={`button-save-tx-${txn.id}`}>
-                              {savingTx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            </Button>
-                            <Button size="icon" variant="ghost" onClick={cancelEditTx} className="h-7 w-7 text-red-400" data-testid={`button-cancel-tx-${txn.id}`}>
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => saveEditTx(txn.id)} disabled={savingTx} className="h-7 w-7 text-emerald-400" data-testid={`button-save-tx-${txn.id}`}>{savingTx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}</Button>
+                            <Button size="icon" variant="ghost" onClick={cancelEditTx} className="h-7 w-7 text-red-400" data-testid={`button-cancel-tx-${txn.id}`}><X className="h-3.5 w-3.5" /></Button>
                           </div>
                         ) : (
-                          <Button size="icon" variant="ghost" onClick={() => startEditTx(txn)} className="h-7 w-7 text-slate-400 hover:text-slate-200" data-testid={`button-edit-tx-${txn.id}`}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => startEditTx(txn)} className="h-7 w-7 text-slate-500 hover:text-slate-200" data-testid={`button-edit-tx-${txn.id}`}><Pencil className="h-3.5 w-3.5" /></Button>
                         )}
                       </TableCell>
                     </TableRow>
                   ))}
-                  {/* Summary footer rows */}
                   {transactions.length > 0 && (() => {
-                    const earnTypes = ['earning', 'site_visit_fee', 'bonus', 'adjustment'];
+                    const earnTypes    = ['earning', 'site_visit_fee', 'bonus', 'adjustment'];
                     const advanceTypes = ['down_payment', 'advance_deduction'];
-                    const totalEarned = transactions.filter(t => earnTypes.includes(t.type)).reduce((s, t) => s + t.amount, 0);
-                    const totalAdvances = transactions.filter(t => advanceTypes.includes(t.type)).reduce((s, t) => s + Math.abs(t.amount), 0);
-                    const totalDeducted = transactions.filter(t => t.amount < 0 && !advanceTypes.includes(t.type)).reduce((s, t) => s + t.amount, 0);
+                    const totalEarned  = transactions.filter(t => earnTypes.includes(t.type)).reduce((s, t) => s + t.amount, 0);
+                    const totalAdv     = transactions.filter(t => advanceTypes.includes(t.type)).reduce((s, t) => s + Math.abs(t.amount), 0);
+                    const totalDed     = transactions.filter(t => t.amount < 0 && !advanceTypes.includes(t.type)).reduce((s, t) => s + t.amount, 0);
                     return (
                       <>
-                        <TableRow className="border-t border-slate-700/50 bg-emerald-500/5">
-                          <TableCell colSpan={3} className="text-slate-400 text-right text-sm">Total Earned</TableCell>
+                        <TableRow className="border-t-2 border-slate-600 bg-emerald-900/20">
+                          <TableCell colSpan={3} className="text-slate-400 text-right text-sm font-semibold py-3">Total Earned</TableCell>
                           <TableCell className="text-right text-emerald-400 font-bold">+{currencyFmt(totalEarned, currency)}</TableCell>
                           <TableCell />
                         </TableRow>
-                        {totalAdvances > 0 && (
-                          <TableRow className="bg-amber-500/5">
-                            <TableCell colSpan={3} className="text-slate-400 text-right text-sm">Advances Paid</TableCell>
-                            <TableCell className="text-right text-amber-400 font-bold">−{currencyFmt(totalAdvances, currency)}</TableCell>
+                        {totalAdv > 0 && (
+                          <TableRow className="bg-amber-900/20">
+                            <TableCell colSpan={3} className="text-slate-400 text-right text-sm font-semibold">Advances Paid</TableCell>
+                            <TableCell className="text-right text-amber-400 font-bold">− {currencyFmt(totalAdv, currency)}</TableCell>
                             <TableCell />
                           </TableRow>
                         )}
-                        {totalDeducted < 0 && (
-                          <TableRow className="bg-red-500/5">
-                            <TableCell colSpan={3} className="text-slate-400 text-right text-sm">Total Deducted</TableCell>
-                            <TableCell className="text-right text-red-400 font-bold">{currencyFmt(totalDeducted, currency)}</TableCell>
+                        {totalDed < 0 && (
+                          <TableRow className="bg-red-900/20">
+                            <TableCell colSpan={3} className="text-slate-400 text-right text-sm font-semibold">Total Deducted</TableCell>
+                            <TableCell className="text-right text-red-400 font-bold">{currencyFmt(totalDed, currency)}</TableCell>
                             <TableCell />
                           </TableRow>
                         )}
-                        <TableRow className="border-t border-slate-700/50 bg-teal-500/5">
-                          <TableCell colSpan={3} className="text-slate-300 text-right font-semibold text-sm">Net Balance</TableCell>
-                          <TableCell className="text-right text-teal-300 font-bold text-base">
-                            {currencyFmt(totalEarned - totalAdvances + totalDeducted, currency)}
-                          </TableCell>
+                        <TableRow className="bg-teal-900/20">
+                          <TableCell colSpan={3} className="text-slate-200 text-right font-bold py-3">Net Balance</TableCell>
+                          <TableCell className="text-right text-teal-300 font-extrabold text-base">{currencyFmt(totalEarned - totalAdv + totalDed, currency)}</TableCell>
                           <TableCell />
                         </TableRow>
                       </>
