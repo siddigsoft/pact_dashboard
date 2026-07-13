@@ -1398,18 +1398,24 @@ const AdminWalletDetail = () => {
                 </div>
                 <div className="px-5 py-4 grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Unpaid Transport</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Transport Cash Advance Owed</p>
                     <p className="text-xl font-extrabold text-orange-300">{currencyFmt(totalUnpaidTransport, currency)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidTransport > 0).length} site{unpaidFees.filter(r => r.unpaidTransport > 0).length !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidTransport > 0).length} site{unpaidFees.filter(r => r.unpaidTransport > 0).length !== 1 ? 's' : ''} — transport fee not yet paid as cash advance</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Unpaid Enum Fee</p>
-                    <p className="text-xl font-extrabold text-amber-300">{currencyFmt(totalUnpaidEnum, currency)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidEnum > 0).length} completed site{unpaidFees.filter(r => r.unpaidEnum > 0).length !== 1 ? 's' : ''}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Enum Fee — Missing Wallet Credit</p>
+                    <p className={`text-xl font-extrabold ${totalUnpaidEnum > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>{totalUnpaidEnum > 0 ? currencyFmt(totalUnpaidEnum, currency) : '✓ All Credited'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {totalUnpaidEnum > 0
+                        ? `${unpaidFees.filter(r => r.unpaidEnum > 0).length} completed site${unpaidFees.filter(r => r.unpaidEnum > 0).length !== 1 ? 's' : ''} with no wallet earning transaction yet`
+                        : 'All completed sites have a wallet earning transaction'}
+                    </p>
                   </div>
                 </div>
                 <div className="px-5 pb-4 border-t border-slate-700">
-                  <p className="text-xs text-slate-500 italic pt-3">See the Transport tab for the full breakdown per site.</p>
+                  <p className="text-xs text-slate-500 italic pt-3">
+                    <strong className="text-slate-400 not-italic">Note:</strong> "Enum Fee — Missing Wallet Credit" = 0 means every completed site already has its enum fee credited to the wallet balance above. The wallet Net Balance shows the full remaining amount still owed to the enumerator. See the Transport tab for per-site advance details.
+                  </p>
                 </div>
               </div>
             );
