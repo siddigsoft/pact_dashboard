@@ -533,7 +533,7 @@ export default function PayrollAdmin() {
         .map((p: any) => ({
           id: p.id, full_name: p.full_name, role: p.role, email: p.email,
           department_id: p.department_id ?? null,
-          department_name: departments.find(d => d.id === p.department_id)?.name ?? null,
+          department_name: deptMap[p.department_id ?? ''] ?? null,
           employment_type: p.employment_type, contract_start_date: p.contract_start_date,
           contract_end_date: p.contract_end_date ?? null,
           contract_type: p.contract_type ?? null,

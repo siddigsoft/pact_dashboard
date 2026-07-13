@@ -124,17 +124,21 @@ export default function SalaryAdvancesPanel() {
     staleTime: 30_000,
   });
 
-  // GL Bridge log — fetch statuses for all advances + recoveries
+  // GL Bridge log — fetch statuses for all advances AND their recoveries.
+  // Recoveries have their own UUIDs as source_id (not the advance ID), so we
+  // must include those IDs too, otherwise recovery GL status never resolves.
   const { data: glLog } = useQuery({
-    queryKey: ['advances_gl_log'],
+    queryKey: ['advances_gl_log', advances?.map(a => a.id)],
     queryFn: async () => {
       if (!advances?.length) return {} as Record<string, GlBridgeEntry>;
       const advIds = advances.map(a => a.id);
+      const recIds = (recoveries ?? []).map(r => r.id);
+      const allIds = [...advIds, ...recIds].slice(0, 500);
       const { data } = await supabase
         .from('acct_gl_bridge_log' as any)
         .select('source_id, status, event_type')
         .in('source_table', ['hr_salary_advances', 'hr_salary_advance_recoveries', 'salary_advances', 'salary_advance_recoveries'])
-        .in('source_id', advIds.slice(0, 500))
+        .in('source_id', allIds)
         .order('created_at', { ascending: false });
       const map: Record<string, GlBridgeEntry> = {};
       for (const row of ((data ?? []) as any[]) as GlBridgeEntry[]) {

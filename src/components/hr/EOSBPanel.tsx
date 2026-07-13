@@ -62,13 +62,13 @@ export const DEFAULT_EOSB_SETTINGS: EosbSettings = {
 };
 
 function calcEOSB(monthlySalary: number, hireDate: string | null, settings: EosbSettings = DEFAULT_EOSB_SETTINGS) {
-  if (!hireDate) return { serviceMonths: 0, serviceYears: 0, accrualDays: 0, eosb: 0, label: '—' };
+  if (!hireDate) return { serviceMonths: 0, serviceYears: 0, accrualDays: 0, accrualLabel: '—', eosb: 0, label: '—' };
   const start = parseISO(hireDate);
-  if (!isValid(start)) return { serviceMonths: 0, serviceYears: 0, accrualDays: 0, eosb: 0, label: 'Invalid date' };
+  if (!isValid(start)) return { serviceMonths: 0, serviceYears: 0, accrualDays: 0, accrualLabel: '—', eosb: 0, label: 'Invalid date' };
   const now = new Date();
   const serviceMonths = differenceInMonths(now, start);
   const serviceYears  = differenceInYears(now, start);
-  if (serviceMonths < settings.min_service_months) return { serviceMonths, serviceYears: 0, accrualDays: 0, eosb: 0, label: '< 1 yr — no entitlement' };
+  if (serviceMonths < settings.min_service_months) return { serviceMonths, serviceYears: 0, accrualDays: 0, accrualLabel: '—', eosb: 0, label: '< 1 yr — no entitlement' };
   const dailyRate = monthlySalary / settings.days_per_month;
   // Correctness fix: years above the tier1 threshold must be paid at the
   // tier2 rate only for the years *beyond* the threshold, not retroactively
@@ -76,9 +76,17 @@ function calcEOSB(monthlySalary: number, hireDate: string | null, settings: Eosb
   // ALL 7 years instead of 21 days for the first 5 + 30 days for the last 2.
   const tier1Years = Math.min(serviceYears, settings.tier1_years_threshold);
   const tier2Years = Math.max(0, serviceYears - settings.tier1_years_threshold);
-  const accrualDays = serviceYears <= settings.tier1_years_threshold ? settings.tier1_days_per_year : settings.tier2_days_per_year;
+  // accrualDays: current-tier rate (for numeric calcs / export). accrualLabel:
+  // shows the blended tier path so the "Days/Yr" column is not misleading for
+  // staff who have crossed the threshold (e.g. "21→30d" instead of just "30d").
+  const accrualDays = serviceYears <= settings.tier1_years_threshold
+    ? settings.tier1_days_per_year
+    : settings.tier2_days_per_year;
+  const accrualLabel = tier2Years > 0
+    ? `${settings.tier1_days_per_year}→${settings.tier2_days_per_year}d`
+    : `${settings.tier1_days_per_year}d`;
   const eosb = dailyRate * (tier1Years * settings.tier1_days_per_year + tier2Years * settings.tier2_days_per_year);
-  return { serviceMonths, serviceYears, accrualDays, eosb, label: `${serviceYears}y` };
+  return { serviceMonths, serviceYears, accrualDays, accrualLabel, eosb, label: `${serviceYears}y` };
 }
 
 function currentYearMonth() {
@@ -247,13 +255,13 @@ export default function EOSBPanel() {
 
   const exportXlsx = useCallback(() => {
     const data = filtered.map(r => {
-      const { serviceYears, accrualDays, eosb } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
+      const { serviceYears, accrualLabel, eosb } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
       return {
         'Staff Name':      r.full_name ?? '—',
         'Hire Date':       r.hire_date ?? '—',
         'Service Years':   serviceYears,
         'Monthly Salary':  r.salary,
-        'Accrual Days/Yr': accrualDays,
+        'Accrual Rate':    accrualLabel,
         'EOSB Amount':     Math.round(eosb * 100) / 100,
       };
     });
@@ -290,8 +298,9 @@ export default function EOSBPanel() {
 
       {/* Info banner */}
       <div className="rounded-lg border border-teal-200 bg-teal-50 dark:bg-teal-950/20 px-4 py-3 text-sm text-teal-800 dark:text-teal-300">
-        <strong>Formula:</strong> Daily Rate (salary ÷ 30) × Accrual Days × Service Years.
-        Accrual = 21 days/yr for ≤5 yrs, 30 days/yr for &gt;5 yrs.
+        <strong>Formula (tiered):</strong> Daily Rate (salary ÷ 30) × [(years ≤5 × 21d) + (years &gt;5 × 30d)].
+        Staff with ≤5 yrs service accrue 21 days/yr; each additional year beyond 5 accrues 30 days/yr.
+        The <em>Accrual Rate</em> column shows "21d" for tier-1 staff and "21→30d" for staff who have crossed the 5-year threshold.
         <strong className="ml-2">GL Bridge:</strong> "Post Monthly Provision" auto-creates DR: EOSB Expense (6200) / CR: EOSB Provision Liability (2350) journal entries for every eligible employee.
       </div>
 
@@ -402,14 +411,14 @@ export default function EOSBPanel() {
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground w-44">Hire Date</th>
                         <th className="text-right px-4 py-2 font-medium text-muted-foreground w-20">Service</th>
                         <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Monthly Salary</th>
-                        <th className="text-right px-4 py-2 font-medium text-muted-foreground w-20">Days/Yr</th>
+                        <th className="text-right px-4 py-2 font-medium text-muted-foreground w-24">Accrual Rate</th>
                         <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">EOSB Accrued</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filtered.map((r, i) => {
-                        const { serviceYears, accrualDays, eosb, label } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
+                        const { serviceYears, accrualLabel, eosb, label } = calcEOSB(r.salary, r.hire_date, activeEosbSettings);
                         const noSalary = r.salary === 0;
                         const isEditingDate = r.id in editingHireDate;
 
@@ -475,7 +484,7 @@ export default function EOSBPanel() {
                                 data-testid={`input-salary-${r.id}`}
                               />
                             </td>
-                            <td className="px-4 py-2.5 text-right text-muted-foreground">{accrualDays > 0 ? `${accrualDays}d` : '—'}</td>
+                            <td className="px-4 py-2.5 text-right text-muted-foreground font-mono text-[11px]">{accrualLabel !== '—' ? accrualLabel : '—'}</td>
                             <td className={cn('px-4 py-2.5 text-right tabular-nums font-semibold', eosb > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-muted-foreground')}>
                               {eosb > 0 ? eosb.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
                             </td>
