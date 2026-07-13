@@ -190,16 +190,32 @@ const AdminWalletDetail = () => {
         setDownPayments([]);
       }
 
-      // Extract distinct MMPs from site entries
+      // Extract distinct MMPs from site entries, then resolve names via direct query
       if (!sitesResult.error && sitesResult.data) {
-        const mmpMap = new Map<string, string>();
-        for (const s of sitesResult.data) {
-          if (s.mmp_file_id) {
-            const mmpName = (s as any).mmp_files?.name || s.mmp_file_id;
-            mmpMap.set(s.mmp_file_id, mmpName);
+        const mmpIds = [...new Set(sitesResult.data.map((s: any) => s.mmp_file_id).filter(Boolean))];
+        if (mmpIds.length > 0) {
+          // Try the join result first, fall back to a direct mmp_files query
+          const joinedNames = new Map<string, string>();
+          for (const s of sitesResult.data) {
+            if (s.mmp_file_id && (s as any).mmp_files?.name) {
+              joinedNames.set(s.mmp_file_id, (s as any).mmp_files.name);
+            }
           }
+          // For any IDs that didn't resolve via join, fetch directly
+          const unresolvedIds = mmpIds.filter(id => !joinedNames.has(id));
+          if (unresolvedIds.length > 0) {
+            const { data: mmpData } = await supabase
+              .from('mmp_files')
+              .select('id, name')
+              .in('id', unresolvedIds);
+            if (mmpData) {
+              for (const m of mmpData) joinedNames.set(m.id, m.name);
+            }
+          }
+          setMmps(mmpIds.map(id => ({ id, name: joinedNames.get(id) || id })));
+        } else {
+          setMmps([]);
         }
-        setMmps(Array.from(mmpMap.entries()).map(([id, name]) => ({ id, name })));
       }
 
       // Site-visit cost submissions
@@ -902,14 +918,32 @@ const AdminWalletDetail = () => {
       {mmps.length > 0 && (
         <div className="rounded-2xl bg-slate-800 border border-slate-700 px-5 py-4 flex flex-wrap items-start gap-4">
           {/* MMP filter */}
-          <div className="flex flex-col gap-1.5 min-w-[200px]">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Filter by MMP</p>
+          <div className="flex flex-col gap-1.5 min-w-[240px]">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+              Filter by MMP
+              {selectedMmp !== 'all' && (
+                <button
+                  onClick={() => setSelectedMmp('all')}
+                  className="ml-2 text-[10px] text-teal-400 hover:text-teal-300 normal-case font-normal tracking-normal underline"
+                >
+                  clear
+                </button>
+              )}
+            </p>
             <Select value={selectedMmp} onValueChange={setSelectedMmp} data-testid="select-mmp-filter">
               <SelectTrigger className="bg-slate-900 border-slate-600 text-slate-100 rounded-xl h-9 text-sm">
-                <SelectValue placeholder="All MMPs" />
+                <SelectValue>
+                  {selectedMmp === 'all'
+                    ? `All MMPs — ${siteVisits.length} site${siteVisits.length !== 1 ? 's' : ''}`
+                    : (() => {
+                        const m = mmps.find(x => x.id === selectedMmp);
+                        const count = siteVisits.filter(s => s.mmp_file_id === selectedMmp).length;
+                        return m ? `${m.name} (${count} sites)` : selectedMmp;
+                      })()}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All MMPs ({siteVisits.length} sites)</SelectItem>
+                <SelectItem value="all">All MMPs — {siteVisits.length} site{siteVisits.length !== 1 ? 's' : ''}</SelectItem>
                 {mmps.map(m => (
                   <SelectItem key={m.id} value={m.id}>
                     {m.name} ({siteVisits.filter(s => s.mmp_file_id === m.id).length} sites)
@@ -917,6 +951,11 @@ const AdminWalletDetail = () => {
                 ))}
               </SelectContent>
             </Select>
+            {selectedMmp !== 'all' && (
+              <p className="text-[10px] text-teal-400 mt-0.5">
+                Showing {filteredSiteVisits.length} of {siteVisits.length} sites
+              </p>
+            )}
           </div>
 
           {/* Per-MMP fee rate override editor */}
