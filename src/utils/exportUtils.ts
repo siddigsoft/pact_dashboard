@@ -25,7 +25,7 @@ export const exportAuditLogsToCSV = (logs: any[], filename?: string) => {
   // Convert logs to CSV rows
   const rows = logs.map(log => {
     return [
-      format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+      log.timestamp ? format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : 'N/A',
       log.action,
       log.category,
       log.description,
@@ -59,7 +59,7 @@ export const exportAuditLogsToCSV = (logs: any[], filename?: string) => {
  */
 export const exportAuditLogsToJSON = (logs: any[], filename?: string) => {
   const processedLogs = logs.map(log => ({
-    timestamp: format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+    timestamp: log.timestamp ? format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : 'N/A',
     action: log.action,
     category: log.category,
     description: log.description,

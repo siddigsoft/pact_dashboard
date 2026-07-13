@@ -150,9 +150,11 @@ const EditMMP: FC = () => {
       const session = await ensureValidSession();
       if (!session.success) return false;
 
-      for (const site of sites) {
+      // Batch all site updates/inserts into a single upsert (replaces N sequential round-trips)
+      const toUpsert = sites.map(site => {
         const ad = site.additionalData || site.additional_data || {};
-        const updateData: any = {
+        const row: any = {
+          mmp_file_id: id,
           site_name: site.site_name || site.siteName || ad['Site Name'] || ad['Site Name:'] || null,
           site_code: site.site_code || site.siteCode || ad['Site Code'] || null,
           hub_office: site.hub_office || site.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || null,
@@ -177,21 +179,15 @@ const EditMMP: FC = () => {
           dispatched_at: site.dispatched_at || site.dispatchedAt || (ad['Dispatched At'] ? new Date(ad['Dispatched At']).toISOString() : null),
           additional_data: site.additionalData || site.additional_data || {},
         };
+        if (site.id) row.id = site.id;
+        Object.keys(row).forEach(k => { if (typeof row[k] === 'undefined') delete row[k]; });
+        return row;
+      });
 
-        Object.keys(updateData).forEach((k) => {
-          if (typeof updateData[k] === 'undefined') delete updateData[k];
-        });
-
-        if (site.id) {
-          const { error: updErr } = await supabase.from('mmp_site_entries').update(updateData).eq('id', site.id);
-          if (updErr) throw updErr;
-        } else {
-          const { error: insErr } = await supabase
-            .from('mmp_site_entries')
-            .insert([{ ...updateData, mmp_file_id: id }]);
-          if (insErr) throw insErr;
-        }
-      }
+      const { error: upsertErr } = await supabase
+        .from('mmp_site_entries')
+        .upsert(toUpsert, { onConflict: 'id', ignoreDuplicates: false });
+      if (upsertErr) throw upsertErr;
 
       await refreshMMPFiles();
 

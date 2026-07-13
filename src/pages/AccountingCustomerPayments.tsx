@@ -50,7 +50,7 @@ export default function AccountingCustomerPayments() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('acct_customer_payments' as any).select('*').order('payment_date', { ascending: false });
+    const { data } = await supabase.from('acct_customer_payments' as any).select('*').order('payment_date', { ascending: false }).limit(500);
     setRows((data ?? []) as Payment[]);
     setLoading(false);
   };

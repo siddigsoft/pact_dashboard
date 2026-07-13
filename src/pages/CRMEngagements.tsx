@@ -67,7 +67,7 @@ export default function CRMEngagements() {
   const load = async () => {
     setLoading(true);
     const [{ data: es }, { data: ps }] = await Promise.all([
-      supabase.from('crm_engagements').select('*').order('date', { ascending: false }),
+      supabase.from('crm_engagements').select('*').order('date', { ascending: false }).limit(500),
       supabase.from('crm_partners').select('id, name').order('name'),
     ]);
     const pMap: Record<string, string> = {};

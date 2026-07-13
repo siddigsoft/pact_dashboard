@@ -12,13 +12,13 @@ import type {
   ReportFormat,
 } from '@/types/reports';
 
+import { PRIMARY_CURRENCY } from './currencyUtils';
+
 const formatCurrency = (value: number): string => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'SDG',
+  return `${PRIMARY_CURRENCY} ${new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(value)}`;
 };
 
 const formatPercent = (value: number): string => {
@@ -175,11 +175,13 @@ export async function exportProductivityMetricsPDF(
 
   const totalAssigned = data.reduce((sum, m) => sum + m.visitsAssigned, 0);
   const totalCompleted = data.reduce((sum, m) => sum + m.visitsCompleted, 0);
-  const avgCompletionRate = data.length > 0 
-    ? data.reduce((sum, m) => sum + m.completionRate, 0) / data.length 
+  // Only average staff who have actual visits — zero-visit staff skew the average down
+  const activeStaff = data.filter(m => m.visitsAssigned > 0);
+  const avgCompletionRate = activeStaff.length > 0
+    ? activeStaff.reduce((sum, m) => sum + m.completionRate, 0) / activeStaff.length
     : 0;
-  const avgOnTimeRate = data.length > 0 
-    ? data.reduce((sum, m) => sum + m.onTimeRate, 0) / data.length 
+  const avgOnTimeRate = activeStaff.length > 0
+    ? activeStaff.reduce((sum, m) => sum + m.onTimeRate, 0) / activeStaff.length
     : 0;
 
   doc.setFontSize(14);

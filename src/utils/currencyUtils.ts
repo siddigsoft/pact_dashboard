@@ -43,8 +43,10 @@ export function convertAmount(
   const fromRate = customRates?.[fromCode] ?? SUPPORTED_CURRENCIES.find(c => c.code === fromCode)?.approxRateToUSD ?? 1;
   const toRate = customRates?.[toCode] ?? SUPPORTED_CURRENCIES.find(c => c.code === toCode)?.approxRateToUSD ?? 1;
 
-  const usdAmount = fromRate > 1 ? amount / fromRate : amount / fromRate;
-  return toRate > 1 ? usdAmount * toRate : usdAmount * toRate;
+  const usdAmount = amount / fromRate;
+  const result = usdAmount * toRate;
+  // Round to 2 decimal places to avoid floating-point drift on money values
+  return Math.round(result * 100) / 100;
 }
 
 export function formatCurrencyAmount(amount: number, currencyCode: string, opts?: { compact?: boolean }): string {
@@ -64,6 +66,10 @@ export function formatCurrencyAmount(amount: number, currencyCode: string, opts?
 export function formatCurrencyAmountWithCode(amount: number, currencyCode: string): string {
   return `${currencyCode} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+/** Canonical currency label used across all reports and exports */
+export const PRIMARY_CURRENCY = 'SDG';
+export const PRIMARY_CURRENCY_SYMBOL = 'SDG';
 
 export const CURRENCY_STORAGE_KEY_PREFIX = 'pact_currency_pref_';
 

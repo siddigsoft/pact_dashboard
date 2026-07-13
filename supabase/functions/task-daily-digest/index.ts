@@ -117,34 +117,50 @@ serve(async (req: Request) => {
     let sent = 0
     let skipped = 0
 
+    // ── Bulk-fetch all tasks upfront to avoid N+1 queries (one per user) ──────
+    const profileIds = profiles.map((p: any) => p.id as string)
+
+    const { data: allRawTasks } = await sb
+      .from('personal_tasks')
+      .select('id, title, priority, status, due_date, completion_reward_amount, completion_reward_currency, recurrence, assigned_to, user_id')
+      .not('status', 'in', '("done","cancelled")')
+      .is('parent_task_id', null)
+      .or(`assigned_to.in.(${profileIds.join(',')}),user_id.in.(${profileIds.join(',')})`)
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(5000)
+
+    const { data: allRawProjectTasks } = await sb
+      .from('project_field_tasks')
+      .select('id, title, priority, status, due_date, project_id, assigned_to')
+      .in('assigned_to', profileIds)
+      .not('status', 'in', '("done","cancelled")')
+      .not('due_date', 'is', null)
+      .lte('due_date', today)
+      .order('due_date', { ascending: true })
+      .limit(5000)
+
+    // Group by effective owner
+    const tasksByUser: Record<string, PersonalTaskRow[]> = {}
+    for (const t of (allRawTasks ?? []) as any[]) {
+      const uid: string = t.assigned_to ?? t.user_id
+      if (!uid) continue
+      if (!tasksByUser[uid]) tasksByUser[uid] = []
+      tasksByUser[uid].push(t as PersonalTaskRow)
+    }
+    const projectTasksByUser: Record<string, ProjectFieldTaskRow[]> = {}
+    for (const t of (allRawProjectTasks ?? []) as any[]) {
+      const uid: string = t.assigned_to
+      if (!uid) continue
+      if (!projectTasksByUser[uid]) projectTasksByUser[uid] = []
+      projectTasksByUser[uid].push(t as ProjectFieldTaskRow)
+    }
+
     for (const rawProfile of profiles) {
       const profile = rawProfile as Profile
       if (!profile.email) { skipped++; continue }
 
-      // Fetch pending personal tasks for this user
-      const { data: rawTasks } = await sb
-        .from('personal_tasks')
-        .select('id, title, priority, status, due_date, completion_reward_amount, completion_reward_currency, recurrence')
-        .or(`assigned_to.eq.${profile.id},and(user_id.eq.${profile.id},assigned_to.is.null)`)
-        .not('status', 'in', '("done","cancelled")')
-        .is('parent_task_id', null)
-        .order('due_date', { ascending: true, nullsFirst: false })
-        .limit(30)
-
-      const tasks: PersonalTaskRow[] = (rawTasks ?? []) as PersonalTaskRow[]
-
-      // Fetch overdue and due-today project field tasks for this user
-      const { data: rawProjectTasks } = await sb
-        .from('project_field_tasks')
-        .select('id, title, priority, status, due_date, project_id')
-        .eq('assigned_to', profile.id)
-        .not('status', 'in', '("done","cancelled")')
-        .not('due_date', 'is', null)
-        .lte('due_date', today)
-        .order('due_date', { ascending: true })
-        .limit(20)
-
-      const projectTasks: ProjectFieldTaskRow[] = (rawProjectTasks ?? []) as ProjectFieldTaskRow[]
+      const tasks: PersonalTaskRow[] = tasksByUser[profile.id] ?? []
+      const projectTasks: ProjectFieldTaskRow[] = projectTasksByUser[profile.id] ?? []
 
       if (!tasks.length && !projectTasks.length) { skipped++; continue }
 

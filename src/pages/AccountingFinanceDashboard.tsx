@@ -1149,7 +1149,15 @@ export default function AccountingFinanceDashboard() {
           </div>
         ) : (() => {
           const md = modules.data;
-          if (!md) return null;
+          if (!md) return (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-500" />
+              <p className="text-sm font-medium text-amber-600">Accounting Module Setup Required</p>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                One or more accounting tables are missing. Ask your system administrator to run the latest accounting migrations.
+              </p>
+            </div>
+          );
 
           type ModGroup = { heading: string; headingAr: string; icon: React.ElementType; iconColor: string; items: { label: string; labelAr: string; entry: ModuleEntry; href: string }[] };
           const groups: ModGroup[] = [

@@ -62,7 +62,7 @@ export default function AccountingWireTransfers() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('acct_wire_transfers' as any).select('*').order('transfer_date', { ascending: false });
+    const { data } = await supabase.from('acct_wire_transfers' as any).select('*').order('transfer_date', { ascending: false }).limit(500);
     setRows((data ?? []) as Wire[]);
     setLoading(false);
   };

@@ -671,6 +671,30 @@ serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKeyEarly = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // ── Dedup guard: prevent duplicate notifications for same event+entity within 5 min ──
+    if (entity_id && supabaseUrl && serviceRoleKeyEarly && recipient_ids.length > 0) {
+      try {
+        const sbCheck = createClient(supabaseUrl, serviceRoleKeyEarly)
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+        const { data: recent } = await sbCheck
+          .from('notifications')
+          .select('id')
+          .eq('event_type', event_type)
+          .eq('entity_id', entity_id)
+          .in('recipient_id', recipient_ids.slice(0, 10))
+          .gte('created_at', fiveMinAgo)
+          .limit(1)
+        if (recent?.length) {
+          return new Response(
+            JSON.stringify({ success: true, deduped: true, count: 0, reason: 'Duplicate suppressed within 5-minute window' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      } catch (_dedupErr) {
+        // Dedup check failed — continue and send normally rather than silently drop
+      }
+    }
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !serviceRoleKey) {
@@ -927,8 +951,40 @@ serve(async (req) => {
             data: { event_type, ...(action_url ? { action_url } : {}), ...(entity_id ? { entity_id } : {}), ...(entity_type ? { entity_type } : {}) },
           }),
         }).then(r => r.json())
-          .then(result => console.log(`FCM push result: sent=${result.sent}, failed=${result.failed}`))
-          .catch(err => console.warn('FCM push fire-and-forget error:', err))
+          .then(result => {
+            console.log(`FCM push result: sent=${result.sent}, failed=${result.failed}`)
+            // Log FCM failures to audit_logs so they're visible alongside email/WA failures
+            if (result.failed > 0) {
+              supabase.from('audit_logs').insert({
+                module: 'notification',
+                action: 'send',
+                entity_type: 'fcm',
+                entity_id: `fcm-${Date.now()}`,
+                entity_name: finalTitleEn,
+                description: `FCM push: ${result.sent} delivered, ${result.failed} failed — event: ${event_type}`,
+                success: false,
+                actor_id: triggered_by || 'system',
+                actor_name: effectiveActorName || 'System',
+                metadata: { event_type, sent: result.sent, failed: result.failed, recipient_count: recipientIds.length }
+              }).then(() => {}).catch(e => console.warn('FCM audit log failed:', e))
+            }
+          })
+          .catch(err => {
+            console.warn('FCM push fire-and-forget error:', err)
+            supabase.from('audit_logs').insert({
+              module: 'notification',
+              action: 'send',
+              entity_type: 'fcm',
+              entity_id: `fcm-err-${Date.now()}`,
+              entity_name: finalTitleEn,
+              description: `FCM push request failed entirely — event: ${event_type}`,
+              success: false,
+              error_message: String(err),
+              actor_id: triggered_by || 'system',
+              actor_name: effectiveActorName || 'System',
+              metadata: { event_type, recipient_count: recipientIds.length }
+            }).then(() => {}).catch(() => {})
+          })
 
         // WhatsApp via WasenderAPI (fire-and-forget — fires for ALL notifications)
         // Per-user opt-out is honoured inside send-whatsapp via user_integrations.whatsapp_enabled

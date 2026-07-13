@@ -82,6 +82,8 @@ const DataExportCenter = () => {
         const sites = siteStats.filter(s => s.mmp_id === c.id);
         const uncovered = sites.filter(s => s.not_covered_flag).length;
         const completed = sites.filter(s => s.status === 'completed').length;
+        // Exclude cancelled sites from denominator — they were never operational
+        const operationalSites = sites.filter(s => s.status !== 'cancelled');
         const reasons: Record<string, number> = {};
         sites.filter(s => s.not_covered_flag && s.not_covered_reason).forEach(s => {
           reasons[s.not_covered_reason] = (reasons[s.not_covered_reason] || 0) + 1;
@@ -92,9 +94,10 @@ const DataExportCenter = () => {
           'Project': mmpAny.projectName || mmpAny.project_name || '',
           'Status': c.status || '',
           'Total Sites': sites.length,
+          'Operational Sites': operationalSites.length,
           'Completed': completed,
           'Uncovered': uncovered,
-          'Coverage Rate': sites.length > 0 ? `${Math.round((completed / sites.length) * 100)}%` : 'N/A',
+          'Coverage Rate': operationalSites.length > 0 ? `${Math.round((completed / operationalSites.length) * 100)}%` : 'N/A',
           'Closed At': mmpAny.cycle_closed_at || mmpAny.cycleClosedAt || '',
           'Top Reasons': Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([r, n]) => `${r}(${n})`).join('; '),
         };
@@ -136,6 +139,11 @@ const DataExportCenter = () => {
         } else {
           hasMore = false;
         }
+      }
+
+      // Warn if the dataset is very large (browser memory risk)
+      if (allSites.length > 5000) {
+        toast({ title: `Large export: ${allSites.length.toLocaleString()} rows`, description: 'This may take a moment. Do not close the tab until the download starts.' });
       }
 
       // Apply filters in-memory (status, dateFrom, dateTo)

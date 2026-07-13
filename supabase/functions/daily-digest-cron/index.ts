@@ -582,13 +582,30 @@ serve(async (req) => {
     const { data: allProfiles } = await sb.from('user_profiles').select('id, role, hub_id').not('role', 'is', null).limit(500)
     if (!allProfiles) throw new Error('No profiles found')
 
+    // Pre-fetch ALL coordinator pending DPs in a single bulk query to avoid N+1
+    const coordinatorIds = allProfiles.filter((p: any) => isCoordinator(p.role)).map((p: any) => p.id)
+    const coordinatorDPMap: Record<string, OwnDPRow[]> = {}
+    if (coordinatorIds.length > 0) {
+      const { data: batchDPs } = await sb.from('down_payment_requests')
+        .select('id, status, created_at, requested_by')
+        .in('requested_by', coordinatorIds)
+        .in('status', ['pending_supervisor', 'pending_admin'])
+        .order('created_at', { ascending: true })
+        .limit(2000)
+      for (const d of (batchDPs ?? []) as any[]) {
+        const uid = d.requested_by as string
+        if (!coordinatorDPMap[uid]) coordinatorDPMap[uid] = []
+        coordinatorDPMap[uid].push({ id: d.id, status: d.status, daysWaiting: daysSince(d.created_at) })
+      }
+    }
+
     let sent = 0
     for (const p of allProfiles) {
       const role = p.role
       if (isCoordinator(role)) {
         const selfRow = data.coordinators.find(c => c.coordinatorId === p.id)
         if (!selfRow || selfRow.totalAssigned === 0) continue
-        const ownDPs = await fetchOwnDPs(sb, p.id)
+        const ownDPs = coordinatorDPMap[p.id] ?? []
         const ownRet = data.returnedSites.filter(rs => rs.coordinatorId === p.id)
         await sendDigest(sb, p.id, buildCoordinatorSelf(selfRow, ownDPs, ownRet))
         sent++

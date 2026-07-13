@@ -356,7 +356,9 @@ const Reports: FC = () => {
     profs.forEach((p) => {
       nameById[p.id] = { name: p.full_name || p.email || p.id, role: p.role || "" };
     });
-    visits.forEach((v) => {
+    // Apply the same date range filter used by other report builders
+    const filteredVisits = visits.filter(v => inRange(v.visit_date || v.created_at));
+    filteredVisits.forEach((v) => {
       const uid = v.assigned_to;
       if (!uid) return;
       if (!byUser[uid]) {
