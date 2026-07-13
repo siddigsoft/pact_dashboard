@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
+import { canSeePage } from '@/lib/page-roles';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
@@ -97,7 +98,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Full Report is visible to management/oversight roles only
-  const canViewFullReport = isSuperAdmin || isAdmin || isICT || isFOM;
+  const canViewFullReport = canSeePage('mmp-full-report', currentUser?.role);
 
   // Initialize forwarded status from MMP workflow
   useEffect(() => {

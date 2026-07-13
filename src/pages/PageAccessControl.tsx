@@ -77,6 +77,8 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','fom','countryDirector'] },
   { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Programme Management',
     roles:['superAdmin','admin','ict','dataTeam','fom','coordinator','supervisor','dataCollector','countryDirector'] },
+  { slug:'mmp-full-report',     label:'MMP Full Report',        path:'/mmp#full-report',        icon:BarChart2, group:'Programme Management',
+    roles:['superAdmin','admin','ict','fom'], note:'Controls who can open the Full Report dialog on the MMP list page' },
   { slug:'hub-operations',      label:'Hub Operations',         path:'/hub-operations',         icon:Building2, group:'Programme Management',
     roles:['superAdmin','admin'] },
 
