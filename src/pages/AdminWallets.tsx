@@ -646,342 +646,243 @@ const AdminWallets: FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 md:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center">
-            <WalletIcon className="h-6 w-6 text-white" />
+      {/* ── Header card ── */}
+      <div className="rounded-2xl overflow-hidden border border-teal-800/60 shadow-xl shadow-black/30">
+        <div className="h-1.5 bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400" />
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-teal-600 flex items-center justify-center shadow-lg shadow-teal-900/50">
+                <WalletIcon className="h-7 w-7 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide">Wallets Management</h1>
+                <p className="text-sm text-teal-400 mt-0.5">Financial Operations Command Center · {rows.length} wallets</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => navigate('/finance-approval')}
+                data-testid="button-goto-finance-approval"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 transition-colors"
+              >
+                <DollarSign className="h-3.5 w-3.5" /> Finance Approval
+              </button>
+              <button
+                onClick={() => navigate('/wallet-reports')}
+                data-testid="button-goto-wallet-reports"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 transition-colors"
+              >
+                <Settings className="h-3.5 w-3.5" /> Wallet Reports
+              </button>
+              <button
+                onClick={() => navigate('/financial-operations')}
+                data-testid="button-goto-financial-ops"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 transition-colors"
+              >
+                <TrendingUp className="h-3.5 w-3.5" /> Financial Ops
+              </button>
+              <button
+                onClick={syncAndRecalculateAll}
+                disabled={syncingAll || rows.length === 0}
+                data-testid="button-sync-all-wallets"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white transition-colors"
+              >
+                {syncingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {syncProgress.current}/{syncProgress.total}</> : <><Zap className="h-3.5 w-3.5" /> Sync All</>}
+              </button>
+              <DataFreshnessBadge />
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold">Wallets Management</h1>
-            <p className="text-sm text-muted-foreground">
-              Financial Operations Command Center
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/finance-approval')}
-            data-testid="button-goto-finance-approval"
-          >
-            <DollarSign className="h-4 w-4 mr-2" />
-            Finance Approval
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/wallet-reports')}
-            data-testid="button-goto-wallet-reports"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Wallet Reports
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/financial-operations')}
-            data-testid="button-goto-financial-ops"
-          >
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Financial Ops
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/budget')}
-            data-testid="button-goto-budget"
-          >
-            <Activity className="h-4 w-4 mr-2" />
-            Budget
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={syncAndRecalculateAll}
-            disabled={syncingAll || rows.length === 0}
-            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
-            data-testid="button-sync-all-wallets"
-          >
-            {syncingAll ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Syncing {syncProgress.current}/{syncProgress.total}...
-              </>
-            ) : (
-              <>
-                <Zap className="h-4 w-4 mr-2" />
-                Sync & Recalculate All
-              </>
-            )}
-          </Button>
-          <DataFreshnessBadge />
         </div>
       </div>
 
 
       {/* ── Wallet Backfill Panel — hidden once scan confirms nothing missing ── */}
       {(backfillScan === null || backfillScan.missing.length > 0 || backfilling) && (
-      <Card className="border-amber-300 dark:border-amber-600 bg-amber-50/40 dark:bg-amber-950/10">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+      <div className="rounded-2xl bg-amber-900/20 border border-amber-700/50 overflow-hidden">
+        <div className="px-5 py-3 bg-amber-900/30 border-b border-amber-700/40 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          <span className="text-sm font-semibold text-amber-300">Missing Wallet Credits — Site Visits</span>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">
-                Missing Wallet Credits — Site Visits
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                New site visits completed through the app are credited <strong>automatically</strong> — you don't need to do anything for those.
-                This panel is for <strong>historical or admin-completed visits</strong> that existed before the auto-credit system. Run the backfill once to catch them up; after that, this count should stay at 0.
+              <p className="text-xs text-slate-300 mb-3">
+                New site visits are credited <strong className="text-white">automatically</strong>. This panel handles <strong className="text-white">historical visits</strong> that existed before the auto-credit system.
               </p>
 
               {/* Scan result */}
               {backfillScan && (
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                  <div className="bg-background rounded-lg border px-3 py-2">
-                    <div className="text-muted-foreground">Total Completed</div>
-                    <div className="font-bold text-base">{backfillScan.totalCompleted}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs mb-3">
+                  <div className="bg-slate-800 rounded-lg border border-slate-700 px-3 py-2">
+                    <div className="text-slate-400">Total Completed</div>
+                    <div className="font-bold text-base text-white">{backfillScan.totalCompleted}</div>
                   </div>
-                  <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-                    <div className="text-muted-foreground">Already Credited</div>
-                    <div className="font-bold text-base text-green-700 dark:text-green-400">{backfillScan.alreadyCredited}</div>
+                  <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg px-3 py-2">
+                    <div className="text-slate-400">Already Credited</div>
+                    <div className="font-bold text-base text-emerald-400">{backfillScan.alreadyCredited}</div>
                   </div>
-                  <div className={`rounded-lg border px-3 py-2 ${backfillScan.missing.length > 0 ? 'bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700' : 'bg-background'}`}>
-                    <div className="text-muted-foreground">Missing Credits</div>
-                    <div className={`font-bold text-base ${backfillScan.missing.length > 0 ? 'text-red-700 dark:text-red-400' : ''}`}>{backfillScan.missing.length}</div>
+                  <div className={`rounded-lg border px-3 py-2 ${backfillScan.missing.length > 0 ? 'bg-red-900/30 border-red-700/50' : 'bg-slate-800 border-slate-700'}`}>
+                    <div className="text-slate-400">Missing Credits</div>
+                    <div className={`font-bold text-base ${backfillScan.missing.length > 0 ? 'text-red-400' : 'text-white'}`}>{backfillScan.missing.length}</div>
                   </div>
-                  <div className="bg-background rounded-lg border px-3 py-2">
-                    <div className="text-muted-foreground">No Fee</div>
-                    <div className="font-bold text-base text-muted-foreground">{backfillScan.noFee}</div>
+                  <div className="bg-slate-800 rounded-lg border border-slate-700 px-3 py-2">
+                    <div className="text-slate-400">No Fee</div>
+                    <div className="font-bold text-base text-slate-400">{backfillScan.noFee}</div>
                   </div>
-                  <div className="bg-background rounded-lg border px-3 py-2">
-                    <div className="text-muted-foreground">No Payee</div>
-                    <div className="font-bold text-base text-muted-foreground">{backfillScan.noUser}</div>
+                  <div className="bg-slate-800 rounded-lg border border-slate-700 px-3 py-2">
+                    <div className="text-slate-400">No Payee</div>
+                    <div className="font-bold text-base text-slate-400">{backfillScan.noUser}</div>
                   </div>
                 </div>
               )}
 
               {/* Progress bar during backfill */}
               {backfilling && backfillProgress.total > 0 && (
-                <div className="mt-3 space-y-1">
-                  <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-xs text-slate-400">
                     <span>Crediting wallets… {backfillProgress.current}/{backfillProgress.total}</span>
                     <span>
-                      <span className="text-green-600">{backfillProgress.succeeded} credited</span>
-                      {backfillProgress.skipped > 0 && <span className="ml-2 text-muted-foreground">{backfillProgress.skipped} skipped</span>}
-                      {backfillProgress.failed > 0 && <span className="ml-2 text-red-500">{backfillProgress.failed} failed</span>}
+                      <span className="text-emerald-400">{backfillProgress.succeeded} credited</span>
+                      {backfillProgress.skipped > 0 && <span className="ml-2">{backfillProgress.skipped} skipped</span>}
+                      {backfillProgress.failed > 0 && <span className="ml-2 text-red-400">{backfillProgress.failed} failed</span>}
                     </span>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-2 bg-green-500 rounded-full transition-all"
-                      style={{ width: `${Math.round((backfillProgress.current / backfillProgress.total) * 100)}%` }}
-                    />
+                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-2 bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.round((backfillProgress.current / backfillProgress.total) * 100)}%` }} />
                   </div>
-                  {backfillLastError && (
-                    <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded px-2 py-1 mt-1 font-mono break-all">
-                      First error: {backfillLastError}
-                    </div>
-                  )}
+                  {backfillLastError && <div className="text-xs text-red-400 bg-red-900/20 border border-red-700/50 rounded px-2 py-1 mt-1 font-mono break-all">First error: {backfillLastError}</div>}
                 </div>
               )}
-              {/* Show last error after backfill finishes */}
               {!backfilling && backfillLastError && backfillProgress.failed > 0 && (
-                <div className="mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded px-2 py-1 font-mono break-all">
-                  Error detail: {backfillLastError}
-                </div>
+                <div className="mt-2 text-xs text-red-400 bg-red-900/20 border border-red-700/50 rounded px-2 py-1 font-mono break-all">Error: {backfillLastError}</div>
               )}
 
-              {/* Preview list of first 10 missing */}
+              {/* Preview list */}
               {backfillScan && backfillScan.missing.length > 0 && !backfilling && (
-                <div className="mt-3 rounded-lg border bg-background overflow-hidden">
-                  <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                <div className="rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-900/60 text-xs font-medium text-slate-400 border-b border-slate-700">
                     Preview — first {Math.min(10, backfillScan.missing.length)} of {backfillScan.missing.length} sites missing credit
                   </div>
-                  <div className="divide-y max-h-48 overflow-y-auto">
+                  <div className="divide-y divide-slate-700/40 max-h-48 overflow-y-auto">
                     {backfillScan.missing.slice(0, 10).map(s => (
                       <div key={s.id} className="px-3 py-1.5 flex justify-between text-xs">
-                        <span className="truncate mr-2 text-foreground/80">{s.siteName}</span>
-                        <span className="flex-shrink-0 text-muted-foreground">{s.userName} · <span className="font-medium text-amber-700 dark:text-amber-400">{s.fee.toLocaleString()} SDG</span></span>
+                        <span className="truncate mr-2 text-slate-300">{s.siteName}</span>
+                        <span className="flex-shrink-0 text-slate-400">{s.userName} · <span className="font-medium text-amber-400">{s.fee.toLocaleString()} SDG</span></span>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {backfillScan && backfillScan.missing.length === 0 && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  All completed sites have wallet credits — nothing to backfill.
                 </div>
               )}
             </div>
 
             {/* Action buttons */}
             <div className="flex flex-col gap-2 flex-shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={scanMissingFees}
                 disabled={backfilling}
                 data-testid="button-scan-missing-fees"
-                className="border-amber-400 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-900/40 hover:bg-amber-900/60 disabled:opacity-50 text-amber-300 border border-amber-700/50 transition-colors"
               >
-                {backfillScan === null ? (
-                  <><Search className="h-3.5 w-3.5 mr-1.5" />Scan Now</>
-                ) : (
-                  <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-scan</>
-                )}
-              </Button>
+                {backfillScan === null ? <><Search className="h-3.5 w-3.5" />Scan Now</> : <><RefreshCw className="h-3.5 w-3.5" />Re-scan</>}
+              </button>
               {backfillScan && backfillScan.missing.length > 0 && (
-                <Button
-                  size="sm"
+                <button
                   onClick={runBackfillAll}
                   disabled={backfilling}
                   data-testid="button-run-backfill"
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors"
                 >
-                  {backfilling ? (
-                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />{backfillProgress.current}/{backfillProgress.total}</>
-                  ) : (
-                    <><PlayCircle className="h-3.5 w-3.5 mr-1.5" />Credit {backfillScan.missing.length} Sites</>
-                  )}
-                </Button>
+                  {backfilling ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{backfillProgress.current}/{backfillProgress.total}</> : <><PlayCircle className="h-3.5 w-3.5" />Credit {backfillScan.missing.length} Sites</>}
+                </button>
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GradientStatCard
-          title="Total Sites Cost"
-          value={fmt(filtered.reduce((a,b)=>a+(Number(b.totalEarned)||0)*100,0), currency)}
-          subtitle={`${filtered.length} active wallets`}
-          icon={TrendingUp}
-          color="blue"
-          data-testid="card-stat-total-earnings"
-        />
-
-        <GradientStatCard
-          title="Total Withdrawals"
-          value={fmt(filtered.reduce((a,b)=>a+(Number(b.totalWithdrawn)||0)*100,0), currency)}
-          subtitle="Paid to enumerators"
-          icon={Activity}
-          color="purple"
-          data-testid="card-stat-total-withdrawals"
-        />
-
-        <GradientStatCard
-          title="Current Balances"
-          value={fmt(filtered.reduce((a,b)=>a+getBalance(b, currency),0), currency)}
-          subtitle="Available for withdrawal"
-          icon={WalletIcon}
-          color="cyan"
-          data-testid="card-stat-current-balances"
-        />
+      {/* ── Stat cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-2xl bg-teal-700 border border-teal-600 p-5 shadow-lg shadow-teal-900/30" data-testid="card-stat-total-earnings">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-teal-200 mb-1">Total Earned</p>
+          <p className="text-2xl font-extrabold text-white">{fmt(filtered.reduce((a,b)=>a+(Number(b.totalEarned)||0)*100,0), currency)}</p>
+          <p className="text-xs text-teal-300 mt-1">{filtered.length} active wallets</p>
+        </div>
+        <div className="rounded-2xl bg-orange-700 border border-orange-600 p-5 shadow-lg shadow-orange-900/30" data-testid="card-stat-total-withdrawals">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-orange-200 mb-1">Total Withdrawn</p>
+          <p className="text-2xl font-extrabold text-white">{fmt(filtered.reduce((a,b)=>a+(Number(b.totalWithdrawn)||0)*100,0), currency)}</p>
+          <p className="text-xs text-orange-300 mt-1">Paid to enumerators</p>
+        </div>
+        <div className="rounded-2xl bg-slate-700 border border-slate-600 p-5 shadow-lg shadow-slate-900/30" data-testid="card-stat-current-balances">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-300 mb-1">Current Balances</p>
+          <p className="text-2xl font-extrabold text-white">{fmt(filtered.reduce((a,b)=>a+getBalance(b, currency),0), currency)}</p>
+          <p className="text-xs text-slate-400 mt-1">Available for withdrawal</p>
+        </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+      {/* ── Search / filter bar ── */}
+      <div className="rounded-2xl bg-slate-800 border border-slate-700 px-5 py-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
           <Input 
             placeholder="Search by name, email, or user ID..." 
             value={search} 
             onChange={e=>setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-9 bg-slate-700 border-slate-600 text-white placeholder:text-slate-400 focus:border-teal-500"
             data-testid="input-search-wallets"
           />
         </div>
-        <Button
-          variant={showZeroBalance ? 'default' : 'outline'}
-          size="sm"
+        <button
           onClick={() => setShowZeroBalance(v => !v)}
           data-testid="button-toggle-zero-balance"
-          className="flex-shrink-0"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${showZeroBalance ? 'bg-teal-600 border-teal-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'}`}
         >
           {showZeroBalance ? `All Wallets (${rows.length})` : `Active Only (${filtered.length})`}
-        </Button>
-        <div className="flex items-center gap-2 border rounded-lg p-1 bg-muted/50">
-          <Button 
-            variant={viewMode === 'table' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('table')}
-            data-testid="button-view-table"
-            className="h-8"
-          >
-            <Table2 className="w-4 h-4 mr-2" />
-            Table
-          </Button>
-          <Button 
-            variant={viewMode === 'grid' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('grid')}
-            data-testid="button-view-grid"
-            className="h-8"
-          >
-            <Grid3x3 className="w-4 h-4 mr-2" />
-            Grid
-          </Button>
+        </button>
+        <div className="flex items-center gap-1 bg-slate-700 border border-slate-600 rounded-lg p-1">
+          <button onClick={() => setViewMode('table')} data-testid="button-view-table" className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === 'table' ? 'bg-teal-600 text-white' : 'text-slate-300 hover:bg-slate-600'}`}>
+            <Table2 className="w-3.5 h-3.5" /> Table
+          </button>
+          <button onClick={() => setViewMode('grid')} data-testid="button-view-grid" className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === 'grid' ? 'bg-teal-600 text-white' : 'text-slate-300 hover:bg-slate-600'}`}>
+            <Grid3x3 className="w-3.5 h-3.5" /> Grid
+          </button>
         </div>
-        <Button 
-          variant="outline" 
-          onClick={load} 
-          data-testid="button-refresh-wallets"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <button onClick={() => load({ force: true })} data-testid="button-refresh-wallets" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </button>
       </div>
 
       {/* Wallets Display */}
       {filtered.length === 0 ? (
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-2xl blur-xl"></div>
-          <Card className="relative bg-gradient-to-br from-slate-900/90 to-blue-900/50 backdrop-blur-xl border border-blue-500/30">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="p-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl mb-6">
-                <WalletIcon className="w-16 h-16 text-blue-400" />
-              </div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-3">
-                No Wallets Detected
-              </h3>
-              <p className="text-blue-300/70 text-center max-w-md text-lg">
-                {search ? 'Adjust search parameters' : 'Wallet data will synchronize once enumerators complete site visits'}
-              </p>
-            </CardContent>
-          </Card>
+        <div className="rounded-2xl bg-slate-800 border border-slate-700 flex flex-col items-center justify-center py-16">
+          <div className="p-4 bg-teal-600/20 rounded-2xl mb-6">
+            <WalletIcon className="w-16 h-16 text-teal-400" />
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-3">No Wallets Detected</h3>
+          <p className="text-slate-400 text-center max-w-md">
+            {search ? 'Adjust search parameters' : 'Wallet data will synchronize once enumerators complete site visits'}
+          </p>
         </div>
       ) : viewMode === 'table' ? (
-        <Card className="border-blue-500/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Table2 className="w-5 h-5" />
-              Detailed Wallet Balances
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-lg border border-blue-500/20 overflow-hidden">
+        <div className="rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden">
+          <div className="px-5 py-4 bg-slate-900/60 border-b border-slate-700 flex items-center gap-2">
+            <Table2 className="w-4 h-4 text-teal-400" />
+            <h3 className="font-semibold text-slate-100 text-sm">Detailed Wallet Balances</h3>
+            <span className="ml-auto text-xs text-slate-400">{filtered.length} wallets</span>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="border-0">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="font-bold">User</TableHead>
-                    <TableHead className="font-bold">Email</TableHead>
-                    <TableHead className="font-bold text-right">Current Balance</TableHead>
-                    <TableHead className="font-bold text-right">
-                      <div className="flex flex-col">
-                        <span>Earnings Breakdown</span>
-                        <span className="text-xs font-normal text-muted-foreground">(Site Visits / Retainer)</span>
-                      </div>
-                    </TableHead>
-                    <TableHead className="font-bold text-right">Total Withdrawn</TableHead>
-                    <TableHead className="font-bold text-center">Status</TableHead>
-                    <TableHead className="font-bold">Last Updated</TableHead>
-                    <TableHead className="font-bold text-center">Actions</TableHead>
+                  <TableRow className="bg-slate-900/60 hover:bg-slate-900/60 border-slate-700">
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">User</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Email</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Balance</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Earnings</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Withdrawn</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-center">Status</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Updated</TableHead>
+                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1005,15 +906,15 @@ const AdminWallets: FC = () => {
                     return (
                       <Fragment key={rowKey}>
                         <TableRow 
-                          className="hover-elevate"
+                          className="border-slate-700/40 hover:bg-slate-700/20 transition-colors"
                           data-testid={`wallet-row-${wallet.user_id}`}
                         >
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium text-slate-200">
                             <div className="flex items-center gap-2">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6"
+                                className="h-6 w-6 text-slate-400 hover:text-white"
                                 disabled={!walletId}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1022,17 +923,17 @@ const AdminWallets: FC = () => {
                               >
                                 {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                               </Button>
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+                              <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold">
                                 {(wallet.owner_name || wallet.profiles?.full_name || 'U')[0].toUpperCase()}
                               </div>
                               <span>{wallet.owner_name || wallet.profiles?.full_name || wallet.profiles?.username || 'Unknown'}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="text-slate-400 text-sm">
                             {wallet.profiles?.email || '-'}
                           </TableCell>
                           <TableCell className="text-right font-bold">
-                            <span className={balance > 0 ? 'text-green-600 dark:text-green-400' : ''}>
+                            <span className={balance > 0 ? 'text-emerald-400' : 'text-slate-400'}>
                               {fmt(balance * 100, currency)}
                             </span>
                           </TableCell>
@@ -1210,36 +1111,35 @@ const AdminWallets: FC = () => {
                 </TableBody>
               </Table>
             </div>
-            
-            {/* Summary Footer */}
-            <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-blue-500/20">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground mb-1">Total Wallets</p>
-                  <p className="text-xl font-bold">{filtered.length}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground mb-1">Total Balance</p>
-                  <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                    {fmt(filtered.reduce((a,b)=>a+getBalance(b, currency),0), currency)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground mb-1">Total Earned</p>
-                  <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                    {fmt(filtered.reduce((a,b)=>a+(Number(b.totalEarned)||0)*100,0), currency)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground mb-1">Total Withdrawn</p>
-                  <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
-                    {fmt(filtered.reduce((a,b)=>a+(Number(b.totalWithdrawn)||0)*100,0), currency)}
-                  </p>
-                </div>
+          </div>
+          {/* Summary Footer */}
+          <div className="px-5 py-4 bg-slate-900/40 border-t border-slate-700">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Total Wallets</p>
+                <p className="text-xl font-extrabold text-white">{filtered.length}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Total Balance</p>
+                <p className="text-xl font-extrabold text-emerald-400">
+                  {fmt(filtered.reduce((a,b)=>a+getBalance(b, currency),0), currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Total Earned</p>
+                <p className="text-xl font-extrabold text-teal-400">
+                  {fmt(filtered.reduce((a,b)=>a+(Number(b.totalEarned)||0)*100,0), currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Total Withdrawn</p>
+                <p className="text-xl font-extrabold text-orange-400">
+                  {fmt(filtered.reduce((a,b)=>a+(Number(b.totalWithdrawn)||0)*100,0), currency)}
+                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map(wallet => (
