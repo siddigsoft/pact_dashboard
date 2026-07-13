@@ -232,6 +232,8 @@ export default function MmpStateReport({
   const [siteCollectorNameMap, setSiteCollectorNameMap] = useState<Record<string, string>>({});
   // actor_id → actor_name from audit logs (resolves users not in profiles table)
   const [actorNameMap, setActorNameMap] = useState<Record<string, string>>({});
+  const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
+  const [advancesByFile, setAdvancesByFile]   = useState<any[]>([]);
   const [cycleStatus, setCycleStatus]       = useState<string>('active');
   const [exporting, setExporting]           = useState(false);
   const [activeTab, setActiveTab]           = useState('summary');
@@ -312,7 +314,7 @@ export default function MmpStateReport({
     const run = async () => {
       setLoading(true);
       try {
-        const [logs, adv, entries, cycleRes] = await Promise.all([
+        const [logs, adv, entries, cycleRes, costSubsRes, advFileRes] = await Promise.all([
           // Audit logs — paginate past the 1000-row server cap
           inChunks(
             'audit_logs',
@@ -334,9 +336,27 @@ export default function MmpStateReport({
           mmpId
             ? supabase.from('mmp_files').select('cycle_status').eq('id', mmpId).single()
             : Promise.resolve({ data: null, error: null }),
+          // Cost submissions for this MMP
+          mmpId
+            ? supabase
+                .from('operational_cost_submissions')
+                .select('id,status,tier1_status,tier2_status,amount_cents,expense_category,description,created_at,request_title,submitted_by,hub_name')
+                .eq('mmp_file_id', mmpId)
+            : Promise.resolve({ data: [], error: null }),
+          // Down payments by mmp_file_id (more reliable than per-entry RLS)
+          mmpId
+            ? supabase
+                .from('down_payment_requests')
+                .select('id,mmp_site_entry_id,status,requested_amount,approved_amount,total_paid_amount,remaining_amount,hub_name,site_name,payment_type,created_at')
+                .eq('mmp_file_id', mmpId)
+            : Promise.resolve({ data: [], error: null }),
         ]);
         setAuditLogs(logs);
-        setAdvancesDetail(adv);
+        // Prefer file-level advance fetch (complete); fall back to entry-level fetch
+        const advFile: any[] = (advFileRes as any).data || [];
+        setAdvancesByFile(advFile);
+        setAdvancesDetail(advFile.length > 0 ? advFile : adv);
+        setCostSubmissions((costSubsRes as any).data || []);
 
         // Build siteId → collectorId map from accepted_by / claimed_by
         const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -934,25 +954,196 @@ export default function MmpStateReport({
               </div>
 
               {/* Financial */}
-              <div>
+              <div className="md:col-span-2">
                 <h3 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
                   <FileText className="h-4 w-4 text-blue-500" />Financial Summary
                 </h3>
-                <div className="space-y-1 text-sm">
-                  {[
-                    { label: 'Advances Requested',    value: advancesDetail.length },
-                    { label: 'Advances Approved',     value: advancesDetail.filter(a => ['approved','partially_paid','fully_paid'].includes(a.status)).length },
-                    { label: 'Advances Pending',      value: advancesDetail.filter(a => ['pending_supervisor','pending_admin'].includes(a.status)).length },
-                    { label: 'Advances Rejected',     value: advancesDetail.filter(a => a.status === 'rejected').length },
-                    { label: 'Total Requested (SDG)', value: cycleSummary.totalAdvanceRequested.toLocaleString() },
-                    { label: 'Total Approved (SDG)',  value: cycleSummary.totalAdvanceApproved.toLocaleString() },
-                    { label: 'Total Paid (SDG)',       value: cycleSummary.totalAdvancePaid.toLocaleString() },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex justify-between border-b border-border/30 py-1">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className="font-medium">{value}</span>
-                    </div>
-                  ))}
+
+                {/* ── Down Payments ── */}
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 mt-1">Down Payments / Advances</p>
+                <div className="overflow-x-auto rounded border border-border/40 mb-4">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-muted-foreground text-xs">
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                        <th className="text-right px-3 py-2 font-medium">Count</th>
+                        <th className="text-right px-3 py-2 font-medium">Requested (SDG)</th>
+                        <th className="text-right px-3 py-2 font-medium">Approved (SDG)</th>
+                        <th className="text-right px-3 py-2 font-medium">Paid (SDG)</th>
+                        <th className="text-right px-3 py-2 font-medium">Remaining (SDG)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const groups: Record<string, { count: number; requested: number; approved: number; paid: number; remaining: number }> = {};
+                        advancesDetail.forEach((a: any) => {
+                          const s = a.status || 'unknown';
+                          if (!groups[s]) groups[s] = { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+                          groups[s].count++;
+                          groups[s].requested  += Number(a.requested_amount)   || 0;
+                          groups[s].approved   += Number(a.approved_amount)    || 0;
+                          groups[s].paid       += Number(a.total_paid_amount)  || 0;
+                          groups[s].remaining  += Number(a.remaining_amount)   || 0;
+                        });
+                        const STATUS_COLOR: Record<string, string> = {
+                          fully_paid:        'text-emerald-700 dark:text-emerald-400',
+                          partially_paid:    'text-teal-700 dark:text-teal-400',
+                          approved:          'text-green-700 dark:text-green-400',
+                          pending_supervisor:'text-amber-700 dark:text-amber-400',
+                          pending_admin:     'text-amber-700 dark:text-amber-400',
+                          rejected:          'text-red-600 dark:text-red-400',
+                        };
+                        const STATUS_LABEL: Record<string, string> = {
+                          fully_paid:        'Fully Paid',
+                          partially_paid:    'Partially Paid',
+                          approved:          'Approved',
+                          pending_supervisor:'Pending (Supervisor)',
+                          pending_admin:     'Pending (Admin)',
+                          rejected:          'Rejected',
+                        };
+                        const ORDER = ['fully_paid','partially_paid','approved','pending_supervisor','pending_admin','rejected'];
+                        const entries = Object.entries(groups).sort(([a],[b]) => {
+                          const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+                          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+                        });
+                        if (entries.length === 0) return (
+                          <tr><td colSpan={6} className="px-3 py-3 text-center text-muted-foreground text-xs">No down-payment records for this MMP</td></tr>
+                        );
+                        const totals = entries.reduce((t,[,v])=>({
+                          count: t.count+v.count, requested: t.requested+v.requested,
+                          approved: t.approved+v.approved, paid: t.paid+v.paid, remaining: t.remaining+v.remaining
+                        }),{ count:0, requested:0, approved:0, paid:0, remaining:0 });
+                        return <>
+                          {entries.map(([status, v], i) => (
+                            <tr key={status} className={`border-t border-border/20 ${i%2===0?'':'bg-muted/10'}`}>
+                              <td className={`px-3 py-1.5 font-medium text-xs ${STATUS_COLOR[status] || ''}`}>
+                                {STATUS_LABEL[status] || status.replace(/_/g,' ')}
+                              </td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">{v.count}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">{v.requested.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-green-700 dark:text-green-400">{v.approved.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{v.paid.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-amber-700 dark:text-amber-400">{v.remaining.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                          <tr className="border-t-2 border-border bg-muted/30 font-semibold text-xs">
+                            <td className="px-3 py-1.5">Total</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{totals.count}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{totals.requested.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-green-700 dark:text-green-400">{totals.approved.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{totals.paid.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-amber-700 dark:text-amber-400">{totals.remaining.toLocaleString()}</td>
+                          </tr>
+                        </>;
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── Down Payments by Hub/State ── */}
+                {(() => {
+                  const byHub: Record<string, { requested: number; approved: number; paid: number; remaining: number; count: number }> = {};
+                  advancesDetail.forEach((a: any) => {
+                    const hub = a.hub_name || 'Unknown Hub';
+                    if (!byHub[hub]) byHub[hub] = { count: 0, requested: 0, approved: 0, paid: 0, remaining: 0 };
+                    byHub[hub].count++;
+                    byHub[hub].requested += Number(a.requested_amount)  || 0;
+                    byHub[hub].approved  += Number(a.approved_amount)   || 0;
+                    byHub[hub].paid      += Number(a.total_paid_amount) || 0;
+                    byHub[hub].remaining += Number(a.remaining_amount)  || 0;
+                  });
+                  const hubs = Object.entries(byHub).sort(([,a],[,b]) => b.count - a.count);
+                  if (hubs.length <= 1) return null;
+                  return (
+                    <>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Down Payments by Hub / State</p>
+                      <div className="overflow-x-auto rounded border border-border/40 mb-4">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-muted/50 text-muted-foreground text-xs">
+                              <th className="text-left px-3 py-2 font-medium">Hub / State</th>
+                              <th className="text-right px-3 py-2 font-medium">Count</th>
+                              <th className="text-right px-3 py-2 font-medium">Requested</th>
+                              <th className="text-right px-3 py-2 font-medium">Approved</th>
+                              <th className="text-right px-3 py-2 font-medium">Paid</th>
+                              <th className="text-right px-3 py-2 font-medium">Remaining</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {hubs.map(([hub, v], i) => (
+                              <tr key={hub} className={`border-t border-border/20 ${i%2===0?'':'bg-muted/10'}`}>
+                                <td className="px-3 py-1.5 font-medium text-xs">{hub}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums">{v.count}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums">{v.requested.toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-green-700 dark:text-green-400">{v.approved.toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{v.paid.toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-amber-700 dark:text-amber-400">{v.remaining.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* ── Cost Submissions ── */}
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Operational Cost Submissions</p>
+                <div className="overflow-x-auto rounded border border-border/40 mb-2">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-muted-foreground text-xs">
+                        <th className="text-left px-3 py-2 font-medium">Title / Category</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                        <th className="text-right px-3 py-2 font-medium">Amount (SDG)</th>
+                        <th className="text-left px-3 py-2 font-medium">Tier 1</th>
+                        <th className="text-left px-3 py-2 font-medium">Tier 2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costSubmissions.length === 0 ? (
+                        <tr><td colSpan={5} className="px-3 py-3 text-center text-muted-foreground text-xs">No cost submissions for this MMP</td></tr>
+                      ) : (
+                        <>
+                          {costSubmissions.map((cs: any, i: number) => {
+                            const amountSdg = Math.round((Number(cs.amount_cents) || 0) / 100);
+                            const statusColor = cs.status === 'approved' ? 'text-green-700 dark:text-green-400'
+                              : cs.status === 'rejected' ? 'text-red-600 dark:text-red-400'
+                              : 'text-amber-700 dark:text-amber-400';
+                            const t1Color = cs.tier1_status === 'approved' ? 'text-green-600' : cs.tier1_status === 'rejected' ? 'text-red-500' : 'text-amber-600';
+                            const t2Color = cs.tier2_status === 'approved' ? 'text-green-600' : cs.tier2_status === 'rejected' ? 'text-red-500' : 'text-amber-600';
+                            return (
+                              <tr key={cs.id} className={`border-t border-border/20 ${i%2===0?'':'bg-muted/10'}`}>
+                                <td className="px-3 py-1.5 text-xs">
+                                  <div className="font-medium">{cs.request_title || cs.description || '—'}</div>
+                                  {cs.expense_category && <div className="text-muted-foreground">{cs.expense_category}</div>}
+                                </td>
+                                <td className={`px-3 py-1.5 text-xs font-medium capitalize ${statusColor}`}>
+                                  {(cs.status || '').replace(/_/g,' ')}
+                                </td>
+                                <td className="px-3 py-1.5 text-right tabular-nums font-medium">{amountSdg.toLocaleString()}</td>
+                                <td className={`px-3 py-1.5 text-xs capitalize ${t1Color}`}>{cs.tier1_status ? cs.tier1_status.replace(/_/g,' ') : '—'}</td>
+                                <td className={`px-3 py-1.5 text-xs capitalize ${t2Color}`}>{cs.tier2_status ? cs.tier2_status.replace(/_/g,' ') : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                          {/* Totals */}
+                          <tr className="border-t-2 border-border bg-muted/30 font-semibold text-xs">
+                            <td className="px-3 py-1.5" colSpan={2}>Total ({costSubmissions.length} submissions)</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">
+                              {Math.round(costSubmissions.reduce((s: number, cs: any) => s + (Number(cs.amount_cents)||0)/100, 0)).toLocaleString()}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-green-700 dark:text-green-400">
+                              {costSubmissions.filter((cs: any) => cs.tier1_status === 'approved').length} approved
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-green-700 dark:text-green-400">
+                              {costSubmissions.filter((cs: any) => cs.tier2_status === 'approved').length} approved
+                            </td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
