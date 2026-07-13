@@ -348,6 +348,19 @@ const AdminWalletDetail = () => {
     });
   }, [siteVisits, downPayments]);
 
+  // Sites where money is still owed — either transport not fully paid by advance,
+  // or the enumerator fee hasn't been credited as a wallet transaction yet.
+  const unpaidFees = useMemo(() => {
+    return transportBreakdown
+      .map(site => {
+        const unpaidTransport = site.transFee > 0 && site.remaining > 0.005 ? site.remaining : 0;
+        const unpaidEnum      = site.isCompleted && site.enumFee > 0 && !site.payment ? site.enumFee : 0;
+        const totalUnpaid     = unpaidTransport + unpaidEnum;
+        return { ...site, unpaidTransport, unpaidEnum, totalUnpaid };
+      })
+      .filter(s => s.totalUnpaid > 0);
+  }, [transportBreakdown]);
+
   const startEditTx = (txn: WalletTransaction) => {
     setEditingTxId(txn.id);
     setEditTxAmount(String(txn.amount));
@@ -794,6 +807,38 @@ const AdminWalletDetail = () => {
 
         {/* ── OVERVIEW ── */}
         <TabsContent value="overview" className="space-y-4">
+
+          {/* ── Unpaid Fees Alert ── */}
+          {unpaidFees.length > 0 && (() => {
+            const totalUnpaidTransport = unpaidFees.reduce((s, r) => s + r.unpaidTransport, 0);
+            const totalUnpaidEnum      = unpaidFees.reduce((s, r) => s + r.unpaidEnum,      0);
+            const grandTotal           = totalUnpaidTransport + totalUnpaidEnum;
+            return (
+              <div className="rounded-2xl border border-red-700/60 bg-red-900/20 overflow-hidden shadow-lg shadow-red-900/20">
+                <div className="px-5 py-3 bg-red-900/40 border-b border-red-700/40 flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-sm font-bold text-red-300">Unpaid Fees — {unpaidFees.length} site{unpaidFees.length !== 1 ? 's' : ''}</p>
+                  <span className="ml-auto text-base font-extrabold text-red-300">{currencyFmt(grandTotal, currency)}</span>
+                </div>
+                <div className="px-5 py-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-orange-300/70 mb-1">Unpaid Transport</p>
+                    <p className="text-xl font-extrabold text-orange-300">{currencyFmt(totalUnpaidTransport, currency)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidTransport > 0).length} site{unpaidFees.filter(r => r.unpaidTransport > 0).length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-amber-300/70 mb-1">Unpaid Enum Fee</p>
+                    <p className="text-xl font-extrabold text-amber-300">{currencyFmt(totalUnpaidEnum, currency)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{unpaidFees.filter(r => r.unpaidEnum > 0).length} completed site{unpaidFees.filter(r => r.unpaidEnum > 0).length !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+                <div className="px-5 pb-3">
+                  <p className="text-xs text-slate-500 italic">See the Transport tab for the full breakdown per site.</p>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={panel}>
               <div className={panelHeader}>
@@ -1061,6 +1106,95 @@ const AdminWalletDetail = () => {
               </Table>
             </div>
           </div>
+
+          {/* ── Unpaid Fees table ── */}
+          {unpaidFees.length > 0 ? (
+            <div className="rounded-2xl border border-red-700/50 overflow-hidden bg-slate-800">
+              <div className="px-5 py-4 bg-red-900/30 border-b border-red-700/40 flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-400" />
+                <h3 className="font-semibold text-red-300 text-sm">Unpaid Fees</h3>
+                <span className="text-xs bg-red-500/20 text-red-300 border border-red-500/30 px-2 py-0.5 rounded-full font-medium">{unpaidFees.length} site{unpaidFees.length !== 1 ? 's' : ''}</span>
+                <span className="ml-auto text-sm font-extrabold text-red-300">
+                  Total: {currencyFmt(unpaidFees.reduce((s, r) => s + r.totalUnpaid, 0), currency)}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-red-800/40 bg-slate-900/40 hover:bg-slate-900/40">
+                      <TableHead className={thClass}>Site</TableHead>
+                      <TableHead className={thClass}>Status</TableHead>
+                      <TableHead className={thClass}>Completed</TableHead>
+                      <TableHead className={`${thClass} text-right`}>Unpaid Transport</TableHead>
+                      <TableHead className={`${thClass} text-right`}>Unpaid Enum Fee</TableHead>
+                      <TableHead className={`${thClass} text-right`}>Total Owed</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unpaidFees.map(site => (
+                      <TableRow key={site.id} className="border-slate-700/40 hover:bg-red-900/10 transition-colors">
+                        <TableCell className="text-slate-100 font-medium text-sm">{site.site_name}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
+                            site.isCompleted
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          }`}>{site.status}</span>
+                        </TableCell>
+                        <TableCell className="text-slate-400 text-sm">
+                          {site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {site.unpaidTransport > 0 ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className="font-bold text-orange-400">{currencyFmt(site.unpaidTransport, currency)}</span>
+                              {site.advPaid > 0 && (
+                                <span className="text-[10px] text-slate-500">partial — {currencyFmt(site.advPaid, currency)} already paid</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-emerald-400 text-xs font-semibold flex items-center justify-end gap-1">
+                              <CheckCircle className="w-3 h-3" /> Settled
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {site.unpaidEnum > 0 ? (
+                            <span className="font-bold text-amber-400">{currencyFmt(site.unpaidEnum, currency)}</span>
+                          ) : (
+                            <span className="text-emerald-400 text-xs font-semibold flex items-center justify-end gap-1">
+                              <CheckCircle className="w-3 h-3" /> Paid
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-extrabold text-red-400 text-sm">
+                          {currencyFmt(site.totalUnpaid, currency)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 border-red-700/50 bg-red-900/20">
+                      <TableCell colSpan={3} className="text-red-300 text-right font-bold text-sm py-4">Total Unpaid</TableCell>
+                      <TableCell className="text-right font-bold text-orange-400">
+                        {currencyFmt(unpaidFees.reduce((s, r) => s + r.unpaidTransport, 0), currency)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-amber-400">
+                        {currencyFmt(unpaidFees.reduce((s, r) => s + r.unpaidEnum, 0), currency)}
+                      </TableCell>
+                      <TableCell className="text-right font-extrabold text-red-300 text-base">
+                        {currencyFmt(unpaidFees.reduce((s, r) => s + r.totalUnpaid, 0), currency)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-700/40 bg-emerald-900/10 px-6 py-8 text-center">
+              <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+              <p className="text-emerald-300 font-semibold">All fees settled</p>
+              <p className="text-slate-500 text-sm mt-1">No unpaid transport or enumerator fees</p>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── EARNINGS ── */}
