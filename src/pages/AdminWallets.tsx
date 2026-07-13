@@ -662,7 +662,7 @@ const AdminWallets: FC = () => {
   const getBalance = (wallet: any, curr: string) => (wallet.balances?.[curr] || 0) * 100;
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8 space-y-6">
+    <div className="min-h-screen bg-slate-900 p-4 md:p-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
