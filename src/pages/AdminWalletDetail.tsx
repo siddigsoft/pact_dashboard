@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,6 +40,13 @@ const AdminWalletDetail = () => {
   const [savingTx, setSavingTx] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [downPayments, setDownPayments] = useState<any[]>([]);
+  const [mmps, setMmps] = useState<{ id: string; name: string }[]>([]);
+  const [selectedMmp, setSelectedMmp] = useState<string>('all');
+  const [siteVisitCosts, setSiteVisitCosts] = useState<any[]>([]);
+  const [operationalCosts, setOperationalCosts] = useState<any[]>([]);
+  // Per-MMP rate overrides — display-only, never modifies wallet transactions
+  const [mmpRateOverrides, setMmpRateOverrides] = useState<Record<string, { enumRate: number; transRate: number }>>({});
+  const [showRateEditor, setShowRateEditor] = useState(false);
 
   const loadWalletData = async () => {
     if (!userId) return;
@@ -49,13 +57,14 @@ const AdminWalletDetail = () => {
       setLoadingSiteVisits(true);
 
       // Use SECURITY DEFINER RPC for wallet + transactions (direct queries are RLS-blocked)
-      const [profileResult, rpcResult, sitesResult, dpResult] = await Promise.all([
+      const [profileResult, rpcResult, sitesResult, dpResult, svcResult, ocResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, role, hub_id')
           .eq('id', userId)
           .single(),
         supabase.rpc('admin_get_user_wallet_data', { p_user_id: userId }),
+        // Include mmp_file_id + MMP name for filter
         supabase
           .from('mmp_site_entries')
           .select(`
@@ -69,18 +78,34 @@ const AdminWalletDetail = () => {
             visit_completed_at,
             enumerator_fee,
             transport_fee,
-            cost
+            cost,
+            mmp_file_id,
+            mmp_files(id, name)
           `)
           .eq('accepted_by', userId)
           .order('accepted_at', { ascending: false })
-          .limit(100),
-        // Fetch transport advance (down payment) records to calculate deductions
+          .limit(200),
+        // Down payments — include receipt fields
         supabase
           .from('down_payment_requests')
-          .select('id, site_name, mmp_site_entry_id, total_paid_amount, remaining_amount, requested_amount, status, requested_at')
+          .select('id, site_name, mmp_site_entry_id, total_paid_amount, remaining_amount, requested_amount, status, requested_at, payment_proof_url, supporting_documents')
           .eq('requested_by', userId)
           .not('status', 'in', '("pending_supervisor","pending_admin","rejected","cancelled","deleted")')
-          .order('requested_at', { ascending: false })
+          .order('requested_at', { ascending: false }),
+        // Site-visit cost submissions (field staff expenses with receipts)
+        supabase
+          .from('site_visit_cost_submissions')
+          .select('id, site_visit_id, mmp_file_id, submitted_at, total_cost_cents, transportation_cost_cents, accommodation_cost_cents, meal_allowance_cents, other_costs_cents, currency, status, supporting_documents, payment_proof_url, wallet_transaction_id, submission_notes')
+          .eq('submitted_by', userId)
+          .order('submitted_at', { ascending: false })
+          .limit(200),
+        // Operational cost submissions (FOM / coordinator level)
+        supabase
+          .from('operational_cost_submissions')
+          .select('id, mmp_file_id, hub_id, submitted_at, amount_cents, currency, status, description, expense_category, expense_date, vendor, reference_number, supporting_documents, payment_proof_url')
+          .eq('submitted_by', userId)
+          .order('submitted_at', { ascending: false })
+          .limit(200),
       ]);
 
       if (profileResult.error) {
@@ -163,6 +188,34 @@ const AdminWalletDetail = () => {
       } else if (dpResult.error) {
         console.warn('Could not load down payment records:', dpResult.error?.message);
         setDownPayments([]);
+      }
+
+      // Extract distinct MMPs from site entries
+      if (!sitesResult.error && sitesResult.data) {
+        const mmpMap = new Map<string, string>();
+        for (const s of sitesResult.data) {
+          if (s.mmp_file_id) {
+            const mmpName = (s as any).mmp_files?.name || s.mmp_file_id;
+            mmpMap.set(s.mmp_file_id, mmpName);
+          }
+        }
+        setMmps(Array.from(mmpMap.entries()).map(([id, name]) => ({ id, name })));
+      }
+
+      // Site-visit cost submissions
+      if (!svcResult.error && svcResult.data) {
+        setSiteVisitCosts(svcResult.data);
+      } else {
+        if (svcResult.error) console.warn('site_visit_cost_submissions fetch:', svcResult.error?.message);
+        setSiteVisitCosts([]);
+      }
+
+      // Operational cost submissions
+      if (!ocResult.error && ocResult.data) {
+        setOperationalCosts(ocResult.data);
+      } else {
+        if (ocResult.error) console.warn('operational_cost_submissions fetch:', ocResult.error?.message);
+        setOperationalCosts([]);
       }
     } catch (error) {
       console.error('Error loading wallet data:', error);
@@ -347,6 +400,68 @@ const AdminWalletDetail = () => {
       return { ...site, enumFee, transFee, advPaid, advStatus, remaining };
     });
   }, [siteVisits, downPayments]);
+
+  // MMP-filtered site visits and derived data
+  const filteredSiteVisits = useMemo(() =>
+    selectedMmp === 'all' ? siteVisits : siteVisits.filter(s => s.mmp_file_id === selectedMmp),
+    [siteVisits, selectedMmp]
+  );
+
+  const filteredTransportBreakdown = useMemo(() => {
+    const base = selectedMmp === 'all' ? siteVisits : siteVisits.filter(s => s.mmp_file_id === selectedMmp);
+    return base.map(site => {
+      const enumFee  = Number(site.enumerator_fee || 0);
+      const transFee = Number(site.transport_fee  || 0);
+      const advance  = downPayments.find(dp => dp.mmp_site_entry_id === site.id);
+      const advPaid  = advance ? parseFloat(advance.total_paid_amount || 0) : 0;
+      const advStatus = advance?.status || null;
+      const remaining = transFee - advPaid;
+      // Apply per-MMP rate override if set (display-only, never changes wallet data)
+      const mmpId = site.mmp_file_id || '';
+      const override = mmpRateOverrides[mmpId];
+      const displayEnumFee  = override?.enumRate  ? override.enumRate  : enumFee;
+      const displayTransFee = override?.transRate ? override.transRate : transFee;
+      return { ...site, enumFee, transFee, advPaid, advStatus, remaining, displayEnumFee, displayTransFee };
+    });
+  }, [siteVisits, downPayments, selectedMmp, mmpRateOverrides]);
+
+  // Filtered cost submissions by MMP
+  const filteredSiteVisitCosts = useMemo(() =>
+    selectedMmp === 'all' ? siteVisitCosts : siteVisitCosts.filter(c => c.mmp_file_id === selectedMmp),
+    [siteVisitCosts, selectedMmp]
+  );
+  const filteredOperationalCosts = useMemo(() =>
+    selectedMmp === 'all' ? operationalCosts : operationalCosts.filter(c => c.mmp_file_id === selectedMmp),
+    [operationalCosts, selectedMmp]
+  );
+
+  // Helper: parse receipt URLs from a down-payment or cost-submission row
+  const parseReceipts = (row: any): string[] => {
+    const urls: string[] = [];
+    // payment_proof_url can be a plain URL string or a JSON array of strings
+    if (row?.payment_proof_url) {
+      try {
+        const parsed = JSON.parse(row.payment_proof_url);
+        if (Array.isArray(parsed)) urls.push(...parsed.filter(Boolean));
+        else if (typeof parsed === 'string' && parsed) urls.push(parsed);
+      } catch {
+        urls.push(row.payment_proof_url);
+      }
+    }
+    // supporting_documents is a JSONB array of { url, filename, … } objects
+    if (row?.supporting_documents) {
+      try {
+        const docs = Array.isArray(row.supporting_documents)
+          ? row.supporting_documents
+          : JSON.parse(row.supporting_documents);
+        for (const d of docs) {
+          const u = d?.url || d?.fileUrl || d?.file_url;
+          if (u) urls.push(u);
+        }
+      } catch {}
+    }
+    return [...new Set(urls)]; // deduplicate
+  };
 
   // Sites where money is still owed — either transport not fully paid by advance,
   // or the enumerator fee hasn't been credited as a wallet transaction yet.
@@ -782,6 +897,109 @@ const AdminWalletDetail = () => {
       </div>
 
       {/* ══════════════════════════════════════════════
+          MMP FILTER + RATE OVERRIDES (display-only)
+      ══════════════════════════════════════════════ */}
+      {mmps.length > 0 && (
+        <div className="rounded-2xl bg-slate-800 border border-slate-700 px-5 py-4 flex flex-wrap items-start gap-4">
+          {/* MMP filter */}
+          <div className="flex flex-col gap-1.5 min-w-[200px]">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Filter by MMP</p>
+            <Select value={selectedMmp} onValueChange={setSelectedMmp} data-testid="select-mmp-filter">
+              <SelectTrigger className="bg-slate-900 border-slate-600 text-slate-100 rounded-xl h-9 text-sm">
+                <SelectValue placeholder="All MMPs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All MMPs ({siteVisits.length} sites)</SelectItem>
+                {mmps.map(m => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name} ({siteVisits.filter(s => s.mmp_file_id === m.id).length} sites)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Per-MMP fee rate override editor */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+              Fee Rate Adjustments
+              <span className="ml-2 text-[10px] text-slate-500 normal-case font-normal tracking-normal">(display-only — does not change wallet)</span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRateEditor(v => !v)}
+              className="border-slate-600 text-slate-300 hover:bg-slate-700 rounded-xl h-9 text-xs"
+              data-testid="button-toggle-rate-editor"
+            >
+              {showRateEditor ? 'Hide Rate Editor' : 'Edit Fee Rates Per MMP'}
+            </Button>
+          </div>
+
+          {/* Rate editor panel */}
+          {showRateEditor && (
+            <div className="w-full border-t border-slate-700 pt-4 mt-1">
+              <p className="text-xs text-slate-400 mb-3">
+                Set custom display rates per MMP. These are <strong className="text-amber-400">purely informational</strong> — they adjust the fee columns shown in the Transport tab only, with no changes to wallet balances or transactions.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {mmps.map(m => {
+                  const ov = mmpRateOverrides[m.id] || { enumRate: 0, transRate: 0 };
+                  return (
+                    <div key={m.id} className="rounded-xl bg-slate-900/60 border border-slate-700 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-slate-200 truncate">{m.name}</p>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-slate-500 uppercase tracking-wider">Enum Rate</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={100}
+                            placeholder="0"
+                            value={ov.enumRate || ''}
+                            onChange={e => setMmpRateOverrides(prev => ({
+                              ...prev,
+                              [m.id]: { ...ov, enumRate: parseFloat(e.target.value) || 0 }
+                            }))}
+                            className="h-8 text-xs bg-slate-800 border-slate-600 text-slate-100 mt-0.5"
+                            data-testid={`input-enum-rate-${m.id}`}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-slate-500 uppercase tracking-wider">Trans Rate</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={100}
+                            placeholder="0"
+                            value={ov.transRate || ''}
+                            onChange={e => setMmpRateOverrides(prev => ({
+                              ...prev,
+                              [m.id]: { ...ov, transRate: parseFloat(e.target.value) || 0 }
+                            }))}
+                            className="h-8 text-xs bg-slate-800 border-slate-600 text-slate-100 mt-0.5"
+                            data-testid={`input-trans-rate-${m.id}`}
+                          />
+                        </div>
+                      </div>
+                      {(ov.enumRate > 0 || ov.transRate > 0) && (
+                        <button
+                          onClick={() => setMmpRateOverrides(prev => { const n = { ...prev }; delete n[m.id]; return n; })}
+                          className="text-[10px] text-red-400 hover:text-red-300"
+                        >
+                          Clear overrides
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
           TABS
       ══════════════════════════════════════════════ */}
       <Tabs defaultValue="overview" className="space-y-4">
@@ -793,6 +1011,7 @@ const AdminWalletDetail = () => {
             { value: 'earnings',      label: 'Earnings' },
             { value: 'transactions',  label: 'Transactions' },
             { value: 'statement',     label: 'Statement' },
+            { value: 'costs',         label: `Costs${(siteVisitCosts.length + operationalCosts.length) > 0 ? ` (${siteVisitCosts.length + operationalCosts.length})` : ''}` },
           ].map(({ value, label }) => (
             <TabsTrigger
               key={value}
@@ -940,9 +1159,9 @@ const AdminWalletDetail = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {siteVisits.length === 0 ? (
+                  {filteredSiteVisits.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-slate-500 h-24">No sites visited yet</TableCell></TableRow>
-                  ) : siteVisits.map((site) => {
+                  ) : filteredSiteVisits.map((site) => {
                     const enumFee   = Number(site.enumerator_fee || 0);
                     const transFee  = Number(site.transport_fee  || 0);
                     const totalFee  = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
@@ -986,12 +1205,12 @@ const AdminWalletDetail = () => {
                       </TableRow>
                     );
                   })}
-                  {siteVisits.length > 0 && (
+                  {filteredSiteVisits.length > 0 && (
                     <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
                       <TableCell colSpan={4} className="text-slate-400 text-right text-sm font-semibold py-3">Totals</TableCell>
-                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(siteVisits.reduce((s, v) => s + Number(v.enumerator_fee || 0), 0), currency)}</TableCell>
-                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(siteVisits.reduce((s, v) => s + Number(v.transport_fee || 0), 0), currency)}</TableCell>
-                      <TableCell className="text-right text-emerald-400 font-bold">{currencyFmt(siteVisits.reduce((s, v) => { const ef = Number(v.enumerator_fee || 0); const tf = Number(v.transport_fee || 0); return s + (ef + tf > 0 ? ef + tf : Number(v.cost || 0)); }, 0), currency)}</TableCell>
+                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(filteredSiteVisits.reduce((s, v) => s + Number(v.enumerator_fee || 0), 0), currency)}</TableCell>
+                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(filteredSiteVisits.reduce((s, v) => s + Number(v.transport_fee || 0), 0), currency)}</TableCell>
+                      <TableCell className="text-right text-emerald-400 font-bold">{currencyFmt(filteredSiteVisits.reduce((s, v) => { const ef = Number(v.enumerator_fee || 0); const tf = Number(v.transport_fee || 0); return s + (ef + tf > 0 ? ef + tf : Number(v.cost || 0)); }, 0), currency)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1002,15 +1221,27 @@ const AdminWalletDetail = () => {
 
         {/* ── TRANSPORT ── */}
         <TabsContent value="transport" className="space-y-4">
+          {/* Active rate override banner */}
+          {Object.keys(mmpRateOverrides).length > 0 && selectedMmp !== 'all' && mmpRateOverrides[selectedMmp] && (
+            <div className="rounded-xl bg-amber-900/30 border border-amber-700/50 px-4 py-2.5 flex items-center gap-2 text-xs text-amber-300">
+              <span className="font-bold">Display override active for this MMP:</span>
+              <span>Enum rate = {currencyFmt(mmpRateOverrides[selectedMmp].enumRate || 0, currency)}</span>
+              <span>·</span>
+              <span>Transport rate = {currencyFmt(mmpRateOverrides[selectedMmp].transRate || 0, currency)}</span>
+              <span className="ml-1 text-amber-500">(wallet unchanged)</span>
+            </div>
+          )}
+
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {(() => {
-              const totalTransFee  = transportBreakdown.reduce((s, r) => s + r.transFee, 0);
-              const totalAdvPaid   = transportBreakdown.reduce((s, r) => s + r.advPaid,  0);
-              const totalRemaining = transportBreakdown.filter(r => r.remaining > 0).reduce((s, r) => s + r.remaining, 0);
-              const sitesWithAdv   = transportBreakdown.filter(r => r.advPaid > 0).length;
+              const td = filteredTransportBreakdown;
+              const totalTransFee  = td.reduce((s, r) => s + r.displayTransFee, 0);
+              const totalAdvPaid   = td.reduce((s, r) => s + r.advPaid,  0);
+              const totalRemaining = td.filter(r => r.remaining > 0).reduce((s, r) => s + r.remaining, 0);
+              const sitesWithAdv   = td.filter(r => r.advPaid > 0).length;
               return [
-                { label: 'Total Transport Fees',    value: currencyFmt(totalTransFee,  currency), color: 'bg-teal-700 border-teal-600',     note: `${transportBreakdown.length} site${transportBreakdown.length !== 1 ? 's' : ''}` },
+                { label: 'Total Transport Fees',    value: currencyFmt(totalTransFee,  currency), color: 'bg-teal-700 border-teal-600',     note: `${td.length} site${td.length !== 1 ? 's' : ''}` },
                 { label: 'Advances Paid in Cash',   value: currencyFmt(totalAdvPaid,   currency), color: 'bg-orange-700 border-orange-600',  note: `${sitesWithAdv} advance${sitesWithAdv !== 1 ? 's' : ''}` },
                 { label: 'Balance Still Owed',      value: currencyFmt(totalRemaining, currency), color: 'bg-amber-700 border-amber-600',    note: 'unpaid portion' },
                 { label: 'Net After Advances',      value: currencyFmt(totalTransFee - totalAdvPaid, currency), color: 'bg-slate-700 border-slate-600', note: 'fee − advances' },
@@ -1029,7 +1260,7 @@ const AdminWalletDetail = () => {
             <div className={panelHeader}>
               <Truck className="w-4 h-4 text-orange-400" />
               <h3 className="font-semibold text-slate-100 text-sm">Transport Payments by Site</h3>
-              <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">{transportBreakdown.length} sites</span>
+              <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">{filteredTransportBreakdown.length} sites</span>
             </div>
             <div className="overflow-x-auto">
               <Table>
@@ -1040,19 +1271,22 @@ const AdminWalletDetail = () => {
                     <TableHead className={thClass}>Completed</TableHead>
                     <TableHead className={`${thClass} text-right`}>Enum Fee</TableHead>
                     <TableHead className={`${thClass} text-right`}>Transport Fee</TableHead>
-                    <TableHead className={`${thClass} text-right`}>Advance Paid</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Advance Paid / Receipts</TableHead>
                     <TableHead className={`${thClass} text-right`}>Still Owed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transportBreakdown.length === 0 ? (
+                  {filteredTransportBreakdown.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-slate-500 h-24">No site visits found</TableCell></TableRow>
-                  ) : transportBreakdown.map(site => {
+                  ) : filteredTransportBreakdown.map(site => {
                     const advStatusColors: Record<string, string> = {
                       fully_paid:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
                       partially_paid:'bg-amber-500/20 text-amber-300 border-amber-500/30',
                       approved:      'bg-blue-500/20 text-blue-300 border-blue-500/30',
                     };
+                    // Find the matching down-payment record for receipt links
+                    const dp = downPayments.find(d => d.mmp_site_entry_id === site.id);
+                    const receipts = dp ? parseReceipts(dp) : [];
                     return (
                       <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/20 transition-colors">
                         <TableCell className="text-slate-100 font-medium text-sm">{site.site_name}</TableCell>
@@ -1064,10 +1298,18 @@ const AdminWalletDetail = () => {
                         </TableCell>
                         <TableCell className="text-slate-400 text-sm">{site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}</TableCell>
                         <TableCell className="text-right text-sm text-teal-300 font-medium">
-                          {site.enumFee > 0 ? currencyFmt(site.enumFee, currency) : <span className="text-slate-600">—</span>}
+                          {site.displayEnumFee > 0 ? (
+                            <span className={site.displayEnumFee !== site.enumFee ? 'text-amber-300' : ''}>
+                              {currencyFmt(site.displayEnumFee, currency)}
+                            </span>
+                          ) : <span className="text-slate-600">—</span>}
                         </TableCell>
                         <TableCell className="text-right text-sm text-teal-300 font-medium">
-                          {site.transFee > 0 ? currencyFmt(site.transFee, currency) : <span className="text-slate-600">—</span>}
+                          {site.displayTransFee > 0 ? (
+                            <span className={site.displayTransFee !== site.transFee ? 'text-amber-300' : ''}>
+                              {currencyFmt(site.displayTransFee, currency)}
+                            </span>
+                          ) : <span className="text-slate-600">—</span>}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {site.advPaid > 0 ? (
@@ -1077,6 +1319,24 @@ const AdminWalletDetail = () => {
                                 <span className={`inline-flex px-1.5 py-0 rounded text-[10px] font-semibold border ${advStatusColors[site.advStatus] || 'bg-slate-600/40 text-slate-300 border-slate-600'}`}>
                                   {site.advStatus.replace(/_/g, ' ')}
                                 </span>
+                              )}
+                              {/* Receipt links from down payment */}
+                              {receipts.length > 0 && (
+                                <div className="flex flex-col items-end gap-0.5 mt-1">
+                                  {receipts.map((url, i) => (
+                                    <a
+                                      key={i}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 underline"
+                                      data-testid={`link-receipt-${site.id}-${i}`}
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      Receipt {receipts.length > 1 ? i + 1 : ''}
+                                    </a>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           ) : <span className="text-slate-600">—</span>}
@@ -1093,13 +1353,13 @@ const AdminWalletDetail = () => {
                       </TableRow>
                     );
                   })}
-                  {transportBreakdown.length > 0 && (
+                  {filteredTransportBreakdown.length > 0 && (
                     <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
                       <TableCell colSpan={3} className="text-slate-400 text-right text-sm font-semibold py-3">Totals</TableCell>
-                      <TableCell className="text-right font-bold text-teal-300">{currencyFmt(transportBreakdown.reduce((s, r) => s + r.enumFee, 0), currency)}</TableCell>
-                      <TableCell className="text-right font-bold text-teal-300">{currencyFmt(transportBreakdown.reduce((s, r) => s + r.transFee, 0), currency)}</TableCell>
-                      <TableCell className="text-right font-bold text-orange-400">− {currencyFmt(transportBreakdown.reduce((s, r) => s + r.advPaid, 0), currency)}</TableCell>
-                      <TableCell className="text-right font-bold text-amber-400">{currencyFmt(transportBreakdown.filter(r => r.remaining > 0).reduce((s, r) => s + r.remaining, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-teal-300">{currencyFmt(filteredTransportBreakdown.reduce((s, r) => s + r.displayEnumFee, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-teal-300">{currencyFmt(filteredTransportBreakdown.reduce((s, r) => s + r.displayTransFee, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-orange-400">− {currencyFmt(filteredTransportBreakdown.reduce((s, r) => s + r.advPaid, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-400">{currencyFmt(filteredTransportBreakdown.filter(r => r.remaining > 0).reduce((s, r) => s + r.remaining, 0), currency)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1558,6 +1818,159 @@ const AdminWalletDetail = () => {
               </Table>
             </div>
           </div>
+        </TabsContent>
+
+        {/* ── COSTS ── */}
+        <TabsContent value="costs" className="space-y-4">
+          {/* Summary cards */}
+          {(() => {
+            const allCosts = [
+              ...filteredSiteVisitCosts.map(c => ({
+                id: c.id,
+                type: 'site_visit' as const,
+                date: c.submitted_at,
+                amountCents: c.total_cost_cents || 0,
+                currency: c.currency || currency,
+                status: c.status,
+                description: c.submission_notes || 'Site visit expenses',
+                mmpFileId: c.mmp_file_id,
+                receipts: parseReceipts(c),
+              })),
+              ...filteredOperationalCosts.map(c => ({
+                id: c.id,
+                type: 'operational' as const,
+                date: c.submitted_at,
+                amountCents: c.amount_cents || 0,
+                currency: c.currency || currency,
+                status: c.status,
+                description: c.description || c.expense_category || 'Operational expense',
+                mmpFileId: c.mmp_file_id,
+                receipts: parseReceipts(c),
+              })),
+            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            const totalCents = allCosts.reduce((s, c) => s + c.amountCents, 0);
+            const paidCosts = allCosts.filter(c => c.status === 'approved' || c.status === 'paid');
+            const pendingCosts = allCosts.filter(c => c.status === 'pending' || c.status === 'submitted' || c.status === 'pending_review');
+            const withReceipts = allCosts.filter(c => c.receipts.length > 0);
+
+            const statusColors: Record<string, string> = {
+              approved:       'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+              paid:           'bg-teal-500/20 text-teal-300 border-teal-500/30',
+              pending:        'bg-amber-500/20 text-amber-300 border-amber-500/30',
+              submitted:      'bg-blue-500/20 text-blue-300 border-blue-500/30',
+              pending_review: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+              rejected:       'bg-red-500/20 text-red-300 border-red-500/30',
+            };
+
+            return (
+              <>
+                {/* KPI cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Submitted',    value: currencyFmt(totalCents / 100, currency),                                  note: `${allCosts.length} submission${allCosts.length !== 1 ? 's' : ''}`,     color: 'bg-teal-700 border-teal-600' },
+                    { label: 'Approved / Paid',    value: currencyFmt(paidCosts.reduce((s, c) => s + c.amountCents, 0) / 100, currency), note: `${paidCosts.length} approved`,                                        color: 'bg-emerald-700 border-emerald-600' },
+                    { label: 'Pending Review',     value: currencyFmt(pendingCosts.reduce((s, c) => s + c.amountCents, 0) / 100, currency), note: `${pendingCosts.length} awaiting`,                                    color: 'bg-amber-700 border-amber-600' },
+                    { label: 'With Receipts',      value: `${withReceipts.length}`,                                                note: `of ${allCosts.length} total`,                                             color: 'bg-slate-700 border-slate-600' },
+                  ].map(({ label, value, note, color }) => (
+                    <div key={label} className={`rounded-2xl border p-5 shadow-lg ${color}`}>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/60 mb-2">{label}</p>
+                      <p className="text-lg md:text-xl font-extrabold text-white leading-none break-all">{value}</p>
+                      <p className="text-[10px] text-white/50 mt-2">{note}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Cost submissions table */}
+                <div className={panel}>
+                  <div className={panelHeader}>
+                    <FileText className="w-4 h-4 text-teal-400" />
+                    <h3 className="font-semibold text-slate-100 text-sm">Cost Submissions</h3>
+                    <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">{allCosts.length} records</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-slate-700 bg-slate-900/40 hover:bg-slate-900/40">
+                          <TableHead className={thClass}>Date</TableHead>
+                          <TableHead className={thClass}>Type</TableHead>
+                          <TableHead className={thClass}>Description</TableHead>
+                          <TableHead className={thClass}>Status</TableHead>
+                          <TableHead className={`${thClass} text-right`}>Amount</TableHead>
+                          <TableHead className={thClass}>Receipts</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allCosts.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-slate-500 h-24">
+                              No cost submissions found{selectedMmp !== 'all' ? ' for this MMP' : ''}
+                            </TableCell>
+                          </TableRow>
+                        ) : allCosts.map(c => (
+                          <TableRow key={c.id} className="border-slate-700/40 hover:bg-slate-700/20 transition-colors">
+                            <TableCell className="text-slate-400 text-sm whitespace-nowrap">
+                              {c.date ? new Date(c.date).toLocaleDateString() : '—'}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
+                                c.type === 'site_visit'
+                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                  : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                              }`}>
+                                {c.type === 'site_visit' ? 'Site Visit' : 'Operational'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-slate-200 text-sm max-w-[200px] truncate" title={c.description}>
+                              {c.description}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${statusColors[c.status] || 'bg-slate-600/40 text-slate-300 border-slate-600'}`}>
+                                {c.status?.replace(/_/g, ' ')}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold text-teal-300 text-sm">
+                              {currencyFmt(c.amountCents / 100, currency)}
+                            </TableCell>
+                            <TableCell>
+                              {c.receipts.length > 0 ? (
+                                <div className="flex flex-col gap-0.5">
+                                  {c.receipts.map((url, i) => (
+                                    <a
+                                      key={i}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 underline whitespace-nowrap"
+                                      data-testid={`link-cost-receipt-${c.id}-${i}`}
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      {c.receipts.length > 1 ? `Receipt ${i + 1}` : 'Receipt'}
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-600 text-xs">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {allCosts.length > 0 && (
+                          <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
+                            <TableCell colSpan={4} className="text-slate-400 text-right font-semibold text-sm py-3">Total</TableCell>
+                            <TableCell className="text-right font-extrabold text-teal-300 tabular-nums">
+                              {currencyFmt(allCosts.reduce((s, c) => s + c.amountCents, 0) / 100, currency)}
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </TabsContent>
 
       </Tabs>

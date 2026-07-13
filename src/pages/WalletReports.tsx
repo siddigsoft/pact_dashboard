@@ -47,6 +47,7 @@ export default function WalletReports() {
   const [pageSize, setPageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
   const [txLoading, setTxLoading] = useState(false);
+  const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
 
   const currentMonth = useMemo(() => {
     const now = new Date();
@@ -84,6 +85,22 @@ export default function WalletReports() {
         setTotalCount(txns.length);
         setAllTransactions(txns);
       }
+      // Fetch cost submissions (site-visit + operational) for the cost submissions tab
+      const [svcRes, ocRes] = await Promise.all([
+        supabase
+          .from('site_visit_cost_submissions')
+          .select('id, submitted_by, submitted_at, mmp_file_id, total_cost_cents, transportation_cost_cents, currency, status, supporting_documents, payment_proof_url, submission_notes, site_visit_id')
+          .order('submitted_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('operational_cost_submissions')
+          .select('id, submitted_by, submitted_at, mmp_file_id, amount_cents, currency, status, description, expense_category, expense_date, supporting_documents, payment_proof_url')
+          .order('submitted_at', { ascending: false })
+          .limit(500),
+      ]);
+      const svcRows = (!svcRes.error && svcRes.data) ? svcRes.data.map((r: any) => ({ ...r, _type: 'site_visit' })) : [];
+      const ocRows  = (!ocRes.error  && ocRes.data)  ? ocRes.data.map( (r: any) => ({ ...r, _type: 'operational' })) : [];
+      setCostSubmissions([...svcRows, ...ocRows].sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()));
     } catch (err) {
       console.error('Error loading wallet reports:', err);
     } finally {
@@ -385,6 +402,10 @@ export default function WalletReports() {
           <TabsTrigger value="withdrawals" data-testid="tab-withdrawal-requests">
             <ArrowDownCircle className="w-4 h-4 mr-2" />
             Withdrawal Requests
+          </TabsTrigger>
+          <TabsTrigger value="costsubmissions" data-testid="tab-cost-submissions">
+            <FileText className="w-4 h-4 mr-2" />
+            Cost Submissions{costSubmissions.length > 0 ? ` (${costSubmissions.length})` : ''}
           </TabsTrigger>
         </TabsList>
 
@@ -799,6 +820,156 @@ export default function WalletReports() {
                           </TableRow>
                         </>
                       )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        {/* Cost Submissions Tab */}
+        <TabsContent value="costsubmissions">
+          <div className="space-y-4">
+            {/* Summary cards */}
+            {(() => {
+              const svcRows = costSubmissions.filter((c: any) => c._type === 'site_visit');
+              const ocRows  = costSubmissions.filter((c: any) => c._type === 'operational');
+              const totalSvc = svcRows.reduce((s: number, c: any) => s + (c.total_cost_cents || 0), 0);
+              const totalOc  = ocRows.reduce( (s: number, c: any) => s + (c.amount_cents || 0), 0);
+              const approved = costSubmissions.filter((c: any) => c.status === 'approved' || c.status === 'paid');
+              const pending  = costSubmissions.filter((c: any) => c.status === 'pending' || c.status === 'submitted' || c.status === 'pending_review');
+              return (
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Site Visit Costs</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold tabular-nums">{formatCurrency(totalSvc / 100)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{svcRows.length} submissions</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Operational Costs</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold tabular-nums">{formatCurrency(totalOc / 100)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{ocRows.length} submissions</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Approved / Paid</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold tabular-nums text-green-600">{approved.length}</p>
+                      <p className="text-xs text-muted-foreground mt-1">of {costSubmissions.length} total</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold tabular-nums text-yellow-600">{pending.length}</p>
+                      <p className="text-xs text-muted-foreground mt-1">awaiting approval</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })()}
+
+            {/* Cost submissions table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  All Cost Submissions ({costSubmissions.length})
+                </CardTitle>
+                <CardDescription>Site-visit and operational cost submissions across all users</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Submitted By</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Receipts</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {costSubmissions.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                            No cost submissions found
+                          </TableCell>
+                        </TableRow>
+                      ) : costSubmissions.map((c: any) => {
+                        const user = users?.find((u: any) => u.id === c.submitted_by);
+                        const amountCents = c._type === 'site_visit' ? (c.total_cost_cents || 0) : (c.amount_cents || 0);
+                        const description = c._type === 'site_visit' ? (c.submission_notes || 'Site visit expenses') : (c.description || c.expense_category || '—');
+                        // Parse receipt URLs
+                        const receipts: string[] = [];
+                        if (c.payment_proof_url) {
+                          try { const p = JSON.parse(c.payment_proof_url); if (Array.isArray(p)) receipts.push(...p.filter(Boolean)); else receipts.push(c.payment_proof_url); } catch { receipts.push(c.payment_proof_url); }
+                        }
+                        if (c.supporting_documents) {
+                          try { const docs = Array.isArray(c.supporting_documents) ? c.supporting_documents : JSON.parse(c.supporting_documents); for (const d of docs) { const u = d?.url || d?.fileUrl; if (u) receipts.push(u); } } catch {}
+                        }
+                        const uniqueReceipts = [...new Set(receipts)];
+                        return (
+                          <TableRow key={c.id} data-testid={`row-cost-submission-${c.id}`}>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {c.submitted_at ? format(new Date(c.submitted_at), 'MMM d, yyyy') : '—'}
+                            </TableCell>
+                            <TableCell className="font-medium text-sm">
+                              {user?.name || user?.full_name || c.submitted_by?.slice(0, 8) + '…' || '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={c._type === 'site_visit' ? 'text-blue-600 border-blue-300' : 'text-purple-600 border-purple-300'}>
+                                {c._type === 'site_visit' ? 'Site Visit' : 'Operational'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[180px] truncate" title={description}>{description}</TableCell>
+                            <TableCell>
+                              <Badge variant={
+                                c.status === 'approved' || c.status === 'paid' ? 'default' :
+                                c.status === 'rejected' ? 'destructive' : 'secondary'
+                              } className="capitalize text-xs">
+                                {c.status?.replace(/_/g, ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold">
+                              {formatCurrency(amountCents / 100)}
+                            </TableCell>
+                            <TableCell>
+                              {uniqueReceipts.length > 0 ? (
+                                <div className="flex flex-col gap-0.5">
+                                  {uniqueReceipts.map((url, i) => (
+                                    <a
+                                      key={i}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                      data-testid={`link-cost-receipt-${c.id}-${i}`}
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      {uniqueReceipts.length > 1 ? `Receipt ${i + 1}` : 'Receipt'}
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : <span className="text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
