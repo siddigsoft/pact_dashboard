@@ -12,7 +12,6 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { exportStandardExcel } from '@/utils/standardExcelExport';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 const DONE_STATUSES = new Set([
@@ -101,6 +100,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [financeLoading, setFinanceLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -321,161 +321,413 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     doc.save(`MMP-Full-Report-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
 
-  // ── Excel Export ──────────────────────────────────────────────────────────
-  const exportExcel = () => {
+  // ── Excel Export (ExcelJS — fully formatted) ──────────────────────────────
+  const exportExcel = async () => {
     if (!stats || !mmp) return;
-    const now = format(new Date(), 'dd MMM yyyy HH:mm');
-    const mmpTitle = mmp.name || mmp.mmp_id || mmpName || 'MMP';
-    const project = (mmp.project as any)?.name || '—';
-    const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  Generated: ${now}`;
-    const metaLine = `Total: ${stats.total}  •  Covered: ${stats.done} (${stats.coveragePct}%)  •  In Progress: ${stats.inProgress}  •  Attention: ${stats.attention}  •  Pending: ${stats.pending}  •  States: ${stats.stateCount}  •  Coordinators: ${stats.coordCount}`;
+    setExcelLoading(true);
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'PACT Command Center — ICT Unit';
+      wb.company = 'PACT';
 
-    // ── Down Payments breakdown rows ────────────────────────────────────
-    const dpRows: (string | number)[][] = downPayments.map(dp => [
-      dp.site_name || '—',
-      dp.hub_name || '—',
-      (dp.payment_type || '').replace(/_/g, ' ') || '—',
-      (dp.status || '').replace(/_/g, ' '),
-      dp.supervisor_status || '—',
-      dp.admin_status || '—',
-      Number(dp.requested_amount || 0),
-      Number(dp.total_paid_amount || 0),
-      Number(dp.remaining_amount || 0),
-      dp.created_at ? format(new Date(dp.created_at), 'dd MMM yyyy') : '—',
-      dp.fully_paid_at ? format(new Date(dp.fully_paid_at), 'dd MMM yyyy') : '—',
-    ]);
-    const dpTotals: (string | number)[] = [
-      `TOTAL (${downPayments.length})`, '', '', '', '', '',
-      downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0),
-      downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0),
-      downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0),
-      '', '',
-    ];
+      const now       = format(new Date(), 'dd MMM yyyy HH:mm');
+      const mmpTitle  = mmp.name || mmp.mmp_id || mmpName || 'MMP';
+      const project   = (mmp.project as any)?.name || '—';
 
-    // ── Cost Submissions breakdown rows ─────────────────────────────────
-    const csRows: (string | number)[][] = costSubmissions.map(cs => [
-      cs.request_title || '—',
-      (cs.expense_category || '').replace(/_/g, ' '),
-      cs.status || '—',
-      cs.tier1_status || '—',
-      cs.tier2_status || '—',
-      Number(cs.amount_cents || 0) / 100,
-      cs.created_at ? format(new Date(cs.created_at), 'dd MMM yyyy') : '—',
-    ]);
-    const csTotals: (string | number)[] = [
-      `TOTAL (${costSubmissions.length})`, '', '', '', '',
-      costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100,
-      '',
-    ];
+      // ── Palette ──────────────────────────────────────────────────────
+      const NAVY    = 'FF0F2041';
+      const NAVY2   = 'FF1D3461';
+      const WHITE   = 'FFFFFFFF';
+      const GREY_H  = 'FFE8EDF4';
+      const GREY_LT = 'FFF8FAFC';
+      const GREEN   = 'FF059669';
+      const AMBER   = 'FFD97706';
+      const RED     = 'FFDC2626';
+      const SLATE   = 'FF64748B';
+      const GOLD    = 'FFFBBF24';
 
-    // ── Activity rows ───────────────────────────────────────────────────
-    const actRows: (string | number)[][] = activityLogs.map(log => [
-      log.timestamp ? format(new Date(log.timestamp), 'dd MMM yyyy HH:mm') : '—',
-      log.actor_name || 'System',
-      (log.actor_role || '').replace(/_/g, ' '),
-      (log.action || '').replace(/_/g, ' '),
-      log.description || log.details || '—',
-      typeof log.previous_state === 'string' ? log.previous_state
-        : (log.previous_state as any)?.status || '',
-      typeof log.new_state === 'string' ? log.new_state
-        : (log.new_state as any)?.status || '',
-    ]);
+      type ExWS = ExcelJS.Worksheet;
 
-    exportStandardExcel({
-      reportTitle: 'PACT Command Center — Full MMP Status Report',
-      subtitleLine: subtitle,
-      metaLine,
-      filenamePrefix: `MMP-Full-Report-${mmp.mmp_id || mmpId}`,
+      // ── Shared helpers ────────────────────────────────────────────────
+      const border = (style: ExcelJS.BorderStyle = 'thin'): ExcelJS.Borders => ({
+        top:    { style, color: { argb: 'FFD1D5DB' } },
+        left:   { style, color: { argb: 'FFD1D5DB' } },
+        bottom: { style, color: { argb: 'FFD1D5DB' } },
+        right:  { style, color: { argb: 'FFD1D5DB' } },
+      });
 
-      // ── Main sheet: By State ────────────────────────────────────────
-      mainSheet: {
-        sheetName: 'By State',
-        headers: ['State', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %', 'Coordinators', 'Fees (SDG)'],
-        colWidths: { 0: 28, 1: 10, 2: 10, 3: 14, 4: 12, 5: 10, 6: 13, 7: 14, 8: 14 },
-        rows: stats.byState.map(s => [s.name, s.total, s.done, s.inProgress, s.attention, s.pending, `${s.coveragePct}%`, s.coordIds.size, s.fees]),
-        totalsRow: ['TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending, `${stats.coveragePct}%`, stats.coordCount, stats.totalFees],
-      },
+      const applyBorder = (row: ExcelJS.Row, style: ExcelJS.BorderStyle = 'thin') =>
+        row.eachCell({ includeEmpty: true }, c => { c.border = border(style); });
 
-      // ── Summary sheet ────────────────────────────────────────────────
-      summarySheet: {
-        title: 'MMP Summary',
-        colWidths: [30, 20],
-        rows: [
-          ['MMP Name', mmpTitle],
-          ['Project', project],
-          ['MMP ID', mmp.mmp_id || '—'],
-          ['MMP Status', mmp.status || '—'],
-          ['Generated', now],
-          [''],
-          ['Total Sites', stats.total],
-          ['Covered', stats.done],
-          ['Coverage %', `${stats.coveragePct}%`],
-          ['In Progress', stats.inProgress],
-          ['Needs Attention', stats.attention],
-          ['Pending', stats.pending],
-          ['Total States', stats.stateCount],
-          ['Total Coordinators', stats.coordCount],
-          ['Total Site Fees (SDG)', stats.totalFees],
-          [''],
-          ['Down Payment Requests', downPayments.length],
-          ['Total Requested (SDG)', downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0)],
-          ['Total Paid (SDG)', downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0)],
-          ['Remaining Balance (SDG)', downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0)],
-          [''],
-          ['Cost Submissions', costSubmissions.length],
-          ['Total Cost Amount (SDG)', costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
-          ['Approved Costs (SDG)', costSubmissions.filter(c => c.status === 'approved').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
-          ['Activity Log Entries', activityLogs.length],
-        ],
-      },
+      const addTitleBlock = (ws: ExWS, title: string, sub: string, numCols: number) => {
+        ws.mergeCells(1, 1, 1, numCols);
+        const t = ws.getCell('A1');
+        t.value     = title;
+        t.font      = { bold: true, size: 13, color: { argb: WHITE } };
+        t.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+        t.alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getRow(1).height = 28;
 
-      // ── Breakdown sheets ─────────────────────────────────────────────
-      breakdownSheets: [
-        {
-          title: 'Coordinator Performance',
-          sheetName: 'By Coordinator',
-          headers: ['Coordinator', 'States Assigned', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %'],
-          colWidths: [30, 16, 10, 10, 14, 12, 10, 13],
-          rows: [
-            ...stats.byCoordinator.map(c => [c.name, c.states.size, c.total, c.done, c.inProgress, c.attention, c.total - c.done - c.inProgress - c.attention, `${c.coveragePct}%`]),
-            ['TOTAL', new Set(stats.byCoordinator.flatMap(c => [...c.states])).size, stats.byCoordinator.reduce((s, c) => s + c.total, 0), stats.byCoordinator.reduce((s, c) => s + c.done, 0), stats.byCoordinator.reduce((s, c) => s + c.inProgress, 0), stats.byCoordinator.reduce((s, c) => s + c.attention, 0), stats.byCoordinator.reduce((s, c) => s + (c.total - c.done - c.inProgress - c.attention), 0), `${stats.coveragePct}%`],
-          ],
-        },
-        {
-          title: 'All Sites',
-          sheetName: 'All Sites',
-          headers: ['Site Name', 'Site Code', 'State', 'Locality', 'Status', 'Category', 'Enumerator Fee (SDG)', 'Transport Fee (SDG)', 'Cost (SDG)'],
-          colWidths: [30, 14, 20, 20, 22, 14, 18, 18, 12],
-          rows: entries.map(e => [
-            e.site_name || '', e.site_code || '',
-            e.state || e.hub_office || '', e.locality || '',
-            fmtStatus(e.status), classifyEntry(e.status),
-            e.enumerator_fee || 0, e.transport_fee || 0, e.cost || 0,
-          ]),
-        },
-        ...(downPayments.length > 0 ? [{
-          title: 'Down Payment Requests',
-          sheetName: 'Down Payments',
-          headers: ['Site Name', 'Hub', 'Type', 'Status', 'Supervisor', 'Admin', 'Requested (SDG)', 'Paid (SDG)', 'Remaining (SDG)', 'Date', 'Fully Paid'],
-          colWidths: [28, 20, 16, 18, 14, 14, 16, 14, 16, 14, 14],
-          rows: [...dpRows, dpTotals],
-        }] : []),
-        ...(costSubmissions.length > 0 ? [{
-          title: 'Operational Cost Submissions',
-          sheetName: 'Cost Submissions',
-          headers: ['Title', 'Category', 'Overall Status', 'Tier 1', 'Tier 2', 'Amount (SDG)', 'Date'],
-          colWidths: [30, 22, 16, 12, 12, 16, 14],
-          rows: [...csRows, csTotals],
-        }] : []),
-        ...(activityLogs.length > 0 ? [{
-          title: 'Activity Log',
-          sheetName: 'Activity',
-          headers: ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State'],
-          colWidths: [18, 24, 18, 22, 40, 18, 18],
-          rows: actRows,
-        }] : []),
-      ],
-    });
+        ws.mergeCells(2, 1, 2, numCols);
+        const s = ws.getCell('A2');
+        s.value     = sub;
+        s.font      = { italic: true, size: 9, color: { argb: 'FF374151' } };
+        s.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        s.alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getRow(2).height = 15;
+      };
+
+      const addHeaderRow = (ws: ExWS, headers: string[], accentCol?: number) => {
+        const row = ws.addRow(headers);
+        row.height = 22;
+        row.eachCell((cell, i) => {
+          cell.font      = { bold: true, size: 10, color: { argb: WHITE } };
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: (accentCol && i === accentCol) ? GREEN : NAVY2 } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          cell.border    = border();
+        });
+        return row;
+      };
+
+      const addDataRow = (ws: ExWS, values: (string | number | null)[], isOdd: boolean) => {
+        const row = ws.addRow(values);
+        row.height = 18;
+        const bg = isOdd ? GREY_LT : GREY_H;
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+          cell.font      = { size: 10 };
+          cell.alignment = { vertical: 'middle', wrapText: true };
+          cell.border    = border();
+        });
+        return row;
+      };
+
+      const addTotalsRow = (ws: ExWS, values: (string | number | null)[]) => {
+        const row = ws.addRow(values);
+        row.height = 22;
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+          cell.font      = { bold: true, size: 10, color: { argb: WHITE } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border    = border('medium');
+        });
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        return row;
+      };
+
+      const pctArgb = (pct: number) =>
+        pct >= 80 ? GREEN : pct >= 50 ? AMBER : RED;
+
+      const coverageCell = (row: ExcelJS.Row, colIdx: number, pct: number) => {
+        const c = row.getCell(colIdx);
+        c.font = { bold: true, size: 10, color: { argb: pctArgb(pct) } };
+      };
+
+      const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  Generated: ${now}`;
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 1 — Summary
+      // ════════════════════════════════════════════════════════════════
+      const wsSumm = wb.addWorksheet('Summary');
+      wsSumm.columns = [{ key: 'a', width: 34 }, { key: 'b', width: 22 }];
+      addTitleBlock(wsSumm, 'PACT Command Center — Full MMP Status Report', subtitle, 2);
+
+      const summSections: [string, string | number][] = [
+        ['MMP Name',         mmpTitle],
+        ['Project',          project],
+        ['MMP ID',           mmp.mmp_id || '—'],
+        ['MMP Status',       mmp.status || '—'],
+        ['Generated',        now],
+        ['', ''],
+        ['── COVERAGE ──', ''],
+        ['Total Sites',      stats.total],
+        ['Covered',          `${stats.done} (${stats.coveragePct}%)`],
+        ['In Progress',      stats.inProgress],
+        ['Needs Attention',  stats.attention],
+        ['Pending',          stats.pending],
+        ['States',           stats.stateCount],
+        ['Coordinators',     stats.coordCount],
+        ['Total Fees (SDG)', stats.totalFees],
+        ['', ''],
+        ['── DOWN PAYMENTS ──', ''],
+        ['Requests',         downPayments.length],
+        ['Total Requested (SDG)', downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0)],
+        ['Total Paid (SDG)', downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0)],
+        ['Remaining (SDG)',  downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0)],
+        ['', ''],
+        ['── COST SUBMISSIONS ──', ''],
+        ['Submissions',      costSubmissions.length],
+        ['Total Amount (SDG)', costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
+        ['Approved (SDG)',   costSubmissions.filter(c => c.status === 'approved').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
+        ['Pending (SDG)',    costSubmissions.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
+        ['', ''],
+        ['── ACTIVITY ──', ''],
+        ['Log Entries',      activityLogs.length],
+      ];
+
+      summSections.forEach(([label, value], i) => {
+        const row = wsSumm.addRow([label, value]);
+        row.height = 18;
+        const isSection = String(label).startsWith('──');
+        const isEmpty = !label;
+        row.getCell(1).font = isSection
+          ? { bold: true, size: 10, color: { argb: WHITE } }
+          : { size: 10, bold: !isEmpty };
+        row.getCell(2).font = { size: 10 };
+        if (isSection) {
+          row.eachCell({ includeEmpty: true }, c => {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY2 } };
+            c.font = { bold: true, size: 10, color: { argb: WHITE } };
+            c.border = border();
+          });
+          wsSumm.mergeCells(row.number, 1, row.number, 2);
+        } else if (!isEmpty) {
+          const bg = i % 2 === 0 ? GREY_LT : GREY_H;
+          row.eachCell({ includeEmpty: true }, c => {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+            c.border = border();
+            c.alignment = { vertical: 'middle' };
+          });
+        }
+        if (label === 'Coverage %' || label === 'Covered') {
+          row.getCell(2).font = { bold: true, size: 10, color: { argb: pctArgb(stats.coveragePct) } };
+        }
+      });
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 2 — By State
+      // ════════════════════════════════════════════════════════════════
+      const wsState = wb.addWorksheet('By State');
+      wsState.columns = [
+        { key: 'state', width: 26 }, { key: 'total', width: 9 },
+        { key: 'done',  width: 10 }, { key: 'ip',    width: 13 },
+        { key: 'att',   width: 11 }, { key: 'pend',  width: 9 },
+        { key: 'pct',   width: 12 }, { key: 'coords',width: 12 },
+        { key: 'fees',  width: 16 },
+      ];
+      addTitleBlock(wsState, 'By State — Coverage Breakdown', subtitle, 9);
+      addHeaderRow(wsState, ['State', 'Total', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %', 'Coordinators', 'Fees (SDG)']);
+
+      stats.byState.forEach((s, i) => {
+        const row = addDataRow(wsState, [s.name, s.total, s.done, s.inProgress, s.attention, s.pending, `${s.coveragePct}%`, s.coordIds.size, s.fees || 0], i % 2 === 0);
+        row.getCell(1).font = { bold: true, size: 10 };
+        row.getCell(3).font = { size: 10, color: { argb: GREEN } };
+        row.getCell(4).font = { size: 10, color: { argb: AMBER } };
+        row.getCell(5).font = { size: 10, color: { argb: RED } };
+        row.getCell(6).font = { size: 10, color: { argb: SLATE } };
+        coverageCell(row, 7, s.coveragePct);
+      });
+      const stTot = addTotalsRow(wsState, ['TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending, `${stats.coveragePct}%`, stats.coordCount, stats.totalFees]);
+      coverageCell(stTot, 7, stats.coveragePct);
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 3 — By Coordinator
+      // ════════════════════════════════════════════════════════════════
+      const wsCoord = wb.addWorksheet('By Coordinator');
+      wsCoord.columns = [
+        { key: 'name',   width: 30 }, { key: 'states', width: 9 },
+        { key: 'total',  width: 10 }, { key: 'done',   width: 10 },
+        { key: 'ip',     width: 13 }, { key: 'att',    width: 11 },
+        { key: 'pend',   width: 10 }, { key: 'pct',    width: 12 },
+      ];
+      addTitleBlock(wsCoord, 'Coordinator Performance', subtitle, 8);
+      addHeaderRow(wsCoord, ['Coordinator', 'States', 'Assigned', 'Covered', 'In Progress', 'Attention', 'Pending', 'Coverage %']);
+
+      stats.byCoordinator.forEach((c, i) => {
+        const pending = c.total - c.done - c.inProgress - c.attention;
+        const row = addDataRow(wsCoord, [c.name, c.states.size, c.total, c.done, c.inProgress, c.attention, pending, `${c.coveragePct}%`], i % 2 === 0);
+        row.getCell(1).font = { bold: true, size: 10 };
+        row.getCell(4).font = { size: 10, color: { argb: GREEN } };
+        row.getCell(5).font = { size: 10, color: { argb: AMBER } };
+        row.getCell(6).font = { size: 10, color: { argb: RED } };
+        coverageCell(row, 8, c.coveragePct);
+      });
+      const coordTotStates = new Set(stats.byCoordinator.flatMap(c => [...c.states])).size;
+      const cTot = addTotalsRow(wsCoord, [
+        `TOTAL (${stats.coordCount})`,
+        coordTotStates,
+        stats.byCoordinator.reduce((s, c) => s + c.total, 0),
+        stats.byCoordinator.reduce((s, c) => s + c.done, 0),
+        stats.byCoordinator.reduce((s, c) => s + c.inProgress, 0),
+        stats.byCoordinator.reduce((s, c) => s + c.attention, 0),
+        stats.byCoordinator.reduce((s, c) => s + (c.total - c.done - c.inProgress - c.attention), 0),
+        `${stats.coveragePct}%`,
+      ]);
+      coverageCell(cTot, 8, stats.coveragePct);
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 4 — All Sites
+      // ════════════════════════════════════════════════════════════════
+      const wsSites = wb.addWorksheet('All Sites');
+      wsSites.columns = [
+        { key: 'name',  width: 30 }, { key: 'code',  width: 14 },
+        { key: 'state', width: 20 }, { key: 'loc',   width: 20 },
+        { key: 'stat',  width: 22 }, { key: 'cat',   width: 13 },
+        { key: 'enum',  width: 16 }, { key: 'trans', width: 16 },
+        { key: 'cost',  width: 12 },
+      ];
+      addTitleBlock(wsSites, `All Sites (${entries.length} total)`, subtitle, 9);
+      addHeaderRow(wsSites, ['Site Name', 'Site Code', 'State', 'Locality', 'Status', 'Category', 'Enum Fee (SDG)', 'Trans Fee (SDG)', 'Cost (SDG)']);
+
+      const CAT_COLOR: Record<string, string> = {
+        done: GREEN, in_progress: AMBER, attention: RED, pending: SLATE,
+      };
+      entries.forEach((e, i) => {
+        const cat = classifyEntry(e.status);
+        const row = addDataRow(wsSites, [
+          e.site_name || '', e.site_code || '',
+          e.state || e.hub_office || '', e.locality || '',
+          fmtStatus(e.status), cat.replace('_', ' '),
+          Number(e.enumerator_fee || 0), Number(e.transport_fee || 0), Number(e.cost || 0),
+        ], i % 2 === 0);
+        row.getCell(6).font = { size: 10, bold: true, color: { argb: CAT_COLOR[cat] || SLATE } };
+      });
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 5 — Down Payments (if any)
+      // ════════════════════════════════════════════════════════════════
+      if (downPayments.length > 0) {
+        const wsDP = wb.addWorksheet('Down Payments');
+        wsDP.columns = [
+          { key: 'site',  width: 28 }, { key: 'hub',   width: 20 },
+          { key: 'type',  width: 16 }, { key: 'stat',  width: 18 },
+          { key: 'sup',   width: 14 }, { key: 'adm',   width: 14 },
+          { key: 'req',   width: 16 }, { key: 'paid',  width: 14 },
+          { key: 'rem',   width: 16 }, { key: 'date',  width: 14 },
+          { key: 'fpaid', width: 14 },
+        ];
+        addTitleBlock(wsDP, 'Down Payment Requests', subtitle, 11);
+        addHeaderRow(wsDP, ['Site Name', 'Hub', 'Type', 'Status', 'Supervisor', 'Admin', 'Requested (SDG)', 'Paid (SDG)', 'Remaining (SDG)', 'Date', 'Fully Paid']);
+
+        const DP_STATUS_COLOR: Record<string, string> = {
+          fully_paid: GREEN, approved: '4338CA', partially_paid: AMBER,
+          pending_admin: '7C3AED', pending_supervisor: 'EA580C', rejected: RED,
+        };
+        const totReq = downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0);
+        const totPaid = downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0);
+        const totRem = downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0);
+
+        downPayments.forEach((dp, i) => {
+          const row = addDataRow(wsDP, [
+            dp.site_name || '—', dp.hub_name || '—',
+            (dp.payment_type || '').replace(/_/g, ' ') || '—',
+            (dp.status || '').replace(/_/g, ' '),
+            dp.supervisor_status || '—', dp.admin_status || '—',
+            Number(dp.requested_amount || 0), Number(dp.total_paid_amount || 0), Number(dp.remaining_amount || 0),
+            dp.created_at ? format(new Date(dp.created_at), 'dd MMM yyyy') : '—',
+            dp.fully_paid_at ? format(new Date(dp.fully_paid_at), 'dd MMM yyyy') : '—',
+          ], i % 2 === 0);
+          const statusArgb = DP_STATUS_COLOR[dp.status] || SLATE;
+          row.getCell(4).font = { bold: true, size: 10, color: { argb: `FF${statusArgb}`.replace(/^FFFF/, 'FF') } };
+          row.getCell(7).font = { size: 10 };
+          row.getCell(8).font = { size: 10, color: { argb: GREEN } };
+          row.getCell(9).font = { size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+        });
+
+        const dpTot = addTotalsRow(wsDP, [
+          `TOTAL (${downPayments.length})`, '', '', '', '', '',
+          totReq, totPaid, totRem, '', '',
+        ]);
+        dpTot.getCell(7).font = { bold: true, size: 10, color: { argb: GOLD } };
+        dpTot.getCell(8).font = { bold: true, size: 10, color: { argb: GREEN } };
+        dpTot.getCell(9).font = { bold: true, size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+      }
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 6 — Cost Submissions (if any)
+      // ════════════════════════════════════════════════════════════════
+      if (costSubmissions.length > 0) {
+        const wsCS = wb.addWorksheet('Cost Submissions');
+        wsCS.columns = [
+          { key: 'title', width: 30 }, { key: 'cat',  width: 22 },
+          { key: 'stat',  width: 16 }, { key: 't1',   width: 12 },
+          { key: 't2',    width: 12 }, { key: 'amt',  width: 16 },
+          { key: 'date',  width: 14 },
+        ];
+        addTitleBlock(wsCS, 'Operational Cost Submissions', subtitle, 7);
+        addHeaderRow(wsCS, ['Title / Group', 'Category', 'Overall Status', 'Tier 1', 'Tier 2', 'Amount (SDG)', 'Date']);
+
+        const CS_STATUS_COLOR: Record<string, string> = {
+          approved: GREEN, pending: AMBER, rejected: RED,
+        };
+        const totAmt = costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100;
+
+        costSubmissions.forEach((cs, i) => {
+          const row = addDataRow(wsCS, [
+            cs.request_title || '—',
+            (cs.expense_category || '').replace(/_/g, ' '),
+            (cs.status || '—').replace(/_/g, ' '),
+            (cs.tier1_status || '—').replace(/_/g, ' '),
+            (cs.tier2_status || '—').replace(/_/g, ' '),
+            Number(cs.amount_cents || 0) / 100,
+            cs.created_at ? format(new Date(cs.created_at), 'dd MMM yyyy') : '—',
+          ], i % 2 === 0);
+          const sc = CS_STATUS_COLOR[cs.status] || SLATE;
+          row.getCell(3).font = { bold: true, size: 10, color: { argb: sc } };
+          row.getCell(4).font = { size: 10, color: { argb: CS_STATUS_COLOR[cs.tier1_status] || SLATE } };
+          row.getCell(5).font = { size: 10, color: { argb: CS_STATUS_COLOR[cs.tier2_status] || SLATE } };
+          row.getCell(6).font = { size: 10, bold: true };
+        });
+
+        const csTot = addTotalsRow(wsCS, [`TOTAL (${costSubmissions.length})`, '', '', '', '', totAmt, '']);
+        csTot.getCell(6).font = { bold: true, size: 10, color: { argb: GOLD } };
+      }
+
+      // ════════════════════════════════════════════════════════════════
+      // Sheet 7 — Activity Log (if any)
+      // ════════════════════════════════════════════════════════════════
+      if (activityLogs.length > 0) {
+        const wsAct = wb.addWorksheet('Activity Log');
+        wsAct.columns = [
+          { key: 'ts',   width: 18 }, { key: 'actor', width: 24 },
+          { key: 'role', width: 18 }, { key: 'act',   width: 22 },
+          { key: 'desc', width: 40 }, { key: 'prev',  width: 18 },
+          { key: 'next', width: 18 },
+        ];
+        addTitleBlock(wsAct, 'MMP Activity Log', subtitle, 7);
+        addHeaderRow(wsAct, ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State']);
+
+        const ACT_COLOR = (action: string) => {
+          const a = (action || '').toLowerCase();
+          if (a.includes('reject') || a.includes('recall') || a.includes('return')) return RED;
+          if (a.includes('approve') || a.includes('complete') || a.includes('verify')) return GREEN;
+          if (a.includes('update') || a.includes('edit')) return 'FF2563EB';
+          return SLATE;
+        };
+
+        activityLogs.forEach((log, i) => {
+          const prevState = typeof log.previous_state === 'string'
+            ? log.previous_state : (log.previous_state as any)?.status || '';
+          const newState = typeof log.new_state === 'string'
+            ? log.new_state : (log.new_state as any)?.status || '';
+          const row = addDataRow(wsAct, [
+            log.timestamp ? format(new Date(log.timestamp), 'dd MMM yyyy HH:mm') : '—',
+            log.actor_name || 'System',
+            (log.actor_role || '').replace(/_/g, ' '),
+            (log.action || '').replace(/_/g, ' '),
+            log.description || log.details || '—',
+            prevState, newState,
+          ], i % 2 === 0);
+          row.getCell(1).font = { size: 9, color: { argb: SLATE } };
+          row.getCell(4).font = { bold: true, size: 10, color: { argb: ACT_COLOR(log.action) } };
+          if (newState) row.getCell(7).font = { bold: true, size: 10, color: { argb: GREEN } };
+        });
+      }
+
+      // ── Download ────────────────────────────────────────────────────
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob   = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const a      = document.createElement('a');
+      a.href       = URL.createObjectURL(blob);
+      a.download   = `MMP-Full-Report-${mmp.mmp_id || mmpId}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error('MMP Excel export error:', err);
+    } finally {
+      setExcelLoading(false);
+    }
   };
 
   // ── Progress bar ──────────────────────────────────────────────────────────
@@ -523,9 +775,11 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button variant="outline" size="sm" onClick={exportExcel} disabled={!stats} className="text-green-700 border-green-300 hover:bg-green-50">
-                <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
-                Excel
+              <Button variant="outline" size="sm" onClick={exportExcel} disabled={!stats || excelLoading} className="text-green-700 border-green-300 hover:bg-green-50">
+                {excelLoading
+                  ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  : <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />}
+                {excelLoading ? 'Building…' : 'Excel'}
               </Button>
               <Button size="sm" onClick={exportPDF} disabled={!stats} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                 <Download className="h-3.5 w-3.5 mr-1.5" />
