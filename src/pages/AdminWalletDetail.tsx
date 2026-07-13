@@ -49,23 +49,14 @@ const AdminWalletDetail = () => {
       setLoadingProfile(true);
       setLoadingSiteVisits(true);
 
-      const [profileResult, walletResult, txnResult, sitesResult] = await Promise.all([
+      // Use SECURITY DEFINER RPC for wallet + transactions (direct queries are RLS-blocked)
+      const [profileResult, rpcResult, sitesResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, role, hub_id')
           .eq('id', userId)
           .single(),
-        supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', userId)
-          .single(),
-        supabase
-          .from('wallet_transactions')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(200),
+        supabase.rpc('admin_get_user_wallet_data', { p_user_id: userId }),
         supabase
           .from('mmp_site_entries')
           .select(`
@@ -94,37 +85,31 @@ const AdminWalletDetail = () => {
       setLoadingProfile(false);
 
       let txnData: any[] = [];
-      
-      if (walletResult.error) {
-        console.error('Failed to load wallet:', walletResult.error);
+
+      const walletRaw = rpcResult.data?.wallet;
+      if (rpcResult.error || !walletRaw) {
+        console.error('Failed to load wallet:', rpcResult.error);
         setWallet(null);
-        toast({
-          title: 'Wallet Not Found',
-          description: 'This user does not have a wallet yet or it could not be loaded.',
-          variant: 'destructive',
-        });
-      } else if (walletResult.data) {
+      } else {
         const transformedWallet: Wallet = {
-          id: walletResult.data.id,
-          userId: walletResult.data.user_id,
-          balances: walletResult.data.balances || { SDG: 0 },
-          totalEarned: parseFloat(walletResult.data.total_earned || 0),
-          totalWithdrawn: parseFloat(walletResult.data.total_withdrawn || 0),
-          createdAt: walletResult.data.created_at,
-          updatedAt: walletResult.data.updated_at,
+          id: walletRaw.id,
+          userId: walletRaw.user_id,
+          balances: walletRaw.balances || { SDG: 0 },
+          totalEarned: parseFloat(walletRaw.total_earned || 0),
+          totalWithdrawn: parseFloat(walletRaw.total_withdrawn || 0),
+          createdAt: walletRaw.created_at,
+          updatedAt: walletRaw.updated_at,
         };
         setWallet(transformedWallet);
-        
         const walletCurrencies = Object.keys(transformedWallet.balances);
         if (walletCurrencies.length > 0 && !walletCurrencies.includes(currency)) {
           setCurrency(walletCurrencies[0] || 'SDG');
         }
       }
 
-      if (txnResult.error) {
-        console.error('Failed to load transactions:', txnResult.error);
-      } else if (txnResult.data) {
-        txnData = txnResult.data;
+      const rawTxns: any[] = rpcResult.data?.transactions || [];
+      if (rawTxns.length > 0) {
+        txnData = rawTxns;
         const transformedTxns: WalletTransaction[] = txnData.map(t => ({
           id: t.id,
           walletId: t.wallet_id,

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -58,51 +58,43 @@ export default function WalletReports() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [totalCount, pageSize]);
 
-  const fetchTransactions = useCallback(async (page: number, size: number) => {
-    setTxLoading(true);
-    try {
-      const { count } = await supabase
-        .from('wallet_transactions')
-        .select('id', { count: 'exact', head: true });
-      setTotalCount(count || 0);
-
-      const from = (page - 1) * size;
-      const to = from + size - 1;
-      const { data: txData } = await supabase
-        .from('wallet_transactions')
-        .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(site_name, site_code, state, locality)')
-        .order('created_at', { ascending: false })
-        .range(from, to);
-      setAllTransactions(txData || []);
-    } catch (err) {
-      console.error('Error loading transactions:', err);
-    } finally {
-      setTxLoading(false);
-    }
-  }, []);
-
   const loadData = async () => {
     setLoading(true);
+    setTxLoading(true);
     try {
-      const data = await adminListWallets({ pageSize: 500 });
-      setWalletRows(data || []);
-      await fetchTransactions(currentPage, pageSize);
+      // Use SECURITY DEFINER RPC — direct table queries are RLS-blocked for other users
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc('admin_get_wallet_data');
+      if (rpcErr) {
+        console.error('RPC error, falling back:', rpcErr);
+        const fallback = await adminListWallets({ pageSize: 500 });
+        setWalletRows((fallback || []).map((w: any) => ({
+          ...w,
+          owner_name: w.full_name || w.owner_name || w.user_id,
+        })));
+      } else {
+        const wallets = (rpcResult?.wallets || []).map((w: any) => ({
+          ...w,
+          owner_name: w.full_name || w.username || w.email || w.user_id,
+          profiles: { full_name: w.full_name, email: w.email, username: w.username },
+          totalEarned: Number(w.total_earned || 0),
+          totalWithdrawn: Number(w.total_withdrawn || 0),
+        }));
+        setWalletRows(wallets);
+        const txns: any[] = rpcResult?.transactions || [];
+        setTotalCount(txns.length);
+        setAllTransactions(txns);
+      }
     } catch (err) {
       console.error('Error loading wallet reports:', err);
     } finally {
       setLoading(false);
+      setTxLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
   }, []);
-
-  useEffect(() => {
-    if (!loading) {
-      fetchTransactions(currentPage, pageSize);
-    }
-  }, [currentPage, pageSize]);
 
   useEffect(() => {
     setCurrentPage(1);
