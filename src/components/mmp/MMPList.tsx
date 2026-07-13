@@ -36,6 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
 import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3 } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
+import MmpFullReportDialog from './MmpFullReportDialog';
 import MMPProgressDialog from './MMPProgressDialog';
 import {
   Dialog,
@@ -73,6 +74,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [renameMMPTarget, setRenameMMPTarget] = useState<MMPFile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [isSavingRename, setIsSavingRename] = useState(false);
+  const [fullReportOpen, setFullReportOpen] = useState(false);
+  const [selectedMmpForReport, setSelectedMmpForReport] = useState<{ id: string; name: string } | null>(null);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -93,6 +96,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canDeleteMMP = !isSupervisor && (checkPermission('mmp', 'delete') || isAdmin || isICT);
   const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+  // Full Report is visible to management/oversight roles only
+  const canViewFullReport = isSuperAdmin || isAdmin || isICT || isFOM;
 
   // Initialize forwarded status from MMP workflow
   useEffect(() => {
@@ -317,16 +322,18 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                     </div>
                   </div>
                   
-                  {/* Full Status Report — always-visible button */}
-                  <button
-                    className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-primary/30 bg-primary/5 text-primary hover:bg-primary/15 transition-colors flex-shrink-0"
-                    onClick={e => { e.stopPropagation(); navigate(`/mmp/${mmp.id}/full-report`); }}
-                    data-testid={`button-full-report-mmp-${mmp.id}`}
-                    title="Full Status Report"
-                  >
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Full Report</span>
-                  </button>
+                  {/* Full Status Report — visible only for admin/ict/fom/superAdmin */}
+                  {canViewFullReport && (
+                    <button
+                      className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex-shrink-0"
+                      onClick={e => { e.stopPropagation(); setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                      data-testid={`button-full-report-mmp-${mmp.id}`}
+                      title="Full Status Report"
+                    >
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Full Report</span>
+                    </button>
+                  )}
 
                   {/* Quick Links Dropdown Menu */}
                   <DropdownMenu>
@@ -343,13 +350,15 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/view`)}>
                         View Details
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => navigate(`/mmp/${mmp.id}/full-report`)}
-                        data-testid={`button-full-report-mmp-${mmp.id}`}
-                      >
-                        <BarChart3 className="h-4 w-4 mr-2 text-primary" />
-                        Full Status Report
-                      </DropdownMenuItem>
+                      {canViewFullReport && (
+                        <DropdownMenuItem
+                          onClick={() => { setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                          data-testid={`button-full-report-dropdown-${mmp.id}`}
+                        >
+                          <BarChart3 className="h-4 w-4 mr-2 text-indigo-600" />
+                          Full Status Report
+                        </DropdownMenuItem>
+                      )}
 
                       {(isSuperAdmin || isAdmin || isICT) && (
                         <DropdownMenuItem
@@ -558,6 +567,16 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Full MMP Status Report Dialog */}
+      {selectedMmpForReport && (
+        <MmpFullReportDialog
+          open={fullReportOpen}
+          onClose={() => { setFullReportOpen(false); setSelectedMmpForReport(null); }}
+          mmpId={selectedMmpForReport.id}
+          mmpName={selectedMmpForReport.name}
+        />
+      )}
     </>
   );
 };

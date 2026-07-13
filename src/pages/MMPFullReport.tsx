@@ -101,7 +101,7 @@ const MMPFullReport = () => {
         while (true) {
           const { data, error: sErr } = await supabase
             .from('mmp_site_entries')
-            .select('id, site_name, site_code, status, hub_office, hub_name, forwarded_to_user_id, additional_data, enumerator_fee, transport_fee, cost, visit_completed_by')
+            .select('id, site_name, site_code, status, hub_office, state, forwarded_to_user_id, additional_data, enumerator_fee, transport_fee, cost, visit_completed_by')
             .eq('mmp_file_id', mmpId)
             .range(from, from + BATCH - 1);
           if (sErr) throw sErr;
