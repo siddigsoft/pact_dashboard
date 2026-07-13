@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Wallet, WalletTransaction } from '@/types/wallet';
-import { ArrowLeft, MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2, History, Truck, FileText, Printer } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2, History, Truck, FileText, Printer, CreditCard, Upload } from 'lucide-react';
 
 const currencyFmt = (amount: number, currency: string) => 
   new Intl.NumberFormat(undefined, { 
@@ -45,9 +45,15 @@ const AdminWalletDetail = () => {
   const [selectedMmp, setSelectedMmp] = useState<string>('all');
   const [siteVisitCosts, setSiteVisitCosts] = useState<any[]>([]);
   const [operationalCosts, setOperationalCosts] = useState<any[]>([]);
-  // Per-MMP rate overrides — display-only, never modifies wallet transactions
+  // Per-MMP rate overrides — pre-filled from actual site entries, editable
   const [mmpRateOverrides, setMmpRateOverrides] = useState<Record<string, { enumRate: number; transRate: number }>>({});
   const [showRateEditor, setShowRateEditor] = useState(false);
+  // Admin Direct Payment dialog
+  const [payOpen, setPayOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState('');
+  const [payNote, setPayNote] = useState('');
+  const [payFile, setPayFile] = useState<File | null>(null);
+  const [paying, setPaying] = useState(false);
 
   const loadWalletData = async () => {
     if (!userId) return;
@@ -199,7 +205,27 @@ const AdminWalletDetail = () => {
               for (const m of mmpData) joinedNames.set(m.id, m.name);
             }
           }
-          setMmps(mmpIds.map(id => ({ id, name: joinedNames.get(id) || id })));
+          const builtMmps = mmpIds.map(id => ({ id, name: joinedNames.get(id) || id }));
+          setMmps(builtMmps);
+          // Pre-fill rate editor with existing fees from site entries (most common value per MMP)
+          const prefill: Record<string, { enumRate: number; transRate: number }> = {};
+          for (const mmpId of mmpIds) {
+            const sitesForMmp = sitesResult.data.filter((s: any) => s.mmp_file_id === mmpId);
+            const enumCounts = new Map<number, number>();
+            const transCounts = new Map<number, number>();
+            for (const s of sitesForMmp) {
+              const ef = Number(s.enumerator_fee || 0);
+              const tf = Number(s.transport_fee || 0);
+              if (ef > 0) enumCounts.set(ef, (enumCounts.get(ef) || 0) + 1);
+              if (tf > 0) transCounts.set(tf, (transCounts.get(tf) || 0) + 1);
+            }
+            const topEnum  = [...enumCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
+            const topTrans = [...transCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
+            if (topEnum > 0 || topTrans > 0) {
+              prefill[mmpId] = { enumRate: topEnum, transRate: topTrans };
+            }
+          }
+          setMmpRateOverrides(prefill);
         } else {
           setMmps([]);
         }
@@ -571,6 +597,80 @@ const AdminWalletDetail = () => {
     }
   };
 
+  const handleAdminDirectPayment = async () => {
+    if (!wallet) return;
+    const amount = parseFloat(payAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: 'Invalid amount', description: 'Enter a positive amount to pay.', variant: 'destructive' });
+      return;
+    }
+    const currentBalance = (wallet.balances?.[currency] ?? 0) as number;
+    if (amount > currentBalance) {
+      toast({ title: 'Insufficient balance', description: `Balance is only ${currencyFmt(currentBalance, currency)}`, variant: 'destructive' });
+      return;
+    }
+    setPaying(true);
+    try {
+      // 1. Upload receipt if provided
+      let proofUrl: string | null = null;
+      if (payFile) {
+        const ext = payFile.name.split('.').pop() || 'jpg';
+        const filePath = `wallet-payments/${userId}/${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('mmp-files')
+          .upload(filePath, payFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(`Receipt upload failed: ${uploadErr.message}`);
+        proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      }
+
+      // 2. Deduct from wallet balance
+      const newBalance = Number((currentBalance - amount).toFixed(2));
+      const newBalances = { ...wallet.balances, [currency]: newBalance };
+      const newTotalWithdrawn = Number(wallet.total_withdrawn ?? 0) + amount;
+
+      const { error: walletErr } = await supabase
+        .from('wallets')
+        .update({
+          balances: newBalances,
+          total_withdrawn: newTotalWithdrawn,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', wallet.id);
+      if (walletErr) throw walletErr;
+
+      // 3. Record withdrawal transaction (with proof URL stored in description for now)
+      const desc = [
+        `Admin direct payment`,
+        payNote ? `— ${payNote}` : '',
+        proofUrl ? `| receipt: ${proofUrl}` : '',
+      ].filter(Boolean).join(' ');
+
+      const { error: txErr } = await supabase.from('wallet_transactions').insert({
+        wallet_id: wallet.id,
+        user_id: userId,
+        type: 'withdrawal',
+        amount: -amount,
+        amount_cents: Math.round(amount * 100),
+        currency,
+        description: desc,
+        balance_before: currentBalance,
+        balance_after: newBalance,
+      });
+      if (txErr) throw txErr;
+
+      toast({ title: 'Payment processed', description: `${currencyFmt(amount, currency)} paid directly to ${userProfile?.full_name || 'enumerator'}.` });
+      setPayOpen(false);
+      setPayAmount('');
+      setPayNote('');
+      setPayFile(null);
+      await loadWalletData();
+    } catch (err: any) {
+      toast({ title: 'Payment failed', description: err?.message || 'Could not process payment.', variant: 'destructive' });
+    } finally {
+      setPaying(false);
+    }
+  };
+
   const recalculateWalletTotals = async () => {
     if (!wallet) return;
     setRecalculating(true);
@@ -899,6 +999,106 @@ const AdminWalletDetail = () => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Admin Direct Payment dialog */}
+            <Dialog open={payOpen} onOpenChange={open => { setPayOpen(open); if (!open) { setPayAmount(''); setPayNote(''); setPayFile(null); } }}>
+              <DialogTrigger asChild>
+                <Button
+                  data-testid="button-admin-direct-pay"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl px-6 h-11 shadow-lg shadow-emerald-900/40 shrink-0 flex items-center gap-2"
+                >
+                  <CreditCard className="h-4 w-4" /> Pay Enumerator
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-slate-900 border-slate-700 max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-slate-100 flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-emerald-400" />
+                    Admin Direct Payment
+                  </DialogTitle>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Pay the enumerator directly. This deducts from their wallet balance immediately — no withdrawal request needed.
+                  </p>
+                </DialogHeader>
+                <div className="grid gap-4 py-2">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-300">Amount ({currency})</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={payAmount}
+                      onChange={e => setPayAmount(e.target.value)}
+                      placeholder="Enter amount"
+                      data-testid="input-direct-pay-amount"
+                      className="bg-slate-800 border-slate-600 text-slate-100"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Available balance: <span className="text-teal-400 font-semibold">{currencyFmt((wallet?.balances?.[currency] ?? 0) as number, currency)}</span>
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-300">Payment Note</label>
+                    <Input
+                      value={payNote}
+                      onChange={e => setPayNote(e.target.value)}
+                      placeholder="e.g. Enumerator fee for MMP January cycle"
+                      data-testid="input-direct-pay-note"
+                      className="bg-slate-800 border-slate-600 text-slate-100"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                      <Upload className="h-3.5 w-3.5 text-slate-400" />
+                      Payment Receipt <span className="text-slate-500 font-normal">(optional)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={e => setPayFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                        id="pay-receipt-upload"
+                        data-testid="input-direct-pay-receipt"
+                      />
+                      <label
+                        htmlFor="pay-receipt-upload"
+                        className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-slate-600 bg-slate-800 hover:bg-slate-700/60 px-4 py-3 text-sm text-slate-400 transition-colors"
+                      >
+                        <Upload className="h-4 w-4 shrink-0" />
+                        {payFile ? (
+                          <span className="text-emerald-400 truncate">{payFile.name}</span>
+                        ) : (
+                          <span>Click to upload receipt (image or PDF)</span>
+                        )}
+                      </label>
+                      {payFile && (
+                        <button
+                          onClick={() => setPayFile(null)}
+                          className="absolute right-2 top-2 text-slate-500 hover:text-red-400 text-xs"
+                        >
+                          ✕ remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={handleAdminDirectPayment}
+                    disabled={paying || !payAmount || parseFloat(payAmount) <= 0}
+                    data-testid="button-submit-direct-pay"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white w-full"
+                  >
+                    {paying ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing…</>
+                    ) : (
+                      <><CreditCard className="h-4 w-4 mr-2" />Confirm Payment</>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </div>
@@ -1018,7 +1218,7 @@ const AdminWalletDetail = () => {
           {showRateEditor && (
             <div className="w-full border-t border-slate-700 pt-4 mt-1">
               <p className="text-xs text-slate-400 mb-3">
-                Set the correct enumerator and transport rates per MMP. Click <strong className="text-teal-400">Apply Rates & Recalculate Wallet</strong> to save the rates to all of this enumerator's site entries for that MMP and automatically recalculate the wallet balance.
+                Rates are <span className="text-teal-400 font-semibold">pre-filled</span> from each MMP's site entries. Edit any value and click <strong className="text-teal-400">Apply Rates & Recalculate Wallet</strong> to save the new rates and update the wallet balance — even for already-paid sites.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {mmps.map(m => {
@@ -1717,7 +1917,30 @@ const AdminWalletDetail = () => {
                           {txn.type.replace(/_/g, ' ')}
                         </span>
                       </TableCell>
-                      <TableCell className="text-slate-400 text-sm max-w-[220px] truncate">{txn.description || '—'}</TableCell>
+                      <TableCell className="text-slate-400 text-sm max-w-[220px]">
+                        {txn.description ? (() => {
+                          const receiptMatch = txn.description.match(/\|\s*receipt:\s*(https?:\/\/\S+)/);
+                          const displayDesc = receiptMatch
+                            ? txn.description.replace(/\|\s*receipt:\s*https?:\/\/\S+/, '').trim()
+                            : txn.description;
+                          return (
+                            <span className="flex items-center gap-1.5 flex-wrap">
+                              <span className="truncate max-w-[160px]">{displayDesc}</span>
+                              {receiptMatch && (
+                                <a
+                                  href={receiptMatch[1]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-0.5 text-[10px] text-teal-400 hover:text-teal-300 border border-teal-700/50 rounded px-1.5 py-0.5 shrink-0"
+                                  data-testid={`link-pay-receipt-${txn.id}`}
+                                >
+                                  <FileText className="h-2.5 w-2.5" />Receipt
+                                </a>
+                              )}
+                            </span>
+                          );
+                        })() : '—'}
+                      </TableCell>
                       <TableCell className="text-right">
                         {editingTxId === txn.id ? (
                           <Input type="number" value={editTxAmount} onChange={e => setEditTxAmount(e.target.value)} className="w-32 ml-auto text-right bg-slate-700 border-slate-500 text-slate-100" data-testid={`input-tx-amount-${txn.id}`} autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEditTx(txn.id); if (e.key === 'Escape') cancelEditTx(); }} />
