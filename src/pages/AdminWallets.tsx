@@ -45,11 +45,6 @@ const AdminWallets: FC = () => {
   // All users from context — bypasses RLS so we see all 221 users regardless
   const { users } = useUser();
 
-  // ── SQL bypass pre-flight ───────────────────────────────────────────────────
-  // Detects whether the admin RLS bypass SQL has been applied.
-  // If not applied, the admin can only see their own wallet (1 row) and backfill writes fail.
-  const [sqlReady, setSqlReady] = useState<boolean | null>(null); // null = checking
-
   // ── Backfill state ─────────────────────────────────────────────────────────
   const [backfillScan, setBackfillScan] = useState<{
     scanned: boolean;
@@ -596,18 +591,6 @@ const AdminWallets: FC = () => {
   };
   
 
-  // Pre-flight: check whether admin RLS bypass SQL has been applied.
-  // We ask for 2 wallet rows — if only 1 comes back the admin can only see their own wallet.
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from('wallets')
-        .select('id')
-        .limit(2);
-      setSqlReady((data?.length ?? 0) > 1);
-    })();
-  }, []);
-
   // Re-run load whenever the users list is ready/updated.
   // After the first load, kick off an auto-scan so the missing-credit count
   // is ready without the admin having to click "Scan Now" manually.
@@ -737,45 +720,9 @@ const AdminWallets: FC = () => {
         </div>
       </div>
 
-      {/* ── SQL pre-flight: only affects DISPLAY (balance totals), not backfill ── */}
-      {sqlReady === false && (
-        <Card className="border-amber-400 dark:border-amber-600 bg-amber-50/60 dark:bg-amber-950/20">
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <Info className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">
-                    Balance display limited — RLS read policy not applied
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Without this one-time setup, this page can only read <strong>your own</strong> wallet row, so the
-                    Total Sites Cost, Total Withdrawals, and per-user balances all show SDG 0.00. <br />
-                    <strong>The backfill itself works fine</strong> — it runs via a server-side edge function that
-                    already bypasses RLS. Run the SQL below only if you want to see correct balance totals here.
-                  </p>
-                  <ol className="text-xs text-muted-foreground mt-2 space-y-0.5 list-decimal list-inside">
-                    <li>Open <strong>Supabase Dashboard → SQL Editor</strong></li>
-                    <li>Paste and run the SQL below (takes ~5 seconds)</li>
-                    <li>Reload this page — totals will show real balances</li>
-                  </ol>
-                </div>
-              </div>
-              <pre className="text-xs bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono select-all">{`-- Admin read-access for wallets (display only — backfill already works without this)
-DROP POLICY IF EXISTS "Admins can view all wallets" ON wallets;
-CREATE POLICY "Admins can view all wallets" ON wallets FOR SELECT USING (
-  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin'))
-);
-DROP POLICY IF EXISTS "Admins can view all wallet transactions" ON wallet_transactions;
-CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions FOR SELECT USING (
-  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin'))
-);`}</pre>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* ── Wallet Backfill Panel ── */}
+      {/* ── Wallet Backfill Panel — hidden once scan confirms nothing missing ── */}
+      {(backfillScan === null || backfillScan.missing.length > 0 || backfilling) && (
       <Card className="border-amber-300 dark:border-amber-600 bg-amber-50/40 dark:bg-amber-950/10">
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-start gap-4">
@@ -906,6 +853,7 @@ CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions F
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
