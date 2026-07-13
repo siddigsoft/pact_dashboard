@@ -1128,7 +1128,7 @@ const AdminWalletDetail = () => {
             <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-advances-paid">
               − {currencyFmt(totalAdvancesPaid, currency)}
             </p>
-            <p className="text-[10px] text-orange-300/70 mt-2">{downPayments.length} advance{downPayments.length !== 1 ? 's' : ''} paid in cash</p>
+            <p className="text-[10px] text-orange-300/70 mt-2">{downPayments.filter(d => parseFloat(d.total_paid_amount || 0) > 0).length} advance{downPayments.filter(d => parseFloat(d.total_paid_amount || 0) > 0).length !== 1 ? 's' : ''} paid in cash</p>
           </div>
         ) : (
           <div className="rounded-2xl bg-violet-700 border border-violet-600 p-5 shadow-lg shadow-violet-900/30">
@@ -1516,16 +1516,16 @@ const AdminWalletDetail = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSiteVisits.length === 0 ? (
+                  {filteredTransportBreakdown.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-slate-500 h-24">No sites visited yet</TableCell></TableRow>
-                  ) : filteredSiteVisits.map((site) => {
-                    const enumFee   = Number(site.enumerator_fee || 0);
-                    const transFee  = Number(site.transport_fee  || 0);
-                    const totalFee  = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
+                  ) : filteredTransportBreakdown.map((site) => {
+                    const totalFee  = site.enumFee + site.transFee > 0 ? site.enumFee + site.transFee : Number(site.cost || 0);
                     const sl        = site.status?.toLowerCase();
                     const isDone       = ['wfp_confirmed','completed','verified','cp_verified','approved','costed','approved_and_costed','locality_permit_verified'].includes(sl ?? '');
                     const isInProgress = ['accepted','claimed','in_progress','ongoing','dispatched','assigned','forwarded','forwarded_to_coordinator','forwarded_to_fom','permits_attached','with_coordinators','submitted','acknowledged','site_claim'].includes(sl ?? '');
                     const isAttention  = ['rejected','declined','returned','returned_to_fom','recalled','sent_back'].includes(sl ?? '');
+                    const advFullyPaid = site.advPaid > 0 && site.advPaid >= site.transFee - 0.005;
+                    const advPartial   = site.advPaid > 0 && !advFullyPaid;
                     return (
                       <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
                         <TableCell className="text-slate-100 font-medium">{site.site_name}</TableCell>
@@ -1542,10 +1542,25 @@ const AdminWalletDetail = () => {
                         <TableCell className="text-slate-400 text-sm">{site.accepted_at ? new Date(site.accepted_at).toLocaleDateString() : '—'}</TableCell>
                         <TableCell className="text-slate-400 text-sm">{site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}</TableCell>
                         <TableCell className="text-right text-sm font-medium">
-                          {enumFee > 0 ? <span className="text-teal-300">{currencyFmt(enumFee, currency)}</span> : <span className="text-slate-600">—</span>}
+                          {site.enumFee > 0 ? <span className="text-teal-300">{currencyFmt(site.enumFee, currency)}</span> : <span className="text-slate-600">—</span>}
                         </TableCell>
                         <TableCell className="text-right text-sm font-medium">
-                          {transFee > 0 ? <span className="text-teal-300">{currencyFmt(transFee, currency)}</span> : <span className="text-slate-600">—</span>}
+                          {site.transFee > 0 ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className="text-teal-300">{currencyFmt(site.transFee, currency)}</span>
+                              {advFullyPaid ? (
+                                <span className="text-emerald-400 text-[10px] flex items-center gap-0.5">
+                                  <CheckCircle className="w-2.5 h-2.5" />Advance paid
+                                </span>
+                              ) : advPartial ? (
+                                <span className="text-amber-400 text-[10px] flex items-center gap-0.5">
+                                  <Clock className="w-2.5 h-2.5" />Partial: {currencyFmt(site.advPaid, currency)}
+                                </span>
+                              ) : isDone ? (
+                                <span className="text-slate-500 text-[10px]">No advance</span>
+                              ) : null}
+                            </div>
+                          ) : <span className="text-slate-600">—</span>}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {site.payment ? (
@@ -1565,12 +1580,12 @@ const AdminWalletDetail = () => {
                       </TableRow>
                     );
                   })}
-                  {filteredSiteVisits.length > 0 && (
+                  {filteredTransportBreakdown.length > 0 && (
                     <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
                       <TableCell colSpan={4} className="text-slate-400 text-right text-sm font-semibold py-3">Totals</TableCell>
-                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(filteredSiteVisits.reduce((s, v) => s + Number(v.enumerator_fee || 0), 0), currency)}</TableCell>
-                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(filteredSiteVisits.reduce((s, v) => s + Number(v.transport_fee || 0), 0), currency)}</TableCell>
-                      <TableCell className="text-right text-emerald-400 font-bold">{currencyFmt(filteredSiteVisits.reduce((s, v) => { const ef = Number(v.enumerator_fee || 0); const tf = Number(v.transport_fee || 0); return s + (ef + tf > 0 ? ef + tf : Number(v.cost || 0)); }, 0), currency)}</TableCell>
+                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(filteredTransportBreakdown.reduce((s, v) => s + v.enumFee, 0), currency)}</TableCell>
+                      <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(filteredTransportBreakdown.reduce((s, v) => s + v.transFee, 0), currency)}</TableCell>
+                      <TableCell className="text-right text-emerald-400 font-bold">{currencyFmt(filteredTransportBreakdown.reduce((s, v) => s + (v.enumFee + v.transFee > 0 ? v.enumFee + v.transFee : Number(v.cost || 0)), 0), currency)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

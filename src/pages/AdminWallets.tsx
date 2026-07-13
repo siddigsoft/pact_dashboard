@@ -798,10 +798,10 @@ const AdminWallets: FC = () => {
             </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* ── Stat cards ── */}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-2xl bg-teal-700 border border-teal-600 p-5 shadow-lg shadow-teal-900/30" data-testid="card-stat-total-earnings">
           <p className="text-[11px] font-bold uppercase tracking-widest text-teal-200 mb-1">Total Earned</p>
