@@ -88,7 +88,7 @@ const MMPFullReport = () => {
         // Fetch MMP metadata
         const { data: mmpData, error: mmpErr } = await supabase
           .from('mmp_files')
-          .select('id, name, mmp_id, project_name, status, cycle_status, created_at, uploaded_by')
+          .select('id, name, mmp_id, status, cycle_status, created_at, uploaded_by, project:projects(id, name)')
           .eq('id', mmpId)
           .single();
         if (mmpErr) throw mmpErr;
@@ -215,7 +215,7 @@ const MMPFullReport = () => {
     doc.text(`Full MMP Status Report`, 14, 16);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${title} | ${mmp.project_name || ''} | Generated: ${now}`, 14, 23);
+    doc.text(`${title} | ${(mmp.project as any)?.name || ''} | Generated: ${now}`, 14, 23);
 
     doc.setFontSize(10);
     doc.text(`Total Sites: ${overall.total}  |  Covered: ${overall.done} (${overall.coveragePct}%)  |  In Progress: ${overall.inProgress}  |  Pending: ${overall.pending}  |  States: ${overall.states}  |  Coordinators: ${overall.coordinators}`, 14, 30);
@@ -271,7 +271,7 @@ const MMPFullReport = () => {
       ['PACT Command Center — Full MMP Status Report'],
       [''],
       ['MMP Name', mmp.name || mmp.mmp_id || ''],
-      ['Project', mmp.project_name || ''],
+      ['Project', (mmp.project as any)?.name || ''],
       ['Status', mmp.status || ''],
       ['Generated', format(new Date(), 'dd MMM yyyy HH:mm')],
       [''],
@@ -359,7 +359,7 @@ const MMPFullReport = () => {
           <div className="min-w-0">
             <h1 className="font-bold text-lg leading-tight truncate">{mmpTitle}</h1>
             <p className="text-xs text-muted-foreground truncate">
-              {mmp?.project_name} {mmp?.created_at ? `· Uploaded ${format(new Date(mmp.created_at), 'dd MMM yyyy')}` : ''}
+              {(mmp?.project as any)?.name} {mmp?.created_at ? `· Uploaded ${format(new Date(mmp.created_at), 'dd MMM yyyy')}` : ''}
             </p>
           </div>
           {mmp?.status && (

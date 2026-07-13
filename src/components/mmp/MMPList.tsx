@@ -317,6 +317,17 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                     </div>
                   </div>
                   
+                  {/* Full Status Report — always-visible button */}
+                  <button
+                    className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-primary/30 bg-primary/5 text-primary hover:bg-primary/15 transition-colors flex-shrink-0"
+                    onClick={e => { e.stopPropagation(); navigate(`/mmp/${mmp.id}/full-report`); }}
+                    data-testid={`button-full-report-mmp-${mmp.id}`}
+                    title="Full Status Report"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Full Report</span>
+                  </button>
+
                   {/* Quick Links Dropdown Menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
