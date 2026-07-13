@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Download, FileSpreadsheet, Loader2, MapPin, Users,
   CheckCircle2, Clock, AlertCircle, BarChart3, X,
-  ShieldAlert, TrendingUp, Activity, FileText,
+  ShieldAlert, TrendingUp, Activity, FileText, DollarSign, History, Banknote,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -96,14 +96,23 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   const [tab, setTab] = useState('overview');
   const [siteFilter, setSiteFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  // Financial & Activity data
+  const [downPayments, setDownPayments] = useState<any[]>([]);
+  const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [financeLoading, setFinanceLoading] = useState(false);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open || !mmpId) return;
     setLoading(true);
+    setFinanceLoading(true);
     setEntries([]);
     setMmp(null);
     setProfileMap({});
+    setDownPayments([]);
+    setCostSubmissions([]);
+    setActivityLogs([]);
 
     (async () => {
       try {
@@ -152,6 +161,34 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         }
       } finally {
         setLoading(false);
+      }
+
+      // ── Financial + Activity (parallel, non-blocking) ─────────────────
+      try {
+        const [dpRes, csRes, alRes] = await Promise.allSettled([
+          supabase
+            .from('down_payment_requests')
+            .select('id, site_name, hub_name, status, requested_amount, total_paid_amount, remaining_amount, payment_type, created_at, supervisor_status, admin_status, fully_paid_at')
+            .eq('mmp_file_id', mmpId)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('operational_cost_submissions')
+            .select('id, status, tier1_status, tier2_status, tier3_status, amount_cents, expense_category, description, hub_id, created_at, request_title')
+            .eq('mmp_file_id', mmpId)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('audit_logs')
+            .select('id, actor_name, actor_role, timestamp, action, description, details, new_state, previous_state')
+            .in('entity_type', ['mmp', 'mmp_file', 'mmp_files'])
+            .eq('entity_id', mmpId)
+            .order('timestamp', { ascending: false })
+            .limit(100),
+        ]);
+        if (dpRes.status === 'fulfilled') setDownPayments(dpRes.value.data || []);
+        if (csRes.status === 'fulfilled') setCostSubmissions(csRes.value.data || []);
+        if (alRes.status === 'fulfilled') setActivityLogs(alRes.value.data || []);
+      } finally {
+        setFinanceLoading(false);
       }
     })();
   }, [open, mmpId]);
@@ -458,6 +495,24 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                   <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
                   Status Breakdown
                 </TabsTrigger>
+                <TabsTrigger value="financial" className="text-xs">
+                  <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+                  Financial
+                  {(downPayments.length + costSubmissions.length) > 0 && (
+                    <span className="ml-1 text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-semibold">
+                      {downPayments.length + costSubmissions.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="activity" className="text-xs">
+                  <History className="h-3.5 w-3.5 mr-1.5" />
+                  Activity
+                  {activityLogs.length > 0 && (
+                    <span className="ml-1 text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full font-semibold">
+                      {activityLogs.length}
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
 
               {/* ── Tab: By State ── */}
@@ -535,6 +590,20 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                           <td className="px-3 py-2"><ProgressBar pct={c.coveragePct} /></td>
                         </tr>
                       ))}
+                      {/* Totals row */}
+                      <tr className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                        <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
+                        <td className="px-3 py-2">TOTAL ({stats.coordCount} coordinators)</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {new Set(stats.byCoordinator.flatMap(c => [...c.states])).size}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{stats.byCoordinator.reduce((s, c) => s + c.total, 0)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-green-700">{stats.byCoordinator.reduce((s, c) => s + c.done, 0)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-amber-700">{stats.byCoordinator.reduce((s, c) => s + c.inProgress, 0)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-600">{stats.byCoordinator.reduce((s, c) => s + c.attention, 0)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{stats.byCoordinator.reduce((s, c) => s + (c.total - c.done - c.inProgress - c.attention), 0)}</td>
+                        <td className="px-3 py-2"><ProgressBar pct={stats.coveragePct} /></td>
+                      </tr>
                     </tbody>
                   </table>
                 )}
@@ -651,6 +720,289 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                     </div>
                   </div>
                 </div>
+              </TabsContent>
+
+              {/* ── Tab: Financial ── */}
+              <TabsContent value="financial" className="flex-1 overflow-auto px-5 py-3 mt-0 space-y-6">
+                {financeLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-indigo-600 mr-2" />
+                    <span className="text-sm text-muted-foreground">Loading financial data…</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* ── Down Payments ─── */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <Banknote className="h-4 w-4 text-emerald-600" />
+                        Down Payment Requests
+                        <span className="text-xs font-normal text-muted-foreground">({downPayments.length} records)</span>
+                      </h3>
+                      {downPayments.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">No down payment requests linked to this MMP.</p>
+                      ) : (
+                        <>
+                          {/* Status summary pills */}
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {Object.entries(
+                              downPayments.reduce<Record<string, number>>((acc, dp) => { acc[dp.status] = (acc[dp.status] || 0) + 1; return acc; }, {})
+                            ).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
+                              const statusColors: Record<string, string> = {
+                                fully_paid: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+                                approved: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+                                partially_paid: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+                                pending_admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+                                pending_supervisor: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+                                rejected: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+                              };
+                              const cls = statusColors[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+                              return (
+                                <span key={status} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>
+                                  {status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                  <span className="font-bold">{count}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {/* Totals summary */}
+                          <div className="grid grid-cols-3 gap-3 mb-3">
+                            {[
+                              { label: 'Total Requested', value: downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0) },
+                              { label: 'Total Paid', value: downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0) },
+                              { label: 'Remaining Balance', value: downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0) },
+                            ].map(({ label, value }) => (
+                              <div key={label} className="rounded-lg border bg-muted/30 px-3 py-2">
+                                <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                                <p className="text-base font-bold tabular-nums">SDG {value.toLocaleString()}</p>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Detail table */}
+                          <table className="w-full text-sm border-separate border-spacing-0">
+                            <thead className="sticky top-0 bg-background z-10">
+                              <tr>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Site</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Hub</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Type</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Status</th>
+                                <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Requested (SDG)</th>
+                                <th className="text-right px-3 py-2 text-xs font-semibold text-green-700 border-b">Paid (SDG)</th>
+                                <th className="text-right px-3 py-2 text-xs font-semibold text-red-600 border-b">Remaining</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {downPayments.map((dp, i) => {
+                                const statusColors: Record<string, string> = {
+                                  fully_paid: 'text-green-700 dark:text-green-400',
+                                  approved: 'text-blue-700 dark:text-blue-400',
+                                  partially_paid: 'text-amber-700 dark:text-amber-400',
+                                  pending_admin: 'text-purple-700 dark:text-purple-400',
+                                  pending_supervisor: 'text-orange-600 dark:text-orange-400',
+                                  rejected: 'text-red-600 dark:text-red-400',
+                                };
+                                return (
+                                  <tr key={dp.id} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
+                                    <td className="px-3 py-1.5 font-medium max-w-[140px] truncate" title={dp.site_name || ''}>{dp.site_name || '—'}</td>
+                                    <td className="px-3 py-1.5 text-muted-foreground text-xs">{dp.hub_name || '—'}</td>
+                                    <td className="px-3 py-1.5 text-muted-foreground text-xs capitalize">{(dp.payment_type || '').replace(/_/g, ' ') || '—'}</td>
+                                    <td className={`px-3 py-1.5 text-xs font-medium capitalize ${statusColors[dp.status] || 'text-muted-foreground'}`}>
+                                      {(dp.status || '').replace(/_/g, ' ')}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums">{Number(dp.requested_amount || 0).toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-green-700 dark:text-green-400">{Number(dp.total_paid_amount || 0).toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-red-600 dark:text-red-400">{Number(dp.remaining_amount || 0).toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-xs text-muted-foreground">{dp.created_at ? format(new Date(dp.created_at), 'dd MMM yyyy') : '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Down payments totals row */}
+                              <tr className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                                <td className="px-3 py-2" colSpan={4}>TOTAL ({downPayments.length})</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{downPayments.reduce((s, d) => s + Number(d.requested_amount || 0), 0).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-green-700">{downPayments.reduce((s, d) => s + Number(d.total_paid_amount || 0), 0).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-red-600">{downPayments.reduce((s, d) => s + Number(d.remaining_amount || 0), 0).toLocaleString()}</td>
+                                <td className="px-3 py-2" />
+                              </tr>
+                            </tbody>
+                          </table>
+                        </>
+                      )}
+                    </div>
+
+                    {/* ── Operational Cost Submissions ─── */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-indigo-600" />
+                        Operational Cost Submissions
+                        <span className="text-xs font-normal text-muted-foreground">({costSubmissions.length} records)</span>
+                      </h3>
+                      {costSubmissions.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">No cost submissions linked to this MMP.</p>
+                      ) : (
+                        <>
+                          {/* Status summary pills */}
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {Object.entries(
+                              costSubmissions.reduce<Record<string, number>>((acc, cs) => { acc[cs.status] = (acc[cs.status] || 0) + 1; return acc; }, {})
+                            ).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
+                              const cls = status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                                : status === 'pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                : status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+                              return (
+                                <span key={status} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>
+                                  {status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                  <span className="font-bold">{count}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {/* Total amount */}
+                          <div className="grid grid-cols-3 gap-3 mb-3">
+                            <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                              <p className="text-xs text-muted-foreground mb-0.5">Total Amount</p>
+                              <p className="text-base font-bold tabular-nums">
+                                SDG {(costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                              <p className="text-xs text-muted-foreground mb-0.5">Approved</p>
+                              <p className="text-base font-bold tabular-nums text-green-700">
+                                SDG {(costSubmissions.filter(c => c.status === 'approved').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                              <p className="text-xs text-muted-foreground mb-0.5">Pending</p>
+                              <p className="text-base font-bold tabular-nums text-amber-700">
+                                SDG {(costSubmissions.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          {/* Detail table */}
+                          <table className="w-full text-sm border-separate border-spacing-0">
+                            <thead className="sticky top-0 bg-background z-10">
+                              <tr>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Title / Category</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Overall Status</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Tier 1</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Tier 2</th>
+                                <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Amount (SDG)</th>
+                                <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground border-b">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {costSubmissions.map((cs, i) => {
+                                const tierBadge = (s: string | null) => {
+                                  if (!s) return null;
+                                  const cls = s === 'approved' ? 'text-green-700' : s === 'pending' ? 'text-amber-700' : s === 'rejected' ? 'text-red-600' : 'text-muted-foreground';
+                                  return <span className={`capitalize text-xs ${cls}`}>{s.replace(/_/g, ' ')}</span>;
+                                };
+                                return (
+                                  <tr key={cs.id} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
+                                    <td className="px-3 py-1.5 max-w-[180px]">
+                                      <div className="font-medium truncate text-xs" title={cs.request_title || ''}>{cs.request_title || '—'}</div>
+                                      <div className="text-muted-foreground text-xs capitalize">{(cs.expense_category || '').replace(/_/g, ' ')}</div>
+                                    </td>
+                                    <td className={`px-3 py-1.5 text-xs font-medium capitalize ${cs.status === 'approved' ? 'text-green-700' : cs.status === 'pending' ? 'text-amber-700' : cs.status === 'rejected' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                                      {(cs.status || '').replace(/_/g, ' ')}
+                                    </td>
+                                    <td className="px-3 py-1.5">{tierBadge(cs.tier1_status)}</td>
+                                    <td className="px-3 py-1.5">{tierBadge(cs.tier2_status)}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums">{(Number(cs.amount_cents || 0) / 100).toLocaleString()}</td>
+                                    <td className="px-3 py-1.5 text-xs text-muted-foreground">{cs.created_at ? format(new Date(cs.created_at), 'dd MMM yyyy') : '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Cost submissions totals row */}
+                              <tr className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                                <td className="px-3 py-2" colSpan={4}>TOTAL ({costSubmissions.length})</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{(costSubmissions.reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100).toLocaleString()}</td>
+                                <td className="px-3 py-2" />
+                              </tr>
+                            </tbody>
+                          </table>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+
+              {/* ── Tab: Activity ── */}
+              <TabsContent value="activity" className="flex-1 overflow-auto px-5 py-3 mt-0">
+                {financeLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-indigo-600 mr-2" />
+                    <span className="text-sm text-muted-foreground">Loading activity…</span>
+                  </div>
+                ) : activityLogs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                    <History className="h-8 w-8 opacity-40" />
+                    <p className="text-sm">No activity logs found for this MMP.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-0 relative">
+                    {/* Timeline line */}
+                    <div className="absolute left-[18px] top-4 bottom-4 w-px bg-border" />
+                    {activityLogs.map((log, i) => {
+                      const actionColor = log.action?.includes('reject') || log.action?.includes('recall') || log.action?.includes('return')
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                        : log.action?.includes('approve') || log.action?.includes('complete') || log.action?.includes('verify')
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : log.action?.includes('update') || log.action?.includes('edit')
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+                      return (
+                        <div key={log.id || i} className="flex gap-3 relative pb-4">
+                          {/* Dot */}
+                          <div className="flex-shrink-0 w-9 flex items-start justify-center pt-0.5 z-10">
+                            <div className={`w-4 h-4 rounded-full border-2 border-background flex items-center justify-center ${actionColor}`}>
+                              <div className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                            </div>
+                          </div>
+                          {/* Content */}
+                          <div className="flex-1 min-w-0 bg-muted/20 rounded-lg border px-3 py-2">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="font-semibold text-sm">{log.actor_name || 'System'}</span>
+                              {log.actor_role && (
+                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded capitalize">
+                                  {log.actor_role.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${actionColor}`}>
+                                {(log.action || 'action').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-auto tabular-nums">
+                                {log.timestamp ? format(new Date(log.timestamp), 'dd MMM yyyy · HH:mm') : '—'}
+                              </span>
+                            </div>
+                            {(log.description || log.details) && (
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                {log.description || log.details}
+                              </p>
+                            )}
+                            {(log.previous_state || log.new_state) && (
+                              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                {log.previous_state && (
+                                  <span className="bg-muted px-1.5 py-0.5 rounded capitalize line-through opacity-60">
+                                    {typeof log.previous_state === 'string' ? log.previous_state : (log.previous_state as any)?.status || JSON.stringify(log.previous_state).slice(0, 30)}
+                                  </span>
+                                )}
+                                {log.previous_state && log.new_state && <span>→</span>}
+                                {log.new_state && (
+                                  <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded capitalize font-medium">
+                                    {typeof log.new_state === 'string' ? log.new_state : (log.new_state as any)?.status || JSON.stringify(log.new_state).slice(0, 30)}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>
