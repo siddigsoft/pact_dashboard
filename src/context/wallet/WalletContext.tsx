@@ -983,6 +983,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('Site entry is null');
       }
 
+      // GUARD: Block payment if the enumerator has not actually completed the site
+      const siteStatus = (entry.status ?? '').toLowerCase();
+      const PAYABLE_STATUSES = ['completed', 'submitted', 'wfp_confirmed', 'cp_verified', 'approved', 'costed', 'approved_and_costed', 'locality_permit_verified'];
+      if (!PAYABLE_STATUSES.includes(siteStatus)) {
+        const reason = `Site visit ${siteVisitId} is not completed (status: "${siteStatus}"). Payment blocked.`;
+        console.error(`[Wallet] ${reason}`);
+        toast({
+          title: 'Payment Blocked',
+          description: `Cannot add fee — site is not yet completed (status: "${siteStatus}").`,
+          variant: 'destructive',
+        });
+        throw new Error(reason);
+      }
+
       // CRITICAL: Require site_code for deduplication - abort if missing
       if (!entry.site_code) {
         console.error(`[Wallet] Site entry ${siteVisitId} missing site_code - cannot verify uniqueness`);

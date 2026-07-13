@@ -9,6 +9,21 @@
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
+/**
+ * Statuses that indicate a site visit is complete enough to be eligible for payment.
+ * A wallet earning transaction will be BLOCKED if the site is not in one of these statuses.
+ */
+export const PAYABLE_SITE_STATUSES = [
+  'completed',
+  'submitted',
+  'wfp_confirmed',
+  'cp_verified',
+  'approved',
+  'costed',
+  'approved_and_costed',
+  'locality_permit_verified',
+] as const;
+
 export interface CreateSiteVisitTransactionOptions {
   /** The site entry ID (mmp_site_entries.id) */
   siteVisitId: string;
@@ -85,6 +100,21 @@ export async function createSiteVisitWalletTransaction(
         toast({
           title: 'Site Visit Not Found',
           description: 'Cannot create wallet transaction - site visit record not found.',
+          variant: 'destructive'
+        });
+      }
+      return { success: false, message: errorMsg };
+    }
+
+    // Step 1b: GUARD — only pay for sites the enumerator has actually completed
+    const siteStatus = (siteEntry.status ?? '').toLowerCase();
+    if (!PAYABLE_SITE_STATUSES.includes(siteStatus as typeof PAYABLE_SITE_STATUSES[number])) {
+      const errorMsg = `Site visit ${siteVisitId} is not completed (current status: "${siteStatus}"). Payment blocked.`;
+      console.error(`[WalletTransaction] ${errorMsg}`);
+      if (showNotifications && toast) {
+        toast({
+          title: 'Payment Blocked',
+          description: `Cannot pay for a site that is not yet completed. Site status: "${siteStatus}".`,
           variant: 'destructive'
         });
       }
