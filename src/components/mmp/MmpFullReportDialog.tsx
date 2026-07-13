@@ -78,13 +78,13 @@ interface Props {
   mmpName: string;
 }
 
-// ── Stat badge colours (light palette) ──────────────────────────────
-const clsCard: Record<EntryClass | 'total', string> = {
-  total:       'border-teal-300   bg-teal-50   text-teal-700',
-  done:        'border-emerald-300 bg-emerald-50 text-emerald-700',
-  in_progress: 'border-amber-300  bg-amber-50  text-amber-700',
-  attention:   'border-red-300    bg-red-50    text-red-700',
-  pending:     'border-gray-300   bg-gray-50   text-gray-600',
+// ── Stat card left-border accent colours ─────────────────────────────
+const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num: string }> = {
+  total:       { border: 'border-l-teal-500',    icon: 'text-teal-500',    num: 'text-teal-700' },
+  done:        { border: 'border-l-emerald-500', icon: 'text-emerald-500', num: 'text-emerald-700' },
+  in_progress: { border: 'border-l-amber-500',  icon: 'text-amber-500',   num: 'text-amber-700' },
+  attention:   { border: 'border-l-red-500',    icon: 'text-red-500',     num: 'text-red-700' },
+  pending:     { border: 'border-l-gray-400',   icon: 'text-gray-400',    num: 'text-gray-600' },
 };
 
 const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
@@ -757,39 +757,38 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
 
   // ── Shared table header cell ──────────────────────────────────────────────
   const TH = ({ children, right }: { children: React.ReactNode; right?: boolean }) => (
-    <th className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border ${right ? 'text-right' : 'text-left'}`}>
+    <th className={`px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50 border-b-2 border-gray-200 ${right ? 'text-right' : 'text-left'} first:rounded-tl-lg last:rounded-tr-lg`}>
       {children}
     </th>
   );
   const TR = ({ children, i }: { children: React.ReactNode; i: number }) => (
-    <tr className={`border-b border-border/30 ${i % 2 === 0 ? '' : 'bg-muted/20'} hover:bg-muted/30 transition-colors`}>
+    <tr className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-teal-50/40 transition-colors`}>
       {children}
     </tr>
   );
   const TotalsRow = ({ children }: { children: React.ReactNode }) => (
-    <tr className="bg-muted font-bold border-t border-border">{children}</tr>
+    <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">{children}</tr>
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent
-        className="max-w-5xl w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-background border border-border text-foreground"
+        className="max-w-5xl w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-gray-50 border-0 shadow-2xl text-foreground"
         onInteractOutside={e => e.preventDefault()}
       >
-        {/* Teal accent strip */}
-        <div className="h-1 bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400 flex-shrink-0" />
-
-        {/* Header */}
-        <DialogHeader className="px-5 pt-4 pb-3 border-b border-border flex-shrink-0 bg-background">
+        {/* Header — teal gradient */}
+        <DialogHeader className="px-5 pt-4 pb-4 flex-shrink-0 bg-gradient-to-r from-teal-700 to-teal-600">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-                <BarChart3 className="h-5 w-5 text-teal-600 flex-shrink-0" />
+              <DialogTitle className="flex items-center gap-2 text-base font-bold text-white">
+                <div className="h-7 w-7 rounded-lg bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <BarChart3 className="h-4 w-4 text-white" />
+                </div>
                 Full MMP Status Report
               </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-0.5 truncate">
-                {mmpName} {mmp?.mmp_id ? `· ${mmp.mmp_id}` : ''} {(mmp?.project as any)?.name ? `· ${(mmp.project as any).name}` : ''}
+              <p className="text-xs text-teal-200 mt-1 truncate pl-9">
+                {mmpName}{mmp?.mmp_id ? ` · ${mmp.mmp_id}` : ''}{(mmp?.project as any)?.name ? ` · ${(mmp.project as any).name}` : ''}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -798,7 +797,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 size="sm"
                 onClick={exportExcel}
                 disabled={!stats || excelLoading}
-                className="border-emerald-500 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-600"
+                className="border-white/30 text-white bg-white/10 hover:bg-white/20 hover:border-white/50 h-8 text-xs"
               >
                 {excelLoading
                   ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -809,13 +808,13 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 size="sm"
                 onClick={exportPDF}
                 disabled={!stats}
-                className="bg-teal-600 hover:bg-teal-500 text-foreground border-0"
+                className="bg-white/15 hover:bg-white/25 text-white border border-white/30 h-8 text-xs"
               >
                 <Download className="h-3.5 w-3.5 mr-1.5" />
                 PDF
               </Button>
-              <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted transition-colors">
-                <X className="h-4 w-4 text-muted-foreground" />
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/15 transition-colors ml-1">
+                <X className="h-4 w-4 text-white/80" />
               </button>
             </div>
           </div>
@@ -835,66 +834,74 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         ) : (
           <div className="flex-1 overflow-hidden flex flex-col">
             {/* Summary stat cards */}
-            <div className="grid grid-cols-5 gap-2 px-5 pt-4 pb-3 flex-shrink-0">
+            <div className="grid grid-cols-5 gap-3 px-5 pt-4 pb-3 flex-shrink-0">
               {[
-                { label: 'Total Sites', value: stats.total, icon: MapPin, cls: 'total' as const },
-                { label: `Covered (${stats.coveragePct}%)`, value: stats.done, icon: CheckCircle2, cls: 'done' as const },
-                { label: 'In Progress', value: stats.inProgress, icon: Clock, cls: 'in_progress' as const },
-                { label: 'Attention', value: stats.attention, icon: ShieldAlert, cls: 'attention' as const },
-                { label: 'Pending', value: stats.pending, icon: Activity, cls: 'pending' as const },
-              ].map(({ label, value, icon: Icon, cls }) => (
-                <div key={cls} className={`rounded-xl border p-3 ${clsCard[cls]}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Icon className="h-3.5 w-3.5 opacity-70" />
-                    <span className="text-[10px] uppercase tracking-wider opacity-80">{label}</span>
+                { label: 'Total Sites',    value: stats.total,      icon: MapPin,      cls: 'total'       as const },
+                { label: 'Covered',        value: stats.done,       icon: CheckCircle2,cls: 'done'        as const },
+                { label: 'In Progress',    value: stats.inProgress, icon: Clock,       cls: 'in_progress' as const },
+                { label: 'Attention',      value: stats.attention,  icon: ShieldAlert, cls: 'attention'   as const },
+                { label: 'Pending',        value: stats.pending,    icon: Activity,    cls: 'pending'     as const },
+              ].map(({ label, value, icon: Icon, cls }) => {
+                const c = clsCard[cls];
+                return (
+                  <div key={cls} className={`rounded-xl bg-white border border-gray-100 border-l-4 shadow-sm p-3 ${c.border}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{label}</span>
+                      <Icon className={`h-4 w-4 ${c.icon} opacity-70`} />
+                    </div>
+                    <div className={`text-2xl font-extrabold tabular-nums ${c.num}`}>{value.toLocaleString()}</div>
+                    {cls === 'done' && (
+                      <div className="text-[10px] text-gray-400 mt-0.5 tabular-nums">{stats.coveragePct}% coverage</div>
+                    )}
                   </div>
-                  <div className="text-2xl font-extrabold tabular-nums">{value.toLocaleString()}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* Coverage bar */}
-            <div className="px-5 pb-3 flex-shrink-0">
+            {/* Coverage strip */}
+            <div className="mx-5 mb-3 rounded-xl bg-white border border-gray-100 shadow-sm px-4 py-2.5 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-20">Overall</span>
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 w-20 flex-shrink-0">Coverage</span>
+                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-2 rounded-full transition-all ${stats.coveragePct >= 70 ? 'bg-emerald-500' : stats.coveragePct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                    className={`h-2.5 rounded-full transition-all ${stats.coveragePct >= 70 ? 'bg-emerald-500' : stats.coveragePct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
                     style={{ width: `${stats.coveragePct}%` }}
                   />
                 </div>
-                <span className="text-sm font-extrabold text-teal-600 w-12 text-right tabular-nums">{stats.coveragePct}%</span>
-                <span className="text-xs text-muted-foreground">{stats.stateCount} states · {stats.coordCount} coordinators</span>
+                <span className={`text-sm font-extrabold w-12 text-right tabular-nums ${stats.coveragePct >= 70 ? 'text-emerald-600' : stats.coveragePct >= 40 ? 'text-amber-600' : 'text-red-600'}`}>
+                  {stats.coveragePct}%
+                </span>
+                <span className="text-xs text-gray-400 hidden sm:block">{stats.stateCount} states · {stats.coordCount} coordinators</span>
               </div>
             </div>
 
             {/* Tabs */}
             <Tabs value={tab} onValueChange={setTab} className="flex-1 overflow-hidden flex flex-col">
-              <TabsList className="flex-shrink-0 mx-5 w-auto justify-start bg-muted/50 border border-border p-1 rounded-xl">
-                <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-foreground text-muted-foreground">
+              <TabsList className="flex-shrink-0 mx-5 w-auto justify-start bg-white border border-gray-200 shadow-sm p-1 rounded-xl gap-0.5">
+                <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <BarChart3 className="h-3.5 w-3.5 mr-1.5" />By State
                 </TabsTrigger>
-                <TabsTrigger value="coordinators" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-foreground text-muted-foreground">
+                <TabsTrigger value="coordinators" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <Users className="h-3.5 w-3.5 mr-1.5" />Coordinators
                 </TabsTrigger>
-                <TabsTrigger value="sites" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-foreground text-muted-foreground">
+                <TabsTrigger value="sites" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <MapPin className="h-3.5 w-3.5 mr-1.5" />All Sites ({entries.length.toLocaleString()})
                 </TabsTrigger>
-                <TabsTrigger value="breakdown" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-foreground text-muted-foreground">
+                <TabsTrigger value="breakdown" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <TrendingUp className="h-3.5 w-3.5 mr-1.5" />Status Breakdown
                 </TabsTrigger>
-                <TabsTrigger value="financial" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-foreground text-muted-foreground">
+                <TabsTrigger value="financial" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <DollarSign className="h-3.5 w-3.5 mr-1.5" />Financial
                   {(downPayments.length + costSubmissions.length) > 0 && (
-                    <span className="ml-1 text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-semibold">
+                    <span className="ml-1.5 text-[10px] bg-teal-100 text-teal-700 data-[state=active]:bg-white/20 data-[state=active]:text-white px-1.5 py-0.5 rounded-full font-bold">
                       {downPayments.length + costSubmissions.length}
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="activity" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-foreground text-muted-foreground">
+                <TabsTrigger value="activity" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <History className="h-3.5 w-3.5 mr-1.5" />Activity
                   {activityLogs.length > 0 && (
-                    <span className="ml-1 text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">
+                    <span className="ml-1.5 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-bold">
                       {activityLogs.length}
                     </span>
                   )}
@@ -903,8 +910,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
 
               {/* ── Tab: By State ── */}
               <TabsContent value="overview" className="flex-1 overflow-auto px-5 py-3 mt-0">
-                <table className="w-full text-sm border-separate border-spacing-0">
-                  <thead className="sticky top-0 bg-background z-10">
+                <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+                  <table className="w-full text-sm border-separate border-spacing-0">
+                  <thead className="sticky top-0 bg-gray-50 z-10">
                     <tr>
                       <TH>State</TH>
                       <TH right>Total</TH>
@@ -940,7 +948,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{stats.coordCount}</td>
                     </TotalsRow>
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </TabsContent>
 
               {/* ── Tab: Coordinators ── */}
@@ -948,8 +957,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 {stats.byCoordinator.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground text-sm">No coordinator assignments found.</div>
                 ) : (
-                  <table className="w-full text-sm border-separate border-spacing-0">
-                    <thead className="sticky top-0 bg-background z-10">
+                  <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+                    <table className="w-full text-sm border-separate border-spacing-0">
+                    <thead className="sticky top-0 bg-gray-50 z-10">
                       <tr>
                         <TH>#</TH>
                         <TH>Coordinator</TH>
@@ -990,7 +1000,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                         <td className="px-3 py-2"><ProgressBar pct={stats.coveragePct} /></td>
                       </TotalsRow>
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
                 )}
               </TabsContent>
 
@@ -1002,12 +1013,12 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                     placeholder="Search site name, code, state…"
                     value={siteFilter}
                     onChange={e => setSiteFilter(e.target.value)}
-                    className="flex-1 px-3 py-1.5 text-sm rounded-lg bg-muted/50 border border-border text-foreground placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                    className="flex-1 px-3 py-1.5 text-sm rounded-xl bg-white border border-gray-200 text-foreground placeholder-gray-400 shadow-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20"
                   />
                   <select
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
-                    className="px-3 py-1.5 text-sm rounded-lg bg-muted/50 border border-border text-foreground focus:outline-none focus:border-teal-500"
+                    className="px-3 py-1.5 text-sm rounded-xl bg-white border border-gray-200 text-foreground shadow-sm focus:outline-none focus:border-teal-400"
                   >
                     <option value="all">All Categories</option>
                     <option value="done">Covered</option>
@@ -1017,8 +1028,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                   </select>
                 </div>
                 <div className="overflow-auto flex-1 pb-3">
-                  <table className="w-full text-sm border-separate border-spacing-0">
-                    <thead className="sticky top-0 bg-background z-10">
+                  <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+                    <table className="w-full text-sm border-separate border-spacing-0">
+                    <thead className="sticky top-0 bg-gray-50 z-10">
                       <tr>
                         <TH>Site</TH>
                         <TH>Code</TH>
@@ -1040,13 +1052,14 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                         </TR>
                       ))}
                     </tbody>
-                  </table>
+                    </table>
                   {filteredSites.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground text-sm">No sites match the filter.</div>
                   )}
                   {entries.length > 500 && (
                     <p className="text-xs text-muted-foreground text-center py-2">Showing 500 of {entries.length} — use export for the full list.</p>
                   )}
+                  </div>
                 </div>
               </TabsContent>
 
@@ -1159,8 +1172,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                               </div>
                             ))}
                           </div>
-                          <table className="w-full text-sm border-separate border-spacing-0">
-                            <thead className="sticky top-0 bg-background z-10">
+                          <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+                            <table className="w-full text-sm border-separate border-spacing-0">
+                            <thead className="sticky top-0 bg-gray-50 z-10">
                               <tr>
                                 <TH>Site</TH><TH>Hub</TH><TH>Type</TH><TH>Status</TH>
                                 <TH right>Requested (SDG)</TH><TH right>Paid (SDG)</TH><TH right>Remaining</TH><TH>Date</TH>
@@ -1196,7 +1210,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                                 <td className="px-3 py-2" />
                               </TotalsRow>
                             </tbody>
-                          </table>
+                            </table>
+                          </div>
                         </>
                       )}
                     </div>
@@ -1248,8 +1263,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                               </p>
                             </div>
                           </div>
-                          <table className="w-full text-sm border-separate border-spacing-0">
-                            <thead className="sticky top-0 bg-background z-10">
+                          <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+                            <table className="w-full text-sm border-separate border-spacing-0">
+                            <thead className="sticky top-0 bg-gray-50 z-10">
                               <tr>
                                 <TH>Title / Category</TH><TH>Status</TH><TH>Tier 1</TH><TH>Tier 2</TH>
                                 <TH right>Amount (SDG)</TH><TH>Date</TH>
@@ -1284,7 +1300,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                                 <td className="px-3 py-2" />
                               </TotalsRow>
                             </tbody>
-                          </table>
+                            </table>
+                          </div>
                         </>
                       )}
                     </div>
