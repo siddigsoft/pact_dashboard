@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Wallet, WalletTransaction } from '@/types/wallet';
-import { ArrowLeft, MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2, History } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2, History, Truck, FileText, Printer } from 'lucide-react';
 
 const currencyFmt = (amount: number, currency: string) => 
   new Intl.NumberFormat(undefined, { 
@@ -269,6 +269,84 @@ const AdminWalletDetail = () => {
       return sum + (paid > 0 ? paid : 0);
     }, 0);
   }, [downPayments]);
+
+  // Bank-statement ledger: merge wallet transactions + down payment cash entries,
+  // sorted oldest-first, then compute running balance after each entry.
+  const statementLedger = useMemo(() => {
+    type LedgerRow = {
+      id: string;
+      date: string;
+      description: string;
+      category: string;
+      credit: number;
+      debit: number;
+      balance: number;
+      source: 'transaction' | 'advance';
+    };
+
+    const creditTypes = ['earning', 'site_visit_fee', 'bonus', 'adjustment', 'adjustment_credit'];
+    const debitTypes  = ['withdrawal', 'penalty', 'debit', 'adjustment_debit'];
+
+    const rows: Omit<LedgerRow, 'balance'>[] = [];
+
+    // Wallet transactions
+    for (const t of transactions) {
+      const amt = Math.abs(Number(t.amount || 0));
+      const isCredit = creditTypes.includes(t.type);
+      const isDebit  = debitTypes.includes(t.type);
+      if (!isCredit && !isDebit) continue;
+      rows.push({
+        id: t.id,
+        date: t.createdAt,
+        description: t.description || t.type.replace(/_/g, ' '),
+        category: t.type.replace(/_/g, ' '),
+        credit: isCredit ? amt : 0,
+        debit:  isDebit  ? amt : 0,
+        source: 'transaction',
+      });
+    }
+
+    // Down payment cash-paid entries (treated as debits — transport advance)
+    for (const dp of downPayments) {
+      const paid = parseFloat(dp.total_paid_amount || 0);
+      if (paid <= 0) continue;
+      rows.push({
+        id: `dp-${dp.id}`,
+        date: dp.requested_at,
+        description: `Transport advance${dp.site_name ? ` — ${dp.site_name}` : ''} (${(dp.status || '').replace(/_/g, ' ')})`,
+        category: 'Transport Advance',
+        credit: 0,
+        debit: paid,
+        source: 'advance',
+      });
+    }
+
+    // Sort chronologically (oldest first for statement readability)
+    rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Compute running balance
+    let running = 0;
+    const ledger: LedgerRow[] = rows.map(r => {
+      running = running + r.credit - r.debit;
+      return { ...r, balance: running };
+    });
+
+    return ledger;
+  }, [transactions, downPayments]);
+
+  // Per-site transport breakdown: enum fee, transport fee, advance paid, remaining owed
+  const transportBreakdown = useMemo(() => {
+    return siteVisits.map(site => {
+      const enumFee   = Number(site.enumerator_fee || 0);
+      const transFee  = Number(site.transport_fee || 0);
+      // Find if a down payment was made for this site entry
+      const advance   = downPayments.find(dp => dp.mmp_site_entry_id === site.id);
+      const advPaid   = advance ? parseFloat(advance.total_paid_amount || 0) : 0;
+      const advStatus = advance?.status || null;
+      const remaining = transFee - advPaid;
+      return { ...site, enumFee, transFee, advPaid, advStatus, remaining };
+    });
+  }, [siteVisits, downPayments]);
 
   const startEditTx = (txn: WalletTransaction) => {
     setEditingTxId(txn.id);
@@ -694,18 +772,20 @@ const AdminWalletDetail = () => {
           TABS
       ══════════════════════════════════════════════ */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-800 border border-slate-700 rounded-xl p-1 h-auto gap-1">
+        <TabsList className="flex w-full overflow-x-auto bg-slate-800 border border-slate-700 rounded-xl p-1 h-auto gap-1 no-scrollbar">
           {[
-            { value: 'overview', label: 'Overview' },
-            { value: 'sites',    label: 'Sites' },
-            { value: 'earnings', label: 'Earnings' },
-            { value: 'transactions', label: 'Transactions' },
+            { value: 'overview',      label: 'Overview' },
+            { value: 'sites',         label: 'Sites' },
+            { value: 'transport',     label: 'Transport' },
+            { value: 'earnings',      label: 'Earnings' },
+            { value: 'transactions',  label: 'Transactions' },
+            { value: 'statement',     label: 'Statement' },
           ].map(({ value, label }) => (
             <TabsTrigger
               key={value}
               value={value}
               data-testid={`tab-${value}`}
-              className="rounded-lg py-2 text-xs md:text-sm font-medium text-slate-400 data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow transition-all"
+              className="flex-shrink-0 rounded-lg py-2 px-3 text-xs md:text-sm font-medium text-slate-400 data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow transition-all"
             >
               {label}
             </TabsTrigger>
@@ -867,6 +947,114 @@ const AdminWalletDetail = () => {
                       <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(siteVisits.reduce((s, v) => s + Number(v.enumerator_fee || 0), 0), currency)}</TableCell>
                       <TableCell className="text-right text-teal-300 font-bold">{currencyFmt(siteVisits.reduce((s, v) => s + Number(v.transport_fee || 0), 0), currency)}</TableCell>
                       <TableCell className="text-right text-emerald-400 font-bold">{currencyFmt(siteVisits.reduce((s, v) => { const ef = Number(v.enumerator_fee || 0); const tf = Number(v.transport_fee || 0); return s + (ef + tf > 0 ? ef + tf : Number(v.cost || 0)); }, 0), currency)}</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── TRANSPORT ── */}
+        <TabsContent value="transport" className="space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {(() => {
+              const totalTransFee  = transportBreakdown.reduce((s, r) => s + r.transFee, 0);
+              const totalAdvPaid   = transportBreakdown.reduce((s, r) => s + r.advPaid,  0);
+              const totalRemaining = transportBreakdown.filter(r => r.remaining > 0).reduce((s, r) => s + r.remaining, 0);
+              const sitesWithAdv   = transportBreakdown.filter(r => r.advPaid > 0).length;
+              return [
+                { label: 'Total Transport Fees',    value: currencyFmt(totalTransFee,  currency), color: 'bg-teal-700 border-teal-600',     note: `${transportBreakdown.length} site${transportBreakdown.length !== 1 ? 's' : ''}` },
+                { label: 'Advances Paid in Cash',   value: currencyFmt(totalAdvPaid,   currency), color: 'bg-orange-700 border-orange-600',  note: `${sitesWithAdv} advance${sitesWithAdv !== 1 ? 's' : ''}` },
+                { label: 'Balance Still Owed',      value: currencyFmt(totalRemaining, currency), color: 'bg-amber-700 border-amber-600',    note: 'unpaid portion' },
+                { label: 'Net After Advances',      value: currencyFmt(totalTransFee - totalAdvPaid, currency), color: 'bg-slate-700 border-slate-600', note: 'fee − advances' },
+              ].map(({ label, value, color, note }) => (
+                <div key={label} className={`rounded-2xl border p-5 shadow-lg ${color}`}>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/60 mb-2">{label}</p>
+                  <p className="text-lg md:text-xl font-extrabold text-white leading-none break-all">{value}</p>
+                  <p className="text-[10px] text-white/50 mt-2">{note}</p>
+                </div>
+              ));
+            })()}
+          </div>
+
+          {/* Per-site transport breakdown table */}
+          <div className={panel}>
+            <div className={panelHeader}>
+              <Truck className="w-4 h-4 text-orange-400" />
+              <h3 className="font-semibold text-slate-100 text-sm">Transport Payments by Site</h3>
+              <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">{transportBreakdown.length} sites</span>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-700 bg-slate-900/40 hover:bg-slate-900/40">
+                    <TableHead className={thClass}>Site</TableHead>
+                    <TableHead className={thClass}>Status</TableHead>
+                    <TableHead className={thClass}>Completed</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Enum Fee</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Transport Fee</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Advance Paid</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Still Owed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transportBreakdown.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center text-slate-500 h-24">No site visits found</TableCell></TableRow>
+                  ) : transportBreakdown.map(site => {
+                    const advStatusColors: Record<string, string> = {
+                      fully_paid:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                      partially_paid:'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                      approved:      'bg-blue-500/20 text-blue-300 border-blue-500/30',
+                    };
+                    return (
+                      <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/20 transition-colors">
+                        <TableCell className="text-slate-100 font-medium text-sm">{site.site_name}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
+                            site.isCompleted ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : 'bg-slate-600/40 text-slate-300 border-slate-600'
+                          }`}>{site.status}</span>
+                        </TableCell>
+                        <TableCell className="text-slate-400 text-sm">{site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}</TableCell>
+                        <TableCell className="text-right text-sm text-teal-300 font-medium">
+                          {site.enumFee > 0 ? currencyFmt(site.enumFee, currency) : <span className="text-slate-600">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-teal-300 font-medium">
+                          {site.transFee > 0 ? currencyFmt(site.transFee, currency) : <span className="text-slate-600">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {site.advPaid > 0 ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className="font-bold text-orange-400">− {currencyFmt(site.advPaid, currency)}</span>
+                              {site.advStatus && (
+                                <span className={`inline-flex px-1.5 py-0 rounded text-[10px] font-semibold border ${advStatusColors[site.advStatus] || 'bg-slate-600/40 text-slate-300 border-slate-600'}`}>
+                                  {site.advStatus.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                            </div>
+                          ) : <span className="text-slate-600">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {site.remaining > 0.01 ? (
+                            <span className="font-semibold text-amber-400">{currencyFmt(site.remaining, currency)}</span>
+                          ) : site.transFee > 0 ? (
+                            <span className="text-emerald-400 font-semibold">Settled</span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {transportBreakdown.length > 0 && (
+                    <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
+                      <TableCell colSpan={3} className="text-slate-400 text-right text-sm font-semibold py-3">Totals</TableCell>
+                      <TableCell className="text-right font-bold text-teal-300">{currencyFmt(transportBreakdown.reduce((s, r) => s + r.enumFee, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-teal-300">{currencyFmt(transportBreakdown.reduce((s, r) => s + r.transFee, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-orange-400">− {currencyFmt(transportBreakdown.reduce((s, r) => s + r.advPaid, 0), currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-400">{currencyFmt(transportBreakdown.filter(r => r.remaining > 0).reduce((s, r) => s + r.remaining, 0), currency)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1094,6 +1282,150 @@ const AdminWalletDetail = () => {
             </div>
           </div>
         </TabsContent>
+
+        {/* ── STATEMENT ── */}
+        <TabsContent value="statement" className="space-y-4">
+          {/* Statement header card */}
+          <div className="rounded-2xl overflow-hidden border border-teal-800/60 shadow-xl shadow-black/30">
+            <div className="h-1 bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400" />
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-5 h-5 text-teal-400" />
+                  <h2 className="text-lg font-bold text-white">Wallet Statement</h2>
+                </div>
+                <p className="text-sm text-slate-400">{userProfile?.full_name || 'Unknown User'} · {userProfile?.email}</p>
+                <p className="text-xs text-slate-500 mt-1">Generated {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })} · Currency: {currency}</p>
+              </div>
+              <div className="flex flex-col items-start md:items-end gap-2">
+                <div className="text-right">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Closing Balance</p>
+                  <p className={`text-2xl font-extrabold ${currentBalance >= 0 ? 'text-teal-300' : 'text-red-400'}`}>
+                    {currencyFmt(currentBalance, currency)}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700 text-xs h-8 gap-1.5"
+                  data-testid="button-print-statement"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print Statement
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Opening balance row + ledger */}
+          <div className={panel}>
+            <div className={panelHeader}>
+              <History className="w-4 h-4 text-teal-400" />
+              <h3 className="font-semibold text-slate-100 text-sm">Full Ledger</h3>
+              <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">{statementLedger.length} entries</span>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-700 bg-slate-900/40 hover:bg-slate-900/40">
+                    <TableHead className={thClass}>#</TableHead>
+                    <TableHead className={thClass}>Date</TableHead>
+                    <TableHead className={thClass}>Description</TableHead>
+                    <TableHead className={thClass}>Category</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Credit (+)</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Debit (−)</TableHead>
+                    <TableHead className={`${thClass} text-right`}>Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {/* Opening balance row */}
+                  <TableRow className="border-slate-700/40 bg-slate-900/30">
+                    <TableCell className="text-slate-600 text-xs">—</TableCell>
+                    <TableCell className="text-slate-500 text-xs">Opening Balance</TableCell>
+                    <TableCell colSpan={3} className="text-slate-500 text-xs italic">Start of account</TableCell>
+                    <TableCell />
+                    <TableCell className="text-right font-bold text-slate-400">{currencyFmt(0, currency)}</TableCell>
+                  </TableRow>
+
+                  {statementLedger.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-slate-500 h-24">No entries yet</TableCell>
+                    </TableRow>
+                  ) : statementLedger.map((row, idx) => (
+                    <TableRow
+                      key={row.id}
+                      className={`border-slate-700/40 hover:bg-slate-700/20 transition-colors ${row.source === 'advance' ? 'bg-orange-900/10' : ''}`}
+                      data-testid={`row-statement-${row.id}`}
+                    >
+                      <TableCell className="text-slate-600 text-xs tabular-nums">{idx + 1}</TableCell>
+                      <TableCell className="text-slate-400 text-xs whitespace-nowrap tabular-nums">
+                        {new Date(row.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })}
+                      </TableCell>
+                      <TableCell className="text-slate-200 text-sm max-w-[200px] md:max-w-xs">
+                        <div className="truncate" title={row.description}>{row.description}</div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold capitalize whitespace-nowrap ${
+                          row.source === 'advance'
+                            ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                            : row.credit > 0
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                        }`}>
+                          {row.category}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {row.credit > 0
+                          ? <span className="font-bold text-emerald-400">+ {currencyFmt(row.credit, currency)}</span>
+                          : <span className="text-slate-700">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {row.debit > 0
+                          ? <span className={`font-bold ${row.source === 'advance' ? 'text-orange-400' : 'text-red-400'}`}>− {currencyFmt(row.debit, currency)}</span>
+                          : <span className="text-slate-700">—</span>}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums font-bold text-sm ${row.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
+                        {currencyFmt(row.balance, currency)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+
+                  {/* Closing totals */}
+                  {statementLedger.length > 0 && (() => {
+                    const totalCredit = statementLedger.reduce((s, r) => s + r.credit, 0);
+                    const totalDebit  = statementLedger.reduce((s, r) => s + r.debit,  0);
+                    return (
+                      <>
+                        <TableRow className="border-t-2 border-slate-600 bg-slate-900/60">
+                          <TableCell colSpan={4} className="text-slate-300 text-right font-bold text-sm py-4">Statement Totals</TableCell>
+                          <TableCell className="text-right font-extrabold text-emerald-400 tabular-nums">+ {currencyFmt(totalCredit, currency)}</TableCell>
+                          <TableCell className="text-right font-extrabold text-red-400 tabular-nums">− {currencyFmt(totalDebit, currency)}</TableCell>
+                          <TableCell className={`text-right font-extrabold tabular-nums text-base ${currentBalance >= 0 ? 'text-teal-300' : 'text-red-400'}`}>
+                            {currencyFmt(currentBalance, currency)}
+                          </TableCell>
+                        </TableRow>
+                        {totalAdvancesPaid > 0 && (
+                          <TableRow className="bg-orange-900/10 border-orange-800/30">
+                            <TableCell colSpan={4} className="text-orange-300/70 text-right text-xs py-2">
+                              Incl. transport advances deducted from balance
+                            </TableCell>
+                            <TableCell />
+                            <TableCell className="text-right text-xs font-semibold text-orange-400 tabular-nums">
+                              − {currencyFmt(totalAdvancesPaid, currency)}
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        )}
+                      </>
+                    );
+                  })()}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
       </Tabs>
     </div>
   );
