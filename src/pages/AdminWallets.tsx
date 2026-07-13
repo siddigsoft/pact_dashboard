@@ -300,9 +300,7 @@ const AdminWallets: FC = () => {
     }
   };
 
-  // ── Run backfill via Edge Function (service role — bypasses all RLS) ────────
-  const BACKFILL_BATCH = 15;
-
+  // ── Run backfill via SECURITY DEFINER RPC (bypasses all RLS server-side) ─────
   const runBackfillAll = async () => {
     if (!backfillScan || backfillScan.missing.length === 0) return;
     setBackfilling(true);
@@ -313,40 +311,29 @@ const AdminWallets: FC = () => {
     let firstError: string | null = null;
     setBackfillProgress({ current: 0, total, succeeded, failed, skipped });
 
-    for (let batchStart = 0; batchStart < sites.length; batchStart += BACKFILL_BATCH) {
-      const batch = sites.slice(batchStart, batchStart + BACKFILL_BATCH);
+    for (let i = 0; i < sites.length; i++) {
+      const site = sites[i];
       try {
-        const { data, error: fnErr } = await supabase.functions.invoke('admin-wallet-backfill', {
-          body: {
-            sites: batch.map(s => ({
-              id: s.id,
-              userId: s.userId,
-              fee: s.fee,
-              siteName: s.siteName,
-            })),
-          },
-        });
+        const { data: result, error: rpcErr } = await supabase
+          .rpc('admin_backfill_site_visit_credit', { p_site_visit_id: site.id });
 
-        if (fnErr) {
-          batch.forEach(() => failed++);
-          if (!firstError) firstError = fnErr.message || 'Edge function call failed';
-        } else if (data?.results) {
-          for (const result of data.results as { success: boolean; skipped: boolean; message: string }[]) {
-            if (result.skipped) skipped++;
-            else if (result.success) succeeded++;
-            else {
-              failed++;
-              if (!firstError) firstError = result.message;
-            }
-          }
+        if (rpcErr) {
+          failed++;
+          if (!firstError) firstError = rpcErr.message;
+        } else if (result?.success) {
+          if (result?.skipped) skipped++;
+          else succeeded++;
+        } else {
+          const msg: string = result?.message || 'Unknown RPC error';
+          if (msg.toLowerCase().includes('already')) skipped++;
+          else { failed++; if (!firstError) firstError = msg; }
         }
       } catch (err: any) {
-        batch.forEach(() => failed++);
+        failed++;
         if (!firstError) firstError = err?.message || 'Unknown exception';
       }
 
-      const processed = Math.min(batchStart + BACKFILL_BATCH, total);
-      setBackfillProgress({ current: processed, total, succeeded, failed, skipped });
+      setBackfillProgress({ current: i + 1, total, succeeded, failed, skipped });
       if (firstError) setBackfillLastError(firstError);
     }
 
