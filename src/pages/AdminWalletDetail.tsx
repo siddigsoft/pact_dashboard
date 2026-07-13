@@ -913,7 +913,7 @@ const AdminWalletDetail = () => {
   const thClass = 'text-slate-500 text-[11px] font-semibold uppercase tracking-wider py-3';
 
   return (
-    <div className="space-y-5 p-3 md:p-6" data-testid="page-admin-wallet-detail">
+    <div className="space-y-5 p-3 md:p-6 bg-slate-900 min-h-screen" data-testid="page-admin-wallet-detail">
 
       {/* ── Back ── */}
       <button
