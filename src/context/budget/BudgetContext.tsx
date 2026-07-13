@@ -121,6 +121,9 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
           .insert({
             project_id: input.projectId,
             total_budget_cents: input.totalBudgetCents,
+            allocated_budget_cents: 0,
+            spent_budget_cents: 0,
+            remaining_budget_cents: input.totalBudgetCents,
             budget_period: input.budgetPeriod,
             period_start_date: input.periodStartDate,
             period_end_date: input.periodEndDate,

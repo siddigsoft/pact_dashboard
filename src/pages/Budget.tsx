@@ -155,13 +155,28 @@ const BudgetPage = () => {
     return projects.filter(p => !projectIdsWithBudgets.has(p.id));
   }, [projects, projectBudgets]);
 
+  // Real spend totals computed from operational_cost_submissions (not stale DB columns)
+  const actualTotalSpentCents = useMemo(() => {
+    return projectBudgets.reduce((sum, pb) => sum + (actualSpendByProject[pb.projectId]?.approved || 0), 0);
+  }, [projectBudgets, actualSpendByProject]);
+
+  const actualTotalBudgetCents = useMemo(() => {
+    return projectBudgets.reduce((sum, pb) => sum + pb.totalBudgetCents, 0);
+  }, [projectBudgets]);
+
+  const actualRemainingCents = actualTotalBudgetCents - actualTotalSpentCents;
+  const actualUtilizationRate = actualTotalBudgetCents > 0
+    ? (actualTotalSpentCents / actualTotalBudgetCents) * 100
+    : 0;
+
   const utilizationPieData = useMemo(() => {
-    if (!stats) return [];
+    const spentVal = Math.round(actualTotalSpentCents / 100);
+    const remainVal = Math.max(0, Math.round(actualRemainingCents / 100));
     return [
-      { name: 'Spent', value: Math.round(stats.totalSpent), color: '#ef4444' },
-      { name: 'Remaining', value: Math.max(0, Math.round(stats.totalBudget - stats.totalSpent)), color: '#22c55e' },
+      { name: 'Spent', value: spentVal, color: '#ef4444' },
+      { name: 'Remaining', value: remainVal, color: '#22c55e' },
     ].filter(d => d.value > 0);
-  }, [stats]);
+  }, [actualTotalSpentCents, actualRemainingCents]);
 
   const projectBarData = useMemo(() => {
     return projectBudgets
@@ -171,12 +186,12 @@ const BudgetPage = () => {
         return {
           name: (proj?.name ?? 'Unknown').slice(0, 16),
           Budget: Math.round(pb.totalBudgetCents / 100),
-          Spent: Math.round(pb.spentBudgetCents / 100),
+          Spent: Math.round((actualSpendByProject[pb.projectId]?.approved || 0) / 100),
         };
       })
       .sort((a, b) => b.Budget - a.Budget)
       .slice(0, 8);
-  }, [projectBudgets, projects]);
+  }, [projectBudgets, projects, actualSpendByProject]);
 
   const selectedOverviewProject = useMemo(() => {
     return projects.find(p => p.id === selectedProjectIdOverview);
@@ -435,8 +450,8 @@ const BudgetPage = () => {
 
         <GradientStatCard
           title="Total Spent"
-          value={formatCurrency(stats?.totalSpent ? stats.totalSpent * 100 : 0)}
-          subtitle={`${stats?.utilizationRate?.toFixed(1)}% utilization`}
+          value={formatCurrency(actualTotalSpentCents)}
+          subtitle={`${actualUtilizationRate.toFixed(1)}% utilization`}
           icon={TrendingDown}
           color="purple"
           data-testid="card-stat-total-spent"
@@ -444,8 +459,8 @@ const BudgetPage = () => {
 
         <GradientStatCard
           title="Remaining Budget"
-          value={formatCurrency(stats?.totalRemaining ? stats.totalRemaining * 100 : 0)}
-          subtitle="Available for allocation"
+          value={formatCurrency(Math.max(0, actualRemainingCents))}
+          subtitle="Budget minus approved spend"
           icon={TrendingUp}
           color="green"
           data-testid="card-stat-remaining-budget"
@@ -550,21 +565,24 @@ const BudgetPage = () => {
               ) : (
                 <>
                   {projectBudgets.slice(0, 5).map((budget) => {
+                    const projName = projects.find(p => p.id === budget.projectId)?.name || `Project FY ${budget.fiscalYear}`;
+                    const actualSpent = actualSpendByProject[budget.projectId]?.approved || 0;
+                    const remainingCents = Math.max(0, budget.totalBudgetCents - actualSpent);
                     const utilizationPercent = budget.totalBudgetCents > 0
-                      ? ((budget.spentBudgetCents / budget.totalBudgetCents) * 100)
+                      ? Math.min(100, (actualSpent / budget.totalBudgetCents) * 100)
                       : 0;
 
                     return (
                       <div key={budget.id} className="space-y-2 p-4 rounded-lg bg-gradient-to-r from-slate-800/50 to-blue-800/50 border border-blue-500/20">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-blue-200">Project Budget - FY {budget.fiscalYear}</p>
+                          <div className="min-w-0 flex-1 pr-4">
+                            <p className="font-medium text-blue-200 truncate">{projName}</p>
                             <p className="text-sm text-blue-300/70">
-                              {budget.budgetPeriod.replace('_', ' ').toUpperCase()}
+                              FY {budget.fiscalYear} • {budget.budgetPeriod.replace('_', ' ').toUpperCase()}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">{formatCurrency(budget.remainingBudgetCents)}</p>
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-semibold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">{formatCurrency(remainingCents)}</p>
                             <p className="text-sm text-blue-300/70">
                               of {formatCurrency(budget.totalBudgetCents)} remaining
                             </p>
@@ -572,7 +590,10 @@ const BudgetPage = () => {
                         </div>
                         <Progress value={utilizationPercent} className="h-2 bg-slate-700/50 [&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-purple-500" />
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-blue-300/70">{utilizationPercent.toFixed(1)}% utilized</span>
+                          <span className="text-blue-300/70">
+                            {utilizationPercent.toFixed(1)}% utilized
+                            {actualSpent > 0 && <> • Spent: {formatCurrency(actualSpent)}</>}
+                          </span>
                           <Badge 
                             variant={budget.status === 'active' ? 'default' : 'secondary'}
                             className={budget.status === 'active' ? 'bg-gradient-to-r from-green-500 to-emerald-600 border-0' : 'bg-slate-700 text-slate-300'}
