@@ -49,7 +49,7 @@ const AdminWallets: FC = () => {
   // ── Backfill state ─────────────────────────────────────────────────────────
   const [backfillScan, setBackfillScan] = useState<{
     scanned: boolean;
-    missing: { id: string; siteName: string; userName: string; fee: number }[];
+    missing: { id: string; siteName: string; userName: string; userId: string; fee: number }[];
     totalCompleted: number;
     alreadyCredited: number;
     noFee: number;
@@ -291,7 +291,7 @@ const AdminWallets: FC = () => {
         if (!effectiveUserId) { noUser++; continue; }
 
         const userName = profileMap[effectiveUserId] || effectiveUserId;
-        missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, fee });
+        missing.push({ id: e.id, siteName: e.site_name || 'Unknown site', userName, userId: effectiveUserId, fee });
       }
 
       setBackfillScan({ scanned: true, missing, totalCompleted, alreadyCredited, noFee, noUser });
@@ -300,48 +300,56 @@ const AdminWallets: FC = () => {
     }
   };
 
-  // ── Run backfill for all missing sites ─────────────────────────────────────
+  // ── Run backfill via Edge Function (service role — bypasses all RLS) ────────
+  const BACKFILL_BATCH = 15;
+
   const runBackfillAll = async () => {
     if (!backfillScan || backfillScan.missing.length === 0) return;
     setBackfilling(true);
     setBackfillLastError(null);
-    const total = backfillScan.missing.length;
+    const sites = backfillScan.missing;
+    const total = sites.length;
     let succeeded = 0, failed = 0, skipped = 0;
     let firstError: string | null = null;
     setBackfillProgress({ current: 0, total, succeeded, failed, skipped });
 
-    for (let i = 0; i < backfillScan.missing.length; i++) {
-      const site = backfillScan.missing[i];
+    for (let batchStart = 0; batchStart < sites.length; batchStart += BACKFILL_BATCH) {
+      const batch = sites.slice(batchStart, batchStart + BACKFILL_BATCH);
       try {
-        // Use SECURITY DEFINER RPC — bypasses all RLS policies server-side.
-        // The RPC runs as the DB owner regardless of the calling user's role.
-        const { data: rpcResult, error: rpcError } = await supabase
-          .rpc('admin_backfill_site_visit_credit', { p_site_visit_id: site.id });
+        const { data, error: fnErr } = await supabase.functions.invoke('admin-wallet-backfill', {
+          body: {
+            sites: batch.map(s => ({
+              id: s.id,
+              userId: s.userId,
+              fee: s.fee,
+              siteName: s.siteName,
+            })),
+          },
+        });
 
-        if (rpcError) {
-          failed++;
-          if (!firstError) firstError = rpcError.message || 'RPC call failed';
-        } else if (rpcResult?.success) {
-          if (rpcResult?.skipped) skipped++;
-          else succeeded++;
-        } else {
-          // Check if the RPC returned success:false for "already" reasons
-          const msg: string = rpcResult?.message || 'Unknown error from RPC';
-          if (msg.toLowerCase().includes('already')) skipped++;
-          else {
-            failed++;
-            if (!firstError) firstError = msg;
+        if (fnErr) {
+          batch.forEach(() => failed++);
+          if (!firstError) firstError = fnErr.message || 'Edge function call failed';
+        } else if (data?.results) {
+          for (const result of data.results as { success: boolean; skipped: boolean; message: string }[]) {
+            if (result.skipped) skipped++;
+            else if (result.success) succeeded++;
+            else {
+              failed++;
+              if (!firstError) firstError = result.message;
+            }
           }
         }
       } catch (err: any) {
-        failed++;
+        batch.forEach(() => failed++);
         if (!firstError) firstError = err?.message || 'Unknown exception';
       }
-      setBackfillProgress({ current: i + 1, total, succeeded, failed, skipped });
+
+      const processed = Math.min(batchStart + BACKFILL_BATCH, total);
+      setBackfillProgress({ current: processed, total, succeeded, failed, skipped });
       if (firstError) setBackfillLastError(firstError);
     }
 
-    // Re-scan to show updated state
     await scanMissingFees();
     await load();
 
@@ -711,67 +719,39 @@ const AdminWallets: FC = () => {
         </div>
       </div>
 
-      {/* ── SQL Pre-flight Warning ── */}
+      {/* ── SQL pre-flight: only affects DISPLAY (balance totals), not backfill ── */}
       {sqlReady === false && (
-        <Card className="border-red-400 dark:border-red-600 bg-red-50/60 dark:bg-red-950/20">
+        <Card className="border-amber-400 dark:border-amber-600 bg-amber-50/60 dark:bg-amber-950/20">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <Info className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold text-sm text-red-800 dark:text-red-300">
-                    ⚠️ Database Permission Setup Required Before Backfill
+                  <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">
+                    Balance display limited — RLS read policy not applied
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    The admin permission policies have not been applied to the database yet. Without them, the backfill cannot read or write other users' wallet data — every credit attempt will fail.
+                    Without this one-time setup, this page can only read <strong>your own</strong> wallet row, so the
+                    Total Sites Cost, Total Withdrawals, and per-user balances all show SDG 0.00. <br />
+                    <strong>The backfill itself works fine</strong> — it runs via a server-side edge function that
+                    already bypasses RLS. Run the SQL below only if you want to see correct balance totals here.
                   </p>
-                  <p className="text-xs font-semibold text-red-700 dark:text-red-400 mt-2">
-                    Steps to fix (takes ~30 seconds):
-                  </p>
-                  <ol className="text-xs text-muted-foreground mt-1 space-y-0.5 list-decimal list-inside">
-                    <li>Open Supabase Dashboard → SQL Editor</li>
-                    <li>Paste and run the SQL below</li>
-                    <li>Reload this page — the warning will disappear</li>
-                    <li>Then run the backfill</li>
+                  <ol className="text-xs text-muted-foreground mt-2 space-y-0.5 list-decimal list-inside">
+                    <li>Open <strong>Supabase Dashboard → SQL Editor</strong></li>
+                    <li>Paste and run the SQL below (takes ~5 seconds)</li>
+                    <li>Reload this page — totals will show real balances</li>
                   </ol>
                 </div>
               </div>
-              <pre className="text-xs bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono select-all">{`-- ── STEP 1: RLS bypass policies (enables admin to read all wallets) ──
+              <pre className="text-xs bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap font-mono select-all">{`-- Admin read-access for wallets (display only — backfill already works without this)
 DROP POLICY IF EXISTS "Admins can view all wallets" ON wallets;
-CREATE POLICY "Admins can view all wallets" ON wallets FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
-DROP POLICY IF EXISTS "Admins can create wallets for any user" ON wallets;
-CREATE POLICY "Admins can create wallets for any user" ON wallets FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
-DROP POLICY IF EXISTS "Admins can update any wallet" ON wallets;
-CREATE POLICY "Admins can update any wallet" ON wallets FOR UPDATE USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
+CREATE POLICY "Admins can view all wallets" ON wallets FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin'))
+);
 DROP POLICY IF EXISTS "Admins can view all wallet transactions" ON wallet_transactions;
-CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
-DROP POLICY IF EXISTS "Admins can create wallet transactions for any user" ON wallet_transactions;
-CREATE POLICY "Admins can create wallet transactions for any user" ON wallet_transactions FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin')));
-
--- ── STEP 2: Backfill RPC (SECURITY DEFINER — bypasses ALL RLS for backfill) ──
-CREATE OR REPLACE FUNCTION public.admin_backfill_site_visit_credit(p_site_visit_id uuid)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_entry RECORD; v_user_id uuid; v_amount numeric; v_wallet RECORD; v_wallet_id uuid; v_cb numeric; v_nb numeric; v_tx_id uuid;
-BEGIN
-  SELECT id,site_name,site_code,accepted_by,visit_completed_by,enumerator_fee,transport_fee,cost INTO v_entry FROM public.mmp_site_entries WHERE id=p_site_visit_id;
-  IF NOT FOUND THEN RETURN jsonb_build_object('success',false,'message','Site entry not found'); END IF;
-  v_user_id := COALESCE(v_entry.visit_completed_by::uuid, CASE WHEN v_entry.accepted_by ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN v_entry.accepted_by::uuid ELSE NULL END);
-  IF v_user_id IS NULL THEN RETURN jsonb_build_object('success',false,'message','No valid payee UUID'); END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id=v_user_id) THEN RETURN jsonb_build_object('success',false,'message',format('Payee %s not in profiles',v_user_id)); END IF;
-  v_amount := COALESCE(v_entry.enumerator_fee,0)+COALESCE(v_entry.transport_fee,0); IF v_amount<=0 THEN v_amount:=COALESCE(v_entry.cost,0); END IF;
-  IF v_amount<=0 THEN RETURN jsonb_build_object('success',false,'message','No fee amount'); END IF;
-  IF EXISTS (SELECT 1 FROM public.wallet_transactions WHERE site_visit_id=p_site_visit_id OR related_site_visit_id=p_site_visit_id) THEN RETURN jsonb_build_object('success',true,'message','Already credited','skipped',true); END IF;
-  SELECT id,COALESCE((balances->>'SDG')::numeric,0),COALESCE(total_earned,0) INTO v_wallet_id,v_cb,v_cb FROM public.wallets WHERE user_id=v_user_id;
-  IF NOT FOUND THEN INSERT INTO public.wallets(user_id,balances,total_earned) VALUES(v_user_id,jsonb_build_object('SDG',0),0) RETURNING id INTO v_wallet_id; v_cb:=0; END IF;
-  SELECT COALESCE((balances->>'SDG')::numeric,0) INTO v_cb FROM public.wallets WHERE id=v_wallet_id;
-  v_nb:=v_cb+v_amount;
-  INSERT INTO public.wallet_transactions(wallet_id,user_id,type,amount,amount_cents,currency,site_visit_id,related_site_visit_id,description,balance_before,balance_after,metadata)
-  VALUES(v_wallet_id,v_user_id,'earning',v_amount,ROUND(v_amount*100)::bigint,'SDG',p_site_visit_id,p_site_visit_id,format('Site visit fee: %s',COALESCE(v_entry.site_name,'?')),v_cb,v_nb,jsonb_build_object('backfill',true,'enumerator_fee',v_entry.enumerator_fee,'transport_fee',v_entry.transport_fee)) RETURNING id INTO v_tx_id;
-  UPDATE public.wallets SET balances=jsonb_set(COALESCE(balances,'{}'::jsonb),'{SDG}',to_jsonb(v_nb)),total_earned=COALESCE(total_earned,0)+v_amount,balance_cents=ROUND(v_nb*100)::bigint,total_earned_cents=COALESCE(total_earned_cents,0)+ROUND(v_amount*100)::bigint,updated_at=now() WHERE id=v_wallet_id;
-  RETURN jsonb_build_object('success',true,'message',format('Credited %s SDG',v_amount),'tx_id',v_tx_id,'amount',v_amount);
-EXCEPTION WHEN OTHERS THEN RETURN jsonb_build_object('success',false,'message',SQLERRM,'detail',SQLSTATE);
-END; $$;
-GRANT EXECUTE ON FUNCTION public.admin_backfill_site_visit_credit(uuid) TO authenticated;`}</pre>
+CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin','superAdmin','financialAdmin'))
+);`}</pre>
             </div>
           </CardContent>
         </Card>
