@@ -203,30 +203,29 @@ const AdminWallets: FC = () => {
   const scanMissingFees = async () => {
     setBackfillScan(null);
     try {
-      // Step 1: get all site_visit_ids already credited (from wallet_transactions)
-      // Do this first — no mmp_site_entries involved yet
-      const { data: existingTxs, error: txErr } = await supabase
-        .from('wallet_transactions')
-        .select('site_visit_id')
-        .in('type', ['earning', 'site_visit_fee'])
-        .not('site_visit_id', 'is', null);
-      if (txErr) throw txErr;
+      // Step 1: get all credited site_visit_ids via SECURITY DEFINER RPC (bypasses RLS)
+      const { data: rpcData } = await supabase.rpc('admin_get_wallet_data');
+      const allTxns: any[] = rpcData?.transactions || [];
+      const creditedIds = new Set(
+        allTxns
+          .filter((t: any) => t.site_visit_id && (t.type === 'earning' || t.type === 'site_visit_fee'))
+          .map((t: any) => t.site_visit_id)
+      );
 
-      const creditedIds = new Set((existingTxs || []).map((t: any) => t.site_visit_id).filter(Boolean));
-
-      // Step 2: Fetch fee-eligible entries — all terminal statuses that should have been paid.
-      // 'wfp_confirmed' is the current fee trigger; 'completed' is the legacy value.
-      // 'submitted' and 'verified' are included for historical records.
-      // Only safe scalar columns — no FK embeds on text columns.
-      // accepted_by is text (not uuid) but may contain a valid UUID; we validate below.
-      const FEE_STATUSES = ['wfp_confirmed', 'completed', 'submitted', 'verified'];
+      // Step 2: Fetch fee-eligible entries — all terminal statuses (case-sensitive as stored in DB)
+      // Verified from live DB: accepted(836), submitted(649), Completed(380), Accepted(370),
+      // verified(263), Approved and Costed(204), approved(131)
+      const FEE_STATUSES = [
+        'accepted', 'submitted', 'Completed', 'Accepted', 'verified',
+        'Approved and Costed', 'approved', 'wfp_confirmed', 'completed',
+      ];
       let allEntries: any[] = [];
       let offset = 0;
       const BATCH = 1000;
       while (true) {
         const { data, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost')
+          .select('id, site_name, accepted_by, visit_completed_by, completed_by_user_id, enumerator_fee, transport_fee, cost')
           .in('status', FEE_STATUSES)
           .range(offset, offset + BATCH - 1);
         if (error) throw error;
@@ -244,6 +243,8 @@ const AdminWallets: FC = () => {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const candidateIds = new Set<string>();
       for (const e of allEntries) {
+        if (e.completed_by_user_id && uuidRegex.test(String(e.completed_by_user_id).trim()))
+          candidateIds.add(String(e.completed_by_user_id).trim());
         if (e.visit_completed_by && uuidRegex.test(String(e.visit_completed_by).trim()))
           candidateIds.add(String(e.visit_completed_by).trim());
         if (e.accepted_by && uuidRegex.test(String(e.accepted_by).trim()))
@@ -276,14 +277,17 @@ const AdminWallets: FC = () => {
         if (creditedIds.has(e.id)) { alreadyCredited++; continue; }
         if (fee <= 0)              { noFee++;           continue; }
 
-        // Resolve the payee: visit_completed_by (uuid) takes priority;
-        // fall back to accepted_by (text field) only when it contains a valid UUID.
+        // Resolve the payee: completed_by_user_id (uuid FK) takes priority,
+        // then visit_completed_by, then accepted_by (text field, may contain UUID).
+        const completedByUserId = e.completed_by_user_id && uuidRegex.test(String(e.completed_by_user_id).trim())
+          ? String(e.completed_by_user_id).trim() : null;
         const visitCompletedBy = e.visit_completed_by && uuidRegex.test(String(e.visit_completed_by).trim())
           ? String(e.visit_completed_by).trim() : null;
         const acceptedBy = e.accepted_by && uuidRegex.test(String(e.accepted_by).trim())
           ? String(e.accepted_by).trim() : null;
         // Pick the first candidate that actually exists in profiles (FK-safe)
         const effectiveUserId =
+          (completedByUserId && validProfileIds.has(completedByUserId) ? completedByUserId : null) ||
           (visitCompletedBy && validProfileIds.has(visitCompletedBy) ? visitCompletedBy : null) ||
           (acceptedBy && validProfileIds.has(acceptedBy) ? acceptedBy : null);
 
@@ -350,17 +354,21 @@ const AdminWallets: FC = () => {
   };
 
   const load = async () => {
-    // Fetch wallets (may be RLS-limited; we expand the list using all users below)
-    const walletData = await adminListWallets({ pageSize: 500 });
+    // Use SECURITY DEFINER RPC to bypass RLS — direct table queries are RLS-limited
+    const { data: rpcResult, error: rpcErr } = await supabase
+      .rpc('admin_get_wallet_data');
 
-    // Also fetch wallet_transactions for ALL users so we can compute per-user totals
-    const { data: allTx } = await supabase
-      .from('wallet_transactions')
-      .select('id, wallet_id, user_id, type, amount, site_visit_id, created_at')
-      .order('created_at', { ascending: false })
-      .limit(5000);
+    const walletData: any[] = rpcErr
+      ? (await adminListWallets({ pageSize: 500 }))   // fallback
+      : (rpcResult?.wallets || []).map((w: any) => ({
+          ...w,
+          owner_name: w.full_name || w.username || w.email || w.user_id,
+          profiles: { full_name: w.full_name, email: w.email, username: w.username },
+        }));
 
-    const txList: any[] = allTx || [];
+    const txList: any[] = rpcErr
+      ? []
+      : (rpcResult?.transactions || []);
 
     // Build maps
     const walletByUserId = new Map((walletData || []).map((w: any) => [w.user_id, w]));
@@ -442,7 +450,7 @@ const AdminWallets: FC = () => {
 
     const { data, error } = await supabase
       .from('wallet_transactions')
-      .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(id, site_name, site_code, locality, state, visit_completed_at)')
+      .select('*')
       .eq('wallet_id', walletId)
       .order('created_at', { ascending: false });
 
