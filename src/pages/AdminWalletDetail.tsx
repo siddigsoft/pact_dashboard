@@ -38,6 +38,7 @@ const AdminWalletDetail = () => {
   const [editTxAmount, setEditTxAmount] = useState('');
   const [savingTx, setSavingTx] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [downPayments, setDownPayments] = useState<any[]>([]);
 
   const loadWalletData = async () => {
     if (!userId) return;
@@ -48,7 +49,7 @@ const AdminWalletDetail = () => {
       setLoadingSiteVisits(true);
 
       // Use SECURITY DEFINER RPC for wallet + transactions (direct queries are RLS-blocked)
-      const [profileResult, rpcResult, sitesResult] = await Promise.all([
+      const [profileResult, rpcResult, sitesResult, dpResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, role, hub_id')
@@ -72,7 +73,14 @@ const AdminWalletDetail = () => {
           `)
           .eq('accepted_by', userId)
           .order('accepted_at', { ascending: false })
-          .limit(100)
+          .limit(100),
+        // Fetch transport advance (down payment) records to calculate deductions
+        supabase
+          .from('down_payment_requests')
+          .select('id, site_name, mmp_site_entry_id, total_paid_amount, remaining_amount, requested_amount, status, requested_at')
+          .eq('requested_by', userId)
+          .not('status', 'in', '("pending_supervisor","pending_admin","rejected","cancelled","deleted")')
+          .order('requested_at', { ascending: false })
       ]);
 
       if (profileResult.error) {
@@ -148,6 +156,14 @@ const AdminWalletDetail = () => {
         setSiteVisits(sitesWithPayments);
       }
       setLoadingSiteVisits(false);
+
+      // Store down payment records (transport advances already paid in cash)
+      if (!dpResult.error && dpResult.data) {
+        setDownPayments(dpResult.data);
+      } else if (dpResult.error) {
+        console.warn('Could not load down payment records:', dpResult.error?.message);
+        setDownPayments([]);
+      }
     } catch (error) {
       console.error('Error loading wallet data:', error);
       toast({
@@ -243,6 +259,16 @@ const AdminWalletDetail = () => {
     }
     return { earned, withdrawn };
   }, [transactions]);
+
+  // Total transport advances already paid in cash via the Down Payments page.
+  // Only the actually-paid portion (total_paid_amount) is deducted — not the
+  // remaining/unpaid portion, and not rejected/cancelled records.
+  const totalAdvancesPaid = useMemo(() => {
+    return downPayments.reduce((sum, dp) => {
+      const paid = parseFloat(dp.total_paid_amount || 0);
+      return sum + (paid > 0 ? paid : 0);
+    }, 0);
+  }, [downPayments]);
 
   const startEditTx = (txn: WalletTransaction) => {
     setEditingTxId(txn.id);
@@ -520,7 +546,8 @@ const AdminWalletDetail = () => {
     );
   }
 
-  const currentBalance = totals.earned - totals.withdrawn;
+  // Actual spendable balance = earned - withdrawn - cash advances already paid
+  const currentBalance = totals.earned - totals.withdrawn - totalAdvancesPaid;
   const initials = (userProfile?.full_name || 'U').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
   /* ── shared panel style ── */
@@ -618,12 +645,17 @@ const AdminWalletDetail = () => {
           4 METRIC CARDS
       ══════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Balance */}
+        {/* Balance — shows net after advances deducted */}
         <div className="rounded-2xl bg-teal-700 border border-teal-600 p-5 shadow-lg shadow-teal-900/30">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-teal-200/80 mb-3">Balance ({currency})</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-teal-200/80 mb-3">Net Balance ({currency})</p>
           <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-balance">
             {currencyFmt(currentBalance, currency)}
           </p>
+          {totalAdvancesPaid > 0 && (
+            <p className="text-[10px] text-teal-300/70 mt-2 leading-tight">
+              Advances deducted: {currencyFmt(totalAdvancesPaid, currency)}
+            </p>
+          )}
         </div>
         {/* Total Earned */}
         <div className="rounded-2xl bg-emerald-700 border border-emerald-600 p-5 shadow-lg shadow-emerald-900/30">
@@ -632,13 +664,23 @@ const AdminWalletDetail = () => {
             {currencyFmt(totals.earned, currency)}
           </p>
         </div>
-        {/* Total Withdrawn */}
-        <div className="rounded-2xl bg-violet-700 border border-violet-600 p-5 shadow-lg shadow-violet-900/30">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-violet-200/80 mb-3">Total Withdrawn</p>
-          <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-total-withdrawn">
-            {currencyFmt(totals.withdrawn, currency)}
-          </p>
-        </div>
+        {/* Transport Advances Paid — only if any exist */}
+        {totalAdvancesPaid > 0 ? (
+          <div className="rounded-2xl bg-orange-700 border border-orange-600 p-5 shadow-lg shadow-orange-900/30">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-orange-200/80 mb-3">Transport Advances</p>
+            <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-advances-paid">
+              − {currencyFmt(totalAdvancesPaid, currency)}
+            </p>
+            <p className="text-[10px] text-orange-300/70 mt-2">{downPayments.length} advance{downPayments.length !== 1 ? 's' : ''} paid in cash</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-violet-700 border border-violet-600 p-5 shadow-lg shadow-violet-900/30">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-violet-200/80 mb-3">Total Withdrawn</p>
+            <p className="text-xl md:text-2xl font-extrabold text-white leading-none break-all" data-testid="text-total-withdrawn">
+              {currencyFmt(totals.withdrawn, currency)}
+            </p>
+          </div>
+        )}
         {/* Transaction Count */}
         <div className="rounded-2xl bg-slate-700 border border-slate-600 p-5 shadow-lg shadow-slate-900/30">
           <p className="text-[11px] font-bold uppercase tracking-widest text-slate-300/80 mb-3">Transactions</p>
@@ -701,20 +743,29 @@ const AdminWalletDetail = () => {
                 <TrendingUp className="w-4 h-4 text-teal-400" />
                 <h3 className="font-semibold text-slate-100 text-sm">Financial Summary</h3>
               </div>
-              <div className="p-5 space-y-3">
-                {[
-                  { label: 'Current Balance', value: currencyFmt(currentBalance, currency),   color: 'text-teal-400' },
-                  { label: 'Total Earned',    value: currencyFmt(totals.earned, currency),    color: 'text-emerald-400' },
-                  { label: 'Total Withdrawn', value: currencyFmt(totals.withdrawn, currency), color: 'text-violet-400' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="flex justify-between items-center py-1">
-                    <span className="text-sm text-slate-400">{label}</span>
-                    <span className={`text-base font-bold ${color}`}>{value}</span>
+              <div className="p-5 space-y-1">
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm text-slate-400">Total Earned</span>
+                  <span className="text-base font-bold text-emerald-400">{currencyFmt(totals.earned, currency)}</span>
+                </div>
+                {totals.withdrawn > 0 && (
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm text-slate-400">Formal Withdrawals</span>
+                    <span className="text-base font-bold text-violet-400">− {currencyFmt(totals.withdrawn, currency)}</span>
                   </div>
-                ))}
+                )}
+                {totalAdvancesPaid > 0 && (
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm text-slate-400 flex items-center gap-1">
+                      Transport Advances
+                      <span className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded font-medium">cash paid</span>
+                    </span>
+                    <span className="text-base font-bold text-orange-400">− {currencyFmt(totalAdvancesPaid, currency)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-3 border-t border-slate-700">
                   <span className="text-sm font-semibold text-slate-200">Net Balance</span>
-                  <span className="text-xl font-extrabold text-teal-300">{currencyFmt(totals.earned - totals.withdrawn, currency)}</span>
+                  <span className="text-xl font-extrabold text-teal-300">{currencyFmt(currentBalance, currency)}</span>
                 </div>
               </div>
             </div>
@@ -859,18 +910,90 @@ const AdminWalletDetail = () => {
               </div>
               {earningsBreakdown.withdrawals > 0 && (
                 <div className="flex justify-between items-center py-3 border-b border-slate-700">
-                  <span className="text-sm text-slate-400">Total Withdrawn</span>
+                  <span className="text-sm text-slate-400">Formal Withdrawals</span>
                   <span className="text-lg font-bold text-violet-400">− {currencyFmt(earningsBreakdown.withdrawals, currency)}</span>
+                </div>
+              )}
+              {totalAdvancesPaid > 0 && (
+                <div className="flex justify-between items-center py-3 border-b border-slate-700">
+                  <span className="text-sm text-slate-400 flex items-center gap-2">
+                    Transport Advances Paid in Cash
+                    <span className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded font-medium">{downPayments.length} record{downPayments.length !== 1 ? 's' : ''}</span>
+                  </span>
+                  <span className="text-lg font-bold text-orange-400">− {currencyFmt(totalAdvancesPaid, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-4">
                 <span className="text-base font-semibold text-slate-200">Net Balance</span>
                 <span className="text-2xl font-extrabold text-teal-300">
-                  {currencyFmt(earningsBreakdown.siteVisitEarnings + earningsBreakdown.bonuses + earningsBreakdown.adjustments - earningsBreakdown.withdrawals, currency)}
+                  {currencyFmt(currentBalance, currency)}
                 </span>
               </div>
             </div>
           </div>
+
+          {/* Down Payment Records detail — only shown if any exist */}
+          {downPayments.length > 0 && (
+            <div className={panel}>
+              <div className={panelHeader}>
+                <DollarSign className="w-4 h-4 text-orange-400" />
+                <h3 className="font-semibold text-slate-100 text-sm">Transport Advances Detail</h3>
+                <span className="ml-auto text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full font-medium">{downPayments.length} advance{downPayments.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-700 bg-slate-900/40 hover:bg-slate-900/40">
+                      <TableHead className={thClass}>Site</TableHead>
+                      <TableHead className={thClass}>Status</TableHead>
+                      <TableHead className={`${thClass} text-right`}>Requested</TableHead>
+                      <TableHead className={`${thClass} text-right`}>Paid in Cash</TableHead>
+                      <TableHead className={`${thClass} text-right`}>Remaining</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {downPayments.map(dp => {
+                      const paid = parseFloat(dp.total_paid_amount || 0);
+                      const remaining = parseFloat(dp.remaining_amount || 0);
+                      const requested = parseFloat(dp.requested_amount || 0);
+                      const statusColors: Record<string, string> = {
+                        fully_paid: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                        partially_paid: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                        approved: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+                      };
+                      const statusClass = statusColors[dp.status] || 'bg-slate-600/40 text-slate-300 border-slate-600';
+                      return (
+                        <TableRow key={dp.id} className="border-slate-700/40 hover:bg-slate-700/20">
+                          <TableCell className="text-slate-200 font-medium text-sm">{dp.site_name || '—'}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${statusClass}`}>
+                              {dp.status?.replace('_', ' ')}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-slate-400 text-sm">{currencyFmt(requested, currency)}</TableCell>
+                          <TableCell className="text-right font-bold text-orange-400 text-sm">
+                            {paid > 0 ? `− ${currencyFmt(paid, currency)}` : '—'}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {remaining > 0
+                              ? <span className="text-amber-400 font-medium">{currencyFmt(remaining, currency)}</span>
+                              : <span className="text-slate-600">—</span>}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    <TableRow className="border-t-2 border-slate-600 bg-slate-900/50">
+                      <TableCell colSpan={3} className="text-slate-400 text-right font-semibold text-sm py-3">Total Deducted from Balance</TableCell>
+                      <TableCell className="text-right font-extrabold text-orange-400">− {currencyFmt(totalAdvancesPaid, currency)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-400">
+                        {currencyFmt(downPayments.reduce((s, dp) => s + parseFloat(dp.remaining_amount || 0), 0), currency)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── TRANSACTIONS ── */}
