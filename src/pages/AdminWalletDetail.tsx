@@ -1523,17 +1523,18 @@ const AdminWalletDetail = () => {
                     const transFee  = Number(site.transport_fee  || 0);
                     const totalFee  = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
                     const sl        = site.status?.toLowerCase();
-                    const isDone    = sl === 'completed' || sl === 'submitted' || sl === 'wfp_confirmed';
+                    const isDone       = ['wfp_confirmed','completed','verified','cp_verified','approved','costed','approved_and_costed','locality_permit_verified'].includes(sl ?? '');
+                    const isInProgress = ['accepted','claimed','in_progress','ongoing','dispatched','assigned','forwarded','forwarded_to_coordinator','forwarded_to_fom','permits_attached','with_coordinators','submitted','acknowledged','site_claim'].includes(sl ?? '');
+                    const isAttention  = ['rejected','declined','returned','returned_to_fom','recalled','sent_back'].includes(sl ?? '');
                     return (
                       <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
                         <TableCell className="text-slate-100 font-medium">{site.site_name}</TableCell>
                         <TableCell>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold ${
-                            isDone                                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                            : sl === 'submitted'                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                            : sl === 'completed' || sl === 'verified' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            : sl === 'assigned'                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            : 'bg-slate-600/60 text-slate-300 border border-slate-600'
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${
+                            isDone       ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                            : isInProgress ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                            : isAttention  ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                            : 'bg-slate-600/40 text-slate-400 border-slate-600/50'
                           }`}>
                             {site.status}
                           </span>
@@ -1650,10 +1651,20 @@ const AdminWalletDetail = () => {
                       <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/20 transition-colors">
                         <TableCell className="text-slate-100 font-medium text-sm">{site.site_name}</TableCell>
                         <TableCell>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
-                            site.isCompleted ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                              : 'bg-slate-600/40 text-slate-300 border-slate-600'
-                          }`}>{site.status}</span>
+                          {(() => {
+                            const s = site.status?.toLowerCase();
+                            const done = ['wfp_confirmed','completed','verified','cp_verified','approved','costed','approved_and_costed','locality_permit_verified'].includes(s ?? '');
+                            const prog = ['accepted','claimed','in_progress','ongoing','dispatched','assigned','forwarded','forwarded_to_coordinator','forwarded_to_fom','permits_attached','with_coordinators','submitted','acknowledged','site_claim'].includes(s ?? '');
+                            const attn = ['rejected','declined','returned','returned_to_fom','recalled','sent_back'].includes(s ?? '');
+                            return (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
+                                done ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                                : prog ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : attn ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                                : 'bg-slate-600/40 text-slate-400 border-slate-600/50'
+                              }`}>{site.status}</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-slate-400 text-sm">{site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}</TableCell>
                         <TableCell className="text-right text-sm text-teal-300 font-medium">
@@ -1756,11 +1767,20 @@ const AdminWalletDetail = () => {
                       <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
                         <TableCell className="text-slate-100 font-medium text-sm">{site.site_name}</TableCell>
                         <TableCell>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
-                            site.isCompleted
-                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                              : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                          }`}>{site.status}</span>
+                          {(() => {
+                            const s = site.status?.toLowerCase();
+                            const done = ['wfp_confirmed','completed','verified','cp_verified','approved','costed','approved_and_costed','locality_permit_verified'].includes(s ?? '');
+                            const prog = ['accepted','claimed','in_progress','ongoing','dispatched','assigned','forwarded','forwarded_to_coordinator','forwarded_to_fom','permits_attached','with_coordinators','submitted','acknowledged','site_claim'].includes(s ?? '');
+                            const attn = ['rejected','declined','returned','returned_to_fom','recalled','sent_back'].includes(s ?? '');
+                            return (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${
+                                done ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                                : prog ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : attn ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                                : 'bg-slate-600/40 text-slate-400 border-slate-600/50'
+                              }`}>{site.status}</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-slate-400 text-sm">
                           {site.visit_completed_at ? new Date(site.visit_completed_at).toLocaleDateString() : '—'}
