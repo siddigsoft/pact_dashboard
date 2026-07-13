@@ -177,7 +177,7 @@ const AdminWalletDetail = () => {
           const payment = txnData.find(
             t => t.site_visit_id === site.id && (t.type === 'earning' || t.type === 'site_visit_fee')
           );
-          const isCompleted = site.status?.toLowerCase() === 'wfp_confirmed';
+          const isCompleted = ['completed', 'submitted', 'wfp_confirmed'].includes(site.status?.toLowerCase() ?? '');
           return {
             ...site,
             isCompleted,
@@ -300,7 +300,7 @@ const AdminWalletDetail = () => {
 
   // Compute work statistics
   const workStats = useMemo(() => {
-    const completedSites = siteVisits.filter(s => s.status?.toLowerCase() === 'wfp_confirmed').length;
+    const completedSites = siteVisits.filter(s => ['completed', 'submitted', 'wfp_confirmed'].includes(s.status?.toLowerCase() ?? '')).length;
     const pendingSites = siteVisits.filter(s => s.status?.toLowerCase() === 'assigned' || s.status?.toLowerCase() === 'in progress').length;
     const totalSites = siteVisits.length;
     const completionRate = totalSites > 0 ? (completedSites / totalSites) * 100 : 0;
@@ -1267,12 +1267,12 @@ const AdminWalletDetail = () => {
                                 const current = Number(site.enumerator_fee || 0);
                                 const diff = newRate > 0 ? newRate - current : null;
                                 const sl = site.status?.toLowerCase();
-                                const isDone = sl === 'wfp_confirmed';
+                                            const isDone = sl === 'completed' || sl === 'submitted' || sl === 'wfp_confirmed';
                                 return (
                                   <tr key={site.id} className="border-b border-slate-700/20 hover:bg-slate-800/40">
                                     <td className="px-4 py-2 text-slate-200 font-medium truncate max-w-[180px]">{site.site_name}</td>
                                     <td className="px-3 py-2">
-                                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold ${isDone ? 'bg-cyan-500/20 text-cyan-300' : sl === 'completed' || sl === 'submitted' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold ${sl === 'wfp_confirmed' ? 'bg-cyan-500/20 text-cyan-300' : isDone ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
                                         {site.status}
                                       </span>
                                     </td>
@@ -1479,8 +1479,8 @@ const AdminWalletDetail = () => {
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Paid',            count: siteVisits.filter(s => s.isCompleted && s.payment).length,  icon: CheckCircle, bg: 'bg-emerald-600', iconBg: 'bg-emerald-500/30' },
-              { label: 'WFP-Confirmed / Unpaid', count: siteVisits.filter(s => s.isCompleted && !s.payment).length, icon: Clock, bg: 'bg-cyan-700', iconBg: 'bg-cyan-600/30' },
-              { label: 'Not Yet Eligible', count: siteVisits.filter(s => !s.isCompleted).length,             icon: MapPin,       bg: 'bg-slate-600',   iconBg: 'bg-slate-500/30' },
+              { label: 'Pending Payment', count: siteVisits.filter(s => s.isCompleted && !s.payment).length, icon: Clock, bg: 'bg-amber-600', iconBg: 'bg-amber-500/30' },
+              { label: 'Not Eligible',   count: siteVisits.filter(s => !s.isCompleted).length,              icon: MapPin, bg: 'bg-slate-600', iconBg: 'bg-slate-500/30' },
             ].map(({ label, count, icon: Icon, bg, iconBg }) => (
               <div key={label} className={`rounded-xl ${bg} p-4 flex items-center justify-between shadow`}>
                 <div>
@@ -1523,7 +1523,7 @@ const AdminWalletDetail = () => {
                     const transFee  = Number(site.transport_fee  || 0);
                     const totalFee  = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
                     const sl        = site.status?.toLowerCase();
-                    const isDone    = sl === 'wfp_confirmed';
+                    const isDone    = sl === 'completed' || sl === 'submitted' || sl === 'wfp_confirmed';
                     return (
                       <TableRow key={site.id} className="border-slate-700/40 hover:bg-slate-700/30 transition-colors">
                         <TableCell className="text-slate-100 font-medium">{site.site_name}</TableCell>
