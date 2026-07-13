@@ -774,8 +774,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent
-        className="flex flex-col p-0 gap-0 overflow-hidden bg-slate-900 border border-slate-700 text-slate-100 [&>button:last-child]:hidden"
-        style={{ width: '98vw', maxWidth: '98vw', height: '96vh', maxHeight: '96vh' }}
+        className="max-w-5xl w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-slate-900 border border-slate-700 text-slate-100"
         onInteractOutside={e => e.preventDefault()}
       >
         {/* Teal accent strip */}
