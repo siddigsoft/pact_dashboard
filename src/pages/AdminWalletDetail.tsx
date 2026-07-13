@@ -50,62 +50,20 @@ const AdminWalletDetail = () => {
 
   const loadWalletData = async () => {
     if (!userId) return;
-    
+
     try {
+      // ── Phase 1: wallet balance + transactions (fast — show immediately) ─────
       setLoading(true);
       setLoadingProfile(true);
       setLoadingSiteVisits(true);
 
-      // Use SECURITY DEFINER RPC for wallet + transactions (direct queries are RLS-blocked)
-      const [profileResult, rpcResult, sitesResult, dpResult, svcResult, ocResult] = await Promise.all([
+      const [profileResult, rpcResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, role, hub_id')
           .eq('id', userId)
           .single(),
         supabase.rpc('admin_get_user_wallet_data', { p_user_id: userId }),
-        // Include mmp_file_id + MMP name for filter
-        supabase
-          .from('mmp_site_entries')
-          .select(`
-            id,
-            site_name,
-            site_code,
-            status,
-            state,
-            locality,
-            accepted_at,
-            visit_completed_at,
-            enumerator_fee,
-            transport_fee,
-            cost,
-            mmp_file_id,
-            mmp_files(id, name)
-          `)
-          .eq('accepted_by', userId)
-          .order('accepted_at', { ascending: false })
-          .limit(200),
-        // Down payments — include receipt fields
-        supabase
-          .from('down_payment_requests')
-          .select('id, site_name, mmp_site_entry_id, total_paid_amount, remaining_amount, requested_amount, status, requested_at, payment_proof_url, supporting_documents')
-          .eq('requested_by', userId)
-          .not('status', 'in', '("pending_supervisor","pending_admin","rejected","cancelled","deleted")')
-          .order('requested_at', { ascending: false }),
-        // Site-visit cost submissions (field staff expenses with receipts)
-        supabase
-          .from('site_visit_cost_submissions')
-          .select('id, site_visit_id, mmp_file_id, submitted_at, total_cost_cents, transportation_cost_cents, accommodation_cost_cents, meal_allowance_cents, other_costs_cents, currency, status, supporting_documents, payment_proof_url, wallet_transaction_id, submission_notes')
-          .eq('submitted_by', userId)
-          .order('submitted_at', { ascending: false })
-          .limit(200),
-        // Operational cost submissions (FOM / coordinator level)
-        supabase
-          .from('operational_cost_submissions')
-          .select('id, mmp_file_id, hub_id, submitted_at, amount_cents, currency, status, description, expense_category, expense_date, vendor, reference_number, supporting_documents, payment_proof_url')
-          .eq('submitted_by', userId)
-          .order('submitted_at', { ascending: false })
-          .limit(200),
       ]);
 
       if (profileResult.error) {
@@ -160,11 +118,55 @@ const AdminWalletDetail = () => {
         setTransactions(transformedTxns);
       }
 
+      // Phase 1 done — page is interactive now
+      setLoading(false);
+
+      // ── Phase 2: site visits + costs (background — doesn't block the UI) ────
+      const [sitesResult, dpResult, svcResult, ocResult] = await Promise.all([
+        supabase
+          .from('mmp_site_entries')
+          .select(`
+            id,
+            site_name,
+            site_code,
+            status,
+            state,
+            locality,
+            accepted_at,
+            visit_completed_at,
+            enumerator_fee,
+            transport_fee,
+            cost,
+            mmp_file_id,
+            mmp_files(id, name)
+          `)
+          .eq('accepted_by', userId)
+          .order('accepted_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('down_payment_requests')
+          .select('id, site_name, mmp_site_entry_id, total_paid_amount, remaining_amount, requested_amount, status, requested_at, payment_proof_url, supporting_documents')
+          .eq('requested_by', userId)
+          .not('status', 'in', '("pending_supervisor","pending_admin","rejected","cancelled","deleted")')
+          .order('requested_at', { ascending: false }),
+        supabase
+          .from('site_visit_cost_submissions')
+          .select('id, site_visit_id, mmp_file_id, submitted_at, total_cost_cents, transportation_cost_cents, accommodation_cost_cents, meal_allowance_cents, other_costs_cents, currency, status, supporting_documents, payment_proof_url, wallet_transaction_id, submission_notes')
+          .eq('submitted_by', userId)
+          .order('submitted_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('operational_cost_submissions')
+          .select('id, mmp_file_id, hub_id, submitted_at, amount_cents, currency, status, description, expense_category, expense_date, vendor, reference_number, supporting_documents, payment_proof_url')
+          .eq('submitted_by', userId)
+          .order('submitted_at', { ascending: false })
+          .limit(200),
+      ]);
+
       if (sitesResult.error) {
         console.error('Failed to load site visits:', sitesResult.error);
       } else if (sitesResult.data) {
         const sitesWithPayments = sitesResult.data.map(site => {
-          // Check for both old 'site_visit_fee' and new 'earning' transaction types
           const payment = txnData.find(
             t => t.site_visit_id === site.id && (t.type === 'earning' || t.type === 'site_visit_fee')
           );
@@ -172,36 +174,20 @@ const AdminWalletDetail = () => {
           return {
             ...site,
             isCompleted,
-            payment: payment ? {
-              amount: parseFloat(payment.amount),
-              date: payment.created_at
-            } : null
+            payment: payment ? { amount: parseFloat(payment.amount), date: payment.created_at } : null
           };
         });
         setSiteVisits(sitesWithPayments);
-      }
-      setLoadingSiteVisits(false);
 
-      // Store down payment records (transport advances already paid in cash)
-      if (!dpResult.error && dpResult.data) {
-        setDownPayments(dpResult.data);
-      } else if (dpResult.error) {
-        console.warn('Could not load down payment records:', dpResult.error?.message);
-        setDownPayments([]);
-      }
-
-      // Extract distinct MMPs from site entries, then resolve names via direct query
-      if (!sitesResult.error && sitesResult.data) {
+        // Resolve MMP names
         const mmpIds = [...new Set(sitesResult.data.map((s: any) => s.mmp_file_id).filter(Boolean))];
         if (mmpIds.length > 0) {
-          // Try the join result first, fall back to a direct mmp_files query
           const joinedNames = new Map<string, string>();
           for (const s of sitesResult.data) {
             if (s.mmp_file_id && (s as any).mmp_files?.name) {
               joinedNames.set(s.mmp_file_id, (s as any).mmp_files.name);
             }
           }
-          // For any IDs that didn't resolve via join, fetch directly
           const unresolvedIds = mmpIds.filter(id => !joinedNames.has(id));
           if (unresolvedIds.length > 0) {
             const { data: mmpData } = await supabase
@@ -217,8 +203,15 @@ const AdminWalletDetail = () => {
           setMmps([]);
         }
       }
+      setLoadingSiteVisits(false);
 
-      // Site-visit cost submissions
+      if (!dpResult.error && dpResult.data) {
+        setDownPayments(dpResult.data);
+      } else {
+        if (dpResult.error) console.warn('Could not load down payment records:', dpResult.error?.message);
+        setDownPayments([]);
+      }
+
       if (!svcResult.error && svcResult.data) {
         setSiteVisitCosts(svcResult.data);
       } else {
@@ -226,7 +219,6 @@ const AdminWalletDetail = () => {
         setSiteVisitCosts([]);
       }
 
-      // Operational cost submissions
       if (!ocResult.error && ocResult.data) {
         setOperationalCosts(ocResult.data);
       } else {

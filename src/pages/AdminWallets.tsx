@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC, Fragment } from 'react';
+import { useEffect, useMemo, useRef, useState, type FC, Fragment } from 'react';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +21,10 @@ import { useToast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
+
+// Module-level cache — survives tab switches, avoids refetching on every mount
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+let _walletCache: { rows: any[]; currency: string; ts: number } | null = null;
 
 const AdminWallets: FC = () => {
   const [rows, setRows] = useState<any[]>([]);
@@ -194,7 +198,7 @@ const AdminWallets: FC = () => {
       variant: errorCount > 0 ? 'destructive' : 'default',
     });
 
-    await load();
+    await load({ force: true });
     setSyncingAll(false);
     setSyncProgress({ current: 0, total: 0 });
   };
@@ -342,7 +346,7 @@ const AdminWallets: FC = () => {
     }
 
     await scanMissingFees();
-    await load();
+    await load({ force: true });
 
     toast({
       title: 'Backfill Complete',
@@ -353,7 +357,14 @@ const AdminWallets: FC = () => {
     setBackfilling(false);
   };
 
-  const load = async () => {
+  const load = async (opts?: { force?: boolean }) => {
+    // Serve from cache immediately if fresh — avoids re-fetch on every tab switch
+    if (!opts?.force && _walletCache && Date.now() - _walletCache.ts < CACHE_TTL_MS) {
+      setRows(_walletCache.rows);
+      setCurrency(_walletCache.currency);
+      return;
+    }
+
     // Use SECURITY DEFINER RPC to bypass RLS — direct table queries are RLS-limited
     const { data: rpcResult, error: rpcErr } = await supabase
       .rpc('admin_get_wallet_data');
@@ -440,8 +451,10 @@ const AdminWallets: FC = () => {
       return (a.owner_name || '').localeCompare(b.owner_name || '');
     });
 
-    setRows(merged);
     const c = walletData && walletData[0]?.balances ? Object.keys(walletData[0].balances)[0] : 'SDG';
+    // Save to module-level cache so next mount is instant
+    _walletCache = { rows: merged, currency: c, ts: Date.now() };
+    setRows(merged);
     setCurrency(c);
   };
 
@@ -595,20 +608,30 @@ const AdminWallets: FC = () => {
     })();
   }, []);
 
-  // Re-run load whenever the users list is ready/updated
+  // Re-run load whenever the users list is ready/updated.
+  // After the first load, kick off an auto-scan so the missing-credit count
+  // is ready without the admin having to click "Scan Now" manually.
+  const autoScannedRef = useRef(false);
   useEffect(() => {
-    if (users && users.length > 0) { load(); }
+    if (users && users.length > 0) {
+      load().then(() => {
+        if (!autoScannedRef.current) {
+          autoScannedRef.current = true;
+          scanMissingFees();
+        }
+      });
+    }
   }, [users]);
 
   useEffect(() => {
-    const id = setInterval(() => { load(); }, 60000);
+    const id = setInterval(() => { load({ force: true }); }, 60000);
     return () => clearInterval(id);
   }, [users]);
 
   useEffect(() => {
     const ch = supabase
       .channel('admin_wallets')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => load());
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => load({ force: true }));
     ch.subscribe();
     return () => { try { supabase.removeChannel(ch); } catch {} };
   }, []);
@@ -762,7 +785,8 @@ CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions F
                 Missing Wallet Credits — Site Visits
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Completed site visits are only credited automatically when finished through the app. Historical or admin-completed visits may be missing. Run a scan to find and backfill them.
+                New site visits completed through the app are credited <strong>automatically</strong> — you don't need to do anything for those.
+                This panel is for <strong>historical or admin-completed visits</strong> that existed before the auto-credit system. Run the backfill once to catch them up; after that, this count should stay at 0.
               </p>
 
               {/* Scan result */}
@@ -1299,7 +1323,7 @@ CREATE POLICY "Admins can view all wallet transactions" ON wallet_transactions F
         userName={adjustmentDialog.userName}
         currentBalance={adjustmentDialog.currentBalance}
         currency={currency}
-        onSuccess={() => load()}
+        onSuccess={() => load({ force: true })}
       />
     </div>
   );
