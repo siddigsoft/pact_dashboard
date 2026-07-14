@@ -6,7 +6,6 @@ import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
@@ -59,6 +58,7 @@ const UserDetail: FC = () => {
   const [editForm, setEditForm] = useState<Partial<User>>({});
 
   const [isSaving, setIsSaving] = useState(false);
+  const [activeSection, setActiveSection] = useState('overview');
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [isConfirmingEmail, setIsConfirmingEmail] = useState(false);
@@ -833,52 +833,164 @@ const UserDetail: FC = () => {
         </div>
       </div>
 
-      {/* ── Content (overlaps the banner by pulling up with -mt) ──────────── */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 -mt-10">
+      {/* ── Sidebar + Content Layout ─────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-5 -mt-10 pb-12">
+        <div className="flex gap-4 lg:gap-5 items-start">
 
-        {/* Profile completeness card */}
-        {(currentUser?.id === user.id || isAdmin) && (
-          <div className="mb-4">
-            <ProfileCompletenessIndicator user={user} />
-          </div>
-        )}
-
-        {/* ── Main Tab Panel ──────────────────────────────────────────────── */}
-        <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
-          <Tabs defaultValue="profile" className="w-full">
-            {/* Tab bar */}
-            <div className="border-b bg-background">
-              <TabsList className="flex flex-row flex-nowrap h-auto p-0 bg-transparent w-full justify-start overflow-x-auto scrollbar-hide rounded-none gap-0">
-                {[
-                  { value: 'profile',        icon: <UserIcon className="h-4 w-4" />,    label: 'Profile'       },
-                  { value: 'employment',     icon: <Briefcase className="h-4 w-4" />,   label: 'Employment'    },
-                  { value: 'location',       icon: <MapPin className="h-4 w-4" />,      label: 'Location'      },
-                  { value: 'performance',    icon: <Award className="h-4 w-4" />,          label: 'Performance'   },
-                  { value: 'bank',           icon: <CreditCard className="h-4 w-4" />,     label: 'Bank'          },
-                  { value: 'contracts',      icon: <FileSignature className="h-4 w-4" />,  label: 'Contracts'     },
-                  { value: 'personal',       icon: <UserIcon className="h-4 w-4" />,        label: 'Personal'      },
-                  { value: 'education',      icon: <GraduationCap className="h-4 w-4" />,   label: 'Education'     },
-                  { value: 'doc-vault',      icon: <FolderOpen className="h-4 w-4" />,      label: 'Documents'     },
-                  { value: 'skills',         icon: <Zap className="h-4 w-4" />,             label: 'Skills'        },
-                  ...(canManageClassifications
-                    ? [{ value: 'classification', icon: <ShieldCheck className="h-4 w-4" />, label: 'Classification' }]
-                    : []),
-                ].map(t => (
-                  <TabsTrigger
-                    key={t.value}
-                    value={t.value}
-                    className="flex items-center gap-1.5 px-4 py-3.5 text-xs sm:text-sm font-medium text-muted-foreground border-b-2 border-transparent rounded-none whitespace-nowrap
-                      data-[state=active]:text-primary data-[state=active]:border-primary data-[state=active]:bg-transparent
-                      hover:text-foreground hover:bg-muted/40 transition-all"
-                  >
-                    {t.icon}{t.label}
-                  </TabsTrigger>
+          {/* ── LEFT SIDEBAR ──────────────────────────────────────────── */}
+          <div className="hidden lg:flex flex-col w-56 xl:w-60 shrink-0 sticky top-6 self-start">
+            <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
+              <div className="p-4 text-center border-b bg-gradient-to-b from-primary/5 to-background">
+                <div className="flex flex-col items-center gap-2.5">
+                  <Avatar className="h-16 w-16 border-4 border-background shadow-md ring-2 ring-primary/20">
+                    {user.avatar ? <AvatarImage src={user.avatar} alt={user.name} /> : null}
+                    <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xl">
+                      {user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-bold text-sm leading-snug">{user.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize mt-0.5">{empType || 'Staff Member'}</p>
+                    {user.employeeId && <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{user.employeeId}</p>}
+                  </div>
+                  <Badge variant={user.isApproved ? "default" : "destructive"} className="text-[11px] px-2.5 py-0.5 rounded-full">
+                    {user.isApproved ? '● Active' : '● Pending'}
+                  </Badge>
+                </div>
+              </div>
+              <nav className="p-2 py-3">
+                {([
+                  { group: 'PROFILE', items: [
+                    { id: 'overview',   emoji: '🏠', label: 'Overview',        filled: !!(user.name && user.email) },
+                    { id: 'employment', emoji: '💼', label: 'Employment',       filled: !!(empDepartmentId || empContractStart) },
+                    { id: 'personal',   emoji: '👤', label: 'Personal Details', filled: null },
+                    { id: 'location',   emoji: '📍', label: 'Location & Work',  filled: !!user.hubId },
+                  ]},
+                  { group: 'BACKGROUND', items: [
+                    { id: 'education',  emoji: '🎓', label: 'Education',        filled: null },
+                    { id: 'documents',  emoji: '📁', label: 'Documents',        filled: contracts.length > 0 },
+                    { id: 'skills',     emoji: '⚡', label: 'Skills',           filled: null },
+                  ]},
+                  { group: 'FINANCE', items: [
+                    { id: 'compensation', emoji: '💰', label: 'Compensation & Bank', filled: !!user.bankAccount },
+                    { id: 'performance',  emoji: '📊', label: 'Performance',         filled: !!user.performance },
+                  ]},
+                  { group: 'SYSTEM', items: [
+                    { id: 'access', emoji: '🔒', label: 'Access & Security', filled: !!user.role },
+                  ]},
+                ] as { group: string; items: { id: string; emoji: string; label: string; filled: boolean | null }[] }[]).map(({ group, items }) => (
+                  <div key={group} className="mb-2">
+                    <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-2.5 mb-1">{group}</p>
+                    {items.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => setActiveSection(s.id)}
+                        className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-left transition-all ${
+                          activeSection === s.id
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                        }`}
+                      >
+                        <span className="text-sm leading-none shrink-0">{s.emoji}</span>
+                        <span className="flex-1 truncate text-[11px] font-medium">{s.label}</span>
+                        {s.filled === true && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />}
+                        {s.filled === false && <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/20 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
                 ))}
-              </TabsList>
-            </div>
+              </nav>
+              {isAdmin && (
+                <div className="p-2 border-t space-y-0.5">
+                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-[11px] h-7 text-muted-foreground" onClick={() => navigate(`/signatures?user=${user.id}`)}>
+                    <FileSignature className="h-3.5 w-3.5" /> View Signatures
+                  </Button>
+                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-[11px] h-7 text-red-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={() => navigate('/hr?tab=offboarding')}>
+                    <UserX className="h-3.5 w-3.5" /> Offboard
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </div>
 
-            {/* ── PROFILE TAB ─────────────────────────────────────────────── */}
-            <TabsContent value="profile" className="p-5 sm:p-6 space-y-5 mt-0">
+          {/* ── MAIN CONTENT COLUMN ───────────────────────────────────── */}
+          <div className="flex-1 min-w-0 space-y-3">
+
+            {/* Profile completeness */}
+            {(currentUser?.id === user.id || isAdmin) && (
+              <ProfileCompletenessIndicator user={user} />
+            )}
+
+            {/* Mobile section selector */}
+            <Card className="lg:hidden shadow-md border-0 overflow-hidden rounded-xl">
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex p-1 gap-0.5 min-w-max">
+                  {[
+                    { id: 'overview',     emoji: '🏠', label: 'Overview'  },
+                    { id: 'employment',   emoji: '💼', label: 'Job'        },
+                    { id: 'personal',     emoji: '👤', label: 'Personal'  },
+                    { id: 'location',     emoji: '📍', label: 'Location'  },
+                    { id: 'education',    emoji: '🎓', label: 'Education' },
+                    { id: 'documents',    emoji: '📁', label: 'Docs'      },
+                    { id: 'skills',       emoji: '⚡', label: 'Skills'    },
+                    { id: 'compensation', emoji: '💰', label: 'Finance'   },
+                    { id: 'performance',  emoji: '📊', label: 'KPIs'      },
+                    { id: 'access',       emoji: '🔒', label: 'Access'    },
+                  ].map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => setActiveSection(s.id)}
+                      className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
+                        activeSection === s.id ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground hover:bg-muted/60'
+                      }`}
+                    >
+                      <span className="text-sm">{s.emoji}</span>
+                      <span className="text-[9px] font-medium">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Card>
+
+            {/* ── Content card ──────────────────────────────────────────── */}
+            <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
+
+              {/* Section header bar */}
+              <div className="border-b px-5 py-3 flex items-center justify-between bg-muted/10">
+                <div className="flex items-center gap-2">
+                  <span className="text-base leading-none">
+                    {activeSection === 'overview' ? '🏠' : activeSection === 'employment' ? '💼' : activeSection === 'personal' ? '👤' : activeSection === 'location' ? '📍' : activeSection === 'education' ? '🎓' : activeSection === 'documents' ? '📁' : activeSection === 'skills' ? '⚡' : activeSection === 'compensation' ? '💰' : activeSection === 'performance' ? '📊' : '🔒'}
+                  </span>
+                  <h2 className="font-bold text-sm text-foreground">
+                    {activeSection === 'overview' ? 'Overview' : activeSection === 'employment' ? 'Employment & Contract' : activeSection === 'personal' ? 'Personal Details' : activeSection === 'location' ? 'Location & Work' : activeSection === 'education' ? 'Education & Experience' : activeSection === 'documents' ? 'Documents' : activeSection === 'skills' ? 'Skills & Languages' : activeSection === 'compensation' ? 'Compensation & Bank' : activeSection === 'performance' ? 'Performance' : 'Access & Security'}
+                  </h2>
+                </div>
+                {(activeSection === 'overview' || activeSection === 'location') && isAdmin && !editMode && (
+                  <Button size="sm" variant="outline" onClick={handleEdit} className="gap-1.5 h-8 text-xs" data-testid="button-edit-section">
+                    <Edit className="h-3 w-3" /> Edit
+                  </Button>
+                )}
+                {editMode && (activeSection === 'overview' || activeSection === 'location') && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const roleEscalation = user && editForm.role !== user.role && ['Admin', 'SuperAdmin'].includes(editForm.role || '');
+                        if (roleEscalation && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true);
+                        else handleEditSave();
+                      }}
+                      disabled={isSaving}
+                      className="h-8 text-xs"
+                    >
+                      {isSaving ? 'Saving…' : 'Save Changes'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleEditCancel} className="h-8 text-xs">Cancel</Button>
+                  </div>
+                )}
+              </div>
+
+            {/* ── OVERVIEW SECTION ───────────────────────────────────────── */}
+            {activeSection === 'overview' && (<div className="p-5 sm:p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
                   <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Full Name</h3>
@@ -961,10 +1073,10 @@ const UserDetail: FC = () => {
                   <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
                 </div>
               )}
-            </TabsContent>
+            </div>)}
 
-            {/* ── EMPLOYMENT TAB ──────────────────────────────────────────── */}
-            <TabsContent value="employment" className="p-5 sm:p-6 space-y-5 mt-0">
+            {/* ── EMPLOYMENT SECTION ──────────────────────────────────────── */}
+            {activeSection === 'employment' && (<div className="p-5 sm:p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
@@ -1069,10 +1181,10 @@ const UserDetail: FC = () => {
                   </Button>
                 </div>
               )}
-            </TabsContent>
+            </div>)}
 
-            {/* ── LOCATION TAB ────────────────────────────────────────────── */}
-            <TabsContent value="location" className="p-5 sm:p-6 space-y-5 mt-0">
+            {/* ── LOCATION SECTION ────────────────────────────────────────── */}
+            {activeSection === 'location' && (<div className="p-5 sm:p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
                   <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Hub</h3>
@@ -1155,10 +1267,10 @@ const UserDetail: FC = () => {
                   </div>
                 </div>
               )}
-            </TabsContent>
+            </div>)}
 
-            {/* ── PERFORMANCE TAB ─────────────────────────────────────────── */}
-            <TabsContent value="performance" className="p-5 sm:p-6 mt-0">
+            {/* ── PERFORMANCE SECTION ─────────────────────────────────────── */}
+            {activeSection === 'performance' && (<div className="p-5 sm:p-6">
               {user.performance ? (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {[
@@ -1181,10 +1293,10 @@ const UserDetail: FC = () => {
                   <p className="text-muted-foreground">No performance data available yet.</p>
                 </div>
               )}
-            </TabsContent>
+            </div>)}
 
-            {/* ── BANK TAB ─────────────────────────────────────────────────── */}
-            <TabsContent value="bank" className="p-5 sm:p-6 mt-0">
+            {/* ── COMPENSATION SECTION ─────────────────────────────────────── */}
+            {activeSection === 'compensation' && (<div className="p-5 sm:p-6 space-y-6">
               {user.bankAccount ? (
                 <div className="space-y-4">
                   <div className="bg-muted/20 rounded-xl p-5 border border-border/40 grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -1220,11 +1332,10 @@ const UserDetail: FC = () => {
                   )}
                 </div>
               )}
-            </TabsContent>
 
-            {/* ── CLASSIFICATION TAB ─────────────────────────────────────── */}
+            {/* Classification sub-section */}
             {canManageClassifications && (
-              <TabsContent value="classification" className="p-5 sm:p-6 space-y-6 mt-0">
+              <div className="border-t pt-6 px-6 pb-6 space-y-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
                     <h3 className="text-base font-semibold">Classification & Compensation</h3>
@@ -1343,14 +1454,14 @@ const UserDetail: FC = () => {
                     )}
                   </CardContent>
                 </Card>
-              </TabsContent>
-            )}
+              </div>)}
+            </div>)}
 
-            {/* ── CONTRACTS TAB ────────────────────────────────────────────── */}
-            <TabsContent
-              value="contracts"
-              className="p-5 sm:p-6 space-y-5 mt-0"
-            >
+            {/* ── DOCUMENTS SECTION ────────────────────────────────────────── */}
+            {activeSection === 'documents' && (<div className="p-5 sm:p-6 space-y-6">
+              <EmployeeDocumentsTab userId={user.id} isAdmin={!!isAdmin} currentUserId={currentUser?.id} />
+              <div className="border-t pt-6">
+                <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><FileSignature className="h-4 w-4 text-indigo-600" /> Employment Contracts</h3>
 
               {/* Upload card — admin only */}
               {isAdmin && (
@@ -1498,30 +1609,137 @@ const UserDetail: FC = () => {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+              </div>
+            </div>)}
 
-            {/* ── PERSONAL TAB ─────────────────────────────────────────────── */}
-            <TabsContent value="personal" className="p-5 sm:p-6 mt-0">
+            {/* ── PERSONAL SECTION ─────────────────────────────────────────── */}
+            {activeSection === 'personal' && (<div className="p-5 sm:p-6">
               <EmployeePersonalTab userId={user.id} isAdmin={!!isAdmin} />
-            </TabsContent>
+            </div>)}
 
-            {/* ── EDUCATION & EXPERIENCE TAB ───────────────────────────────── */}
-            <TabsContent value="education" className="p-5 sm:p-6 mt-0">
+            {/* ── EDUCATION SECTION ────────────────────────────────────────── */}
+            {activeSection === 'education' && (<div className="p-5 sm:p-6">
               <EmployeeEducationTab userId={user.id} isAdmin={!!isAdmin} />
-            </TabsContent>
+            </div>)}
 
-            {/* ── DOCUMENT VAULT TAB ───────────────────────────────────────── */}
-            <TabsContent value="doc-vault" className="p-5 sm:p-6 mt-0">
-              <EmployeeDocumentsTab userId={user.id} isAdmin={!!isAdmin} currentUserId={currentUser?.id} />
-            </TabsContent>
-
-            {/* ── SKILLS & LANGUAGES TAB ───────────────────────────────────── */}
-            <TabsContent value="skills" className="p-5 sm:p-6 mt-0">
+            {/* ── SKILLS SECTION ───────────────────────────────────────────── */}
+            {activeSection === 'skills' && (<div className="p-5 sm:p-6">
               <EmployeeSkillsTab userId={user.id} isAdmin={!!isAdmin} />
-            </TabsContent>
+            </div>)}
 
-          </Tabs>
-        </Card>
+            {/* ── ACCESS & SECURITY SECTION ────────────────────────────────── */}
+            {activeSection === 'access' && (
+              <div className="p-5 sm:p-6 space-y-5">
+                {isAdmin && (
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5" /> System Role
+                    </h4>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <RoleBadge role={user.role} size="sm" />
+                      <UserClassificationBadge userId={user.id} />
+                      {!editMode && (
+                        <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleEdit} data-testid="button-change-role">
+                          <Edit className="h-3 w-3" /> Change Role
+                        </Button>
+                      )}
+                    </div>
+                    {editMode && (
+                      <div className="space-y-3">
+                        <select
+                          className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
+                          value={editForm.role || ""}
+                          onChange={e => handleEditChange("role", e.target.value)}
+                          disabled={isProtectedOwner(user?.id)}
+                          title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                        >
+                          <option value="" disabled>Select role</option>
+                          {availableRoles.map(role => (
+                            <option key={role} value={role}>{toRoleLabel(role) || role}</option>
+                          ))}
+                        </select>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving}>
+                            {isSaving ? 'Saving…' : 'Save Role'}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={handleEditCancel}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                    <UserCheck className="h-3.5 w-3.5" /> Account Status
+                  </h4>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <Badge variant={user.isApproved ? "default" : "destructive"} className="px-3 py-1.5 text-xs font-semibold rounded-full">
+                      {user.isApproved ? '● Active' : '● Pending Approval'}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">Last active: {user.lastActive ? new Date(user.lastActive).toLocaleDateString() : 'N/A'}</span>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-2 pt-1 flex-wrap">
+                      {!user.isApproved && (
+                        <Button size="sm" className="gap-1.5" onClick={() => approveUser(user.id)} disabled={isApproving} data-testid="button-approve-user-access">
+                          {isApproving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />} Approve
+                        </Button>
+                      )}
+                      {user.isApproved && (
+                        <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => rejectUser(user.id)} disabled={isRejecting} data-testid="button-deactivate-user-access">
+                          {isRejecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserX className="h-3.5 w-3.5" />} Deactivate
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {isAdmin && (
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <Mail className="h-3.5 w-3.5" /> Email Management
+                    </h4>
+                    <p className="text-sm break-all font-medium">{user.email}</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        size="sm" variant="outline" className="gap-1.5"
+                        onClick={async () => {
+                          setIsConfirmingEmail(true);
+                          try {
+                            await adminConfirmUserEmail(user.id);
+                            toast({ title: 'Email confirmed successfully' });
+                          } catch (e: any) {
+                            toast({ title: 'Failed', description: (e as Error).message, variant: 'destructive' });
+                          } finally { setIsConfirmingEmail(false); }
+                        }}
+                        disabled={isConfirmingEmail} data-testid="button-confirm-email"
+                      >
+                        {isConfirmingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />} Confirm Email
+                      </Button>
+                      <Button
+                        size="sm" variant="outline" className="gap-1.5"
+                        onClick={async () => {
+                          const newEmail = window.prompt('Enter new email address:');
+                          if (!newEmail) return;
+                          try {
+                            await adminUpdateUserEmail(user.id, newEmail);
+                            toast({ title: 'Email updated', description: `Changed to ${newEmail}` });
+                          } catch (e: any) {
+                            toast({ title: 'Failed', description: (e as Error).message, variant: 'destructive' });
+                          }
+                        }}
+                        data-testid="button-update-email"
+                      >
+                        <Edit className="h-3.5 w-3.5" /> Update Email
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            </Card>
+          </div>
+        </div>
       </div>
 
       <Dialog open={bankAccountFormOpen} onOpenChange={setBankAccountFormOpen}>
