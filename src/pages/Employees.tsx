@@ -2598,7 +2598,7 @@ export default function Employees() {
                           <div className="flex items-start gap-3">
                             <Avatar name={p.full_name} size="md" availability={p.presence} />
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm truncate">{p.full_name || 'Unknown'}</p>
+                              <a href={`/users/${p.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm truncate hover:underline hover:text-primary block">{p.full_name || 'Unknown'}</a>
                               <p className="text-[11px] text-muted-foreground truncate">{p.email}</p>
                               <RoleBadge role={p.role} />
                             </div>
@@ -2655,7 +2655,7 @@ export default function Employees() {
                               <div className="flex items-center gap-2.5">
                                 <Avatar name={p.full_name} size="sm" availability={p.presence} />
                                 <div className="min-w-0">
-                                  <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
+                                  <a href={`/users/${p.id}`} onClick={e => e.stopPropagation()} className="text-sm font-medium truncate hover:underline hover:text-primary block">{p.full_name || '—'}</a>
                                   <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
                                 </div>
                               </div>
@@ -2742,7 +2742,7 @@ export default function Employees() {
                           <div className="flex items-start gap-3">
                             <Avatar name={p.full_name} size="md" availability={p.presence} />
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm truncate">{p.full_name || 'Unknown'}</p>
+                              <a href={`/users/${p.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm truncate hover:underline hover:text-primary block">{p.full_name || 'Unknown'}</a>
                               <p className="text-[11px] text-muted-foreground truncate">{p.email}</p>
                               <div className="flex items-center gap-1 mt-0.5 flex-wrap"><RoleBadge role={p.role} />{rc && <ClassificationBadge level={rc.classification_level} />}</div>
                             </div>
@@ -2798,7 +2798,7 @@ export default function Employees() {
                               <div className="flex items-center gap-2.5">
                                 <Avatar name={p.full_name} size="sm" availability={p.presence} />
                                 <div className="min-w-0">
-                                  <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
+                                  <a href={`/users/${p.id}`} onClick={e => e.stopPropagation()} className="text-sm font-medium truncate hover:underline hover:text-primary block">{p.full_name || '—'}</a>
                                   <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
                                 </div>
                               </div>
