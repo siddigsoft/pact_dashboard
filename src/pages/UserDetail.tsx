@@ -818,152 +818,96 @@ const UserDetail: FC = () => {
         </div>
       </div>
 
-      {/* ── Sidebar + Content Layout ─────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-5 pt-4 pb-12">
-        <div className="flex gap-4 lg:gap-5 items-start">
-
-          {/* ── LEFT SIDEBAR ──────────────────────────────────────────── */}
-          <div className="hidden lg:flex flex-col w-56 xl:w-60 shrink-0 sticky top-6 self-start">
-            <Card className="shadow-md border overflow-hidden rounded-xl">
-              {/* Profile summary — matches canvas */}
-              <div className="p-4 text-center border-b">
-                <div className="flex flex-col items-center gap-2">
-                  <Avatar className="h-16 w-16 shadow-md">
-                    {user.avatar ? <AvatarImage src={user.avatar} alt={user.name} /> : null}
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground font-extrabold text-xl">
-                      {user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-0.5">
-                    <p className="font-bold text-[13px] leading-snug">{user.name}</p>
-                    <p className="text-[11px] text-muted-foreground capitalize">{empType || 'Staff Member'}</p>
-                    {user.employeeId && <p className="text-[10px] text-muted-foreground/70 font-mono">{user.employeeId}</p>}
-                  </div>
-                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'}`}>
-                    ● {user.isApproved ? 'Active' : 'Pending'}
-                  </span>
-                  {/* Profile progress bar */}
-                  {(() => {
-                    const fields = [user.name, user.email, user.phone, user.hubId, user.employeeId, user.bankAccount, empDepartmentId, empContractStart];
-                    const filled = fields.filter(Boolean).length;
-                    const pct = Math.round((filled / fields.length) * 100);
-                    return (
-                      <div className="w-full mt-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">Profile</span>
-                          <span className={`text-[9px] font-bold ${pct >= 80 ? 'text-emerald-600' : 'text-amber-500'}`}>{pct}%</span>
-                        </div>
-                        <div className="h-1 bg-muted rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${pct >= 80 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
+      {/* ── Employee Identity Bar ─────────────────────────────────────────── */}
+      <div className="bg-background border-b">
+        <div className="max-w-7xl mx-auto px-5 py-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <Avatar className="h-12 w-12 shrink-0 shadow">
+              {user.avatar ? <AvatarImage src={user.avatar} alt={user.name} /> : null}
+              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground font-extrabold text-lg">
+                {user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold text-base leading-tight">{user.name}</p>
+                <RoleBadge role={user.role} size="sm" />
+                <UserClassificationBadge userId={user.id} />
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-amber-100 text-amber-700'}`}>
+                  ● {user.isApproved ? 'Active' : 'Pending'}
+                </span>
               </div>
-
-              {/* Nav — PROFILE / BACKGROUND / FINANCE / SYSTEM groups */}
-              <nav className="p-2 py-2.5 overflow-y-auto">
-                {([
-                  { group: 'PROFILE', items: [
-                    { id: 'overview',     emoji: '🏠', label: 'Overview',              filled: !!(user.name && user.email) },
-                    { id: 'employment',   emoji: '💼', label: 'Employment & Contract',  filled: !!(empDepartmentId || empContractStart) },
-                    { id: 'personal',     emoji: '👤', label: 'Personal Details',       filled: null },
-                    { id: 'location',     emoji: '📍', label: 'Location & Work',        filled: !!user.hubId },
-                  ]},
-                  { group: 'BACKGROUND', items: [
-                    { id: 'education',    emoji: '🎓', label: 'Education & Experience', filled: null },
-                    { id: 'documents',    emoji: '📁', label: 'Document Vault',         filled: contracts.length > 0 },
-                    { id: 'skills',       emoji: '⚡', label: 'Skills & Languages',     filled: null },
-                  ]},
-                  { group: 'FINANCE', items: [
-                    { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',    filled: !!user.bankAccount },
-                    { id: 'performance',  emoji: '📊', label: 'Performance',            filled: !!user.performance },
-                  ]},
-                  { group: 'SYSTEM', items: [
-                    { id: 'access',       emoji: '🔒', label: 'Access & Security',      filled: !!user.role },
-                  ]},
-                ] as { group: string; items: { id: string; emoji: string; label: string; filled: boolean | null }[] }[]).map(({ group, items }) => (
-                  <div key={group} className="mb-3">
-                    <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-2 mb-1">{group}</p>
-                    {items.map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => setActiveSection(s.id)}
-                        className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-all ${
-                          activeSection === s.id
-                            ? 'bg-primary/10 text-primary font-semibold'
-                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                        }`}
-                      >
-                        <span className="text-sm leading-none shrink-0">{s.emoji}</span>
-                        <span className="flex-1 truncate text-[11px]">{s.label}</span>
-                        {s.filled === true && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />}
-                        {s.filled === false && <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/20 shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </nav>
-
-              {/* Bottom actions — canvas style */}
-              <div className="p-2 border-t space-y-1.5">
-                <button
-                  onClick={() => navigate(`/signatures?user=${user.id}`)}
-                  className="w-full text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg py-2 transition-colors"
-                >
-                  📧 Send Email
-                </button>
-                {isAdmin && (
-                  <button
-                    onClick={() => navigate('/hr?tab=offboarding')}
-                    className="w-full text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg py-2 transition-colors"
-                  >
-                    🚪 Offboard
-                  </button>
-                )}
-              </div>
-            </Card>
+              <p className="text-xs text-muted-foreground capitalize mt-0.5">
+                {empType || 'Staff Member'}
+                {user.employeeId ? ` · ${user.employeeId}` : ''}
+                {user.email ? ` · ${user.email}` : ''}
+              </p>
+            </div>
           </div>
-
-          {/* ── MAIN CONTENT COLUMN ───────────────────────────────────── */}
-          <div className="flex-1 min-w-0 space-y-3">
-
-            {/* Profile completeness */}
-            {(currentUser?.id === user.id || isAdmin) && (
-              <ProfileCompletenessIndicator user={user} />
-            )}
-
-            {/* Mobile section selector */}
-            <Card className="lg:hidden shadow-md border-0 overflow-hidden rounded-xl">
-              <div className="overflow-x-auto scrollbar-hide">
-                <div className="flex p-1 gap-0.5 min-w-max">
-                  {[
-                    { id: 'overview',     emoji: '🏠', label: 'Overview'  },
-                    { id: 'employment',   emoji: '💼', label: 'Job'        },
-                    { id: 'personal',     emoji: '👤', label: 'Personal'  },
-                    { id: 'location',     emoji: '📍', label: 'Location'  },
-                    { id: 'education',    emoji: '🎓', label: 'Education' },
-                    { id: 'documents',    emoji: '📁', label: 'Docs'      },
-                    { id: 'skills',       emoji: '⚡', label: 'Skills'    },
-                    { id: 'compensation', emoji: '💰', label: 'Finance'   },
-                    { id: 'performance',  emoji: '📊', label: 'KPIs'      },
-                    { id: 'access',       emoji: '🔒', label: 'Access'    },
-                  ].map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => setActiveSection(s.id)}
-                      className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
-                        activeSection === s.id ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground hover:bg-muted/60'
-                      }`}
-                    >
-                      <span className="text-sm">{s.emoji}</span>
-                      <span className="text-[9px] font-medium">{s.label}</span>
-                    </button>
-                  ))}
+          {/* Profile completeness mini-bar */}
+          {(() => {
+            const fields = [user.name, user.email, user.phone, user.hubId, user.employeeId, user.bankAccount, empDepartmentId, empContractStart];
+            const pct = Math.round((fields.filter(Boolean).length / fields.length) * 100);
+            return (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-muted-foreground hidden sm:inline">Profile</span>
+                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden hidden sm:block">
+                  <div className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
                 </div>
+                <span className={`text-xs font-bold ${pct >= 80 ? 'text-emerald-600' : 'text-amber-500'}`}>{pct}%</span>
               </div>
-            </Card>
+            );
+          })()}
+          {/* Quick actions */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg px-3 py-1.5 transition-colors">
+              📧 Send Email
+            </button>
+            {isAdmin && (
+              <button onClick={() => navigate('/hr?tab=offboarding')} className="text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 rounded-lg px-3 py-1.5 transition-colors">
+                🚪 Offboard
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tab Navigation ──────────────────────────────────────────────────── */}
+      <div className="bg-background border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 overflow-x-auto scrollbar-hide">
+          <div className="flex min-w-max">
+            {[
+              { id: 'overview',     emoji: '🏠', label: 'Overview'              },
+              { id: 'employment',   emoji: '💼', label: 'Employment & Contract'  },
+              { id: 'personal',     emoji: '👤', label: 'Personal Details'       },
+              { id: 'location',     emoji: '📍', label: 'Location & Work'        },
+              { id: 'education',    emoji: '🎓', label: 'Education & Experience' },
+              { id: 'documents',    emoji: '📁', label: 'Document Vault'         },
+              { id: 'skills',       emoji: '⚡', label: 'Skills & Languages'     },
+              { id: 'compensation', emoji: '💰', label: 'Compensation & Bank'    },
+              { id: 'performance',  emoji: '📊', label: 'Performance'            },
+              { id: 'access',       emoji: '🔒', label: 'Access & Security'      },
+            ].map(s => (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
+                className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
+                  activeSection === s.id
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
+                }`}
+              >
+                <span className="text-base leading-none">{s.emoji}</span>
+                <span>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Full-width Content ──────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-16">
+        <div className="w-full">
 
             {/* ── Content card ──────────────────────────────────────────── */}
             <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
@@ -1751,7 +1695,6 @@ const UserDetail: FC = () => {
             )}
 
             </Card>
-          </div>
         </div>
       </div>
 
