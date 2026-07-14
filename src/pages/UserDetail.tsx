@@ -860,18 +860,16 @@ const UserDetail: FC = () => {
               </div>
               <nav className="p-2 py-3">
                 {([
-                  { group: 'PROFILE', items: [
+                  { group: 'EMPLOYEE', items: [
                     { id: 'overview',   emoji: '🏠', label: 'Overview',        filled: !!(user.name && user.email) },
-                    { id: 'employment', emoji: '💼', label: 'Employment',       filled: !!(empDepartmentId || empContractStart) },
                     { id: 'personal',   emoji: '👤', label: 'Personal Details', filled: null },
-                    { id: 'location',   emoji: '📍', label: 'Location & Work',  filled: !!user.hubId },
-                  ]},
-                  { group: 'BACKGROUND', items: [
                     { id: 'education',  emoji: '🎓', label: 'Education',        filled: null },
-                    { id: 'documents',  emoji: '📁', label: 'Documents',        filled: contracts.length > 0 },
                     { id: 'skills',     emoji: '⚡', label: 'Skills',           filled: null },
                   ]},
-                  { group: 'FINANCE', items: [
+                  { group: 'HR RECORDS', items: [
+                    { id: 'employment',   emoji: '💼', label: 'Employment',          filled: !!(empDepartmentId || empContractStart) },
+                    { id: 'location',     emoji: '📍', label: 'Location & Work',     filled: !!user.hubId },
+                    { id: 'documents',    emoji: '📁', label: 'Documents',           filled: contracts.length > 0 },
                     { id: 'compensation', emoji: '💰', label: 'Compensation & Bank', filled: !!user.bankAccount },
                     { id: 'performance',  emoji: '📊', label: 'Performance',         filled: !!user.performance },
                   ]},
