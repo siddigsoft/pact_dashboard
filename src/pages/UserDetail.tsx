@@ -721,37 +721,35 @@ const UserDetail: FC = () => {
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
 
-      {/* ── Compact Top Bar ─────────────────────────────────────────────────── */}
-      <div className="bg-background border-b sticky top-0 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 sm:px-5 h-13 flex items-center justify-between gap-3 py-2.5">
-          {/* Left: breadcrumb + current section */}
-          <div className="flex items-center gap-2.5 min-w-0">
+      {/* ── System-style Dark Header ──────────────────────────────────────── */}
+      <div className="sticky top-0 z-30 shadow-2xl" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}>
+        {/* Row 1: breadcrumb + identity */}
+        <div className="px-5 pt-3 pb-2.5 border-b border-white/10 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => navigate("/employees")}
-              className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs transition-colors shrink-0 font-medium"
+              className="flex items-center gap-1.5 text-white/60 hover:text-white text-xs transition-colors shrink-0"
               data-testid="button-back-users"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">HR / Users</span>
+              <span className="hidden sm:inline">HR / Employees</span>
             </button>
-            <span className="text-muted-foreground/30 hidden sm:inline">|</span>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm font-bold text-foreground truncate">{user.name}</span>
-              <span className="text-xs text-muted-foreground hidden md:inline">
-                {{
-                  overview: '🏠 Overview', employment: '💼 Employment', personal: '👤 Personal Details',
-                  location: '📍 Location & Work', education: '🎓 Education', documents: '📁 Documents',
-                  skills: '⚡ Skills', compensation: '💰 Compensation & Bank',
-                  performance: '📊 Performance', access: '🔒 Access & Security',
-                }[activeSection] ?? ''}
-              </span>
+            <span className="text-white/20 hidden sm:inline">/</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-lg" style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}>
+                <span className="text-base">👤</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-white font-bold text-sm leading-none truncate">{user.name}</p>
+                <p className="text-white/50 text-[10px] mt-0.5 capitalize">{empType || 'Staff Member'}{user.employeeId ? ` · ${user.employeeId}` : ''}</p>
+              </div>
             </div>
           </div>
-          {/* Right: actions */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
             {isAdmin && !editMode && !user.isApproved && (
               <>
-                <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-8 text-xs" data-testid="button-approve-user">
+                <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 h-8 text-xs border-0" data-testid="button-approve-user">
                   <UserCheck className="h-3 w-3" />{isApproving ? 'Approving…' : 'Approve'}
                 </Button>
                 <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1.5 h-8 text-xs" data-testid="button-reject-user">
@@ -762,8 +760,8 @@ const UserDetail: FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/signatures')}
-              className="gap-1.5 h-8 text-xs text-muted-foreground"
+              onClick={() => navigate(`/signatures?user=${user.id}`)}
+              className="text-white/70 hover:text-white hover:bg-white/10 gap-1.5 h-8 text-xs"
               data-testid="button-goto-signatures"
             >
               <FileSignature className="h-3.5 w-3.5" />
@@ -773,7 +771,7 @@ const UserDetail: FC = () => {
               <Button
                 onClick={handleEdit}
                 size="sm"
-                className="gap-1.5 h-8 text-xs font-semibold"
+                className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1.5 h-8 text-xs font-semibold shadow"
                 data-testid="button-edit-user"
               >
                 <Edit className="h-3.5 w-3.5" />
@@ -790,15 +788,32 @@ const UserDetail: FC = () => {
                   }}
                   disabled={isSaving}
                   size="sm"
-                  className="h-8 text-xs font-semibold"
+                  className="bg-white text-[#0d1f3c] hover:bg-white/90 h-8 text-xs font-semibold shadow"
                 >
-                  {isSaving ? "Saving…" : "Save Changes"}
+                  {isSaving ? 'Saving…' : 'Save Changes'}
                 </Button>
-                <Button onClick={handleEditCancel} size="sm" variant="outline" className="h-8 text-xs">
+                <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 h-8 text-xs">
                   Cancel
                 </Button>
               </>
             )}
+          </div>
+        </div>
+        {/* Row 2: section breadcrumb strip */}
+        <div className="px-5 py-2 flex items-center gap-2 text-[11px] text-white/50">
+          <span>Employee Profile</span>
+          <span className="text-white/20">›</span>
+          <span className="text-white/90 font-medium">
+            {{
+              overview: '🏠 Overview', employment: '💼 Employment & Contract', personal: '👤 Personal Details',
+              location: '📍 Location & Work', education: '🎓 Education & Experience', documents: '📁 Document Vault',
+              skills: '⚡ Skills & Languages', compensation: '💰 Compensation & Bank',
+              performance: '📊 Performance', access: '🔒 Access & Security',
+            }[activeSection] ?? 'Overview'}
+          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className="text-white/60">{user.isApproved ? 'Active' : 'Pending'}</span>
           </div>
         </div>
       </div>
