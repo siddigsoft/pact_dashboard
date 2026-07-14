@@ -228,9 +228,26 @@ class _AppDrawer extends ConsumerWidget {
     );
   }
 
-  /// Returns null (hidden) when the route is blocked by a permission override.
+  /// Shows a greyed-out locked tile when blocked (instead of hiding it
+  /// silently), so users understand why the item is not accessible.
   Widget _drawerTile(IconData icon, String title, String route, BuildContext context) {
-    if (PermissionService.isRouteBlocked(route)) return const SizedBox.shrink();
+    if (PermissionService.isRouteBlocked(route)) {
+      return ListTile(
+        leading: Icon(icon, size: 22, color: Colors.grey.shade400),
+        title: Text(title, style: TextStyle(fontSize: 14, color: Colors.grey.shade400)),
+        trailing: Icon(Icons.lock_outline, size: 14, color: Colors.grey.shade400),
+        onTap: () {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This section has been restricted by your administrator'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      );
+    }
     return ListTile(
       leading: Icon(icon, size: 22),
       title: Text(title, style: const TextStyle(fontSize: 14)),

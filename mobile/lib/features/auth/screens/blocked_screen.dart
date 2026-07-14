@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../permissions/permission_service.dart';
 
 /// Displayed when a user tries to navigate to a page that has been explicitly
 /// blocked via a page_access_override in the admin panel.
@@ -48,7 +49,14 @@ class BlockedScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 32),
                 ElevatedButton.icon(
-                  onPressed: () => context.go(AppRoutes.dashboard),
+                  onPressed: () {
+                    final safe = PermissionService.getFirstAllowedRoute([
+                      AppRoutes.dashboard,
+                      AppRoutes.notifications,
+                      AppRoutes.profile,
+                    ]);
+                    if (safe != null && context.mounted) context.go(safe);
+                  },
                   icon: const Icon(Icons.home_outlined, size: 18),
                   label: const Text('Return to Dashboard'),
                   style: ElevatedButton.styleFrom(

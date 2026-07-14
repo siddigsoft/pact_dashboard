@@ -98,12 +98,69 @@ serve(async (req: Request) => {
     const results = (data as Array<{ fund_id: string; fund_name: string; action: string }>) ?? []
     console.log(`[pre-fund-scheduler] Completed — ${results.length} fund(s) actioned`)
 
+    // ── #66 — Expiry window notifications (30 / 15 / 7 days) ────────────────
+    // Query active funds expiring within 30 days and notify Finance team if
+    // the exact window (30, 15, or 7 days remaining) hasn't been notified yet.
+    let expiryNotified = 0
+    try {
+      const today = new Date()
+      const in30 = new Date(today); in30.setDate(today.getDate() + 30)
+
+      const { data: expiringFunds } = await supabase
+        .from('pre_fund_requests')
+        .select('id, name, end_date, fund_status')
+        .in('fund_status', ['active', 'ending_soon', 'low_balance'])
+        .lte('end_date', in30.toISOString().slice(0, 10))
+        .gte('end_date', today.toISOString().slice(0, 10))
+
+      const todayMidnight = new Date(today); todayMidnight.setHours(0, 0, 0, 0)
+      for (const fund of (expiringFunds ?? [])) {
+        const endDate = new Date(fund.end_date as string)
+        const daysLeft = Math.round((endDate.getTime() - todayMidnight.getTime()) / 86400000)
+        if (![7, 15, 30].includes(daysLeft)) continue
+
+        const dedupKey = `pre_fund_expiry_${fund.id}_${daysLeft}d`
+
+        // Deduplication: skip if we already fired this exact window today
+        const { count } = await supabase
+          .from('notification_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('event_type', 'pre_fund_expiry_warning')
+          .eq('reference_type', 'pre_fund_request')
+          .contains('metadata', { dedup_key: dedupKey })
+
+        if ((count ?? 0) > 0) continue
+
+        const priority = daysLeft <= 7 ? 'critical' : daysLeft <= 15 ? 'high' : 'medium'
+        await supabase.from('notification_events').insert({
+          event_type:    'pre_fund_expiry_warning',
+          reference_type: 'pre_fund_request',
+          title:   `Pre-Fund Expiry: ${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining — "${fund.name}"`,
+          message: `"${fund.name}" expires on ${fund.end_date}. Please initiate a renewal or return before the deadline.`,
+          target_roles: ['superAdmin', 'fom', 'finance'],
+          metadata: {
+            fund_id:    fund.id,
+            days_left:  daysLeft,
+            end_date:   fund.end_date,
+            priority,
+            action_url: '/pre-funding',
+            dedup_key:  dedupKey,
+          },
+        })
+        expiryNotified++
+      }
+      console.log(`[pre-fund-scheduler] Expiry notifications sent: ${expiryNotified}`)
+    } catch (expiryErr) {
+      console.error('[pre-fund-scheduler] Expiry notification error:', expiryErr)
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
         started_at: startedAt,
         completed_at: new Date().toISOString(),
         funds_actioned: results.length,
+        expiry_notified: expiryNotified,
         results,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

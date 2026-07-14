@@ -13,7 +13,7 @@
 -- ── Step 1 : Build the authoritative slug list ────────────────────────────────
 -- This array must be kept in sync with PAGE_DEFS in
 -- src/pages/PageAccessControl.tsx (grep for "slug:'").
--- Last synced: 2026-07-12
+-- Last synced: 2026-07-14
 
 DO $$
 DECLARE
@@ -110,6 +110,7 @@ DECLARE
     'leave',
     'login-analytics',
     'mmp',
+    'mmp-full-report',
     'mmp-management',
     'mobile-support-tickets',
     'monitoring-form',
@@ -143,8 +144,8 @@ DECLARE
     'search',
     'settings',
     'signatures',
-    'sites-for-verification',
     'site-visits',
+    'sites-for-verification',
     'staff-directory',
     'staff-onboarding',
     'super-admin-hub',

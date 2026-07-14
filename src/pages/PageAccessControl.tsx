@@ -766,6 +766,17 @@ export default function PageAccessControl() {
     return m;
   }, [overrides]);
 
+  // Detect orphan overrides — saved rows whose page_slug no longer exists in PAGE_DEFS.
+  const validSlugs = useMemo(() => new Set(PAGE_DEFS.map(p => p.slug)), []);
+  const orphanOverrides = useMemo(
+    () => overrides.filter(o => !validSlugs.has(o.page_slug)),
+    [overrides, validSlugs],
+  );
+  const orphanSlugs = useMemo(
+    () => [...new Set(orphanOverrides.map(o => o.page_slug))],
+    [orphanOverrides],
+  );
+
   const { data: roleConfigs = {}, refetch: refetchRoleConfigs } = useQuery<Record<string, string[]>>({
     queryKey: ['pac-role-configs'],
     queryFn: async () => {
@@ -910,7 +921,28 @@ export default function PageAccessControl() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background overflow-hidden">
+      <div className="flex flex-col h-screen bg-background overflow-hidden">
+
+        {/* #79 — Orphan override warning banner */}
+        {orphanSlugs.length > 0 && (
+          <div
+            className="flex items-start gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs"
+            data-testid="banner-orphan-overrides"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+            <div className="flex-1 min-w-0">
+              <span className="font-semibold">Stale permission overrides detected — </span>
+              {orphanSlugs.length} page slug{orphanSlugs.length !== 1 ? 's' : ''} in{' '}
+              <code className="bg-amber-100 px-1 rounded font-mono">page_access_overrides</code>{' '}
+              no longer exist in PAGE_DEFS:{' '}
+              <span className="font-mono font-medium">{orphanSlugs.join(', ')}</span>.{' '}
+              Run <code className="bg-amber-100 px-1 rounded font-mono">cleanup_orphan_page_permissions.sql</code>{' '}
+              to remove them.
+            </div>
+          </div>
+        )}
+
+      <div className="flex flex-1 bg-background overflow-hidden">
 
         {/* Left panel */}
         <div className="w-64 flex-shrink-0 border-r flex flex-col bg-card">
@@ -1403,6 +1435,7 @@ export default function PageAccessControl() {
             </>
           )}
         </div>
+      </div>
       </div>
     </TooltipProvider>
   );

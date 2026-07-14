@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/splash_screen.dart';
@@ -86,8 +88,36 @@ final _router = GoRouter(
   ],
 );
 
-class PactApp extends ConsumerWidget {
+class PactApp extends ConsumerStatefulWidget {
   const PactApp({super.key});
+
+  @override
+  ConsumerState<PactApp> createState() => _PactAppState();
+}
+
+class _PactAppState extends ConsumerState<PactApp> {
+  Timer? _permSyncTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh permissions every 10 minutes while the app is in the foreground.
+    // After each sync GoRouter re-evaluates the redirect guard so any newly
+    // blocked route is enforced without requiring the user to restart.
+    _permSyncTimer = Timer.periodic(const Duration(minutes: 10), (_) async {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await PermissionService.syncForUser(user.id);
+        _router.refresh();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _permSyncTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

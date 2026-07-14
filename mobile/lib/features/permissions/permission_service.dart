@@ -83,6 +83,16 @@ class PermissionService {
         threshold: _ttl,
       );
 
+  /// Returns the first route from [candidates] that is not blocked for the
+  /// current user.  Falls back through the list and returns null only if
+  /// every candidate is blocked.
+  static String? getFirstAllowedRoute(List<String> candidates) {
+    for (final route in candidates) {
+      if (!isRouteBlocked(route)) return route;
+    }
+    return null;
+  }
+
   /// Clears the cached overrides.  Call this on sign-out so the next user
   /// starts with a fresh slate.
   static void clear() {
