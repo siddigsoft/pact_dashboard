@@ -50,9 +50,46 @@ UPDATE public.acct_accounts SET code = '260000' WHERE code = 'OLD_2600';
 UPDATE public.acct_accounts SET code = '261000' WHERE code = 'OLD_2610';
 UPDATE public.acct_accounts SET code = '262000' WHERE code = 'OLD_2620';
 UPDATE public.acct_accounts SET code = '280000' WHERE code = 'OLD_2800';
--- ─── Equity / Other ──────────────────────────────────────────────────────────
+-- ─── Assets (extra country-specific accounts) ────────────────────────────────
+UPDATE public.acct_accounts SET code = '121000' WHERE code = 'OLD_1210';
+UPDATE public.acct_accounts SET code = '122000' WHERE code = 'OLD_1220';
+UPDATE public.acct_accounts SET code = '131000' WHERE code = 'OLD_1310';
+UPDATE public.acct_accounts SET code = '140000' WHERE code = 'OLD_1400';
+UPDATE public.acct_accounts SET code = '141000' WHERE code = 'OLD_1410';
+UPDATE public.acct_accounts SET code = '170000' WHERE code = 'OLD_1700';
+UPDATE public.acct_accounts SET code = '181000' WHERE code = 'OLD_1810';
+UPDATE public.acct_accounts SET code = '182000' WHERE code = 'OLD_1820';
+UPDATE public.acct_accounts SET code = '185000' WHERE code = 'OLD_1850';
+-- ─── Liabilities (extra country-specific accounts) ───────────────────────────
+UPDATE public.acct_accounts SET code = '221000' WHERE code = 'OLD_2210';
+UPDATE public.acct_accounts SET code = '222000' WHERE code = 'OLD_2220';
+UPDATE public.acct_accounts SET code = '223000' WHERE code = 'OLD_2230';
+UPDATE public.acct_accounts SET code = '225000' WHERE code = 'OLD_2250';
+UPDATE public.acct_accounts SET code = '230000' WHERE code = 'OLD_2300';
+UPDATE public.acct_accounts SET code = '231000' WHERE code = 'OLD_2310';
+UPDATE public.acct_accounts SET code = '250000' WHERE code = 'OLD_2500';
+-- ─── Equity ───────────────────────────────────────────────────────────────────
 UPDATE public.acct_accounts SET code = '300001' WHERE code = 'OLD_3000'; -- Odoo 300000 conflict
+UPDATE public.acct_accounts SET code = '310000' WHERE code = 'OLD_3100';
+UPDATE public.acct_accounts SET code = '320000' WHERE code = 'OLD_3200';
+UPDATE public.acct_accounts SET code = '330000' WHERE code = 'OLD_3300';
+UPDATE public.acct_accounts SET code = '340000' WHERE code = 'OLD_3400';
+UPDATE public.acct_accounts SET code = '350000' WHERE code = 'OLD_3500';
+-- ─── Revenue (extra country-specific accounts) ───────────────────────────────
 UPDATE public.acct_accounts SET code = '400001' WHERE code = 'OLD_4000'; -- Odoo 400000 conflict
+UPDATE public.acct_accounts SET code = '410000' WHERE code = 'OLD_4100';
+UPDATE public.acct_accounts SET code = '411000' WHERE code = 'OLD_4110';
+UPDATE public.acct_accounts SET code = '412000' WHERE code = 'OLD_4120';
+UPDATE public.acct_accounts SET code = '413000' WHERE code = 'OLD_4130';
+UPDATE public.acct_accounts SET code = '414000' WHERE code = 'OLD_4140';
+UPDATE public.acct_accounts SET code = '415000' WHERE code = 'OLD_4150';
+UPDATE public.acct_accounts SET code = '420000' WHERE code = 'OLD_4200';
+UPDATE public.acct_accounts SET code = '430000' WHERE code = 'OLD_4300';
+UPDATE public.acct_accounts SET code = '440000' WHERE code = 'OLD_4400';
+UPDATE public.acct_accounts SET code = '450000' WHERE code = 'OLD_4500';
+UPDATE public.acct_accounts SET code = '460000' WHERE code = 'OLD_4600';
+UPDATE public.acct_accounts SET code = '490000' WHERE code = 'OLD_4900';
+-- ─── Other / Clearing ────────────────────────────────────────────────────────
 UPDATE public.acct_accounts SET code = '499000' WHERE code = 'OLD_4990';
 UPDATE public.acct_accounts SET code = '499900' WHERE code = 'OLD_4999';
 -- ─── Revenue / Expenses ───────────────────────────────────────────────────────
@@ -61,19 +98,29 @@ UPDATE public.acct_accounts SET code = '505000' WHERE code = 'OLD_5050';
 UPDATE public.acct_accounts SET code = '506000' WHERE code = 'OLD_5060';
 UPDATE public.acct_accounts SET code = '507000' WHERE code = 'OLD_5070';
 UPDATE public.acct_accounts SET code = '510000' WHERE code = 'OLD_5100';
+UPDATE public.acct_accounts SET code = '511000' WHERE code = 'OLD_5110';
 UPDATE public.acct_accounts SET code = '520001' WHERE code = 'OLD_5200'; -- Odoo 520000 = Postage & Delivery
+UPDATE public.acct_accounts SET code = '521000' WHERE code = 'OLD_5210';
+UPDATE public.acct_accounts SET code = '530000' WHERE code = 'OLD_5300';
 UPDATE public.acct_accounts SET code = '531009' WHERE code = 'OLD_5310'; -- Odoo 531000–531008 occupied
 UPDATE public.acct_accounts SET code = '532001' WHERE code = 'OLD_5320'; -- Odoo 532000 = Exch Gain/Loss
 UPDATE public.acct_accounts SET code = '540000' WHERE code = 'OLD_5400';
+UPDATE public.acct_accounts SET code = '541000' WHERE code = 'OLD_5410';
+UPDATE public.acct_accounts SET code = '550000' WHERE code = 'OLD_5500';
 UPDATE public.acct_accounts SET code = '560000' WHERE code = 'OLD_5600';
 UPDATE public.acct_accounts SET code = '570000' WHERE code = 'OLD_5700';
 UPDATE public.acct_accounts SET code = '580000' WHERE code = 'OLD_5800';
+UPDATE public.acct_accounts SET code = '590000' WHERE code = 'OLD_5900';
 UPDATE public.acct_accounts SET code = '600001' WHERE code = 'OLD_6000'; -- Odoo 600000 = Share Capital
 UPDATE public.acct_accounts SET code = '610000' WHERE code = 'OLD_6100';
 UPDATE public.acct_accounts SET code = '611000' WHERE code = 'OLD_6110';
 UPDATE public.acct_accounts SET code = '615000' WHERE code = 'OLD_6150';
 UPDATE public.acct_accounts SET code = '620000' WHERE code = 'OLD_6200';
+UPDATE public.acct_accounts SET code = '621000' WHERE code = 'OLD_6210';
+UPDATE public.acct_accounts SET code = '622000' WHERE code = 'OLD_6220';
+UPDATE public.acct_accounts SET code = '630000' WHERE code = 'OLD_6300';
 UPDATE public.acct_accounts SET code = '631000' WHERE code = 'OLD_6310';
+UPDATE public.acct_accounts SET code = '632000' WHERE code = 'OLD_6320';
 UPDATE public.acct_accounts SET code = '640000' WHERE code = 'OLD_6400';
 UPDATE public.acct_accounts SET code = '700000' WHERE code = 'OLD_7000';
 UPDATE public.acct_accounts SET code = '999000' WHERE code = 'OLD_9990';
