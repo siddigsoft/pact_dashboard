@@ -237,8 +237,8 @@ BEGIN
                            COALESCE(v_xfer.transfer_number, p_transfer_id::text));
 
   -- ── FROM-country journal entry ──────────────────────────────────────────────
-  -- DR 1800 Due From Other PACT Entities  (receivable: we funded another entity)
-  -- CR 1200 Cash at Bank                  (our cash goes out)
+  -- DR 180000 Due From Other PACT Entities  (receivable: we funded another entity)
+  -- CR 120000 Cash at Bank                  (our cash goes out)
   v_from_je_id := public.acct_bridge_post_journal(
     'intercompany_transfers',
     p_transfer_id,
@@ -248,7 +248,7 @@ BEGIN
     v_desc_ar_from,
     jsonb_build_array(
       jsonb_build_object(
-        'account_code', '1800',
+        'account_code', '180000',
         'debit_credit', 'DR',
         'amount',       v_xfer.amount,
         'currency',     v_xfer.currency,
@@ -258,7 +258,7 @@ BEGIN
         'function',     'none'
       ),
       jsonb_build_object(
-        'account_code', '1200',
+        'account_code', '120000',
         'debit_credit', 'CR',
         'amount',       v_xfer.amount,
         'currency',     v_xfer.currency,
@@ -271,8 +271,8 @@ BEGIN
   );
 
   -- ── TO-country journal entry ────────────────────────────────────────────────
-  -- DR 1200 Cash at Bank                  (receiving-country cash goes up)
-  -- CR 2800 Due To Other PACT Entities    (payable: we owe the sending entity)
+  -- DR 120000 Cash at Bank                  (receiving-country cash goes up)
+  -- CR 280000 Due To Other PACT Entities    (payable: we owe the sending entity)
   v_to_je_id := public.acct_bridge_post_journal(
     'intercompany_transfers',
     p_transfer_id,
@@ -282,7 +282,7 @@ BEGIN
     v_desc_ar_to,
     jsonb_build_array(
       jsonb_build_object(
-        'account_code', '1200',
+        'account_code', '120000',
         'debit_credit', 'DR',
         'amount',       v_xfer.amount,
         'currency',     v_xfer.currency,
@@ -292,7 +292,7 @@ BEGIN
         'function',     'none'
       ),
       jsonb_build_object(
-        'account_code', '2800',
+        'account_code', '280000',
         'debit_credit', 'CR',
         'amount',       v_xfer.amount,
         'currency',     v_xfer.currency,
@@ -318,7 +318,8 @@ END $$;
 
 COMMENT ON FUNCTION public.acct_bridge_post_intercompany(uuid) IS
   'Posts two balanced GL journal entries (one per country) for an intercompany '
-  'fund transfer. FROM-country: DR 1800 / CR 1200. TO-country: DR 1200 / CR 2800.';
+  'fund transfer. FROM-country: DR 180000 / CR 120000. TO-country: DR 120000 / CR 280000. '
+  'Updated by acct_coa_standardize_6digit.sql to use 6-digit codes.';
 
 -- =============================================================================
 -- STEP 6 — Trigger: auto-post when status flips to ''approved''
