@@ -416,7 +416,7 @@ WHERE NOT EXISTS (
     AND a.country_id IS NULL
 )
 ORDER BY s.odoo_code, s.odoo_company  -- deterministic pick when same code spans companies
-ON CONFLICT ON CONSTRAINT acct_accounts_code_global_uq DO NOTHING;
+ON CONFLICT (code) WHERE country_id IS NULL DO NOTHING;
 
 -- After import: update staging to mark what was imported
 UPDATE odoo_coa_staging s
