@@ -721,36 +721,62 @@ const UserDetail: FC = () => {
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
 
-      {/* ── Hero Banner ─────────────────────────────────────────────────────── */}
-      <div className="relative bg-gradient-to-br from-primary via-primary/85 to-primary/60 pt-16">
-        {/* back-navigation inside banner */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 pb-0 flex items-center justify-between">
-          <button
-            onClick={() => navigate("/users")}
-            className="flex items-center gap-1.5 text-primary-foreground/80 hover:text-primary-foreground text-sm transition-colors"
-            data-testid="button-back-users"
-          >
-            <ArrowLeft className="h-4 w-4" /> Users
-          </button>
-          <div className="flex items-center gap-2">
+      {/* ── Compact Top Bar ─────────────────────────────────────────────────── */}
+      <div className="bg-background border-b sticky top-0 z-20 shadow-sm">
+        <div className="max-w-7xl mx-auto px-3 sm:px-5 h-13 flex items-center justify-between gap-3 py-2.5">
+          {/* Left: breadcrumb + current section */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              onClick={() => navigate("/employees")}
+              className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs transition-colors shrink-0 font-medium"
+              data-testid="button-back-users"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">HR / Users</span>
+            </button>
+            <span className="text-muted-foreground/30 hidden sm:inline">|</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-bold text-foreground truncate">{user.name}</span>
+              <span className="text-xs text-muted-foreground hidden md:inline">
+                {{
+                  overview: '🏠 Overview', employment: '💼 Employment', personal: '👤 Personal Details',
+                  location: '📍 Location & Work', education: '🎓 Education', documents: '📁 Documents',
+                  skills: '⚡ Skills', compensation: '💰 Compensation & Bank',
+                  performance: '📊 Performance', access: '🔒 Access & Security',
+                }[activeSection] ?? ''}
+              </span>
+            </div>
+          </div>
+          {/* Right: actions */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isAdmin && !editMode && !user.isApproved && (
+              <>
+                <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-8 text-xs" data-testid="button-approve-user">
+                  <UserCheck className="h-3 w-3" />{isApproving ? 'Approving…' : 'Approve'}
+                </Button>
+                <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1.5 h-8 text-xs" data-testid="button-reject-user">
+                  <UserX className="h-3 w-3" />{isRejecting ? 'Rejecting…' : 'Reject'}
+                </Button>
+              </>
+            )}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/signatures')}
-              className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10 gap-1.5"
+              className="gap-1.5 h-8 text-xs text-muted-foreground"
               data-testid="button-goto-signatures"
             >
-              <FileSignature className="h-4 w-4" />
+              <FileSignature className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Signatures</span>
             </Button>
             {isAdmin && !editMode && (
               <Button
                 onClick={handleEdit}
                 size="sm"
-                className="bg-white text-primary hover:bg-white/90 gap-1.5 shadow-sm font-semibold"
+                className="gap-1.5 h-8 text-xs font-semibold"
                 data-testid="button-edit-user"
               >
-                <Edit className="h-4 w-4" />
+                <Edit className="h-3.5 w-3.5" />
                 Edit Profile
               </Button>
             )}
@@ -764,77 +790,21 @@ const UserDetail: FC = () => {
                   }}
                   disabled={isSaving}
                   size="sm"
-                  className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm"
+                  className="h-8 text-xs font-semibold"
                 >
                   {isSaving ? "Saving…" : "Save Changes"}
                 </Button>
-                <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10">
+                <Button onClick={handleEditCancel} size="sm" variant="outline" className="h-8 text-xs">
                   Cancel
                 </Button>
               </>
             )}
           </div>
         </div>
-
-        {/* Avatar + name row */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-16 flex flex-col sm:flex-row items-center sm:items-end gap-4">
-          <div className="relative shrink-0">
-            <Avatar className="h-24 w-24 sm:h-28 sm:w-28 shadow-2xl border-4 border-white/30 ring-4 ring-white/10">
-              {user.avatar ? (
-                <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
-              ) : (
-                <AvatarFallback className="bg-white/20 text-white text-3xl font-bold backdrop-blur-sm">
-                  {getInitials(user.name)}
-                </AvatarFallback>
-              )}
-            </Avatar>
-            <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-white shadow ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-          </div>
-          <div className="text-center sm:text-left flex-1 min-w-0 pb-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight truncate">{user.name}</h1>
-            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 mt-2">
-              <RoleBadge role={user.role} size="sm" />
-              <UserClassificationBadge userId={user.id} />
-              <Badge variant={user.isApproved ? "default" : "destructive"} className="text-xs bg-white/20 text-white border-white/30 backdrop-blur-sm">
-                {user.isApproved ? "Active" : "Pending"}
-              </Badge>
-            </div>
-            <div className="flex flex-wrap justify-center sm:justify-start gap-x-4 gap-y-1 mt-3 text-primary-foreground/75 text-sm">
-              {user.email && (
-                <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{user.email}</span>
-              )}
-              {user.phone && (
-                <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{user.phone}</span>
-              )}
-              {getUserLocation(user) !== "Not set" && (
-                <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{getUserLocation(user)}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Admin quick-actions */}
-          {isAdmin && !editMode && (
-            <div className="flex flex-col gap-2 shrink-0">
-              {!user.isApproved && (
-                <>
-                  <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shadow" data-testid="button-approve-user">
-                    <UserCheck className="h-3.5 w-3.5" />{isApproving ? 'Approving…' : 'Approve'}
-                  </Button>
-                  <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1.5 shadow" data-testid="button-reject-user">
-                    <UserX className="h-3.5 w-3.5" />{isRejecting ? 'Rejecting…' : 'Reject'}
-                  </Button>
-                </>
-              )}
-              <Button onClick={handleConfirmEmail} disabled={isConfirmingEmail} size="sm" variant="ghost" className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10 gap-1.5" data-testid="button-confirm-email">
-                <ShieldCheck className="h-3.5 w-3.5" />{isConfirmingEmail ? 'Confirming…' : 'Confirm Email'}
-              </Button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── Sidebar + Content Layout ─────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-5 -mt-10 pb-12">
+      <div className="max-w-7xl mx-auto px-3 sm:px-5 pt-4 pb-12">
         <div className="flex gap-4 lg:gap-5 items-start">
 
           {/* ── LEFT SIDEBAR ──────────────────────────────────────────── */}
