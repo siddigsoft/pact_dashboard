@@ -393,7 +393,7 @@ INSERT INTO acct_accounts (
   internal_group, company_id,
   country_id
 )
-SELECT
+SELECT DISTINCT ON (s.odoo_code)
   s.odoo_code,
   s.odoo_name,
   s.odoo_name,  -- Arabic name: same as English until translated
@@ -408,16 +408,15 @@ SELECT
   NULL    -- country_id: set manually if needed per country partitioning
 FROM odoo_coa_staging s
 LEFT JOIN companies c ON c.name_en = s.odoo_company
--- Only import codes that are NOT already in acct_accounts
+-- Skip any code that already exists as a global account (country_id IS NULL)
+-- This matches the actual partial unique index: acct_accounts_code_global_uq
 WHERE NOT EXISTS (
   SELECT 1 FROM acct_accounts a
   WHERE a.code = s.odoo_code
-    AND (
-      (c.id IS NOT NULL AND a.company_id = c.id)
-      OR
-      (a.company_id IS NULL AND c.id IS NULL)
-    )
-);
+    AND a.country_id IS NULL
+)
+ORDER BY s.odoo_code, s.odoo_company  -- deterministic pick when same code spans companies
+ON CONFLICT ON CONSTRAINT acct_accounts_code_global_uq DO NOTHING;
 
 -- After import: update staging to mark what was imported
 UPDATE odoo_coa_staging s
