@@ -1751,8 +1751,8 @@ export default function EmailManagement() {
       const { data: adminUsers, error: usersError } = await supabase
         .from('profiles')
         .select('id')
-        .in('role', ['admin', 'super_admin'])
-        .eq('status', 'active');
+        .in('role', ['admin', 'Admin', 'Administrator', 'super_admin', 'superAdmin', 'SuperAdmin'])
+        .eq('status', 'approved');
       if (usersError) throw usersError;
       if (!adminUsers || adminUsers.length === 0) {
         toast({ title: 'No recipients', description: 'No active admin or super_admin users found.', variant: 'destructive' });
