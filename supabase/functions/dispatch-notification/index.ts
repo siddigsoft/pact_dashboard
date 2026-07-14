@@ -494,7 +494,7 @@ function generateEventEmailHtml(
 
   const actionBtnColor = isSuccess ? '#059669' : isError ? '#dc2626' : accentColor
   const actionBtnLabel_en = (() => {
-    if (['approval_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return 'Review & Approve →'
+    if (['approval_required', 'cost_action_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return 'Review & Approve →'
     if (eventType.includes('assigned')) return 'View Assignment →'
     if ([
       'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',
@@ -506,11 +506,7 @@ function generateEventEmailHtml(
     return 'View Details →'
   })()
   const actionBtnLabel_ar = (() => {
-    if (['approval_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return '← المراجعة والموافقة'
-    // EN label for these is "View Project →" — mirror with "← عرض المشروع"
-    // (must come BEFORE the generic .includes('assigned') catch so the
-    // project-scoped events resolve to the project label, not the
-    // generic "View Assignment" label).
+    if (['approval_required', 'cost_action_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return '← المراجعة والموافقة'
     if ([
       'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',
       'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
@@ -520,6 +516,16 @@ function generateEventEmailHtml(
     if (eventType.includes('assigned')) return '← عرض التعيين'
     return '← عرض التفاصيل'
   })()
+
+  // ── Resolve absolute URLs ──────────────────────────────────────────────────
+  const APP_BASE = 'https://app.pactorg.com'
+  const fullWebUrl = actionUrl
+    ? (actionUrl.startsWith('http') ? actionUrl : `${APP_BASE}${actionUrl}`)
+    : ''
+  // Mobile deep-link: pact://cost-submission (strip leading slash)
+  const fullMobileUrl = actionUrl
+    ? `pact://${actionUrl.replace(/^\/+/, '')}`
+    : ''
 
   const roleDisplayNames: Record<string, { en: string; ar: string }> = {
     'super_admin': { en: 'Super Administrators', ar: 'المسؤولين الكبار' },
@@ -595,15 +601,29 @@ function generateEventEmailHtml(
           <!-- Context details block (dynamic per event type) -->
           ${contextBlock}
 
-          <!-- Action button -->
-          ${actionUrl ? `
-          <div style="text-align:center;margin:28px 0 8px;">
-            <a href="${actionUrl}"
-               style="display:inline-block;padding:14px 32px;background:${actionBtnColor};color:white;text-decoration:none;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:-0.01em;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
-              ${actionBtnLabel_en}
+          <!-- Action buttons: Web + Mobile -->
+          ${fullWebUrl ? `
+          <div style="text-align:center;margin:28px 0 4px;">
+
+            <!-- Primary: Open in Web App -->
+            <a href="${fullWebUrl}"
+               style="display:inline-block;padding:14px 28px;background:${actionBtnColor};color:white;text-decoration:none;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:-0.01em;box-shadow:0 2px 8px rgba(0,0,0,0.15);margin:4px 6px;">
+              🌐 ${actionBtnLabel_en}
             </a>
+
+            <!-- Secondary: Open in Mobile App -->
+            <a href="${fullMobileUrl}"
+               style="display:inline-block;padding:14px 28px;background:#ffffff;color:${actionBtnColor};text-decoration:none;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:-0.01em;box-shadow:0 2px 8px rgba(0,0,0,0.12);border:2px solid ${actionBtnColor};margin:4px 6px;">
+              📱 Open in Mobile App
+            </a>
+
           </div>
-          <p style="text-align:center;margin:8px 0 0;font-size:13px;color:#9ca3af;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${actionBtnLabel_ar}</p>
+          <p style="text-align:center;margin:10px 0 0;font-size:12px;color:#9ca3af;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
+            ${actionBtnLabel_ar} &nbsp;|&nbsp; افتح في تطبيق الجوال
+          </p>
+          <p style="text-align:center;margin:6px 0 0;font-size:11px;color:#cbd5e1;">
+            If the mobile button doesn't open, install the PACT Command Center app first.
+          </p>
           ` : ''}
 
         </td></tr>
@@ -991,7 +1011,7 @@ serve(async (req) => {
         {
           const waData: Record<string, string> = {
             actor: effectiveActorName || 'System',
-            url: action_url || 'app.pactorg.com',
+            url: action_url ? (action_url.startsWith('http') ? action_url : `https://app.pactorg.com${action_url}`) : 'https://app.pactorg.com',
           }
           // Map common metadata fields to template data keys
           if (metadata.task_name)    waData.task_title  = metadata.task_name

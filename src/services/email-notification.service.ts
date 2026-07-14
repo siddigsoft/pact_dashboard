@@ -99,6 +99,8 @@ const generateNotificationEmailHTML = (
 
   const colors = typeColors[type] || typeColors.info;
   const fullUrl = actionUrl ? (actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl) : '';
+  // Mobile deep-link (pact:// scheme handled by the Flutter app)
+  const mobileUrl = actionUrl ? `pact://${actionUrl.replace(/^\/+/, '')}` : '';
 
   const roleEn = recipientRole?.en || '';
   const roleAr = recipientRole?.ar || '';
@@ -119,12 +121,19 @@ const generateNotificationEmailHTML = (
   ` : '';
 
   const actionButton = fullUrl ? `
-    <div style="text-align:center; margin:28px 0;">
+    <div style="text-align:center; margin:28px 0 6px;">
       <a href="${fullUrl}"
-         style="display:inline-block; padding:13px 32px; background-color:#0F2041; color:#ffffff; text-decoration:none; border-radius:6px; font-weight:700; font-size:15px; letter-spacing:0.3px;">
-        ${actionLabel || 'View Details'} &nbsp;|&nbsp; عرض التفاصيل
+         style="display:inline-block; padding:13px 28px; background-color:#0F2041; color:#ffffff; text-decoration:none; border-radius:6px; font-weight:700; font-size:15px; letter-spacing:0.3px; margin:4px 6px;">
+        🌐 ${actionLabel || 'View Details'} &nbsp;|&nbsp; عرض التفاصيل
+      </a>
+      <a href="${mobileUrl}"
+         style="display:inline-block; padding:13px 28px; background-color:#ffffff; color:#0F2041; text-decoration:none; border-radius:6px; font-weight:700; font-size:15px; letter-spacing:0.3px; border:2px solid #0F2041; margin:4px 6px;">
+        📱 Open in Mobile App &nbsp;|&nbsp; افتح في تطبيق الجوال
       </a>
     </div>
+    <p style="text-align:center; margin:4px 0 0; font-size:11px; color:#9CA3AF;">
+      If the mobile button doesn't open, please install the PACT Command Center app first.
+    </p>
   ` : '';
 
   return `<!DOCTYPE html>
