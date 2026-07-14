@@ -7,7 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -31,6 +31,10 @@ import { AlertCircle, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
 import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel } from "@/utils/roleMapping";
 import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCompletenessIndicator";
+import EmployeePersonalTab from "@/components/hr/EmployeePersonalTab";
+import EmployeeEducationTab from "@/components/hr/EmployeeEducationTab";
+import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
+import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
@@ -852,6 +856,10 @@ const UserDetail: FC = () => {
                   { value: 'performance',    icon: <Award className="h-4 w-4" />,          label: 'Performance'   },
                   { value: 'bank',           icon: <CreditCard className="h-4 w-4" />,     label: 'Bank'          },
                   { value: 'contracts',      icon: <FileSignature className="h-4 w-4" />,  label: 'Contracts'     },
+                  { value: 'personal',       icon: <UserIcon className="h-4 w-4" />,        label: 'Personal'      },
+                  { value: 'education',      icon: <GraduationCap className="h-4 w-4" />,   label: 'Education'     },
+                  { value: 'doc-vault',      icon: <FolderOpen className="h-4 w-4" />,      label: 'Documents'     },
+                  { value: 'skills',         icon: <Zap className="h-4 w-4" />,             label: 'Skills'        },
                   ...(canManageClassifications
                     ? [{ value: 'classification', icon: <ShieldCheck className="h-4 w-4" />, label: 'Classification' }]
                     : []),
@@ -1490,6 +1498,26 @@ const UserDetail: FC = () => {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* ── PERSONAL TAB ─────────────────────────────────────────────── */}
+            <TabsContent value="personal" className="p-5 sm:p-6 mt-0">
+              <EmployeePersonalTab userId={user.id} isAdmin={!!isAdmin} />
+            </TabsContent>
+
+            {/* ── EDUCATION & EXPERIENCE TAB ───────────────────────────────── */}
+            <TabsContent value="education" className="p-5 sm:p-6 mt-0">
+              <EmployeeEducationTab userId={user.id} isAdmin={!!isAdmin} />
+            </TabsContent>
+
+            {/* ── DOCUMENT VAULT TAB ───────────────────────────────────────── */}
+            <TabsContent value="doc-vault" className="p-5 sm:p-6 mt-0">
+              <EmployeeDocumentsTab userId={user.id} isAdmin={!!isAdmin} currentUserId={currentUser?.id} />
+            </TabsContent>
+
+            {/* ── SKILLS & LANGUAGES TAB ───────────────────────────────────── */}
+            <TabsContent value="skills" className="p-5 sm:p-6 mt-0">
+              <EmployeeSkillsTab userId={user.id} isAdmin={!!isAdmin} />
             </TabsContent>
 
           </Tabs>
