@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Loader2, GraduationCap, Briefcase, Edit, Save, X, Calendar, Building, MapPin } from "lucide-react";
+import { Plus, Trash2, Loader2, GraduationCap, Briefcase, Edit, Save, X, Calendar, Building, MapPin, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface EduEntry {
@@ -27,27 +27,47 @@ interface ExpEntry {
   is_current: boolean;
   description?: string;
   location?: string;
+  sector?: string;
 }
 
 const DEGREE_LABELS: Record<string, string> = {
-  high_school: 'High School', diploma: 'Diploma', bachelor: "Bachelor's",
-  master: "Master's", phd: 'PhD / Doctorate', professional: 'Professional', other: 'Other',
+  high_school:      'High School',
+  vocational:       'Vocational Training',
+  college_diploma:  'College Diploma / Technical Certificate',
+  diploma:          'Diploma',
+  bachelor:         "Bachelor's Degree",
+  postgrad_diploma: 'Postgraduate Diploma / Higher Diploma',
+  master:           "Master's Degree",
+  phd:              'PhD / Doctorate',
+  professional:     'Professional Certification',
+  other:            'Other',
 };
 
-const EMPTY_EDU: EduEntry = { degree_level: 'bachelor', institution: '', field_of_study: '', graduation_year: null, country: '', grade: '' };
-const EMPTY_EXP: ExpEntry = { employer: '', job_title: '', start_date: '', end_date: '', is_current: false, description: '', location: '' };
+const SECTORS = [
+  'Health', 'Education', 'Finance & Accounting', 'Humanitarian / WASH',
+  'Food Security & Livelihoods', 'Protection', 'Shelter & NFI',
+  'Logistics & Supply Chain', 'IT & Technology', 'HR & Administration',
+  'Project Management', 'Monitoring & Evaluation', 'Legal & Compliance',
+  'Communications & Media', 'Engineering & Infrastructure',
+  'Research & Development', 'Other',
+];
+
+const EMPTY_EDU: EduEntry = {
+  degree_level: 'bachelor', institution: '', field_of_study: '',
+  graduation_year: null, country: '', grade: '',
+};
+const EMPTY_EXP: ExpEntry = {
+  employer: '', job_title: '', start_date: '', end_date: '',
+  is_current: false, description: '', location: '', sector: '',
+};
 
 export default function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const { toast } = useToast();
   const [edu, setEdu] = useState<EduEntry[]>([]);
   const [exp, setExp] = useState<ExpEntry[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Education form
   const [eduForm, setEduForm] = useState<EduEntry | null>(null);
   const [eduSaving, setEduSaving] = useState(false);
-
-  // Experience form
   const [expForm, setExpForm] = useState<ExpEntry | null>(null);
   const [expSaving, setExpSaving] = useState(false);
 
@@ -134,7 +154,9 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-bold text-base flex items-center gap-2"><GraduationCap className="h-4 w-4 text-primary" /> Education History</h3>
+            <h3 className="font-bold text-base flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 text-primary" /> Education History
+            </h3>
             <p className="text-xs text-muted-foreground">Degrees, diplomas, and academic credentials</p>
           </div>
           {isAdmin && (
@@ -222,8 +244,10 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-bold text-base flex items-center gap-2"><Briefcase className="h-4 w-4 text-primary" /> Work Experience</h3>
-            <p className="text-xs text-muted-foreground">Previous employment and positions held</p>
+            <h3 className="font-bold text-base flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-primary" /> Employment History
+            </h3>
+            <p className="text-xs text-muted-foreground">Previous and current employment positions</p>
           </div>
           {isAdmin && (
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setExpForm({ ...EMPTY_EXP })} data-testid="button-add-experience">
@@ -245,20 +269,30 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
                 <Input value={expForm.job_title} onChange={e => setExpForm(p => p ? { ...p, job_title: e.target.value } : p)} placeholder="Position / Role" className="h-9 text-sm" />
               </div>
               <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Experience Area / Sector</label>
+                <Select value={expForm.sector || ''} onValueChange={v => setExpForm(p => p ? { ...p, sector: v } : p)}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select sector…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— None —</SelectItem>
+                    {SECTORS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Location</label>
+                <Input value={expForm.location || ''} onChange={e => setExpForm(p => p ? { ...p, location: e.target.value } : p)} placeholder="City, Country" className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Start Date *</label>
                 <Input type="date" value={expForm.start_date} onChange={e => setExpForm(p => p ? { ...p, start_date: e.target.value } : p)} className="h-9 text-sm" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">End Date</label>
                 <Input type="date" value={expForm.end_date || ''} disabled={expForm.is_current} onChange={e => setExpForm(p => p ? { ...p, end_date: e.target.value } : p)} className="h-9 text-sm disabled:opacity-40" />
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer mt-1">
                   <input type="checkbox" checked={expForm.is_current} onChange={e => setExpForm(p => p ? { ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date } : p)} className="rounded" />
                   Currently working here
                 </label>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Location</label>
-                <Input value={expForm.location || ''} onChange={e => setExpForm(p => p ? { ...p, location: e.target.value } : p)} placeholder="City, Country" className="h-9 text-sm" />
               </div>
               <div className="space-y-1 sm:col-span-2">
                 <label className="text-xs text-muted-foreground">Description</label>
@@ -277,7 +311,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
         <div className="space-y-2">
           {exp.length === 0 && !expForm && (
             <div className="text-center py-8 text-muted-foreground text-sm border rounded-xl border-dashed bg-muted/5">
-              No work experience added yet.
+              No employment history added yet.
             </div>
           )}
           {exp.map(e => (
@@ -289,6 +323,11 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-sm">{e.job_title}</span>
                   {e.is_current && <Badge className="text-xs bg-green-100 text-green-800 border-green-200">Current</Badge>}
+                  {e.sector && e.sector !== 'none' && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <Tag className="h-2.5 w-2.5" />{e.sector}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
                   <Building className="h-3 w-3" /> {e.employer}

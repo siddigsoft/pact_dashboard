@@ -113,7 +113,9 @@ const UserDetail: FC = () => {
   const [empContractEnd, setEmpContractEnd] = useState<string>("");
   const [empReportsTo, setEmpReportsTo] = useState<string>("");
   const [taskDigestOptOut, setTaskDigestOptOut] = useState<boolean>(false);
+  const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
   const [empSaving, setEmpSaving] = useState(false);
+  const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
   const savedDepartmentIdRef = useRef<string | null>(null);
@@ -375,11 +377,14 @@ const UserDetail: FC = () => {
       // Load task digest opt-out from profile
       supabase
         .from("profiles")
-        .select("task_digest_opt_out")
+        .select("task_digest_opt_out, country_code")
         .eq("id", user.id)
         .single()
         .then(({ data }) => {
-          if (data) setTaskDigestOptOut(data.task_digest_opt_out === true);
+          if (data) {
+            setTaskDigestOptOut(data.task_digest_opt_out === true);
+            if (data.country_code) setEmpCountryCode(data.country_code);
+          }
         });
     }
   }, [user?.id]);
@@ -394,17 +399,36 @@ const UserDetail: FC = () => {
 
       // When employment record is saved, automatically mark as employee
       const hasEmploymentData = !!(empType || empContractStart || empDepartmentId);
-      const { error } = await supabase.from("profiles").update({
+
+      // Auto-generate employee ID if not yet assigned and contract start date is set
+      let autoEmployeeId: string | null = null;
+      if (!user.employeeId && empContractStart && empCountryCode) {
+        const { data: genId, error: genErr } = await supabase.rpc('generate_employee_id', {
+          p_country_code: empCountryCode.trim().toUpperCase(),
+          p_contract_date: empContractStart,
+        });
+        if (!genErr && genId) autoEmployeeId = genId as string;
+      }
+
+      const updatePayload: Record<string, unknown> = {
         department_id: empDepartmentId || null,
         employment_type: empType || null,
         contract_start_date: empContractStart || null,
         contract_end_date: empContractEnd || null,
         reports_to: empReportsTo || null,
         task_digest_opt_out: taskDigestOptOut,
+        country_code: empCountryCode || 'SD',
         is_employee: hasEmploymentData,
         updated_at: new Date().toISOString(),
-      }).eq("id", user.id);
+      };
+      if (autoEmployeeId) updatePayload.employee_id = autoEmployeeId;
+
+      const { error } = await supabase.from("profiles").update(updatePayload).eq("id", user.id);
       if (error) throw error;
+
+      if (autoEmployeeId) {
+        toast({ title: `Employee ID assigned: ${autoEmployeeId}`, description: "Generated from country code + contract date." });
+      }
 
       // Notify employee when department actually changes
       const newDeptId = empDepartmentId || null;
@@ -737,10 +761,22 @@ const UserDetail: FC = () => {
 
   const handleApprove = async () => {
     if (!user || !approveUser) return;
+
+    // Document verification gate — block if there are unverified/rejected docs
+    if (docsVerified.total > 0 && !docsVerified.allVerified) {
+      const remaining = docsVerified.total - docsVerified.verified;
+      toast({
+        title: "Cannot activate — documents not fully verified",
+        description: `${remaining} document(s) still need HR verification. Go to the Documents tab to verify them first.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsApproving(true);
     await approveUser(user.id);
     setIsApproving(false);
-    toast({ title: "User approved", description: `${user.name} has been approved.` });
+    toast({ title: "User approved", description: `${user.name} has been approved and activated.` });
   };
 
   const handleReject = async () => {
@@ -1175,6 +1211,32 @@ const UserDetail: FC = () => {
                   })()}
                 </div>
 
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Country Code (for Employee ID)</h4>
+                  {isAdmin ? (
+                    <div className="space-y-1">
+                      <Input
+                        value={empCountryCode}
+                        onChange={e => setEmpCountryCode(e.target.value.toUpperCase().slice(0, 4))}
+                        placeholder="e.g. SD"
+                        maxLength={4}
+                        className="h-11 font-mono uppercase tracking-widest"
+                        data-testid="input-emp-country-code"
+                      />
+                      {!user.employeeId && empContractStart && (
+                        <p className="text-xs text-muted-foreground">
+                          Will generate: <span className="font-mono font-semibold">{(empCountryCode || 'XX').toUpperCase()}{empContractStart.replace(/-/g, '')}0001</span>
+                        </p>
+                      )}
+                      {user.employeeId && (
+                        <p className="text-xs text-green-600 font-medium">Employee ID already assigned: {user.employeeId}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="font-semibold text-base font-mono">{empCountryCode || "—"}</p>
+                  )}
+                </div>
+
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 sm:col-span-2">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                     <UserCheck className="h-3.5 w-3.5" /> Reports To (Manager)
@@ -1572,7 +1634,14 @@ const UserDetail: FC = () => {
 
             {/* ── DOCUMENTS SECTION ────────────────────────────────────────── */}
             {activeSection === 'documents' && (<div className="p-5 sm:p-6 space-y-6">
-              <EmployeeDocumentsTab userId={user.id} isAdmin={!!isAdmin} currentUserId={currentUser?.id} />
+              <EmployeeDocumentsTab
+                userId={user.id}
+                isAdmin={!!isAdmin}
+                currentUserId={currentUser?.id}
+                onVerificationChange={(allVerified, verified, total) =>
+                  setDocsVerified({ allVerified, verified, total })
+                }
+              />
               <div className="border-t pt-6">
                 <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><FileSignature className="h-4 w-4 text-indigo-600" /> Employment Contracts</h3>
 
