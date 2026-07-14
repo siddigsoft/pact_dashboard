@@ -40,7 +40,7 @@ const availableRoles = VISIBLE_ROLE_CODES;
 
 const TAB_GROUPS = [
   {
-    id: 'profile', label: 'Profile', color: '#3b82f6',
+    id: 'profile', label: 'Profile', color: '#3b82f6', Icon: UserIcon,
     tabs: [
       { id: 'overview',    emoji: '🏠', label: 'Overview',              description: 'General info — name, contact details, employee ID, role, and account status at a glance.' },
       { id: 'employment',  emoji: '💼', label: 'Employment & Contract',  description: 'Contract type, department, hub assignment, employment start/end dates, and terms.' },
@@ -49,7 +49,7 @@ const TAB_GROUPS = [
     ],
   },
   {
-    id: 'background', label: 'Background', color: '#8b5cf6',
+    id: 'background', label: 'Background', color: '#8b5cf6', Icon: GraduationCap,
     tabs: [
       { id: 'education',   emoji: '🎓', label: 'Education & Experience', description: 'Academic qualifications, institutions, graduation years, and prior work experience history.' },
       { id: 'documents',   emoji: '📁', label: 'Document Vault',         description: 'Uploaded staff documents — contracts, national IDs, certificates, and other files.' },
@@ -57,14 +57,14 @@ const TAB_GROUPS = [
     ],
   },
   {
-    id: 'finance', label: 'Finance', color: '#D97706',
+    id: 'finance', label: 'Finance', color: '#D97706', Icon: CreditCard,
     tabs: [
       { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.' },
       { id: 'performance',  emoji: '📊', label: 'Performance',           description: 'Performance review scores, quarterly objectives, and development notes from review cycles.' },
     ],
   },
   {
-    id: 'system', label: 'System', color: '#ef4444',
+    id: 'system', label: 'System', color: '#ef4444', Icon: ShieldCheck,
     tabs: [
       { id: 'access', emoji: '🔒', label: 'Access & Security',           description: 'User role assignment, login history, two-factor authentication status, and page-level permission overrides.' },
     ],
@@ -790,84 +790,109 @@ const UserDetail: FC = () => {
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
 
-      {/* ── System-style Dark Header ──────────────────────────────────────── */}
+      {/* ── Sticky Dark Header ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 shadow-2xl" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}>
-        {/* Row 1: breadcrumb + identity */}
-        <div className="px-5 pt-3 pb-2.5 border-b border-white/10 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+
+        {/* Row 1: Compact breadcrumb nav */}
+        <div className="px-5 pt-3 pb-2 border-b border-white/8 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-[11px] text-white/50">
             <button
               onClick={() => navigate("/employees")}
-              className="flex items-center gap-1.5 text-white/60 hover:text-white text-xs transition-colors shrink-0"
+              className="flex items-center gap-1 hover:text-white/80 transition-colors"
               data-testid="button-back-users"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">HR / Employees</span>
+              <ArrowLeft className="h-3 w-3" />
+              <span>HR / Employees</span>
             </button>
-            <span className="text-white/20 hidden sm:inline">/</span>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-lg" style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}>
-                <span className="text-base">👤</span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-white font-bold text-sm leading-none truncate">{user.name}</p>
-                <p className="text-white/50 text-[10px] mt-0.5 capitalize">{empType || 'Staff Member'}{user.employeeId ? ` · ${user.employeeId}` : ''}</p>
-              </div>
-            </div>
+            <span className="text-white/20">›</span>
+            <span className="text-white/70 font-medium truncate max-w-[180px]">{user.name}</span>
           </div>
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {isAdmin && !editMode && !user.isApproved && (
               <>
-                <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 h-8 text-xs border-0" data-testid="button-approve-user">
+                <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 h-7 text-[11px] px-2.5 border-0" data-testid="button-approve-user">
                   <UserCheck className="h-3 w-3" />{isApproving ? 'Approving…' : 'Approve'}
                 </Button>
-                <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1.5 h-8 text-xs" data-testid="button-reject-user">
+                <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1 h-7 text-[11px] px-2.5" data-testid="button-reject-user">
                   <UserX className="h-3 w-3" />{isRejecting ? 'Rejecting…' : 'Reject'}
                 </Button>
               </>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate(`/signatures?user=${user.id}`)}
-              className="text-white/70 hover:text-white hover:bg-white/10 gap-1.5 h-8 text-xs"
-              data-testid="button-goto-signatures"
-            >
-              <FileSignature className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Signatures</span>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-white/60 hover:text-white hover:bg-white/10 gap-1 h-7 text-[11px] px-2.5" data-testid="button-goto-signatures">
+              <FileSignature className="h-3 w-3" /><span className="hidden sm:inline">Signatures</span>
             </Button>
             {isAdmin && !editMode && (
-              <Button
-                onClick={handleEdit}
-                size="sm"
-                className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1.5 h-8 text-xs font-semibold shadow"
-                data-testid="button-edit-user"
-              >
-                <Edit className="h-3.5 w-3.5" />
-                Edit Profile
+              <Button onClick={handleEdit} size="sm" className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1 h-7 text-[11px] px-2.5 font-semibold shadow" data-testid="button-edit-user">
+                <Edit className="h-3 w-3" />Edit Profile
               </Button>
             )}
             {editMode && (
               <>
-                <Button
-                  onClick={() => {
-                    const roleEscalation = user && editForm.role !== user.role && ['Admin', 'SuperAdmin'].includes(editForm.role || '');
-                    if (roleEscalation && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true);
-                    else handleEditSave();
-                  }}
-                  disabled={isSaving}
-                  size="sm"
-                  className="bg-white text-[#0d1f3c] hover:bg-white/90 h-8 text-xs font-semibold shadow"
-                >
+                <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px] px-2.5 font-semibold shadow border-0">
                   {isSaving ? 'Saving…' : 'Save Changes'}
                 </Button>
-                <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 h-8 text-xs">
-                  Cancel
-                </Button>
+                <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 h-7 text-[11px] px-2.5">Cancel</Button>
               </>
             )}
           </div>
         </div>
+
+        {/* Row 2: Employee identity strip */}
+        {(() => {
+          const fields = [user.name, user.email, user.phone, user.hubId, user.employeeId, user.bankAccount, empDepartmentId, empContractStart];
+          const pct = Math.round((fields.filter(Boolean).length / fields.length) * 100);
+          const initials = user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??';
+          return (
+            <div className="px-5 py-3 border-b border-white/10 flex items-center gap-4">
+              {/* Avatar with status dot */}
+              <div className="relative shrink-0">
+                <div
+                  className="h-12 w-12 rounded-xl flex items-center justify-center text-white font-extrabold text-base shadow-lg ring-2 ring-white/15"
+                  style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}
+                >
+                  {user.avatar
+                    ? <img src={user.avatar} alt={user.name} className="h-12 w-12 rounded-xl object-cover" />
+                    : initials}
+                </div>
+                <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0a1628] ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              </div>
+              {/* Name + badges */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-white font-bold text-[15px] leading-tight">{user.name}</span>
+                  <RoleBadge role={user.role} size="sm" />
+                  <UserClassificationBadge userId={user.id} />
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-400/20 text-emerald-300' : 'bg-amber-400/20 text-amber-300'}`}>
+                    ● {user.isApproved ? 'Active' : 'Pending'}
+                  </span>
+                </div>
+                <p className="text-white/45 text-[11px] mt-0.5 truncate capitalize">
+                  {empType || 'Staff Member'}{user.employeeId ? ` · ${user.employeeId}` : ''}{user.email ? ` · ${user.email}` : ''}
+                </p>
+              </div>
+              {/* Profile completeness */}
+              <div className="hidden md:flex items-center gap-2 shrink-0">
+                <span className="text-white/35 text-[10px] uppercase tracking-wide">Profile</span>
+                <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
+                </div>
+                <span className={`text-[11px] font-bold ${pct >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</span>
+              </div>
+              {/* Quick actions */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => navigate(`/signatures?user=${user.id}`)} className="flex items-center gap-1.5 text-[11px] font-semibold text-white/70 bg-white/8 hover:bg-white/15 border border-white/10 rounded-lg px-3 py-1.5 transition-all">
+                  <Mail className="h-3 w-3" /><span className="hidden sm:inline">Send Email</span>
+                </button>
+                {isAdmin && (
+                  <button onClick={() => navigate('/hr?tab=offboarding')} className="flex items-center gap-1.5 text-[11px] font-semibold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg px-3 py-1.5 transition-all">
+                    <UserX className="h-3 w-3" /><span className="hidden sm:inline">Offboard</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Level 2: Group tabs ── */}
         <div className="px-5 pt-3 flex items-end gap-1.5">
           {TAB_GROUPS.map(g => {
@@ -880,7 +905,7 @@ const UserDetail: FC = () => {
                 style={isActive ? { backgroundColor: `${g.color}1e`, borderColor: `${g.color}40` } : {}}
               >
                 {isActive && <span className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full" style={{ backgroundColor: g.color }} />}
-                <span className="text-[13px] leading-none">{g.tabs[0].emoji}</span>
+                <g.Icon className="h-3.5 w-3.5 shrink-0" style={isActive ? { color: g.color } : {}} />
                 <span>{g.label}</span>
                 <span
                   className={`ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${isActive ? '' : 'text-gray-500 bg-white/5'}`}
@@ -957,60 +982,6 @@ const UserDetail: FC = () => {
         <p className="text-[12.5px] text-muted-foreground leading-relaxed">{activeTabInGroup.description}</p>
       </div>
 
-      {/* ── Employee Identity Bar ─────────────────────────────────────────── */}
-      <div className="bg-background border-b">
-        <div className="max-w-7xl mx-auto px-5 py-3 flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <Avatar className="h-12 w-12 shrink-0 shadow">
-              {user.avatar ? <AvatarImage src={user.avatar} alt={user.name} /> : null}
-              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground font-extrabold text-lg">
-                {user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-bold text-base leading-tight">{user.name}</p>
-                <RoleBadge role={user.role} size="sm" />
-                <UserClassificationBadge userId={user.id} />
-                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-amber-100 text-amber-700'}`}>
-                  ● {user.isApproved ? 'Active' : 'Pending'}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground capitalize mt-0.5">
-                {empType || 'Staff Member'}
-                {user.employeeId ? ` · ${user.employeeId}` : ''}
-                {user.email ? ` · ${user.email}` : ''}
-              </p>
-            </div>
-          </div>
-          {/* Profile completeness mini-bar */}
-          {(() => {
-            const fields = [user.name, user.email, user.phone, user.hubId, user.employeeId, user.bankAccount, empDepartmentId, empContractStart];
-            const pct = Math.round((fields.filter(Boolean).length / fields.length) * 100);
-            return (
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-muted-foreground hidden sm:inline">Profile</span>
-                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden hidden sm:block">
-                  <div className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
-                </div>
-                <span className={`text-xs font-bold ${pct >= 80 ? 'text-emerald-600' : 'text-amber-500'}`}>{pct}%</span>
-              </div>
-            );
-          })()}
-          {/* Quick actions */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg px-3 py-1.5 transition-colors">
-              📧 Send Email
-            </button>
-            {isAdmin && (
-              <button onClick={() => navigate('/hr?tab=offboarding')} className="text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 rounded-lg px-3 py-1.5 transition-colors">
-                🚪 Offboard
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* ── Full-width Content ──────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-16">
         <div className="w-full">
@@ -1019,14 +990,18 @@ const UserDetail: FC = () => {
             <Card className="shadow-xl border-0 overflow-hidden rounded-2xl">
 
               {/* Section header bar */}
-              <div className="border-b px-5 py-3 flex items-center justify-between bg-muted/10">
-                <div className="flex items-center gap-2">
-                  <span className="text-base leading-none">
-                    {activeSection === 'overview' ? '🏠' : activeSection === 'employment' ? '💼' : activeSection === 'personal' ? '👤' : activeSection === 'location' ? '📍' : activeSection === 'education' ? '🎓' : activeSection === 'documents' ? '📁' : activeSection === 'skills' ? '⚡' : activeSection === 'compensation' ? '💰' : activeSection === 'performance' ? '📊' : '🔒'}
-                  </span>
-                  <h2 className="font-bold text-sm text-foreground">
-                    {activeSection === 'overview' ? 'Overview' : activeSection === 'employment' ? 'Employment & Contract' : activeSection === 'personal' ? 'Personal Details' : activeSection === 'location' ? 'Location & Work' : activeSection === 'education' ? 'Education & Experience' : activeSection === 'documents' ? 'Documents' : activeSection === 'skills' ? 'Skills & Languages' : activeSection === 'compensation' ? 'Compensation & Bank' : activeSection === 'performance' ? 'Performance' : 'Access & Security'}
-                  </h2>
+              <div
+                className="border-b px-5 py-3 flex items-center justify-between border-l-[3px]"
+                style={{ borderLeftColor: accent, backgroundColor: `${accent}06`, borderBottomColor: `${accent}18` }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}18` }}>
+                    <span className="text-sm leading-none">{activeTabInGroup.emoji}</span>
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-sm text-foreground leading-none">{activeTabInGroup.label}</h2>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{activeGroup.label} section</p>
+                  </div>
                 </div>
                 {(activeSection === 'overview' || activeSection === 'location') && isAdmin && !editMode && (
                   <Button size="sm" variant="outline" onClick={handleEdit} className="gap-1.5 h-8 text-xs" data-testid="button-edit-section">
@@ -1044,6 +1019,7 @@ const UserDetail: FC = () => {
                       }}
                       disabled={isSaving}
                       className="h-8 text-xs"
+                      style={{ backgroundColor: accent, borderColor: accent }}
                     >
                       {isSaving ? 'Saving…' : 'Save Changes'}
                     </Button>
