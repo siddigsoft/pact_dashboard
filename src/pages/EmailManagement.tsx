@@ -1040,6 +1040,7 @@ export default function EmailManagement() {
   const [smtpStatus, setSmtpStatus] = useState<'checking' | 'configured' | 'not_configured' | 'error'>('checking');
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [testEmail, setTestEmail] = useState('');
+  const [sendingBroadcastTest, setSendingBroadcastTest] = useState(false);
 
   // Templates state
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -1219,6 +1220,46 @@ export default function EmailManagement() {
       });
     } finally {
       setTestingSmtp(false);
+    }
+  };
+
+  const sendBroadcastTestEmail = async () => {
+    setSendingBroadcastTest(true);
+    try {
+      const { error } = await supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type: 'cost_action_required',
+          recipient_roles: ['admin', 'super_admin'],
+          title_en: 'Action Required: Cost Submission — Tier 4 Review',
+          title_ar: 'مطلوب إجراء: مراجعة المرحلة 4 لطلب التكلفة',
+          message_en: 'Submission "9B6EE184" (SDG 100,000) by Mohammed elmahi abdalla elmahi has passed Tier 3 and is now waiting for your Tier 4 review. Please approve or reject.',
+          message_ar: 'طلب "9B6EE184" (SDG 100,000) من Mohammed elmahi abdalla elmahi اجتاز المرحلة 3 وينتظر الآن مراجعتك في المرحلة 4. يرجى الموافقة أو الرفض.',
+          priority: 'high',
+          entity_type: 'costSubmission',
+          action_url: '/cost-submission',
+          send_email: true,
+          metadata: {
+            ref_number: '9B6EE184',
+            amount: '100,000',
+            currency: 'SDG',
+            submitter_name: 'Mohammed elmahi abdalla elmahi',
+            tier: '4',
+          },
+        },
+      });
+      if (error) throw error;
+      toast({
+        title: '✅ Test emails sent',
+        description: 'All admin and super_admin users will receive the new-format email with web + mobile buttons.',
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Send failed',
+        description: err.message || 'Could not send broadcast test email',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingBroadcastTest(false);
     }
   };
 
@@ -1748,6 +1789,35 @@ export default function EmailManagement() {
                 <p className="text-xs text-muted-foreground">
                   Send a test email to verify the SMTP configuration is working correctly
                 </p>
+              </div>
+
+              {/* Broadcast Test — new email format */}
+              <div className="space-y-3 pt-2 border-t">
+                <Label className="flex items-center gap-2">
+                  📨 Broadcast New Email Format to All Admins
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Sends a sample <strong>Cost Submission — Tier 4 Review</strong> notification to every <strong>Admin</strong> and <strong>Super Admin</strong> in the system so they can see the new email layout with the fixed web link and new mobile app button.
+                </p>
+                <Button
+                  onClick={sendBroadcastTestEmail}
+                  disabled={sendingBroadcastTest || smtpStatus !== 'configured'}
+                  variant="outline"
+                  className="border-orange-400 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                  data-testid="button-broadcast-test-email"
+                >
+                  {sendingBroadcastTest ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Sending to all admins...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Send Test to All Admins &amp; Super Admins
+                    </>
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
