@@ -6,7 +6,7 @@ import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, Info } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -38,6 +38,39 @@ import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
 
+const TAB_GROUPS = [
+  {
+    id: 'profile', label: 'Profile', color: '#3b82f6',
+    tabs: [
+      { id: 'overview',    emoji: '🏠', label: 'Overview',              description: 'General info — name, contact details, employee ID, role, and account status at a glance.' },
+      { id: 'employment',  emoji: '💼', label: 'Employment & Contract',  description: 'Contract type, department, hub assignment, employment start/end dates, and terms.' },
+      { id: 'personal',    emoji: '👤', label: 'Personal Details',       description: 'Date of birth, nationality, marital status, and personal identification details.' },
+      { id: 'location',    emoji: '📍', label: 'Location & Work',        description: 'Work hub, assigned state and locality for field staff, or country/city for non-field staff.' },
+    ],
+  },
+  {
+    id: 'background', label: 'Background', color: '#8b5cf6',
+    tabs: [
+      { id: 'education',   emoji: '🎓', label: 'Education & Experience', description: 'Academic qualifications, institutions, graduation years, and prior work experience history.' },
+      { id: 'documents',   emoji: '📁', label: 'Document Vault',         description: 'Uploaded staff documents — contracts, national IDs, certificates, and other files.' },
+      { id: 'skills',      emoji: '⚡', label: 'Skills & Languages',     description: 'Professional skills, language proficiencies, and competency levels recorded for this staff member.' },
+    ],
+  },
+  {
+    id: 'finance', label: 'Finance', color: '#D97706',
+    tabs: [
+      { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.' },
+      { id: 'performance',  emoji: '📊', label: 'Performance',           description: 'Performance review scores, quarterly objectives, and development notes from review cycles.' },
+    ],
+  },
+  {
+    id: 'system', label: 'System', color: '#ef4444',
+    tabs: [
+      { id: 'access', emoji: '🔒', label: 'Access & Security',           description: 'User role assignment, login history, two-factor authentication status, and page-level permission overrides.' },
+    ],
+  },
+];
+
 const UserDetail: FC = () => {
   const { id } = useParams<{ id: string }>();
   const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers, adminConfirmUserEmail, adminUpdateUserEmail } = useUser();
@@ -59,6 +92,11 @@ const UserDetail: FC = () => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
+  const [dropOpen, setDropOpen] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const activeGroup = TAB_GROUPS.find(g => g.tabs.some(t => t.id === activeSection)) ?? TAB_GROUPS[0];
+  const activeTabInGroup = activeGroup.tabs.find(t => t.id === activeSection) ?? activeGroup.tabs[0];
+  const accent = activeGroup.color;
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [isConfirmingEmail, setIsConfirmingEmail] = useState(false);
@@ -258,6 +296,18 @@ const UserDetail: FC = () => {
         }
       });
   }, [user?.id, user?.role]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Close dropdown when group changes
+  useEffect(() => { setDropOpen(false); }, [activeGroup.id]);
 
   // Initialize available states and localities when entering edit mode
   useEffect(() => {
@@ -818,23 +868,93 @@ const UserDetail: FC = () => {
             )}
           </div>
         </div>
-        {/* Row 2: section breadcrumb strip */}
-        <div className="px-5 py-2 flex items-center gap-2 text-[11px] text-white/50">
-          <span>Employee Profile</span>
-          <span className="text-white/20">›</span>
-          <span className="text-white/90 font-medium">
-            {{
-              overview: '🏠 Overview', employment: '💼 Employment & Contract', personal: '👤 Personal Details',
-              location: '📍 Location & Work', education: '🎓 Education & Experience', documents: '📁 Document Vault',
-              skills: '⚡ Skills & Languages', compensation: '💰 Compensation & Bank',
-              performance: '📊 Performance', access: '🔒 Access & Security',
-            }[activeSection] ?? 'Overview'}
-          </span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-            <span className="text-white/60">{user.isApproved ? 'Active' : 'Pending'}</span>
-          </div>
+        {/* ── Level 2: Group tabs ── */}
+        <div className="px-5 pt-3 flex items-end gap-1.5">
+          {TAB_GROUPS.map(g => {
+            const isActive = activeGroup.id === g.id;
+            return (
+              <button
+                key={g.id}
+                onClick={() => { setActiveSection(g.tabs[0].id); setDropOpen(false); }}
+                className={`group relative flex items-center gap-2 px-4 pt-2.5 pb-3 rounded-t-xl text-sm font-semibold transition-all duration-150 border border-b-0 shrink-0 ${isActive ? 'text-white' : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/10'}`}
+                style={isActive ? { backgroundColor: `${g.color}1e`, borderColor: `${g.color}40` } : {}}
+              >
+                {isActive && <span className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full" style={{ backgroundColor: g.color }} />}
+                <span className="text-[13px] leading-none">{g.tabs[0].emoji}</span>
+                <span>{g.label}</span>
+                <span
+                  className={`ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${isActive ? '' : 'text-gray-500 bg-white/5'}`}
+                  style={isActive ? { backgroundColor: `${g.color}44`, color: g.color } : {}}
+                >
+                  {g.tabs.length}
+                </span>
+              </button>
+            );
+          })}
         </div>
+
+        {/* ── Level 3: Sub-tab dropdown ── */}
+        <div
+          className="relative px-4 py-2 border-t flex items-center gap-3"
+          style={{ borderColor: `${accent}30`, backgroundColor: `${accent}0a` }}
+          ref={dropRef}
+        >
+          <button
+            onClick={() => setDropOpen(v => !v)}
+            className={`flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm ${dropOpen ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white'}`}
+          >
+            <span className="text-[13px] leading-none shrink-0">{activeTabInGroup.emoji}</span>
+            <span className="truncate">{activeTabInGroup.label}</span>
+            <ChevronDown className={`h-4 w-4 shrink-0 ml-auto opacity-60 transition-transform duration-150 ${dropOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400 shrink-0">
+            <span className="px-2 py-1 rounded-full font-medium" style={{ backgroundColor: `${accent}22`, color: accent }}>
+              {activeGroup.tabs.findIndex(t => t.id === activeSection) + 1} / {activeGroup.tabs.length}
+            </span>
+            <span className="opacity-50">{activeGroup.label}</span>
+          </div>
+          {dropOpen && (
+            <div
+              className="absolute top-full left-4 right-4 mt-1 rounded-xl border shadow-2xl overflow-hidden z-50"
+              style={{
+                background: 'linear-gradient(135deg, #0d1f3c 0%, #0f2240 100%)',
+                borderColor: `${accent}35`,
+                boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px ${accent}25`,
+              }}
+            >
+              <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: `${accent}25`, backgroundColor: `${accent}12` }}>
+                <span className="text-[13px]">{activeTabInGroup.emoji}</span>
+                <span className="text-[12px] font-bold text-white tracking-wide">{activeGroup.label}</span>
+                <span className="ml-auto text-[10px] text-gray-400">{activeGroup.tabs.length} pages</span>
+              </div>
+              <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {activeGroup.tabs.map(t => {
+                  const isActive = activeSection === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => { setActiveSection(t.id); setDropOpen(false); }}
+                      className={`flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100 ${isActive ? 'text-white' : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'}`}
+                      style={isActive ? { backgroundColor: `${accent}28`, outline: `1px solid ${accent}50` } : {}}
+                    >
+                      <span className="text-[13px] leading-none shrink-0 mt-0.5" style={{ opacity: isActive ? 1 : 0.6 }}>{t.emoji}</span>
+                      <span className="text-[12px] font-medium leading-tight">{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Description strip ── */}
+      <div
+        className="flex items-start gap-3 px-5 py-2.5 border-b border-l-[3px]"
+        style={{ borderLeftColor: accent, backgroundColor: `${accent}08`, borderBottomColor: `${accent}20` }}
+      >
+        <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: accent }} />
+        <p className="text-[12.5px] text-muted-foreground leading-relaxed">{activeTabInGroup.description}</p>
       </div>
 
       {/* ── Employee Identity Bar ─────────────────────────────────────────── */}
@@ -887,39 +1007,6 @@ const UserDetail: FC = () => {
                 🚪 Offboard
               </button>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Tab Navigation ──────────────────────────────────────────────────── */}
-      <div className="bg-background border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 overflow-x-auto scrollbar-hide">
-          <div className="flex min-w-max">
-            {[
-              { id: 'overview',     emoji: '🏠', label: 'Overview'              },
-              { id: 'employment',   emoji: '💼', label: 'Employment & Contract'  },
-              { id: 'personal',     emoji: '👤', label: 'Personal Details'       },
-              { id: 'location',     emoji: '📍', label: 'Location & Work'        },
-              { id: 'education',    emoji: '🎓', label: 'Education & Experience' },
-              { id: 'documents',    emoji: '📁', label: 'Document Vault'         },
-              { id: 'skills',       emoji: '⚡', label: 'Skills & Languages'     },
-              { id: 'compensation', emoji: '💰', label: 'Compensation & Bank'    },
-              { id: 'performance',  emoji: '📊', label: 'Performance'            },
-              { id: 'access',       emoji: '🔒', label: 'Access & Security'      },
-            ].map(s => (
-              <button
-                key={s.id}
-                onClick={() => setActiveSection(s.id)}
-                className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
-                  activeSection === s.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
-                }`}
-              >
-                <span className="text-base leading-none">{s.emoji}</span>
-                <span>{s.label}</span>
-              </button>
-            ))}
           </div>
         </div>
       </div>
