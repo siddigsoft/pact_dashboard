@@ -522,10 +522,9 @@ function generateEventEmailHtml(
   const fullWebUrl = actionUrl
     ? (actionUrl.startsWith('http') ? actionUrl : `${APP_BASE}${actionUrl}`)
     : ''
-  // Mobile deep-link: pact://cost-submission (strip leading slash)
-  const fullMobileUrl = actionUrl
-    ? `pact://${actionUrl.replace(/^\/+/, '')}`
-    : ''
+  // Mobile link: use HTTPS (same web URL) so email clients don't flag custom schemes.
+  // Universal links on Android/iOS will open the native app if installed.
+  const fullMobileUrl = fullWebUrl
 
   const roleDisplayNames: Record<string, { en: string; ar: string }> = {
     'super_admin': { en: 'Super Administrators', ar: 'المسؤولين الكبار' },

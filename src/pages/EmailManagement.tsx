@@ -1771,7 +1771,7 @@ export default function EmailManagement() {
           message_ar: 'طلب "9B6EE184" (SDG 100,000) من Mohammed elmahi abdalla elmahi اجتاز المرحلة 3 وينتظر الآن مراجعتك في المرحلة 4. يرجى الموافقة أو الرفض.',
           priority: 'high',
           entity_type: 'costSubmission',
-          action_url: '/cost-submission',
+          action_url: 'https://app.pactorg.com/cost-submission',
           send_email: true,
           metadata: {
             ref_number: '9B6EE184',

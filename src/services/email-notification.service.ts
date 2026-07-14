@@ -99,8 +99,8 @@ const generateNotificationEmailHTML = (
 
   const colors = typeColors[type] || typeColors.info;
   const fullUrl = actionUrl ? (actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl) : '';
-  // Mobile deep-link (pact:// scheme handled by the Flutter app)
-  const mobileUrl = actionUrl ? `pact://${actionUrl.replace(/^\/+/, '')}` : '';
+  // Mobile link: use HTTPS same as web — avoids email client security warnings on custom schemes
+  const mobileUrl = actionUrl ? (actionUrl.startsWith('http') ? actionUrl : `https://app.pactorg.com${actionUrl}`) : '';
 
   const roleEn = recipientRole?.en || '';
   const roleAr = recipientRole?.ar || '';
