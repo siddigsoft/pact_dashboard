@@ -81,6 +81,11 @@ const UserDetail: FC = () => {
   const savedDepartmentIdRef = useRef<string | null>(null);
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
 
+  // ── Location personal data (city/address for non-field staff) ───────────
+  const [locPersonal, setLocPersonal] = useState({ address_line1: '', address_line2: '', city: '', country: '' });
+  const [locPersonalId, setLocPersonalId] = useState<string | null>(null);
+  const [locSaving, setLocSaving] = useState(false);
+
   // ── Contract documents ────────────────────────────────────────────────────
   interface StaffContract {
     id: string;
@@ -239,6 +244,20 @@ const UserDetail: FC = () => {
       setAvailableLocalities([]);
     }
   }, [editForm.stateId, editMode]);
+
+  // Fetch city/address from hr_employee_personal for non-field-staff
+  useEffect(() => {
+    const FIELD_STAFF = ['datacollector', 'coordinator', 'supervisor'];
+    const role = (user?.role || '').toLowerCase();
+    if (!user || FIELD_STAFF.includes(role)) return;
+    supabase.from('hr_employee_personal').select('id,address_line1,address_line2,city,country').eq('profile_id', user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setLocPersonal({ address_line1: data.address_line1 || '', address_line2: data.address_line2 || '', city: data.city || '', country: data.country || '' });
+          setLocPersonalId(data.id);
+        }
+      });
+  }, [user?.id, user?.role]);
 
   // Initialize available states and localities when entering edit mode
   useEffect(() => {
@@ -1141,90 +1160,164 @@ const UserDetail: FC = () => {
             </div>)}
 
             {/* ── LOCATION SECTION ────────────────────────────────────────── */}
-            {activeSection === 'location' && (<div className="p-5 sm:p-6 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Hub</h3>
-                  {editMode ? (
-                    <Select value={editForm.hubId || ""} onValueChange={v => handleEditChange("hubId", v)}>
-                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select hub" /></SelectTrigger>
-                      <SelectContent>{hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="font-semibold text-base">{hubDisplayName || user.hubId || <span className="text-muted-foreground">Not set</span>}</p>
-                  )}
-                </div>
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Secondary Hub</h3>
-                  {editMode ? (
-                    <Select value={editForm.secondaryHubId || "__none__"} onValueChange={v => handleEditChange("secondaryHubId", v === "__none__" ? undefined : v)}>
-                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="No secondary hub" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">No secondary hub</SelectItem>
-                        {hubs.filter(h => h.id !== editForm.hubId).map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="font-semibold text-base">{user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : <span className="text-muted-foreground">None</span>}</p>
-                  )}
-                </div>
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">State</h3>
-                  {editMode ? (
-                    <Select value={editForm.stateId || ""} onValueChange={v => handleEditChange("stateId", v)} disabled={!editForm.hubId}>
-                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select state" /></SelectTrigger>
-                      <SelectContent>{availableStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="font-semibold text-base">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : <span className="text-muted-foreground">Not set</span>}</p>
-                  )}
-                </div>
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Locality</h3>
-                  {editMode ? (
-                    <Select value={editForm.localityId || "__none__"} onValueChange={v => handleEditChange("localityId", v === "__none__" ? undefined : v)} disabled={!editForm.stateId}>
-                      <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select locality (optional)" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {availableLocalities.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="font-semibold text-base">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : <span className="text-muted-foreground">Not set</span>}</p>
-                  )}
-                </div>
-              </div>
+            {activeSection === 'location' && (() => {
+              const FIELD_STAFF = ['datacollector', 'coordinator', 'supervisor'];
+              const isFieldStaff = FIELD_STAFF.includes((user.role || '').toLowerCase());
 
-              {editMode && (
-                <div className="flex items-center gap-3 pt-2">
-                  <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving}>
-                    {isSaving ? "Saving…" : "Save Location"}
-                  </Button>
-                  <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
+              const LocField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">{label}</h3>
+                  {children}
                 </div>
-              )}
+              );
 
-              {user.location && (
-                <div className="pt-2 space-y-3">
-                  <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />GPS Location Data
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { label: 'Latitude', value: String(user.location.latitude) },
-                      { label: 'Longitude', value: String(user.location.longitude) },
-                      { label: 'Sharing', value: user.location.isSharing ? 'Enabled' : 'Disabled' },
-                      { label: 'Last Updated', value: user.location.lastUpdated ? new Date(user.location.lastUpdated).toLocaleDateString() : 'N/A' },
-                    ].map(item => (
-                      <div key={item.label} className="bg-muted/20 rounded-xl p-3 border border-border/40 space-y-1">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{item.label}</p>
-                        <p className="font-semibold text-sm font-mono">{item.value}</p>
+              return (
+                <div className="p-5 sm:p-6 space-y-5">
+                  {isFieldStaff ? (
+                    /* ── Field Staff: Hub / State / Locality ── */
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <LocField label="Hub">
+                          {editMode ? (
+                            <Select value={editForm.hubId || ""} onValueChange={v => handleEditChange("hubId", v)}>
+                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select hub" /></SelectTrigger>
+                              <SelectContent>{hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="font-semibold text-base">{hubDisplayName || user.hubId || <span className="text-muted-foreground">Not set</span>}</p>
+                          )}
+                        </LocField>
+                        <LocField label="Secondary Hub">
+                          {editMode ? (
+                            <Select value={editForm.secondaryHubId || "__none__"} onValueChange={v => handleEditChange("secondaryHubId", v === "__none__" ? undefined : v)}>
+                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="No secondary hub" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">No secondary hub</SelectItem>
+                                {hubs.filter(h => h.id !== editForm.hubId).map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="font-semibold text-base">{user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : <span className="text-muted-foreground">None</span>}</p>
+                          )}
+                        </LocField>
+                        <LocField label="State">
+                          {editMode ? (
+                            <Select value={editForm.stateId || ""} onValueChange={v => handleEditChange("stateId", v)} disabled={!editForm.hubId}>
+                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select state" /></SelectTrigger>
+                              <SelectContent>{availableStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="font-semibold text-base">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : <span className="text-muted-foreground">Not set</span>}</p>
+                          )}
+                        </LocField>
+                        <LocField label="Locality">
+                          {editMode ? (
+                            <Select value={editForm.localityId || "__none__"} onValueChange={v => handleEditChange("localityId", v === "__none__" ? undefined : v)} disabled={!editForm.stateId}>
+                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select locality (optional)" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">None</SelectItem>
+                                {availableLocalities.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="font-semibold text-base">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : <span className="text-muted-foreground">Not set</span>}</p>
+                          )}
+                        </LocField>
                       </div>
-                    ))}
-                  </div>
+                      {editMode && (
+                        <div className="flex items-center gap-3 pt-2">
+                          <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving}>
+                            {isSaving ? "Saving…" : "Save Location"}
+                          </Button>
+                          <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* ── Non-Field Staff: Country / City / Address ── */
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <LocField label="Country">
+                          {editMode ? (
+                            <Input value={locPersonal.country} onChange={e => setLocPersonal(p => ({ ...p, country: e.target.value }))} className="h-11 bg-background" placeholder="e.g. Sudan" />
+                          ) : (
+                            <p className="font-semibold text-base">{locPersonal.country || <span className="text-muted-foreground">Not set</span>}</p>
+                          )}
+                        </LocField>
+                        <LocField label="City">
+                          {editMode ? (
+                            <Input value={locPersonal.city} onChange={e => setLocPersonal(p => ({ ...p, city: e.target.value }))} className="h-11 bg-background" placeholder="e.g. Khartoum" />
+                          ) : (
+                            <p className="font-semibold text-base">{locPersonal.city || <span className="text-muted-foreground">Not set</span>}</p>
+                          )}
+                        </LocField>
+                        <LocField label="Address Line 1">
+                          {editMode ? (
+                            <Input value={locPersonal.address_line1} onChange={e => setLocPersonal(p => ({ ...p, address_line1: e.target.value }))} className="h-11 bg-background" placeholder="Street / Block / Area" />
+                          ) : (
+                            <p className="font-semibold text-base">{locPersonal.address_line1 || <span className="text-muted-foreground">Not set</span>}</p>
+                          )}
+                        </LocField>
+                        <LocField label="Address Line 2">
+                          {editMode ? (
+                            <Input value={locPersonal.address_line2} onChange={e => setLocPersonal(p => ({ ...p, address_line2: e.target.value }))} className="h-11 bg-background" placeholder="Apartment / Building (optional)" />
+                          ) : (
+                            <p className="font-semibold text-base">{locPersonal.address_line2 || <span className="text-muted-foreground italic text-sm">—</span>}</p>
+                          )}
+                        </LocField>
+                      </div>
+                      {editMode && isAdmin && (
+                        <div className="flex items-center gap-3 pt-2">
+                          <Button
+                            onClick={async () => {
+                              setLocSaving(true);
+                              try {
+                                const payload = { profile_id: user.id, address_line1: locPersonal.address_line1, address_line2: locPersonal.address_line2, city: locPersonal.city, country: locPersonal.country };
+                                if (locPersonalId) {
+                                  await supabase.from('hr_employee_personal').update(payload).eq('id', locPersonalId);
+                                } else {
+                                  const { data } = await supabase.from('hr_employee_personal').insert(payload).select('id').single();
+                                  if (data) setLocPersonalId(data.id);
+                                }
+                                toast({ title: "Location saved", description: "Address details updated successfully." });
+                                setEditMode(false);
+                              } catch { toast({ title: "Save failed", variant: "destructive" }); }
+                              finally { setLocSaving(false); }
+                            }}
+                            disabled={locSaving}
+                          >
+                            {locSaving ? "Saving…" : "Save Location"}
+                          </Button>
+                          <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* GPS Location Data — shown for all roles */}
+                  {user.location && (
+                    <div className="pt-2 space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />GPS Location Data
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { label: 'Latitude', value: String(user.location.latitude) },
+                          { label: 'Longitude', value: String(user.location.longitude) },
+                          { label: 'Sharing', value: user.location.isSharing ? 'Enabled' : 'Disabled' },
+                          { label: 'Last Updated', value: user.location.lastUpdated ? new Date(user.location.lastUpdated).toLocaleDateString() : 'N/A' },
+                        ].map(item => (
+                          <div key={item.label} className="bg-muted/20 rounded-xl p-3 border border-border/40 space-y-1">
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{item.label}</p>
+                            <p className="font-semibold text-sm font-mono">{item.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>)}
+              );
+            })()}
 
             {/* ── PERFORMANCE SECTION ─────────────────────────────────────── */}
             {activeSection === 'performance' && (<div className="p-5 sm:p-6">
