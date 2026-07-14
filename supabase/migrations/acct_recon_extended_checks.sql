@@ -129,7 +129,7 @@ begin
   where a.code like '5%'
     and je.status = 'posted'
     and je.posting_date <= p_check_date
-    and je.source_table = 'operational_cost_submissions';
+    and je.source_type = 'operational_cost_submissions';
 
   -- Source: total amount_cents across all fully approved/paid/reconciled submissions
   begin
