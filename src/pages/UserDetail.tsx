@@ -859,44 +859,36 @@ const UserDetail: FC = () => {
                 </div>
               </div>
               <nav className="p-2 py-3">
-                {([
-                  { group: 'EMPLOYEE', items: [
-                    { id: 'overview',   emoji: '🏠', label: 'Overview',        filled: !!(user.name && user.email) },
-                    { id: 'personal',   emoji: '👤', label: 'Personal Details', filled: null },
-                    { id: 'education',  emoji: '🎓', label: 'Education',        filled: null },
-                    { id: 'skills',     emoji: '⚡', label: 'Skills',           filled: null },
-                  ]},
-                  { group: 'HR RECORDS', items: [
+                <div>
+                  <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-2.5 mb-2">HR</p>
+                  {[
+                    { id: 'overview',     emoji: '🏠', label: 'Overview',           filled: !!(user.name && user.email) },
                     { id: 'employment',   emoji: '💼', label: 'Employment',          filled: !!(empDepartmentId || empContractStart) },
+                    { id: 'personal',     emoji: '👤', label: 'Personal Details',    filled: null },
                     { id: 'location',     emoji: '📍', label: 'Location & Work',     filled: !!user.hubId },
+                    { id: 'education',    emoji: '🎓', label: 'Education',           filled: null },
                     { id: 'documents',    emoji: '📁', label: 'Documents',           filled: contracts.length > 0 },
+                    { id: 'skills',       emoji: '⚡', label: 'Skills',              filled: null },
                     { id: 'compensation', emoji: '💰', label: 'Compensation & Bank', filled: !!user.bankAccount },
                     { id: 'performance',  emoji: '📊', label: 'Performance',         filled: !!user.performance },
-                  ]},
-                  { group: 'SYSTEM', items: [
-                    { id: 'access', emoji: '🔒', label: 'Access & Security', filled: !!user.role },
-                  ]},
-                ] as { group: string; items: { id: string; emoji: string; label: string; filled: boolean | null }[] }[]).map(({ group, items }) => (
-                  <div key={group} className="mb-2">
-                    <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-2.5 mb-1">{group}</p>
-                    {items.map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => setActiveSection(s.id)}
-                        className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-left transition-all ${
-                          activeSection === s.id
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                        }`}
-                      >
-                        <span className="text-sm leading-none shrink-0">{s.emoji}</span>
-                        <span className="flex-1 truncate text-[11px] font-medium">{s.label}</span>
-                        {s.filled === true && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />}
-                        {s.filled === false && <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/20 shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                ))}
+                    { id: 'access',       emoji: '🔒', label: 'Access & Security',   filled: !!user.role },
+                  ].map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => setActiveSection(s.id)}
+                      className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-left transition-all ${
+                        activeSection === s.id
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                      }`}
+                    >
+                      <span className="text-sm leading-none shrink-0">{s.emoji}</span>
+                      <span className="flex-1 truncate text-[11px] font-medium">{s.label}</span>
+                      {s.filled === true && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />}
+                      {s.filled === false && <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/20 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
               </nav>
               {isAdmin && (
                 <div className="p-2 border-t space-y-0.5">
