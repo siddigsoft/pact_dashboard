@@ -86,6 +86,29 @@ Excel export button in the Compliance tab generates two sheets:
 - **Policies** — all published policies with completion %
 - **Acknowledgements** — full log with employee, version, timestamp, IP
 
+## Storage Bucket (Policy Document Uploads)
+
+Bucket name: **`hr-policies`** (public)
+- Max file size: 50 MB
+- Allowed types: PDF, Word (.doc/.docx), Excel (.xls/.xlsx)
+- Bucket was created directly via SQL (already applied — no action needed):
+  ```sql
+  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  VALUES ('hr-policies', 'hr-policies', true, 52428800,
+    ARRAY['application/pdf','application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+  ON CONFLICT (id) DO NOTHING;
+  ```
+- RLS: HR/admin/ict roles can upload and delete; all authenticated users can download.
+
+## Extra Metadata Columns (already applied)
+Added to `hr_policies` via `supabase/migrations/20260715_hr_policy_extra_fields.sql`:
+- `description text` — short 1–2 sentence summary
+- `review_date date` — next scheduled review date
+- `owner text` — responsible person or role (free text)
+
 ## Troubleshooting
 | Symptom | Check |
 |---|---|
@@ -93,3 +116,5 @@ Excel export button in the Compliance tab generates two sheets:
 | Acknowledgement not saving | Check auth session is valid; `acknowledge-policy` edge function deployed |
 | IP address is null | Edge function deployed? Verify `x-forwarded-for` header present in Supabase request |
 | Cron not firing | Verify `CRON_SECRET` secret set; check pg_cron job with `SELECT * FROM cron.job` |
+| Upload fails "Bucket not found" | Bucket already created — check Storage tab in Supabase Dashboard confirms `hr-policies` exists |
+| Upload fails 403 | User's role not in (admin, super_admin, hr_admin, ict) — check `profiles.role` |
