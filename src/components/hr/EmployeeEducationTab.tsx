@@ -197,9 +197,15 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           icon={<GraduationCap className="h-5 w-5" />}
           title="Education History"
           subtitle={`${edu.length} academic qualification${edu.length !== 1 ? 's' : ''} on record`}
-          action={isAdmin && !eduForm ? (
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setEduForm({ ...EMPTY_EDU })} data-testid="button-add-education">
-              <Plus className="h-3 w-3" /> Add Qualification
+          action={isAdmin ? (
+            <Button
+              size="sm"
+              variant={eduForm ? "ghost" : "outline"}
+              className={`h-8 gap-1.5 text-xs ${eduForm ? 'text-muted-foreground hover:text-foreground' : ''}`}
+              onClick={() => eduForm ? setEduForm(null) : setEduForm({ ...EMPTY_EDU })}
+              data-testid="button-add-education"
+            >
+              {eduForm ? <><X className="h-3 w-3" /> Cancel</> : <><Plus className="h-3 w-3" /> Add Qualification</>}
             </Button>
           ) : undefined}
         />
@@ -250,7 +256,11 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           <div className="text-center py-10 border rounded-xl border-dashed bg-muted/5">
             <GraduationCap className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No education history recorded yet.</p>
-            {isAdmin && <p className="text-xs text-muted-foreground mt-1">Click "Add Qualification" to get started.</p>}
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => setEduForm({ ...EMPTY_EDU })} data-testid="button-add-education-empty">
+                <Plus className="h-3 w-3" /> Add First Qualification
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -292,9 +302,15 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           icon={<Briefcase className="h-5 w-5" />}
           title="Employment History"
           subtitle={`${exp.length} position${exp.length !== 1 ? 's' : ''} on record`}
-          action={isAdmin && !expForm ? (
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setExpForm({ ...EMPTY_EXP })} data-testid="button-add-experience">
-              <Plus className="h-3 w-3" /> Add Position
+          action={isAdmin ? (
+            <Button
+              size="sm"
+              variant={expForm ? "ghost" : "outline"}
+              className={`h-8 gap-1.5 text-xs ${expForm ? 'text-muted-foreground hover:text-foreground' : ''}`}
+              onClick={() => expForm ? setExpForm(null) : setExpForm({ ...EMPTY_EXP })}
+              data-testid="button-add-experience"
+            >
+              {expForm ? <><X className="h-3 w-3" /> Cancel</> : <><Plus className="h-3 w-3" /> Add Position</>}
             </Button>
           ) : undefined}
         />
@@ -353,7 +369,11 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           <div className="text-center py-10 border rounded-xl border-dashed bg-muted/5">
             <Briefcase className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No employment history recorded yet.</p>
-            {isAdmin && <p className="text-xs text-muted-foreground mt-1">Click "Add Position" to get started.</p>}
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => setExpForm({ ...EMPTY_EXP })} data-testid="button-add-experience-empty">
+                <Plus className="h-3 w-3" /> Add First Position
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">

@@ -1066,6 +1066,55 @@ const UserDetail: FC = () => {
 
             {/* ── OVERVIEW SECTION ───────────────────────────────────────── */}
             {activeSection === 'overview' && (<div className="p-5 sm:p-6 space-y-5">
+
+              {/* ── Profile Completeness Banner ─────────────────────────────── */}
+              {!editMode && (() => {
+                const created = (user as any).createdAt ? new Date((user as any).createdAt) : null;
+                const daysOn = created ? Math.floor((Date.now() - created.getTime()) / 86400000) : null;
+                const checks = [
+                  { label: 'Phone number',     done: !!user.phone,                              section: 'overview',     emoji: '📞' },
+                  { label: 'Employee ID',      done: !!user.employeeId,                         section: 'overview',     emoji: '🪪' },
+                  { label: 'Department set',   done: !!empDepartmentId,                         section: 'employment',   emoji: '🏢' },
+                  { label: 'Bank account',     done: !!user.bankAccount,                        section: 'compensation', emoji: '🏦' },
+                  { label: 'Personal details', done: !!(user as any).profile?.date_of_birth,    section: 'personal',     emoji: '👤' },
+                  { label: 'Documents',        done: !!(user as any).documentsCount,            section: 'documents',    emoji: '📁' },
+                ];
+                const doneCnt = checks.filter(c => c.done).length;
+                const pct = Math.round(doneCnt / checks.length * 100);
+                const barColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500';
+                const textColor = pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                return (
+                  <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-sm">Profile Completeness</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{doneCnt} of {checks.length} key fields filled{daysOn !== null ? ` · ${daysOn.toLocaleString()} days on record` : ''}</p>
+                      </div>
+                      <span className={`text-2xl font-black ${textColor}`}>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-primary/10 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {checks.map(c => (
+                        <button
+                          key={c.label}
+                          onClick={() => setActiveSection(c.section)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors
+                            ${c.done
+                              ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800'
+                              : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 cursor-pointer'}`}
+                        >
+                          <span>{c.emoji}</span>
+                          <span>{c.label}</span>
+                          <span className="opacity-60">{c.done ? '✓' : '→'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
                   <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Full Name</h3>
