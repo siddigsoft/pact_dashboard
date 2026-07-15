@@ -857,7 +857,17 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
   const [effectiveDate, setEffDate]   = useState(existing?.effective_date ?? format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes]             = useState(existing?.notes ?? '');
   const [hourlyRate, setHourlyRate]   = useState(String(existing?.hourly_rate ?? ''));
+  const [gradeId, setGradeId]         = useState<string>((existing as any)?.grade_id ?? '__none');
   const [saving, setSaving]           = useState(false);
+
+  const { data: compGrades = [] } = useQuery<{ id: string; code: string; title: string; min_salary: number; midpoint_salary: number; max_salary: number; currency: string }[]>({
+    queryKey: ['comp-grades-for-dialog'],
+    queryFn: async () => {
+      const { data } = await supabase.from('hr_compensation_grades' as any).select('id, code, title, min_salary, midpoint_salary, max_salary, currency').eq('is_active', true).order('code');
+      return (data ?? []) as any[];
+    },
+    staleTime: 5 * 60_000,
+  });
 
   // Profile fields — editable inline so HR doesn't need to bounce to the Users
   // page just to change a department or contract type before configuring pay.
@@ -984,6 +994,7 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
         user_id: emp.id, base_salary: base, currency, allowances, deductions,
         notes: notes || null, effective_date: effectiveDate, updated_at: now,
         salary_history: newHistory, hourly_rate: hr,
+        grade_id: gradeId === '__none' ? null : gradeId,
       };
       const trySave = async (p: Record<string, unknown>) => existing
         ? await supabase.from('employee_salary_config').update(p).eq('id', existing.id)
@@ -1281,6 +1292,42 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
               <SectionLabel icon={<CalendarRange className="h-3.5 w-3.5 text-violet-500" />} label="Effective Date" />
               <Input type="date" value={effectiveDate} onChange={e => setEffDate(e.target.value)} className="text-sm h-10 mt-1.5" />
             </div>
+          </div>
+
+          {/* Grade Band assignment */}
+          <div className="grid grid-cols-5 gap-3 items-end">
+            <div className="col-span-3">
+              <SectionLabel icon={<BarChart3 className="h-3.5 w-3.5 text-indigo-400" />} label="Compensation Grade Band" />
+              <Select value={gradeId} onValueChange={setGradeId}>
+                <SelectTrigger className="h-10 text-sm mt-1.5" data-testid="select-grade-band">
+                  <SelectValue placeholder="No grade assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">— No grade —</SelectItem>
+                  {compGrades.map(g => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.code} — {g.title} ({g.min_salary.toLocaleString()}–{g.max_salary.toLocaleString()} {g.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {gradeId !== '__none' && (() => {
+              const g = compGrades.find(x => x.id === gradeId);
+              if (!g) return null;
+              const base_num = parseFloat(baseSalary) || 0;
+              const compa = g.midpoint_salary > 0 ? Math.round((base_num / g.midpoint_salary) * 100) : null;
+              const color = base_num < g.min_salary ? 'text-red-600' : base_num > g.max_salary ? 'text-amber-600' : 'text-emerald-600';
+              return (
+                <div className="col-span-2 pb-1">
+                  <p className="text-[11px] text-muted-foreground">Compa-ratio vs midpoint</p>
+                  <p className={`text-sm font-bold ${color}`}>{compa !== null ? `${compa}%` : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {base_num < g.min_salary ? '⚠ Below band min' : base_num > g.max_salary ? '⚠ Above band max' : '✓ Within band'}
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Hourly Rate (for hourly-rate employees) */}
@@ -3357,34 +3404,60 @@ function AdjustmentDialog({ empName, adjustments, onSave, onClose }: {
 function PreRunDiffModal({ open, loading, data, periodLabel, onClose, onConfirm }: {
   open: boolean; loading: boolean;
   data: { newStarters: any[]; leavers: any[]; salaryChanges: any[]; leaveDeductions: any[] } | null;
-  periodLabel: string; onClose: () => void; onConfirm: () => void;
+  periodLabel: string; onClose: () => void;
+  onConfirm: (leaverDecisions: Record<string, 'include' | 'exclude'>) => void;
 }) {
-  const totalChanges = !data ? 0
-    : data.newStarters.length + data.leavers.length + data.salaryChanges.length + data.leaveDeductions.length;
+  const [ackd, setAckd] = useState<Record<string, boolean>>({});
+  const [leaverDec, setLeaverDec] = useState<Record<string, 'include' | 'exclude'>>({});
+
+  useEffect(() => { if (open) { setAckd({}); setLeaverDec({}); } }, [open]);
+
+  if (!data) return null;
+
+  const sections = [
+    { key: 'starters',      count: data.newStarters.length },
+    { key: 'leavers',       count: data.leavers.length },
+    { key: 'salary',        count: data.salaryChanges.length },
+    { key: 'leave',         count: data.leaveDeductions.length },
+  ].filter(s => s.count > 0);
+
+  const leaversAllDecided = data.leavers.every(l => !!leaverDec[l.id]);
+  const allAckd = sections.every(s => s.key === 'leavers' ? (ackd['leavers'] && leaversAllDecided) : ackd[s.key]);
+  const totalChanges = data.newStarters.length + data.leavers.length + data.salaryChanges.length + data.leaveDeductions.length;
+  const canCompute = !loading && (totalChanges === 0 || allAckd);
+
+  const toggle = (key: string, ok: boolean) => setAckd(p => ({ ...p, [key]: ok }));
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl p-0 max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-xl p-0 max-h-[85vh] flex flex-col">
         <div className="px-5 pt-5 pb-4 border-b bg-slate-50 dark:bg-slate-900 rounded-t-2xl shrink-0">
           <DialogTitle className="text-base font-bold flex items-center gap-2">
             <FileText className="h-4 w-4 text-indigo-500" />
             Pre-Run Changes — {periodLabel}
           </DialogTitle>
-          <DialogDescription className="text-xs mt-0.5">Review what is new or different in this period before computing payroll.</DialogDescription>
+          <DialogDescription className="text-xs mt-0.5">Review each section and confirm before computing. Leavers require an explicit include/exclude decision.</DialogDescription>
         </div>
-        <div className="px-5 py-4 overflow-y-auto space-y-4 flex-1">
+        <div className="px-5 py-4 overflow-y-auto space-y-5 flex-1">
           {loading ? (
             <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>
-          ) : data && (
+          ) : totalChanges === 0 ? (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300">
+              <CheckCircle className="h-4 w-4 shrink-0" />
+              No changes detected for {periodLabel}. Payroll is consistent with the previous period.
+            </div>
+          ) : (
             <>
-              {totalChanges === 0 && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300">
-                  <CheckCircle className="h-4 w-4 shrink-0" />
-                  No changes detected for {periodLabel}. Payroll looks consistent with the previous period.
-                </div>
-              )}
+              {/* New Starters */}
               {data.newStarters.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-2">New Starters ({data.newStarters.length})</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">New Starters ({data.newStarters.length})</p>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground select-none">
+                      <input type="checkbox" checked={!!ackd['starters']} onChange={e => toggle('starters', e.target.checked)} className="rounded" />
+                      Reviewed
+                    </label>
+                  </div>
                   <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 overflow-hidden">
                     {data.newStarters.map((s: any) => (
                       <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b last:border-0 border-emerald-100 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-900/10">
@@ -3395,22 +3468,66 @@ function PreRunDiffModal({ open, loading, data, periodLabel, onClose, onConfirm 
                   </div>
                 </div>
               )}
+
+              {/* Leavers — require per-person decision */}
               {data.leavers.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-red-600 dark:text-red-400 mb-2">Leavers ({data.leavers.length})</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-widest text-red-600 dark:text-red-400">Leavers — set include/exclude decision ({data.leavers.length})</p>
+                    {leaversAllDecided && (
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground select-none">
+                        <input type="checkbox" checked={!!ackd['leavers']} onChange={e => toggle('leavers', e.target.checked)} className="rounded" />
+                        Confirmed
+                      </label>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground -mt-1">
+                    <strong>Include (final period)</strong> — pay them for days worked before their end date. <strong>Exclude</strong> — remove them from this run entirely.
+                  </p>
                   <div className="rounded-lg border border-red-200 dark:border-red-800 overflow-hidden">
                     {data.leavers.map((s: any) => (
-                      <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b last:border-0 border-red-100 dark:border-red-900 bg-red-50/50 dark:bg-red-900/10">
-                        <span className="text-sm font-medium">{s.name}</span>
-                        <span className="text-xs text-red-700 dark:text-red-400">Left {s.contract_end_date}</span>
+                      <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2.5 border-b last:border-0 border-red-100 dark:border-red-900 bg-red-50/50 dark:bg-red-900/10">
+                        <div>
+                          <p className="text-sm font-medium">{s.name}</p>
+                          <p className="text-xs text-red-700 dark:text-red-400">Left {s.contract_end_date}</p>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          {(['include', 'exclude'] as const).map(opt => (
+                            <button
+                              key={opt}
+                              onClick={() => setLeaverDec(p => ({ ...p, [s.id]: opt }))}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
+                                leaverDec[s.id] === opt
+                                  ? opt === 'include'
+                                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                                    : 'bg-red-600 border-red-600 text-white'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-muted-foreground hover:border-slate-400',
+                              )}
+                            >
+                              {opt === 'include' ? 'Include (final period)' : 'Exclude'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
+                  {!leaversAllDecided && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">Set a decision for every leaver before confirming.</p>
+                  )}
                 </div>
               )}
+
+              {/* Salary Changes */}
               {data.salaryChanges.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 mb-2">Salary Changes ({data.salaryChanges.length})</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400">Salary Changes ({data.salaryChanges.length})</p>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground select-none">
+                      <input type="checkbox" checked={!!ackd['salary']} onChange={e => toggle('salary', e.target.checked)} className="rounded" />
+                      Reviewed
+                    </label>
+                  </div>
                   <div className="rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
                     {data.salaryChanges.map((s: any) => (
                       <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 border-b last:border-0 border-blue-100 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10">
@@ -3424,9 +3541,17 @@ function PreRunDiffModal({ open, loading, data, periodLabel, onClose, onConfirm 
                   </div>
                 </div>
               )}
+
+              {/* Unpaid Leave Deductions */}
               {data.leaveDeductions.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-2">Unpaid Leave Deductions ({data.leaveDeductions.length})</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">Unpaid Leave Deductions ({data.leaveDeductions.length})</p>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground select-none">
+                      <input type="checkbox" checked={!!ackd['leave']} onChange={e => toggle('leave', e.target.checked)} className="rounded" />
+                      Reviewed
+                    </label>
+                  </div>
                   <div className="rounded-lg border border-amber-200 dark:border-amber-800 overflow-hidden">
                     {data.leaveDeductions.map((s: any) => (
                       <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 border-b last:border-0 border-amber-100 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-900/10">
@@ -3443,10 +3568,13 @@ function PreRunDiffModal({ open, loading, data, periodLabel, onClose, onConfirm 
             </>
           )}
         </div>
-        <DialogFooter className="px-5 py-4 border-t gap-2 shrink-0">
+        <DialogFooter className="px-5 py-4 border-t gap-2 shrink-0 flex-col items-stretch sm:items-center sm:flex-row">
+          {totalChanges > 0 && !allAckd && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 flex-1">Acknowledge every section above to enable compute.</p>
+          )}
           <Button variant="outline" onClick={onClose} className="h-9">Cancel</Button>
-          <Button onClick={onConfirm} disabled={loading} className="h-9 bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+          <Button onClick={() => onConfirm(leaverDec)} disabled={!canCompute} className="h-9 bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 disabled:opacity-40">
+            <PlayCircle className="h-4 w-4" />
             Confirm &amp; Compute
           </Button>
         </DialogFooter>
@@ -3511,8 +3639,11 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
     return { net: row.net_salary + bonus - ded, bonus, ded, adjs };
   };
 
-  const computePreview = useCallback(async () => {
-    if (!configured.length) { toast({ title: 'No employees have salary configured.', variant: 'destructive' }); return; }
+  const computePreview = useCallback(async (excludedIds: string[] = []) => {
+    const configuredSubset = excludedIds.length > 0
+      ? configured.filter(e => !excludedIds.includes(e.id))
+      : configured;
+    if (!configuredSubset.length) { toast({ title: 'No employees have salary configured.', variant: 'destructive' }); return; }
     setComputing(true);
 
     const startStr = format(periodStart, 'yyyy-MM-dd');
@@ -3568,7 +3699,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
     // instead of relying on someone to remember to do it manually. We also
     // check for recoveries already logged against this exact payroll period
     // so recomputing/re-saving the same period's preview never double-deducts.
-    const empIds = configured.map(e => e.id);
+    const empIds = configuredSubset.map(e => e.id);
     let advanceDeductionByUser: Record<string, { amount: number; ids: string[] }> = {};
     if (empIds.length > 0) {
       const { data: advances } = await supabase
@@ -3604,7 +3735,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
       }
     }
 
-    setPreview(configured.map(emp => {
+    setPreview(configuredSubset.map(emp => {
       const calc = computePayroll(emp.salary_config!);
       const rewards = rewardsByUser[emp.id] ?? 0;
       const hourlyRate = emp.salary_config?.hourly_rate ?? 0;
@@ -3898,7 +4029,13 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
         data={diffData}
         periodLabel={periodLabel}
         onClose={() => setDiffOpen(false)}
-        onConfirm={() => { setDiffOpen(false); computePreview(); }}
+        onConfirm={(leaverDecisions) => {
+          const excluded = Object.entries(leaverDecisions)
+            .filter(([, v]) => v === 'exclude')
+            .map(([k]) => k);
+          setDiffOpen(false);
+          computePreview(excluded);
+        }}
       />
       {retainerEmployees.length > 0 && (
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-3 text-xs text-amber-800 dark:text-amber-300" data-testid="banner-retainer-warning">
