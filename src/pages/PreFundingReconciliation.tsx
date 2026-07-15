@@ -20,7 +20,7 @@ import {
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
   Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
   ExternalLink, ChevronDown, History, Trash2, Filter, AlertCircle,
-  Info, Receipt, User, Clock, FileSpreadsheet, Hash,
+  Info, Receipt, User, Clock, FileSpreadsheet, Hash, Loader2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -1083,40 +1083,72 @@ export default function PreFundingReconciliation() {
     setBulkDeleting(true);
     setConfirmBulkDelete(false);
     const toDelete = transactions.filter(t => selectedTxnIds.has(t.id));
-    let totalRestored = 0;
-    let errors = 0;
-    for (const txn of toDelete) {
-      try {
-        const { error } = await supabase.from('pre_fund_transactions').delete().eq('id', txn.id);
-        if (error) throw error;
-        totalRestored += txn.amount;
+    try {
+      // ── 1. Delete all transactions in a single batch query ──────────────
+      const ids = toDelete.map(t => t.id);
+      const { error: delErr } = await supabase
+        .from('pre_fund_transactions')
+        .delete()
+        .in('id', ids);
+      if (delErr) throw delErr;
+
+      const totalRestored = toDelete.reduce((s, t) => s + t.amount, 0);
+
+      // ── 2. Unlink source records — one UPDATE per source table ──────────
+      const byTable = new Map<string, { srcIds: string[]; txns: typeof toDelete }>();
+      for (const txn of toDelete) {
         if (txn.source_table && txn.source_id) {
-          await (supabase as any).from(txn.source_table).update({ pre_fund_transaction_id: null }).eq('id', txn.source_id);
-          // Restore allocation spent_amount
-          const { data: srcRow } = await (supabase as any).from(txn.source_table).select('requested_by,submitted_by').eq('id', txn.source_id).maybeSingle();
-          const userId = srcRow?.requested_by ?? srcRow?.submitted_by ?? null;
-          if (userId) {
-            const { data: alloc } = await supabase.from('pre_fund_allocations').select('id,spent_amount').eq('pre_fund_request_id', selectedFund.id).eq('user_id', userId).maybeSingle();
-            if (alloc) await supabase.from('pre_fund_allocations').update({ spent_amount: Math.max(0, (alloc.spent_amount ?? 0) - txn.amount) }).eq('id', alloc.id);
-          }
+          if (!byTable.has(txn.source_table)) byTable.set(txn.source_table, { srcIds: [], txns: [] });
+          byTable.get(txn.source_table)!.srcIds.push(txn.source_id);
+          byTable.get(txn.source_table)!.txns.push(txn);
         }
-      } catch { errors++; }
-    }
-    // Restore total balance in one shot
-    if (totalRestored > 0) {
-      await supabase.from('pre_fund_requests').update({
-        available_balance: (selectedFund.available_balance ?? 0) + totalRestored,
-        paid_amount: Math.max(0, (selectedFund.paid_amount ?? 0) - totalRestored),
-      }).eq('id', selectedFund.id);
-    }
-    setSelectedTxnIds(new Set());
-    setBulkDeleting(false);
-    loadFunds();
-    loadTxns(selectedFund.id);
-    if (errors === 0) {
+      }
+      await Promise.all([...byTable.entries()].map(([table, { srcIds }]) =>
+        (supabase as any).from(table).update({ pre_fund_transaction_id: null }).in('id', srcIds)
+      ));
+
+      // ── 3. Restore allocations — batch fetch source rows, compute deltas ─
+      const userDelta = new Map<string, number>();
+      await Promise.all([...byTable.entries()].map(async ([table, { srcIds, txns: tableTxns }]) => {
+        const { data: srcRows } = await (supabase as any)
+          .from(table).select('id,requested_by,submitted_by').in('id', srcIds);
+        const rowMap = new Map((srcRows ?? []).map((r: any) => [r.id, r]));
+        for (const txn of tableTxns) {
+          const row = rowMap.get(txn.source_id);
+          const uid = row?.requested_by ?? row?.submitted_by ?? null;
+          if (uid) userDelta.set(uid, (userDelta.get(uid) ?? 0) + txn.amount);
+        }
+      }));
+      if (userDelta.size > 0) {
+        const { data: allocs } = await supabase
+          .from('pre_fund_allocations')
+          .select('id,user_id,spent_amount')
+          .eq('pre_fund_request_id', selectedFund.id)
+          .in('user_id', [...userDelta.keys()]);
+        await Promise.all((allocs ?? []).map((alloc: any) =>
+          supabase.from('pre_fund_allocations')
+            .update({ spent_amount: Math.max(0, (alloc.spent_amount ?? 0) - (userDelta.get(alloc.user_id) ?? 0)) })
+            .eq('id', alloc.id)
+        ));
+      }
+
+      // ── 4. Restore fund balance in one shot ─────────────────────────────
+      if (totalRestored > 0) {
+        await supabase.from('pre_fund_requests').update({
+          available_balance: (selectedFund.available_balance ?? 0) + totalRestored,
+          paid_amount: Math.max(0, (selectedFund.paid_amount ?? 0) - totalRestored),
+        }).eq('id', selectedFund.id);
+      }
+
+      setSelectedTxnIds(new Set());
+      loadFunds();
+      loadTxns(selectedFund.id);
       toast({ title: `${toDelete.length} transaction${toDelete.length !== 1 ? 's' : ''} removed`, description: `Balance restored by ${selectedFund.currency} ${formatNumber(totalRestored, 0)}.` });
-    } else {
-      toast({ title: `${toDelete.length - errors} of ${toDelete.length} removed`, description: `${errors} failed. Please retry.`, variant: 'destructive' });
+    } catch (err) {
+      console.error('[BULK_UNLINK] Error:', err);
+      toast({ title: 'Removal failed', description: 'Could not complete removal. Please try again.', variant: 'destructive' });
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -3023,56 +3055,73 @@ export default function PreFundingReconciliation() {
       </Dialog>
 
       {/* ── Bulk delete confirmation dialog ─────────────────────────────────── */}
-      <Dialog open={confirmBulkDelete} onOpenChange={open => { if (!open) setConfirmBulkDelete(false); }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={confirmBulkDelete || bulkDeleting} onOpenChange={open => { if (!open && !bulkDeleting) setConfirmBulkDelete(false); }}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-600">
               <Trash2 className="h-4 w-4" /> Remove {selectedTxnIds.size} Transaction{selectedTxnIds.size !== 1 ? 's' : ''}
             </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground pt-1">
               This will permanently remove the selected {selectedTxnIds.size} transaction{selectedTxnIds.size !== 1 ? 's' : ''} and restore the fund balance.
             </p>
-            {selectedFund && (
-              <div className="rounded-lg border p-3 space-y-1 bg-muted/30 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Selected transactions</span>
-                  <span className="font-semibold">{selectedTxnIds.size}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Balance to restore</span>
-                  <span className="font-mono font-semibold text-emerald-600">
-                    {selectedFund.currency} {formatNumber(transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0), 0)}
-                  </span>
-                </div>
-                {/* Group breakdown */}
-                {(() => {
-                  const sel = transactions.filter(t => selectedTxnIds.has(t.id));
-                  const byType = sel.reduce((m, t) => { m[t.transaction_type] = (m[t.transaction_type] ?? 0) + 1; return m; }, {} as Record<string, number>);
-                  return (
-                    <div className="flex gap-1.5 flex-wrap pt-1">
-                      {Object.entries(byType).map(([type, count]) => (
-                        <span key={type} className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted', TXN_TYPE_CFG[type]?.color)}>
-                          {TXN_TYPE_CFG[type]?.label ?? type} ×{count}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })()}
+          </DialogHeader>
+
+          {bulkDeleting ? (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <Loader2 className="h-8 w-8 animate-spin text-rose-500" />
+              <div className="text-center">
+                <p className="font-medium text-sm">Removing {selectedTxnIds.size} transactions…</p>
+                <p className="text-xs text-muted-foreground mt-1">Unlinking fund records and restoring balance. Please wait.</p>
               </div>
-            )}
-            <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
-                Original payment records are not deleted — only the fund linkage is removed.
-              </AlertDescription>
-            </Alert>
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-3 py-1">
+              {selectedFund && (
+                <div className="rounded-lg border p-4 space-y-2 bg-muted/30 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Selected transactions</span>
+                    <span className="font-semibold tabular-nums">{selectedTxnIds.size}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Balance to restore</span>
+                    <span className="font-mono font-semibold text-emerald-600 tabular-nums">
+                      {selectedFund.currency} {formatNumber(transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0), 0)}
+                    </span>
+                  </div>
+                  {/* Type breakdown */}
+                  {(() => {
+                    const sel = transactions.filter(t => selectedTxnIds.has(t.id));
+                    const byType = sel.reduce((m, t) => { m[t.transaction_type] = (m[t.transaction_type] ?? 0) + 1; return m; }, {} as Record<string, number>);
+                    return (
+                      <div className="flex gap-1.5 flex-wrap pt-1 border-t">
+                        {Object.entries(byType).map(([type, count]) => (
+                          <span key={type} className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted', TXN_TYPE_CFG[type]?.color)}>
+                            {TXN_TYPE_CFG[type]?.label ?? type} ×{count}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                  Original payment records are not deleted — only the fund linkage is removed.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmBulkDelete(false)} data-testid="button-cancel-bulk-delete">Cancel</Button>
+            <Button variant="outline" onClick={() => setConfirmBulkDelete(false)} disabled={bulkDeleting} data-testid="button-cancel-bulk-delete">
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={handleBulkUnlink} disabled={bulkDeleting} data-testid="button-confirm-bulk-delete">
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {selectedTxnIds.size} & Restore Balance
+              {bulkDeleting
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Removing…</>
+                : <><Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {selectedTxnIds.size} & Restore Balance</>
+              }
             </Button>
           </DialogFooter>
         </DialogContent>
