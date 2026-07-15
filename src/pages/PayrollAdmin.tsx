@@ -3353,6 +3353,108 @@ function AdjustmentDialog({ empName, adjustments, onSave, onClose }: {
   );
 }
 
+// ── Pre-Run Diff Modal ────────────────────────────────────────────────────────
+function PreRunDiffModal({ open, loading, data, periodLabel, onClose, onConfirm }: {
+  open: boolean; loading: boolean;
+  data: { newStarters: any[]; leavers: any[]; salaryChanges: any[]; leaveDeductions: any[] } | null;
+  periodLabel: string; onClose: () => void; onConfirm: () => void;
+}) {
+  const totalChanges = !data ? 0
+    : data.newStarters.length + data.leavers.length + data.salaryChanges.length + data.leaveDeductions.length;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-xl p-0 max-h-[80vh] flex flex-col">
+        <div className="px-5 pt-5 pb-4 border-b bg-slate-50 dark:bg-slate-900 rounded-t-2xl shrink-0">
+          <DialogTitle className="text-base font-bold flex items-center gap-2">
+            <FileText className="h-4 w-4 text-indigo-500" />
+            Pre-Run Changes — {periodLabel}
+          </DialogTitle>
+          <DialogDescription className="text-xs mt-0.5">Review what is new or different in this period before computing payroll.</DialogDescription>
+        </div>
+        <div className="px-5 py-4 overflow-y-auto space-y-4 flex-1">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>
+          ) : data && (
+            <>
+              {totalChanges === 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300">
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                  No changes detected for {periodLabel}. Payroll looks consistent with the previous period.
+                </div>
+              )}
+              {data.newStarters.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-2">New Starters ({data.newStarters.length})</p>
+                  <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 overflow-hidden">
+                    {data.newStarters.map((s: any) => (
+                      <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b last:border-0 border-emerald-100 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-900/10">
+                        <span className="text-sm font-medium">{s.name}</span>
+                        <span className="text-xs text-emerald-700 dark:text-emerald-400">Started {s.contract_start_date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.leavers.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-red-600 dark:text-red-400 mb-2">Leavers ({data.leavers.length})</p>
+                  <div className="rounded-lg border border-red-200 dark:border-red-800 overflow-hidden">
+                    {data.leavers.map((s: any) => (
+                      <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b last:border-0 border-red-100 dark:border-red-900 bg-red-50/50 dark:bg-red-900/10">
+                        <span className="text-sm font-medium">{s.name}</span>
+                        <span className="text-xs text-red-700 dark:text-red-400">Left {s.contract_end_date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.salaryChanges.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 mb-2">Salary Changes ({data.salaryChanges.length})</p>
+                  <div className="rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
+                    {data.salaryChanges.map((s: any) => (
+                      <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 border-b last:border-0 border-blue-100 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10">
+                        <span className="text-sm font-medium">{s.name}</span>
+                        <span className="text-xs text-blue-700 dark:text-blue-400 text-right">
+                          {s.previous_salary ? Number(s.previous_salary).toLocaleString() : '—'} → {Number(s.new_salary).toLocaleString()} {s.currency}
+                          <span className="ml-1 opacity-70">(eff. {s.effective_date})</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.leaveDeductions.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-2">Unpaid Leave Deductions ({data.leaveDeductions.length})</p>
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 overflow-hidden">
+                    {data.leaveDeductions.map((s: any) => (
+                      <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 border-b last:border-0 border-amber-100 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-900/10">
+                        <span className="text-sm font-medium">{s.name}</span>
+                        <span className="text-xs text-amber-700 dark:text-amber-400 text-right">
+                          {Number(s.days_count).toFixed(1)} days · {s.start_date} → {s.end_date}
+                          {s.deduction_amount ? ` · deduct ${Number(s.deduction_amount).toLocaleString()}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <DialogFooter className="px-5 py-4 border-t gap-2 shrink-0">
+          <Button variant="outline" onClick={onClose} className="h-9">Cancel</Button>
+          <Button onClick={onConfirm} disabled={loading} className="h-9 bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+            Confirm &amp; Compute
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   employees: EmployeeRow[]; runs: PayrollRun[]; currentUserId: string; currentUserRole: string;
@@ -3371,6 +3473,9 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   const [adjustments, setAdjustments]  = useState<Record<string, Adjustment[]>>({});
   const [adjEmp, setAdjEmp]            = useState<RunItem | null>(null);
   const [includeTaskRewards, setIncludeTaskRewards] = useState(false);
+  const [diffOpen, setDiffOpen]        = useState(false);
+  const [diffData, setDiffData]        = useState<{ newStarters: any[]; leavers: any[]; salaryChanges: any[]; leaveDeductions: any[] } | null>(null);
+  const [diffLoading, setDiffLoading]  = useState(false);
 
   const periodStart = startOfMonth(subMonths(new Date(), -monthOffset));
   const periodEnd   = endOfMonth(subMonths(new Date(), -monthOffset));
@@ -3732,6 +3837,49 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   // NOT included in this payroll run (they're paid via the separate Retainer
   // Management wallet flow to avoid double-paying them). Make that explicit
   // so admins don't assume "Run Payroll" already covers everyone.
+  const openPreRunDiff = async () => {
+    setDiffOpen(true);
+    setDiffData(null);
+    setDiffLoading(true);
+    try {
+      const startStr = format(periodStart, 'yyyy-MM-dd');
+      const endStr   = format(periodEnd,   'yyyy-MM-dd');
+      const [
+        { data: newStarters },
+        { data: leavers },
+        { data: salaryChanges },
+        { data: leaveFlags },
+      ] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, contract_start_date').gte('contract_start_date', startStr).lte('contract_start_date', endStr).eq('is_employee', true),
+        supabase.from('profiles').select('id, full_name, contract_end_date').gte('contract_end_date', startStr).lte('contract_end_date', endStr).eq('is_employee', true),
+        supabase.from('salary_increments').select('id, user_id, previous_salary, new_salary, currency, effective_date').gte('effective_date', startStr).lte('effective_date', endStr).eq('status', 'approved'),
+        supabase.from('hr_payroll_leave_flags' as any).select('id, user_id, days_count, deduction_amount, start_date, end_date').eq('pay_period', periodLabel).eq('applied', false),
+      ]);
+      const allUserIds = [...new Set([
+        ...(newStarters ?? []).map((r: any) => r.id),
+        ...(leavers ?? []).map((r: any) => r.id),
+        ...(salaryChanges ?? []).map((r: any) => r.user_id),
+        ...(leaveFlags ?? []).map((r: any) => r.user_id),
+      ])];
+      let nameMap: Record<string, string> = {};
+      if (allUserIds.length > 0) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', allUserIds);
+        (profs ?? []).forEach((p: any) => { nameMap[p.id] = p.full_name ?? '—'; });
+      }
+      setDiffData({
+        newStarters:    (newStarters    ?? []).map((r: any) => ({ ...r, name: r.full_name ?? nameMap[r.id] ?? '—' })),
+        leavers:        (leavers        ?? []).map((r: any) => ({ ...r, name: r.full_name ?? nameMap[r.id] ?? '—' })),
+        salaryChanges:  (salaryChanges  ?? []).map((r: any) => ({ ...r, name: nameMap[r.user_id] ?? '—' })),
+        leaveDeductions:(leaveFlags     ?? []).map((r: any) => ({ ...r, name: nameMap[r.user_id] ?? '—' })),
+      });
+    } catch (err) {
+      console.warn('[PayrollAdmin] pre-run diff failed:', err);
+      setDiffData({ newStarters: [], leavers: [], salaryChanges: [], leaveDeductions: [] });
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
   const retainerEmployees = employees.filter(e => e.contract_type === 'retainer' || e.retainer?.is_active);
   const statutorySkippedCount = preview.filter(r => (r.deductions_snapshot ?? []).length === 0 && r.currency !== 'SDG' && r.gross_salary > 0).length;
   // T007: block finalizing a run while statutory deductions were silently skipped
@@ -3744,6 +3892,14 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
 
   return (
     <div className="space-y-5">
+      <PreRunDiffModal
+        open={diffOpen}
+        loading={diffLoading}
+        data={diffData}
+        periodLabel={periodLabel}
+        onClose={() => setDiffOpen(false)}
+        onConfirm={() => { setDiffOpen(false); computePreview(); }}
+      />
       {retainerEmployees.length > 0 && (
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 px-4 py-3 text-xs text-amber-800 dark:text-amber-300" data-testid="banner-retainer-warning">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -3800,7 +3956,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
                 <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
                 Task Rewards
               </label>
-              <Button onClick={computePreview} disabled={computing || isLocked || isApproved} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 h-9">
+              <Button onClick={openPreRunDiff} disabled={computing || isLocked || isApproved} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 h-9">
                 {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                 Compute
               </Button>

@@ -49,16 +49,20 @@ const OrgChartPanel        = lazy(() => import('./OrgChart'));
 const BenefitsPanel        = lazy(() => import('./BenefitsAdministration'));
 const HeadcountPanel       = lazy(() => import('./HeadcountPlanning'));
 const AssetsPanel          = lazy(() => import('./HRAssets'));
-const PolicyLibraryPanel   = lazy(() => import('./HRPolicyLibrary'));
+const PolicyLibraryPanel      = lazy(() => import('./HRPolicyLibrary'));
+const CompensationBandsPanel  = lazy(() => import('@/components/hr/CompensationBands'));
+const PayEquityPanel          = lazy(() => import('@/components/hr/PayEquityReport'));
+const ComplianceReportsPanel  = lazy(() => import('@/components/hr/ComplianceReports'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type HRSection = 'pay' | 'time-leave' | 'people' | 'analytics';
 type HRTab =
   | 'payroll' | 'payroll-admin' | 'retainer' | 'eosb' | 'salary-advances' | 'salary-increments' | 'field-wallet' | 'payroll-summary'
+  | 'comp-bands' | 'compliance-reports'
   | 'timesheet' | 'leave-requests' | 'leave-calendar' | 'attendance'
   | 'performance' | 'training' | 'contracts' | 'positions' | 'onboarding' | 'offboarding'
   | 'recruitment' | 'disciplinary' | 'org-chart' | 'benefits' | 'headcount'
-  | 'overview' | 'hr-analytics' | 'wa-broadcast'
+  | 'overview' | 'hr-analytics' | 'wa-broadcast' | 'pay-equity'
   | 'equipment'
   | 'policy-library'
   // legacy aliases kept for backwards-compat URL links
@@ -79,6 +83,8 @@ const SECTIONS: SectionDef[] = [
       { id: 'salary-increments', label: 'Salary Increments', icon: Calculator,  adminOnly: true,  description: 'Review and approve structured salary increment proposals — with justification narratives, effective dates, and a full change audit trail.' },
       { id: 'field-wallet',      label: 'Field Wallet',      icon: Wallet,      adminOnly: true,  description: 'Manage field wallet allocations for operational staff — issue funds, process top-ups, and reconcile field cash balances against transactions.' },
       { id: 'payroll-summary',   label: 'Payroll Report',    icon: Download,    adminOnly: true,  description: 'Generate and export consolidated payroll summary reports filtered by department, contract type, or pay period for finance and audit.' },
+      { id: 'comp-bands',        label: 'Compensation Bands', icon: BarChart2,   adminOnly: true,  description: 'Define and manage salary grade bands (min/midpoint/max) for all positions. Visual band bars show where each grade sits. Used to compute compa-ratios in the Pay Equity report.' },
+      { id: 'compliance-reports',label: 'Compliance Reports', icon: ShieldCheck, adminOnly: true,  description: 'Statutory compliance reports for Sudan: Social Insurance (NPF — 8% employee, 17% employer) and Tax Withholding (progressive PIT). Filterable by payroll period with Excel export.' },
     ],
   },
   {
@@ -113,6 +119,7 @@ const SECTIONS: SectionDef[] = [
     tabs: [
       { id: 'overview',     label: 'HR Overview',  icon: BarChart2,    adminOnly: true, description: 'Aggregate HR dashboard showing live headcount, leave utilisation rates, payroll totals, contract expiry alerts, and key people metrics at a glance.' },
       { id: 'hr-analytics', label: 'HR Analytics', icon: TrendingUp,   adminOnly: true, description: 'Deep-dive analytics on workforce trends — staff turnover rates, salary distributions, contract type breakdown, and departmental staffing levels over time.' },
+      { id: 'pay-equity',   label: 'Pay Equity',   icon: BarChart2,    adminOnly: true, description: 'Compa-ratio analysis across all staff — compares each employee\'s salary to their grade midpoint, flags outliers below 80% or above 120%, with Excel export.' },
       { id: 'wa-broadcast', label: 'HR Broadcast', icon: MessageSquare,adminOnly: true, description: 'Send targeted WhatsApp broadcasts to staff groups — payslip-ready notifications, policy announcements, and important HR communications at scale.' },
     ],
   },
@@ -216,6 +223,8 @@ export default function HRHub() {
         {tab === 'salary-increments' && isAdmin && <Suspense fallback={<PanelLoader />}><SalaryIncrPanel /></Suspense>}
         {tab === 'field-wallet' && isAdmin && <Suspense fallback={<PanelLoader />}><FieldWalletPanel /></Suspense>}
         {tab === 'payroll-summary' && isAdmin && <Suspense fallback={<PanelLoader />}><PayrollReportPanel /></Suspense>}
+        {tab === 'comp-bands' && isAdmin && <Suspense fallback={<PanelLoader />}><CompensationBandsPanel /></Suspense>}
+        {tab === 'compliance-reports' && isAdmin && <Suspense fallback={<PanelLoader />}><ComplianceReportsPanel /></Suspense>}
 
         {/* Time & Leave */}
         {tab === 'timesheet' && <Suspense fallback={<PanelLoader />}><TimesheetPanel /></Suspense>}
@@ -241,6 +250,7 @@ export default function HRHub() {
         {/* Analytics & Comms */}
         {tab === 'overview' && isAdmin && <HROverviewPanel />}
         {tab === 'hr-analytics' && isAdmin && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
+        {tab === 'pay-equity' && isAdmin && <Suspense fallback={<PanelLoader />}><PayEquityPanel /></Suspense>}
         {tab === 'wa-broadcast' && isAdmin && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
       </div>
     </HubLayout>

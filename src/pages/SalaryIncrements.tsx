@@ -130,7 +130,9 @@ export default function SalaryIncrements() {
         user_name: pm[r.user_id] ?? 'Unknown',
         approver_name: r.approved_by ? (pm[r.approved_by] ?? 'Unknown') : null,
       })));
-      await syncDueIncrements(incRes.data as Increment[]);
+      // Note: auto-application of due increments is now handled by the
+      // hr-salary-increment-apply nightly Edge Function (02:00 UTC).
+      // The syncDueIncrements page-load trigger has been removed.
     }
     setProfiles((profRes.data ?? []) as Profile[]);
     setLoading(false);

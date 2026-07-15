@@ -503,6 +503,35 @@ export default function LeaveRequests() {
       } catch (notifyErr) {
         console.warn('[Leave] notify outcome failed (decision still saved):', notifyErr);
       }
+      // Queue payroll deduction flag for approved unpaid leave (final decision only)
+      if (!nextTier && reviewAction === 'approved' && reviewDialog.leave_type === 'unpaid') {
+        try {
+          const { data: cfg } = await supabase
+            .from('employee_salary_config')
+            .select('base_salary')
+            .eq('user_id', reviewDialog.user_id)
+            .maybeSingle();
+          const baseSalary = Number((cfg as any)?.base_salary ?? 0);
+          const dailyRate  = baseSalary > 0 ? Math.round((baseSalary / 30) * 100) / 100 : null;
+          const deductionAmount = dailyRate && reviewDialog.days_count
+            ? Math.round(dailyRate * reviewDialog.days_count * 100) / 100
+            : null;
+          const startDate = parseISO(reviewDialog.start_date);
+          const payPeriod = isValid(startDate) ? format(startDate, 'MMMM yyyy') : null;
+          await supabase.from('hr_payroll_leave_flags' as any).insert({
+            leave_request_id: reviewDialog.id,
+            user_id: reviewDialog.user_id,
+            start_date: reviewDialog.start_date,
+            end_date: reviewDialog.end_date,
+            days_count: reviewDialog.days_count,
+            daily_rate: dailyRate,
+            deduction_amount: deductionAmount,
+            pay_period: payPeriod,
+          });
+        } catch (flagErr) {
+          console.warn('[Leave] hr_payroll_leave_flags insert failed (approval still saved):', flagErr);
+        }
+      }
       setReviewDialog(null);
       setReviewNotes('');
       load();
