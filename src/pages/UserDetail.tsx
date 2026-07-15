@@ -36,6 +36,14 @@ import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
 import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
 import { generateEmployeeCV } from "@/utils/employeeCvExport";
+import {
+  generateReverseChronologicalCV,
+  generateFunctionalCV,
+  generateCombinationCV,
+  generateEuropassCV,
+  CV_FORMAT_OPTIONS,
+  type CvFormatId,
+} from "@/utils/cvFormats";
 import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName } from "@/utils/employeeProfileFolder";
 
 // Use centralized visible role codes (excludes superAdmin)
@@ -120,6 +128,8 @@ const UserDetail: FC = () => {
   const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
   const [empSaving, setEmpSaving] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
+  const [showCvMenu, setShowCvMenu] = useState(false);
+  const cvMenuRef = useRef<HTMLDivElement>(null);
   const [empSummary, setEmpSummary] = useState<string>("");
   const [profileFolderPath, setProfileFolderPath] = useState<string | null>(null);
   const [folderSyncing, setFolderSyncing] = useState(false);
@@ -972,32 +982,82 @@ const UserDetail: FC = () => {
                 <button onClick={() => navigate(`/signatures?user=${user.id}`)} className="flex items-center gap-1.5 text-[11px] font-semibold text-white/70 bg-white/8 hover:bg-white/15 border border-white/10 rounded-lg px-3 py-1.5 transition-all">
                   <Mail className="h-3 w-3" /><span className="hidden sm:inline">Send Email</span>
                 </button>
-                <button
-                  disabled={cvExporting}
-                  onClick={async () => {
-                    setCvExporting(true);
-                    try {
-                      await generateEmployeeCV(user, {
-                        departmentName: departments.find(d => d.id === empDepartmentId)?.name,
-                        contractStart:  empContractStart,
-                        contractEnd:    empContractEnd,
-                        employmentType: empType,
-                        reportsToName:  allUsers.find(u => u.id === empReportsTo)?.full_name ?? undefined,
-                        hubName:        hubs.find(h => h.id === user.hubId)?.name || user.hubId || undefined,
-                      });
-                    } catch (e: any) {
-                      toast({ title: 'CV export failed', description: e.message, variant: 'destructive' });
-                    } finally { setCvExporting(false); }
-                  }}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  data-testid="button-export-cv"
-                  title="Export CV as UN P11 / World Bank format PDF"
-                >
-                  {cvExporting
-                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                    : <Download className="h-3 w-3" />}
-                  <span className="hidden sm:inline">{cvExporting ? 'Exporting…' : 'Export CV'}</span>
-                </button>
+                {/* ── CV Export Format Picker ── */}
+                <div className="relative" ref={cvMenuRef}>
+                  <button
+                    disabled={cvExporting}
+                    onClick={() => setShowCvMenu(v => !v)}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="button-export-cv"
+                    title="Export CV — choose format"
+                  >
+                    {cvExporting
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <Download className="h-3 w-3" />}
+                    <span className="hidden sm:inline">{cvExporting ? 'Exporting…' : 'Export CV'}</span>
+                    {!cvExporting && <ChevronDown className="h-2.5 w-2.5 opacity-60" />}
+                  </button>
+
+                  {showCvMenu && !cvExporting && (
+                    <>
+                      {/* Backdrop */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowCvMenu(false)}
+                      />
+                      {/* Dropdown panel */}
+                      <div className="absolute right-0 top-full mt-1.5 z-50 w-80 rounded-xl border border-white/10 bg-[#0d1f3c] shadow-2xl overflow-hidden">
+                        <div className="px-3 py-2 border-b border-white/8">
+                          <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Choose Export Format</p>
+                        </div>
+                        <div className="py-1">
+                          {CV_FORMAT_OPTIONS.map(fmt => (
+                            <button
+                              key={fmt.id}
+                              data-testid={`cv-format-${fmt.id}`}
+                              onClick={async () => {
+                                setShowCvMenu(false);
+                                setCvExporting(true);
+                                const cvCtx = {
+                                  departmentName: departments.find(d => d.id === empDepartmentId)?.name,
+                                  contractStart:  empContractStart,
+                                  contractEnd:    empContractEnd,
+                                  employmentType: empType,
+                                  reportsToName:  allUsers.find(u => u.id === empReportsTo)?.full_name ?? undefined,
+                                  hubName:        hubs.find(h => h.id === user.hubId)?.name || user.hubId || undefined,
+                                };
+                                try {
+                                  if (fmt.id === 'un_p11')              await generateEmployeeCV(user, cvCtx);
+                                  else if (fmt.id === 'reverse_chronological') await generateReverseChronologicalCV(user, cvCtx);
+                                  else if (fmt.id === 'functional')     await generateFunctionalCV(user, cvCtx);
+                                  else if (fmt.id === 'combination')    await generateCombinationCV(user, cvCtx);
+                                  else if (fmt.id === 'europass')       await generateEuropassCV(user, cvCtx);
+                                  toast({ title: `${fmt.label} exported`, description: 'PDF downloaded successfully.' });
+                                } catch (e: any) {
+                                  toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
+                                } finally { setCvExporting(false); }
+                              }}
+                              className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-white/6 transition-colors text-left group"
+                            >
+                              <span className="text-lg leading-none mt-0.5 shrink-0">{fmt.icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[12px] font-semibold text-white/90 group-hover:text-white">{fmt.label}</span>
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white/8 text-white/40 uppercase tracking-wide">{fmt.pages}</span>
+                                </div>
+                                <p className="text-[10px] text-white/40 mt-0.5 leading-snug">{fmt.description}</p>
+                                <p className="text-[9px] mt-1 text-white/30">ATS: <span className="text-emerald-400/70">{fmt.ats}</span></p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="px-3 py-2 border-t border-white/8 bg-white/3">
+                          <p className="text-[9px] text-white/25 leading-snug">All formats export as PDF using profile data on file. UN P11 is also saved to the workspace dossier.</p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {isAdmin && (
                   <button onClick={() => navigate('/hr?tab=offboarding')} className="flex items-center gap-1.5 text-[11px] font-semibold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg px-3 py-1.5 transition-all">
                     <UserX className="h-3 w-3" /><span className="hidden sm:inline">Offboard</span>
