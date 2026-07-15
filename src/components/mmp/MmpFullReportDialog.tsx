@@ -197,16 +197,26 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
 
       // ── Financial + Activity (parallel, non-blocking) ─────────────────
       try {
+        // down_payment_requests links to MMPs via mmp_site_entry_id (site-level FK),
+        // NOT mmp_file_id — so we must look up by the entry IDs for this MMP.
+        const entryIds = allEntries.map(e => e.id);
+
+        const dpQuery = entryIds.length > 0
+          ? supabase
+              .from('down_payment_requests')
+              .select('id, site_name, hub_name, status, requested_amount, total_paid_amount, remaining_amount, payment_type, created_at, supervisor_status, admin_status, fully_paid_at')
+              .in('mmp_site_entry_id', entryIds)
+              .order('created_at', { ascending: false })
+          : Promise.resolve({ data: [] as any[], error: null });
+
         const [dpRes, csRes, alRes] = await Promise.allSettled([
-          supabase
-            .from('down_payment_requests')
-            .select('id, site_name, hub_name, status, requested_amount, total_paid_amount, remaining_amount, payment_type, created_at, supervisor_status, admin_status, fully_paid_at')
-            .eq('mmp_file_id', mmpId)
-            .order('created_at', { ascending: false }),
+          dpQuery,
+          // operational_cost_submissions has both mmp_file_id and mmp_id columns;
+          // query both to avoid missing records linked via either column.
           supabase
             .from('operational_cost_submissions')
             .select('id, status, tier1_status, tier2_status, tier3_status, amount_cents, expense_category, description, hub_id, created_at, request_title')
-            .eq('mmp_file_id', mmpId)
+            .or(`mmp_file_id.eq.${mmpId},mmp_id.eq.${mmpId}`)
             .order('created_at', { ascending: false }),
           supabase
             .from('audit_logs')
@@ -216,7 +226,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
             .order('timestamp', { ascending: false })
             .limit(100),
         ]);
-        if (dpRes.status === 'fulfilled') setDownPayments(dpRes.value.data || []);
+        if (dpRes.status === 'fulfilled') setDownPayments((dpRes.value as any).data || []);
         if (csRes.status === 'fulfilled') setCostSubmissions(csRes.value.data || []);
         if (alRes.status === 'fulfilled') setActivityLogs(alRes.value.data || []);
       } finally {
