@@ -84,3 +84,9 @@ id = "WM9bgfKaYrZaJeZMcVN7q"
 uri = "file://USER_MANUAL_2026-07-15.md"
 type = "text"
 title = "User Manual — 2026-07-15"
+
+[[outputs]]
+id = "H0ypLNeHvsIZWhFs_svaI"
+uri = "file://HR_Profiles_User_Manual_2026-07-15.docx"
+type = "word_document"
+title = "HR & Profiles User Manual — July 2026"
