@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload, RotateCcw, RefreshCw, Loader2 } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, AlertCircle, ChevronUp, ChevronDown, Play, Upload, RotateCcw, RefreshCw, Loader2 } from 'lucide-react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -1212,7 +1212,24 @@ const CoordinatorSites: FC = () => {
   const handleVerifySite = async (siteId: string, notes?: string) => {
     // Detect if running in Capacitor
     const isCapacitor = typeof (window as any).Capacitor !== 'undefined';
-    
+
+    // ── Hard gate: state permit must be completed before CP verification ──
+    const siteForPermitCheck = coordinatorSites.find(s => s.id === siteId);
+    if (siteForPermitCheck) {
+      const ad = typeof siteForPermitCheck.additional_data === 'string'
+        ? (() => { try { return JSON.parse(siteForPermitCheck.additional_data); } catch { return {}; } })()
+        : (siteForPermitCheck.additional_data || {});
+      const permitDone = isTruthyFlag(ad.state_permit_attached) || isTruthyFlag(ad.state_permit_not_required);
+      if (!permitDone) {
+        toast({
+          title: 'State permit required before verification',
+          description: 'You must complete the State Permit step first — either upload the permit document or answer the permit questions — before you can verify this site.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     try {
       const updateData: any = {
         status: 'verified',
@@ -2528,6 +2545,23 @@ const CoordinatorSites: FC = () => {
 
     try {
       const { sites: localitySites } = selectedLocalityForBulkVerify;
+
+      // ── Hard gate: all sites in locality must have state permit completed ──
+      const sitesBlockedByPermit = localitySites.filter((site: any) => {
+        const ad = typeof site.additional_data === 'string'
+          ? (() => { try { return JSON.parse(site.additional_data); } catch { return {}; } })()
+          : (site.additional_data || {});
+        return !isTruthyFlag(ad.state_permit_attached) && !isTruthyFlag(ad.state_permit_not_required);
+      });
+      if (sitesBlockedByPermit.length > 0) {
+        toast({
+          title: 'State permit required before verification',
+          description: `${sitesBlockedByPermit.length} site(s) in this locality have not completed the State Permit step. Please upload the permit or answer the permit questions for all sites before verifying.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const visitDateString = formatDateLocal(bulkLocalityVisitDateObj);
       const startStr = formatDateLocal(bulkExpectedStartDate);
       const endStr = formatDateLocal(bulkExpectedEndDate);
@@ -4608,7 +4642,29 @@ const CoordinatorSites: FC = () => {
             <DialogTitle>Verify Site</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p className="mb-4">Are you sure you want to verify this site?</p>
+            {(() => {
+              const selectedSite = coordinatorSites.find(s => s.id === selectedSiteId);
+              const ad = selectedSite
+                ? (typeof selectedSite.additional_data === 'string'
+                    ? (() => { try { return JSON.parse(selectedSite.additional_data); } catch { return {}; } })()
+                    : (selectedSite.additional_data || {}))
+                : {};
+              const permitDone = isTruthyFlag(ad.state_permit_attached) || isTruthyFlag(ad.state_permit_not_required);
+              if (!permitDone) {
+                return (
+                  <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 p-4 mb-4 flex gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-red-700 dark:text-red-300 text-sm">State Permit step not completed</p>
+                      <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                        You must complete the <strong>State Permit</strong> step before verifying this site. Go to the <strong>Permits</strong> tab, upload the permit document or answer the permit questions, then return here to verify.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+              return <p className="mb-4">Are you sure you want to verify this site?</p>;
+            })()}
             <div className="mt-4">
               <label htmlFor="verification-notes" className="text-sm font-medium mb-2 block">
                 Verification Notes (Optional)
@@ -4638,6 +4694,14 @@ const CoordinatorSites: FC = () => {
                 }
               }}
               className="bg-green-600 hover:bg-green-700"
+              disabled={(() => {
+                const selectedSite = coordinatorSites.find(s => s.id === selectedSiteId);
+                if (!selectedSite) return false;
+                const ad = typeof selectedSite.additional_data === 'string'
+                  ? (() => { try { return JSON.parse(selectedSite.additional_data); } catch { return {}; } })()
+                  : (selectedSite.additional_data || {});
+                return !isTruthyFlag(ad.state_permit_attached) && !isTruthyFlag(ad.state_permit_not_required);
+              })()}
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               Confirm Verification
