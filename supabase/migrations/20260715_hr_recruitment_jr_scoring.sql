@@ -170,6 +170,52 @@ CREATE INDEX IF NOT EXISTS idx_hr_slots_scheduled ON hr_interview_slots(schedule
 
 ALTER TABLE hr_interview_slots ENABLE ROW LEVEL SECURITY;
 
+-- ─────────────────────────────────────────────────────────────────────────
+-- 6. Add 'filled' status to JR and scoring rubric to job postings
+-- ─────────────────────────────────────────────────────────────────────────
+-- Drop existing check and re-add with 'filled' included
+ALTER TABLE hr_job_requisitions
+  DROP CONSTRAINT IF EXISTS hr_job_requisitions_status_check;
+ALTER TABLE hr_job_requisitions
+  ADD CONSTRAINT hr_job_requisitions_status_check
+    CHECK (status IN ('draft','pending_manager','pending_hr','approved','rejected','filled'));
+
+-- Per-posting configurable scoring rubric (jsonb array of {id, label} objects)
+ALTER TABLE hr_job_postings
+  ADD COLUMN IF NOT EXISTS scoring_rubric jsonb;  -- NULL = use global default rubric
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 7. Onboarding records for hired candidates
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS hr_onboarding_records (
+  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  candidate_id        uuid        REFERENCES hr_candidates(id)  ON DELETE CASCADE,
+  profile_id          uuid        REFERENCES profiles(id)        ON DELETE SET NULL,
+  full_name           text        NOT NULL,
+  job_title           text,
+  department_id       uuid        REFERENCES departments(id)     ON DELETE SET NULL,
+  expected_start_date date,
+  notes               text,
+  created_by          uuid        REFERENCES profiles(id)        ON DELETE SET NULL,
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hr_onboarding_candidate ON hr_onboarding_records(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_hr_onboarding_profile   ON hr_onboarding_records(profile_id);
+
+ALTER TABLE hr_onboarding_records ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS hr_onboarding_all ON hr_onboarding_records;
+CREATE POLICY hr_onboarding_all ON hr_onboarding_records FOR ALL
+  USING (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+              AND p.role IN ('super_admin','admin','hr','hr_admin','manager'))
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+              AND p.role IN ('super_admin','admin','hr','hr_admin','manager'))
+  );
+
 DROP POLICY IF EXISTS hr_slots_select ON hr_interview_slots;
 CREATE POLICY hr_slots_select ON hr_interview_slots FOR SELECT
   USING (

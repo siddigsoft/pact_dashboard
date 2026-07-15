@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
+import { useOutlookCalendar } from '@/hooks/useOutlookCalendar';
+import { EmailNotificationService } from '@/services/email-notification.service';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,9 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Briefcase, Plus, Loader2, Users, Star, Trash2, Edit2, Search, FileDown,
   CheckCircle2, XCircle, Clock, CalendarPlus, FileText, UserCheck, Link2,
-  Video, Phone, MapPin, Award, ChevronRight, AlertTriangle,
+  Video, Phone, MapPin, Award, ChevronRight, AlertTriangle, Mail, Eye,
+  Settings2, GripVertical, X as XIcon,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, addMinutes } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
@@ -26,11 +30,14 @@ import jsPDF from 'jspdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface RubricCategory { id: string; label: string; }
+
 interface JobPosting {
   id: string; title: string; department_id: string | null; employment_type: string;
   status: 'open' | 'on_hold' | 'closed'; headcount_needed: number;
   description: string | null; requirements: string | null;
   opened_at: string; closed_at: string | null; requisition_id: string | null;
+  scoring_rubric: RubricCategory[] | null;
 }
 interface Candidate {
   id: string; job_posting_id: string; full_name: string; email: string | null;
@@ -46,7 +53,7 @@ interface JobRequisition {
   id: string; title: string; department_id: string | null; hub_id: string | null;
   headcount: number; justification: string | null; salary_band: string | null;
   target_start_date: string | null;
-  status: 'draft' | 'pending_manager' | 'pending_hr' | 'approved' | 'rejected';
+  status: 'draft' | 'pending_manager' | 'pending_hr' | 'approved' | 'rejected' | 'filled';
   requested_by: string | null;
   manager_approved_at: string | null; manager_approved_by: string | null; manager_rejection_note: string | null;
   hr_approved_at: string | null; hr_approved_by: string | null; hr_rejection_note: string | null;
@@ -64,8 +71,8 @@ interface InterviewSlot {
   location: string | null; meeting_link: string | null; notes: string | null;
   created_by: string | null; created_at: string;
 }
-interface Dept { id: string; name: string; }
-interface Hub  { id: string; name: string; }
+interface Dept    { id: string; name: string; }
+interface Hub     { id: string; name: string; }
 interface Profile { id: string; full_name: string; email?: string | null; }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -81,14 +88,15 @@ const STAGE_CFG: Record<Candidate['stage'], { label: string; class: string }> = 
 const STAGES: Candidate['stage'][] = ['applied','screening','interview','offer','hired','rejected'];
 
 const JR_STATUS_CFG: Record<JobRequisition['status'], { label: string; class: string; icon: React.ReactNode }> = {
-  draft:           { label: 'Draft',               class: 'border-gray-300 text-gray-600',    icon: <Edit2 className="h-3 w-3" /> },
-  pending_manager: { label: 'Pending Manager',      class: 'border-amber-300 text-amber-700',  icon: <Clock className="h-3 w-3" /> },
-  pending_hr:      { label: 'Pending HR',           class: 'border-blue-300 text-blue-700',    icon: <Clock className="h-3 w-3" /> },
-  approved:        { label: 'Approved',             class: 'border-emerald-300 text-emerald-700', icon: <CheckCircle2 className="h-3 w-3" /> },
-  rejected:        { label: 'Rejected',             class: 'border-red-300 text-red-600',      icon: <XCircle className="h-3 w-3" /> },
+  draft:           { label: 'Draft',          class: 'border-gray-300 text-gray-600',       icon: <Edit2 className="h-3 w-3" /> },
+  pending_manager: { label: 'Pending Manager', class: 'border-amber-300 text-amber-700',    icon: <Clock className="h-3 w-3" /> },
+  pending_hr:      { label: 'Pending HR',      class: 'border-blue-300 text-blue-700',      icon: <Clock className="h-3 w-3" /> },
+  approved:        { label: 'Approved',        class: 'border-emerald-300 text-emerald-700',icon: <CheckCircle2 className="h-3 w-3" /> },
+  rejected:        { label: 'Rejected',        class: 'border-red-300 text-red-600',        icon: <XCircle className="h-3 w-3" /> },
+  filled:          { label: 'Filled',          class: 'border-teal-300 text-teal-700',      icon: <UserCheck className="h-3 w-3" /> },
 };
 
-const DEFAULT_RUBRIC = [
+const DEFAULT_RUBRIC: RubricCategory[] = [
   { id: 'technical',      label: 'Technical Skills' },
   { id: 'communication',  label: 'Communication'    },
   { id: 'culture_fit',    label: 'Culture Fit'      },
@@ -121,7 +129,7 @@ function calcOverall(scores: Record<string, number>): number {
   return vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10 : 0;
 }
 
-function generateOfferPdf(c: Candidate, posting: JobPosting, deptName: string) {
+function buildOfferPdf(c: Candidate, posting: JobPosting, deptName: string): jsPDF {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const today = format(new Date(), 'MMMM d, yyyy');
   const margin = 25;
@@ -161,9 +169,9 @@ function generateOfferPdf(c: Candidate, posting: JobPosting, deptName: string) {
   doc.setFont('helvetica', 'bold'); doc.text('Position Details', margin, y);
   doc.setFont('helvetica', 'normal');
   const details: [string, string][] = [
-    ['Position Title', posting.title],
-    ['Department',     deptName],
-    ['Employment Type', posting.employment_type.replace('_', ' ')],
+    ['Position Title',   posting.title],
+    ['Department',       deptName],
+    ['Employment Type',  posting.employment_type.replace('_', ' ')],
     ...(c.offer_start_date ? [['Start Date', format(new Date(c.offer_start_date), 'MMMM d, yyyy')] as [string,string]] : []),
     ...(c.salary_offer    ? [['Monthly Salary', `${c.salary_offer.toLocaleString()} ${c.offer_currency ?? 'SDG'}`] as [string,string]] : []),
   ];
@@ -189,7 +197,7 @@ function generateOfferPdf(c: Candidate, posting: JobPosting, deptName: string) {
   doc.setFontSize(8); doc.setTextColor(150, 150, 150);
   doc.text('This document is confidential and intended solely for the named recipient.', margin, 285);
 
-  doc.save(`Offer_Letter_${c.full_name.replace(/\s+/g, '_')}.pdf`);
+  return doc;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -198,10 +206,12 @@ export default function Recruitment() {
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { isConnected: outlookConnected, createEvent: createOutlookEvent } = useOutlookCalendar();
   const isAdmin   = hasAnyRole(['super_admin','admin','hr','hr_admin','hr_manager']);
   const isManager = hasAnyRole(['super_admin','admin','hr','hr_admin','hr_manager','manager']);
 
-  // ── Data state
+  // ── Data
   const [postings,    setPostings]    = useState<JobPosting[]>([]);
   const [candidates,  setCandidates]  = useState<Candidate[]>([]);
   const [requisitions,setRequisitions]= useState<JobRequisition[]>([]);
@@ -211,18 +221,24 @@ export default function Recruitment() {
   const [hubs,        setHubs]        = useState<Hub[]>([]);
   const [profiles,    setProfiles]    = useState<Profile[]>([]);
 
-  // ── UI state
-  const [loading,          setLoading]          = useState(true);
-  const [saving,           setSaving]           = useState(false);
-  const [search,           setSearch]           = useState('');
-  const [pageTab,          setPageTab]          = useState<'postings'|'requisitions'>('postings');
-  const [selectedPosting,  setSelectedPosting]  = useState<string | null>(null);
-  const [missingTable,     setMissingTable]      = useState(false);
+  // ── UI
+  const [loading,         setLoading]         = useState(true);
+  const [saving,          setSaving]          = useState(false);
+  const [search,          setSearch]          = useState('');
+  const [pageTab,         setPageTab]         = useState<'postings'|'requisitions'>('postings');
+  const [selectedPosting, setSelectedPosting] = useState<string | null>(null);
+  const [missingTable,    setMissingTable]    = useState(false);
 
   // Job posting dialog
-  const [jobDialogOpen,  setJobDialogOpen]  = useState(false);
-  const [editingJob,     setEditingJob]     = useState<JobPosting | null>(null);
-  const [jobForm,        setJobForm]        = useState({ ...BLANK_JOB });
+  const [jobDialogOpen, setJobDialogOpen] = useState(false);
+  const [editingJob,    setEditingJob]    = useState<JobPosting | null>(null);
+  const [jobForm,       setJobForm]       = useState({ ...BLANK_JOB });
+
+  // Rubric config dialog
+  const [rubricDialogOpen,    setRubricDialogOpen]    = useState(false);
+  const [rubricTargetPosting, setRubricTargetPosting] = useState<JobPosting | null>(null);
+  const [rubricDraft,         setRubricDraft]         = useState<RubricCategory[]>([]);
+  const [rubricNewLabel,      setRubricNewLabel]      = useState('');
 
   // Candidate add/edit dialog
   const [candDialogOpen, setCandDialogOpen] = useState(false);
@@ -230,28 +246,31 @@ export default function Recruitment() {
   const [candForm,       setCandForm]       = useState({ ...BLANK_CAND });
 
   // Candidate detail dialog
-  const [detailCand,     setDetailCand]     = useState<Candidate | null>(null);
-  const [detailTab,      setDetailTab]      = useState('overview');
+  const [detailCand, setDetailCand] = useState<Candidate | null>(null);
+  const [detailTab,  setDetailTab]  = useState('overview');
 
-  // Scorecard dialog
-  const [myScores,       setMyScores]       = useState<Record<string, number>>({});
-  const [scoreNotes,     setScoreNotes]     = useState('');
-  const [savingScore,    setSavingScore]    = useState(false);
+  // Scorecard
+  const [myScores,   setMyScores]   = useState<Record<string, number>>({});
+  const [scoreNotes, setScoreNotes] = useState('');
+  const [savingScore,setSavingScore]= useState(false);
 
-  // Interview scheduling dialog
+  // Interview scheduling
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [slotCandId,     setSlotCandId]     = useState<string|null>(null);
   const [slotForm,       setSlotForm]       = useState({ ...BLANK_SLOT });
 
-  // JR dialogs
-  const [jrDialogOpen,   setJrDialogOpen]   = useState(false);
-  const [editingJr,      setEditingJr]      = useState<JobRequisition | null>(null);
-  const [jrForm,         setJrForm]         = useState({ ...BLANK_JR });
-  const [approveDialog,  setApproveDialog]  = useState<{jr: JobRequisition; action: 'approve'|'reject'; layer: 'manager'|'hr'}|null>(null);
-  const [approveNote,    setApproveNote]    = useState('');
-  const [savingApprove,  setSavingApprove]  = useState(false);
+  // Offer preview
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
 
-  // Hired → Onboarding dialog
+  // JR dialogs
+  const [jrDialogOpen,  setJrDialogOpen]  = useState(false);
+  const [editingJr,     setEditingJr]     = useState<JobRequisition | null>(null);
+  const [jrForm,        setJrForm]        = useState({ ...BLANK_JR });
+  const [approveDialog, setApproveDialog] = useState<{jr: JobRequisition; action: 'approve'|'reject'; layer: 'manager'|'hr'}|null>(null);
+  const [approveNote,   setApproveNote]   = useState('');
+  const [savingApprove, setSavingApprove] = useState(false);
+
+  // Hired dialog
   const [hiredDialog,    setHiredDialog]    = useState<Candidate|null>(null);
   const [hiredProfileId, setHiredProfileId] = useState('');
 
@@ -260,23 +279,23 @@ export default function Recruitment() {
   async function fetchAll() {
     setLoading(true);
     const [jobsRes, candRes, jrRes, scoresRes, slotsRes, deptRes, hubRes, profRes] = await Promise.all([
-      supabase.from('hr_job_postings'    as any).select('*').order('opened_at', { ascending: false }),
-      supabase.from('hr_candidates'      as any).select('*').order('applied_at', { ascending: false }),
-      supabase.from('hr_job_requisitions'as any).select('*').order('created_at', { ascending: false }),
-      supabase.from('hr_candidate_scores'as any).select('*'),
-      supabase.from('hr_interview_slots' as any).select('*').order('scheduled_at'),
+      supabase.from('hr_job_postings'     as any).select('*').order('opened_at', { ascending: false }),
+      supabase.from('hr_candidates'       as any).select('*').order('applied_at', { ascending: false }),
+      supabase.from('hr_job_requisitions' as any).select('*').order('created_at', { ascending: false }),
+      supabase.from('hr_candidate_scores' as any).select('*'),
+      supabase.from('hr_interview_slots'  as any).select('*').order('scheduled_at'),
       supabase.from('departments').select('id, name').order('name'),
       supabase.from('hubs').select('id, name').order('name'),
       supabase.from('profiles').select('id, full_name, email').order('full_name'),
     ]);
     if (jobsRes.error?.code === '42P01') { setMissingTable(true); setLoading(false); return; }
-    if (jobsRes.data)   setPostings(jobsRes.data as unknown as JobPosting[]);
-    if (candRes.data)   setCandidates(candRes.data as unknown as Candidate[]);
-    if (jrRes.data)     setRequisitions(jrRes.data as unknown as JobRequisition[]);
-    if (scoresRes.data) setScores(scoresRes.data as unknown as CandidateScore[]);
-    if (slotsRes.data)  setSlots(slotsRes.data as unknown as InterviewSlot[]);
-    if (deptRes.data)   setDepts(deptRes.data as Dept[]);
-    if (hubRes.data)    setHubs(hubRes.data as Hub[]);
+    if (jobsRes.data)   setPostings(jobsRes.data   as unknown as JobPosting[]);
+    if (candRes.data)   setCandidates(candRes.data  as unknown as Candidate[]);
+    if (jrRes.data)     setRequisitions(jrRes.data  as unknown as JobRequisition[]);
+    if (scoresRes.data) setScores(scoresRes.data    as unknown as CandidateScore[]);
+    if (slotsRes.data)  setSlots(slotsRes.data      as unknown as InterviewSlot[]);
+    if (deptRes.data)   setDepts(deptRes.data  as Dept[]);
+    if (hubRes.data)    setHubs(hubRes.data    as Hub[]);
     if (profRes.data)   setProfiles(profRes.data as Profile[]);
     setLoading(false);
   }
@@ -284,13 +303,20 @@ export default function Recruitment() {
   // ── Derived ────────────────────────────────────────────────────────────────
   const filteredPostings = useMemo(() =>
     postings.filter(p => p.title.toLowerCase().includes(search.toLowerCase())), [postings, search]);
-  const candidatesFor = (jobId: string) => candidates.filter(c => c.job_posting_id === jobId);
-  const candidateScores = (candId: string) => scores.filter(s => s.candidate_id === candId);
-  const candidateSlots  = (candId: string) => slots.filter(s => s.candidate_id === candId);
-  const profileName = (id: string | null) => profiles.find(p => p.id === id)?.full_name ?? '—';
-  const deptName = (id: string | null) => depts.find(d => d.id === id)?.name ?? '—';
-  const hubName  = (id: string | null) => hubs.find(h => h.id === id)?.name  ?? '—';
-  const activePosting = postings.find(p => p.id === selectedPosting) ?? null;
+  const candidatesFor  = (jobId: string) => candidates.filter(c => c.job_posting_id === jobId);
+  const candidateScores= (candId: string) => scores.filter(s => s.candidate_id === candId);
+  const candidateSlots = (candId: string) => slots.filter(s => s.candidate_id === candId);
+  const profileName    = (id: string | null) => profiles.find(p => p.id === id)?.full_name ?? '—';
+  const profileEmail   = (id: string | null) => profiles.find(p => p.id === id)?.email ?? null;
+  const deptName       = (id: string | null) => depts.find(d => d.id === id)?.name ?? '—';
+  const hubName        = (id: string | null) => hubs.find(h => h.id === id)?.name  ?? '—';
+  const activePosting  = postings.find(p => p.id === selectedPosting) ?? null;
+
+  function getEffectiveRubric(posting: JobPosting | null): RubricCategory[] {
+    if (!posting) return DEFAULT_RUBRIC;
+    const custom = posting.scoring_rubric;
+    return Array.isArray(custom) && custom.length > 0 ? custom : DEFAULT_RUBRIC;
+  }
 
   // ── Job Posting CRUD ───────────────────────────────────────────────────────
   function openNewJob() { setEditingJob(null); setJobForm({ ...BLANK_JOB }); setJobDialogOpen(true); }
@@ -325,6 +351,32 @@ export default function Recruitment() {
     fetchAll();
   }
 
+  // ── Rubric config ──────────────────────────────────────────────────────────
+  function openRubricDialog(p: JobPosting) {
+    setRubricTargetPosting(p);
+    setRubricDraft(getEffectiveRubric(p).map(r => ({ ...r })));
+    setRubricNewLabel('');
+    setRubricDialogOpen(true);
+  }
+  function addRubricCategory() {
+    const label = rubricNewLabel.trim();
+    if (!label) return;
+    const id = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (rubricDraft.some(r => r.id === id)) { toast({ title: 'Category already exists', variant: 'destructive' }); return; }
+    setRubricDraft(d => [...d, { id, label }]);
+    setRubricNewLabel('');
+  }
+  async function saveRubric() {
+    if (!rubricTargetPosting) return;
+    const rubric = rubricDraft.length > 0 ? rubricDraft : null;
+    await supabase.from('hr_job_postings' as any)
+      .update({ scoring_rubric: rubric })
+      .eq('id', rubricTargetPosting.id);
+    toast({ title: 'Scoring rubric saved' });
+    setRubricDialogOpen(false);
+    fetchAll();
+  }
+
   // ── Candidate CRUD ─────────────────────────────────────────────────────────
   function openNewCand() { setEditingCand(null); setCandForm({ ...BLANK_CAND }); setCandDialogOpen(true); }
   function openEditCand(c: Candidate) {
@@ -355,7 +407,6 @@ export default function Recruitment() {
       : await supabase.from('hr_candidates' as any).insert({ ...payload, created_by: currentUser?.id ?? null });
     setSaving(false);
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: editingCand ? 'Candidate updated' : 'Candidate added' });
     if (payload.interviewer_id && payload.interview_date && payload.interviewer_id !== editingCand?.interviewer_id) {
       try {
         await NotificationTriggerService.send({
@@ -365,6 +416,7 @@ export default function Recruitment() {
         });
       } catch (e) { console.warn('[Recruitment] interview notify failed:', e); }
     }
+    toast({ title: editingCand ? 'Candidate updated' : 'Candidate added' });
     setCandDialogOpen(false); fetchAll();
   }
   async function deleteCandidate(c: Candidate) {
@@ -384,17 +436,34 @@ export default function Recruitment() {
   async function confirmHired() {
     if (!hiredDialog) return;
     setSaving(true);
+    const posting = postings.find(p => p.id === hiredDialog.job_posting_id);
+
+    // 1. Mark candidate as hired
     const update: any = { stage: 'hired', onboarding_noted: true };
     if (hiredProfileId) update.linked_profile_id = hiredProfileId;
     await supabase.from('hr_candidates' as any).update(update).eq('id', hiredDialog.id);
-    // Mark linked JR as filled if applicable
-    const posting = postings.find(p => p.id === hiredDialog.job_posting_id);
+
+    // 2. Mark linked JR as 'filled'
     if (posting?.requisition_id) {
       await supabase.from('hr_job_requisitions' as any)
-        .update({ status: 'approved' })
+        .update({ status: 'filled' })
         .eq('id', posting.requisition_id)
-        .eq('status', 'approved');
+        .in('status', ['approved']);
     }
+
+    // 3. Create onboarding record
+    await supabase.from('hr_onboarding_records' as any).insert({
+      candidate_id:        hiredDialog.id,
+      profile_id:          hiredProfileId || null,
+      full_name:           hiredDialog.full_name,
+      job_title:           posting?.title ?? null,
+      department_id:       posting?.department_id ?? null,
+      expected_start_date: hiredDialog.offer_start_date ?? null,
+      notes:               hiredProfileId ? 'Linked to existing profile' : 'New hire — profile setup required',
+      created_by:          currentUser?.id ?? null,
+    });
+
+    // 4. Notify HR/admin
     try {
       await NotificationTriggerService.sendToRoles(['super_admin','admin','hr','hr_admin'], {
         title: 'Candidate Hired — Onboarding Required',
@@ -402,10 +471,14 @@ export default function Recruitment() {
         type: 'success', category: 'team', priority: 'high', link: '/staff-onboarding',
       });
     } catch (e) { console.warn('[Recruitment] hired notify failed:', e); }
+
     setSaving(false);
     setHiredDialog(null);
-    toast({ title: 'Candidate marked as Hired', description: 'HR notified for onboarding.' });
+    toast({ title: 'Candidate marked as Hired', description: 'Redirecting to Staff Onboarding…' });
     fetchAll();
+
+    // 5. Navigate HR to Staff Onboarding
+    setTimeout(() => navigate('/staff-onboarding'), 1200);
   }
 
   // ── Scoring ────────────────────────────────────────────────────────────────
@@ -442,11 +515,14 @@ export default function Recruitment() {
       toast({ title: 'Date/time required', variant: 'destructive' }); return;
     }
     setSaving(true);
+    const startDt = new Date(slotForm.scheduled_at);
+    const durationMin = parseInt(slotForm.duration_minutes, 10) || 60;
+    const endDt = addMinutes(startDt, durationMin);
     const payload: any = {
       candidate_id: slotCandId,
       interviewer_ids: slotForm.interviewer_ids,
-      scheduled_at: new Date(slotForm.scheduled_at).toISOString(),
-      duration_minutes: parseInt(slotForm.duration_minutes, 10) || 60,
+      scheduled_at: startDt.toISOString(),
+      duration_minutes: durationMin,
       interview_type: slotForm.interview_type,
       location: slotForm.location || null,
       meeting_link: slotForm.meeting_link || null,
@@ -454,30 +530,104 @@ export default function Recruitment() {
       created_by: currentUser?.id ?? null,
     };
     const { error } = await supabase.from('hr_interview_slots' as any).insert(payload);
-    setSaving(false);
-    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    // Notify each interviewer
+    if (error) { setSaving(false); toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+
+    const cand = candidates.find(c => c.id === slotCandId);
+    const posting = cand ? postings.find(p => p.id === cand.job_posting_id) : null;
+    const subjectLine = `Interview: ${cand?.full_name ?? 'Candidate'} — ${posting?.title ?? 'Position'}`;
+
+    // Collect interviewer emails for calendar invite + in-app notifications
+    const attendeeEmails: string[] = [];
     for (const uid of slotForm.interviewer_ids) {
-      const cand = candidates.find(c => c.id === slotCandId);
+      const email = profileEmail(uid);
+      if (email) attendeeEmails.push(email);
       try {
         await NotificationTriggerService.send({
           userId: uid, title: 'Interview Scheduled',
-          message: `You have an interview with ${cand?.full_name ?? 'a candidate'} on ${format(new Date(slotForm.scheduled_at), 'MMM d, yyyy HH:mm')} (${slotForm.interview_type.replace('_', ' ')}).`,
+          message: `You have an interview with ${cand?.full_name ?? 'a candidate'} on ${format(startDt, 'MMM d, yyyy HH:mm')} (${slotForm.interview_type.replace('_', ' ')}).`,
           type: 'info', category: 'assignments', priority: 'high', link: '/recruitment',
         });
       } catch (e) { console.warn('[Recruitment] slot notify failed:', e); }
     }
-    toast({ title: 'Interview scheduled' });
+
+    // Outlook calendar event (best-effort if connected)
+    if (outlookConnected && attendeeEmails.length > 0) {
+      try {
+        await createOutlookEvent({
+          subject: subjectLine,
+          start: startDt.toISOString(),
+          end:   endDt.toISOString(),
+          location: slotForm.location || slotForm.meeting_link || undefined,
+          body: slotForm.notes || `Interview with ${cand?.full_name ?? 'candidate'} for ${posting?.title ?? 'the position'}.`,
+          attendeeEmails,
+        });
+        toast({ title: 'Interview scheduled + Outlook invite sent' });
+      } catch (e) {
+        console.warn('[Recruitment] Outlook event creation failed:', e);
+        toast({ title: 'Interview scheduled', description: 'Outlook invite could not be sent.' });
+      }
+    } else {
+      toast({ title: 'Interview scheduled' });
+    }
+
+    setSaving(false);
     setSlotDialogOpen(false);
     fetchAll();
   }
 
-  // ── Offer letter ───────────────────────────────────────────────────────────
-  async function saveOfferDetails(c: Candidate, salary: number, currency: string, startDate: string) {
-    await supabase.from('hr_candidates' as any)
-      .update({ salary_offer: salary, offer_currency: currency, offer_start_date: startDate || null })
-      .eq('id', c.id);
-    fetchAll();
+  // ── Offer email send ───────────────────────────────────────────────────────
+  async function sendOfferEmail(c: Candidate, posting: JobPosting | undefined) {
+    if (!c.email || !posting) {
+      toast({ title: 'Candidate has no email address', variant: 'destructive' }); return;
+    }
+    setSaving(true);
+    const startDateStr = c.offer_start_date ? format(new Date(c.offer_start_date), 'MMMM d, yyyy') : 'to be confirmed';
+    const salaryStr = c.salary_offer
+      ? `${c.salary_offer.toLocaleString()} ${c.offer_currency ?? 'SDG'} per month`
+      : 'as discussed';
+
+    const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+  <div style="background:#0f2041;color:#fff;padding:16px 24px;border-radius:4px 4px 0 0">
+    <strong>PACT Command Center — Offer of Employment</strong>
+  </div>
+  <div style="padding:24px;border:1px solid #e5e7eb;border-top:none">
+    <p>Dear ${c.full_name.split(' ')[0]},</p>
+    <p>We are delighted to offer you the position of <strong>${posting.title}</strong> at PACT Command Center.</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <tr><td style="padding:6px;color:#6b7280;width:140px">Position</td><td style="padding:6px;font-weight:600">${posting.title}</td></tr>
+      <tr style="background:#f9fafb"><td style="padding:6px;color:#6b7280">Start Date</td><td style="padding:6px;font-weight:600">${startDateStr}</td></tr>
+      <tr><td style="padding:6px;color:#6b7280">Monthly Salary</td><td style="padding:6px;font-weight:600">${salaryStr}</td></tr>
+    </table>
+    <p>Please confirm your acceptance within 7 days by replying to this email.</p>
+    <p>We look forward to welcoming you to our team!</p>
+    <p style="margin-top:24px">Warm regards,<br><strong>HR Department</strong><br>PACT Command Center</p>
+  </div>
+  <div style="padding:8px 24px;font-size:11px;color:#9ca3af;border-top:1px solid #f3f4f6">
+    This offer is confidential and intended solely for the named recipient.
+  </div>
+</div>`;
+
+    try {
+      await EmailNotificationService.sendEmail({
+        to: c.email,
+        subject: `Offer of Employment — ${posting.title} | PACT Command Center`,
+        recipientName: c.full_name,
+        html,
+        text: `Dear ${c.full_name.split(' ')[0]},\n\nWe are delighted to offer you the position of ${posting.title} at PACT Command Center.\n\nStart Date: ${startDateStr}\nMonthly Salary: ${salaryStr}\n\nPlease confirm your acceptance within 7 days.\n\nHR Department, PACT Command Center`,
+        priority: 'high',
+      });
+      await supabase.from('hr_candidates' as any)
+        .update({ offer_sent_at: new Date().toISOString() })
+        .eq('id', c.id);
+      toast({ title: 'Offer letter emailed successfully' });
+      // Refresh so offer_sent_at shows
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: 'Email failed', description: err?.message ?? 'Could not send email', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
   }
 
   // ── Job Requisitions ───────────────────────────────────────────────────────
@@ -530,7 +680,8 @@ export default function Recruitment() {
       if (layer === 'manager') {
         update = { status: 'pending_hr', manager_approved_at: new Date().toISOString(), manager_approved_by: currentUser.id };
         try { await NotificationTriggerService.sendToRoles(['super_admin','admin','hr','hr_admin'], {
-          title: 'JR Needs HR Approval', message: `Requisition "${jr.title}" passed manager review — awaiting HR approval.`,
+          title: 'JR Needs HR Approval',
+          message: `Requisition "${jr.title}" passed manager review — awaiting HR approval.`,
           type: 'info', category: 'assignments', priority: 'high', link: '/recruitment',
         }); } catch (e) { console.warn(e); }
       } else {
@@ -576,6 +727,8 @@ export default function Recruitment() {
         : '',
       'Interview Date': c.interview_date ? format(new Date(c.interview_date), 'yyyy-MM-dd HH:mm') : '',
       'Applied At': format(new Date(c.applied_at), 'yyyy-MM-dd'),
+      'Salary Offer': c.salary_offer ?? '',
+      'Offer Sent': c.offer_sent_at ? format(new Date(c.offer_sent_at), 'yyyy-MM-dd') : '',
     }));
     exportToExcel(rows, 'Candidates', `Recruitment_Candidates_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
@@ -589,50 +742,81 @@ export default function Recruitment() {
   if (missingTable) return (
     <Card className="border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/10">
       <CardContent className="py-10 text-center text-sm text-amber-700 dark:text-amber-400">
-        Apply <code className="font-mono text-xs">supabase/migrations/20260705_hr_recruitment_disciplinary_benefits_headcount.sql</code> then <code className="font-mono text-xs">20260715_hr_recruitment_jr_scoring.sql</code> to enable this page.
+        Apply <code className="font-mono text-xs">20260705_hr_recruitment_disciplinary_benefits_headcount.sql</code> then <code className="font-mono text-xs">20260715_hr_recruitment_jr_scoring.sql</code> to enable this page.
       </CardContent>
     </Card>
   );
 
-  // ── Candidate detail dialog content ───────────────────────────────────────
+  // ── Candidate detail dialog ────────────────────────────────────────────────
   function CandidateDetailDialog() {
     const c = detailCand;
     if (!c) return null;
     const posting = postings.find(p => p.id === c.job_posting_id);
+    const rubric  = getEffectiveRubric(posting ?? null);
     const cScores = candidateScores(c.id);
     const cSlots  = candidateSlots(c.id);
     const avgScore = cScores.length
       ? (cScores.reduce((s, sc) => s + (sc.overall_score ?? 0), 0) / cScores.length).toFixed(1)
       : null;
     const myExistingScore = cScores.find(s => s.interviewer_id === currentUser?.id);
-    const radarData = DEFAULT_RUBRIC.map(r => {
-      const avg = cScores.filter(s => s.rubric_scores[r.id]).length
-        ? cScores.reduce((sum, s) => sum + (s.rubric_scores[r.id] ?? 0), 0) / cScores.filter(s => s.rubric_scores[r.id]).length
+    const radarData = rubric.map(r => {
+      const withValue = cScores.filter(s => (s.rubric_scores[r.id] ?? 0) > 0);
+      const avg = withValue.length
+        ? withValue.reduce((sum, s) => sum + (s.rubric_scores[r.id] ?? 0), 0) / withValue.length
         : 0;
       return { subject: r.label, score: Math.round(avg * 10) / 10, fullMark: 5 };
     });
 
-    // Offer state (local to dialog)
     const [offerSalary,   setOfferSalary]   = useState(String(c.salary_offer ?? ''));
     const [offerCurrency, setOfferCurrency] = useState(c.offer_currency ?? 'SDG');
     const [offerStart,    setOfferStart]    = useState(c.offer_start_date ?? '');
     const [savingOffer,   setSavingOffer]   = useState(false);
+    const [sendingEmail,  setSendingEmail]  = useState(false);
 
-    async function saveOffer() {
+    async function saveOfferDetails() {
       setSavingOffer(true);
-      await saveOfferDetails(c, parseFloat(offerSalary) || 0, offerCurrency, offerStart);
+      await supabase.from('hr_candidates' as any)
+        .update({ salary_offer: parseFloat(offerSalary) || null, offer_currency: offerCurrency, offer_start_date: offerStart || null })
+        .eq('id', c.id);
       setSavingOffer(false);
       toast({ title: 'Offer details saved' });
+      fetchAll();
     }
+
+    function previewPdf() {
+      const updatedCand = { ...c,
+        salary_offer: parseFloat(offerSalary) || c.salary_offer,
+        offer_currency: offerCurrency,
+        offer_start_date: offerStart || c.offer_start_date,
+      };
+      const doc = buildOfferPdf(updatedCand, posting!, deptName(posting?.department_id ?? null));
+      const url = doc.output('bloburl') as unknown as string;
+      setPreviewBlobUrl(url);
+    }
+
     function downloadPdf() {
-      if (!posting) return;
-      const updatedCand = { ...c, salary_offer: parseFloat(offerSalary) || c.salary_offer,
-        offer_currency: offerCurrency, offer_start_date: offerStart || c.offer_start_date };
-      generateOfferPdf(updatedCand, posting, deptName(posting.department_id));
+      const updatedCand = { ...c,
+        salary_offer: parseFloat(offerSalary) || c.salary_offer,
+        offer_currency: offerCurrency,
+        offer_start_date: offerStart || c.offer_start_date,
+      };
+      buildOfferPdf(updatedCand, posting!, deptName(posting?.department_id ?? null))
+        .save(`Offer_Letter_${c.full_name.replace(/\s+/g, '_')}.pdf`);
+    }
+
+    async function handleSendEmail() {
+      setSendingEmail(true);
+      const updatedCand = { ...c,
+        salary_offer: parseFloat(offerSalary) || c.salary_offer,
+        offer_currency: offerCurrency,
+        offer_start_date: offerStart || c.offer_start_date,
+      };
+      await sendOfferEmail(updatedCand, posting);
+      setSendingEmail(false);
     }
 
     return (
-      <Dialog open={!!detailCand} onOpenChange={(o) => { if (!o) setDetailCand(null); }}>
+      <Dialog open={!!detailCand} onOpenChange={(o) => { if (!o) { setDetailCand(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -658,12 +842,14 @@ export default function Recruitment() {
             {/* Overview */}
             <TabsContent value="overview" className="space-y-3 pt-2">
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                {[
-                  ['Email', c.email], ['Phone', c.phone], ['Source', c.source],
+                {([
+                  ['Email', c.email],
+                  ['Phone', c.phone],
+                  ['Source', c.source],
                   ['Interviewer', c.interviewer_id ? profileName(c.interviewer_id) : null],
                   ['Interview Date', c.interview_date ? format(new Date(c.interview_date), 'MMM d, yyyy HH:mm') : null],
-                ].filter(([,v]) => v).map(([k, v]) => (
-                  <div key={String(k)}>
+                ] as [string, string|null][]).filter(([, v]) => v).map(([k, v]) => (
+                  <div key={k}>
                     <p className="text-xs text-muted-foreground">{k}</p>
                     <p className="font-medium">{v}</p>
                   </div>
@@ -700,6 +886,9 @@ export default function Recruitment() {
                   </ResponsiveContainer>
                 </div>
               )}
+              {cScores.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No scorecards submitted yet.</p>
+              )}
               <div className="space-y-2">
                 {cScores.map(sc => (
                   <Card key={sc.id} className="bg-muted/30">
@@ -712,7 +901,7 @@ export default function Recruitment() {
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-1">
-                        {DEFAULT_RUBRIC.map(r => (
+                        {rubric.map(r => (
                           <div key={r.id} className="text-xs">
                             <span className="text-muted-foreground">{r.label}: </span>
                             <span className="font-medium">{sc.rubric_scores[r.id] ?? '—'}/5</span>
@@ -725,13 +914,13 @@ export default function Recruitment() {
                 ))}
               </div>
 
-              {/* My scorecard */}
+              {/* Submit my scorecard */}
               <div className="border-t pt-3 space-y-3">
                 <p className="text-sm font-semibold">{myExistingScore ? 'Update My Scorecard' : 'Submit My Scorecard'}</p>
                 <div className="grid grid-cols-1 gap-2">
-                  {DEFAULT_RUBRIC.map(r => (
+                  {rubric.map(r => (
                     <div key={r.id} className="flex items-center justify-between gap-3">
-                      <Label className="text-xs w-32 shrink-0">{r.label}</Label>
+                      <Label className="text-xs w-36 shrink-0">{r.label}</Label>
                       <div className="flex gap-1">
                         {[1,2,3,4,5].map(n => (
                           <button key={n} onClick={() => setMyScores(s => ({ ...s, [r.id]: n }))}
@@ -763,8 +952,8 @@ export default function Recruitment() {
                 <Card key={sl.id} className="bg-muted/30">
                   <CardContent className="p-3 space-y-1">
                     <div className="flex items-center gap-2">
-                      {sl.interview_type === 'video' && <Video className="h-3.5 w-3.5 text-blue-500" />}
-                      {sl.interview_type === 'phone' && <Phone className="h-3.5 w-3.5 text-emerald-500" />}
+                      {sl.interview_type === 'video'     && <Video  className="h-3.5 w-3.5 text-blue-500" />}
+                      {sl.interview_type === 'phone'     && <Phone  className="h-3.5 w-3.5 text-emerald-500" />}
                       {sl.interview_type === 'in_person' && <MapPin className="h-3.5 w-3.5 text-amber-500" />}
                       <span className="font-medium text-sm">{format(new Date(sl.scheduled_at), 'MMM d, yyyy HH:mm')}</span>
                       <Badge variant="outline" className="text-[10px]">{sl.duration_minutes}min</Badge>
@@ -807,16 +996,32 @@ export default function Recruitment() {
                   <Input type="date" value={offerStart} onChange={e => setOfferStart(e.target.value)} />
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={saveOffer} disabled={savingOffer}>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={saveOfferDetails} disabled={savingOffer}>
                   {savingOffer && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}Save Details
                 </Button>
-                <Button size="sm" onClick={downloadPdf} data-testid={`btn-offer-pdf-${c.id}`}>
-                  <FileDown className="h-3.5 w-3.5 mr-1" />Download Offer PDF
+                <Button size="sm" variant="outline" onClick={previewPdf}>
+                  <Eye className="h-3.5 w-3.5 mr-1" />Preview PDF
                 </Button>
+                <Button size="sm" variant="outline" onClick={downloadPdf} data-testid={`btn-offer-pdf-${c.id}`}>
+                  <FileDown className="h-3.5 w-3.5 mr-1" />Download PDF
+                </Button>
+                {c.email && (
+                  <Button size="sm" onClick={handleSendEmail} disabled={sendingEmail || saving}>
+                    {(sendingEmail || saving) ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Mail className="h-3.5 w-3.5 mr-1" />}
+                    Send via Email
+                  </Button>
+                )}
               </div>
               {c.offer_sent_at && (
-                <p className="text-xs text-muted-foreground">Offer sent {format(new Date(c.offer_sent_at), 'MMM d, yyyy')}</p>
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />Offer sent {format(new Date(c.offer_sent_at), 'MMM d, yyyy HH:mm')}
+                </p>
+              )}
+              {!c.email && (
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />No email address on file — email send unavailable
+                </p>
               )}
             </TabsContent>
           </Tabs>
@@ -870,7 +1075,7 @@ export default function Recruitment() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-4">
-            {/* Left: posting list */}
+            {/* Posting list */}
             <div className="md:col-span-1 space-y-2">
               {filteredPostings.length === 0 && (
                 <p className="text-sm text-muted-foreground py-6 text-center">No job postings yet.</p>
@@ -897,8 +1102,13 @@ export default function Recruitment() {
                       <Users className="h-3 w-3" />
                       {candidatesFor(p.id).length} candidate{candidatesFor(p.id).length === 1 ? '' : 's'} · needs {p.headcount_needed}
                     </div>
-                    {p.requisition_id && (
+                    {p.scoring_rubric && Array.isArray(p.scoring_rubric) && p.scoring_rubric.length > 0 && (
                       <p className="text-[10px] text-purple-500 mt-1 flex items-center gap-1">
+                        <Settings2 className="h-2.5 w-2.5" />Custom rubric ({p.scoring_rubric.length} categories)
+                      </p>
+                    )}
+                    {p.requisition_id && (
+                      <p className="text-[10px] text-blue-500 mt-0.5 flex items-center gap-1">
                         <Link2 className="h-2.5 w-2.5" />From approved requisition
                       </p>
                     )}
@@ -907,7 +1117,7 @@ export default function Recruitment() {
               ))}
             </div>
 
-            {/* Right: candidate pipeline */}
+            {/* Candidate pipeline */}
             <div className="md:col-span-2">
               {!activePosting ? (
                 <Card className="h-full">
@@ -927,8 +1137,14 @@ export default function Recruitment() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      {isAdmin && <Button size="sm" variant="outline" onClick={() => openEditJob(activePosting)} data-testid="button-edit-posting"><Edit2 className="h-3.5 w-3.5" /></Button>}
-                      {isAdmin && <Button size="sm" variant="outline" className="text-red-600" onClick={() => deleteJob(activePosting)} data-testid="button-delete-posting"><Trash2 className="h-3.5 w-3.5" /></Button>}
+                      {isAdmin && (
+                        <Button size="sm" variant="outline" title="Configure scoring rubric"
+                          onClick={() => openRubricDialog(activePosting)} data-testid="button-configure-rubric">
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {isAdmin && <Button size="sm" variant="outline" onClick={() => openEditJob(activePosting)}><Edit2 className="h-3.5 w-3.5" /></Button>}
+                      {isAdmin && <Button size="sm" variant="outline" className="text-red-600" onClick={() => deleteJob(activePosting)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                       {isAdmin && <Button size="sm" onClick={openNewCand} data-testid="button-add-candidate"><Plus className="h-3.5 w-3.5 mr-1" />Add Candidate</Button>}
                     </div>
                   </CardHeader>
@@ -959,14 +1175,13 @@ export default function Recruitment() {
                                     {candidateSlots(c.id).length} interview{candidateSlots(c.id).length > 1 ? 's' : ''}
                                   </Badge>
                                 )}
+                                {c.onboarding_noted && (
+                                  <Badge variant="outline" className="text-[10px] border-teal-300 text-teal-600">
+                                    <UserCheck className="h-2.5 w-2.5 mr-0.5" />Onboarding
+                                  </Badge>
+                                )}
                               </div>
-                              <p className="text-xs text-muted-foreground">{c.email} {c.phone ? `· ${c.phone}` : ''}</p>
-                              {c.interview_date && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  Interview: {format(new Date(c.interview_date), 'MMM d, yyyy HH:mm')}
-                                  {c.interviewer_id ? ` with ${profileName(c.interviewer_id)}` : ''}
-                                </p>
-                              )}
+                              <p className="text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ''}</p>
                             </div>
                             <div className="flex flex-col items-end gap-2">
                               <Select value={c.stage} onValueChange={(v) => quickSetStage(c, v as Candidate['stage'])} disabled={!isAdmin}>
@@ -981,11 +1196,11 @@ export default function Recruitment() {
                                     onClick={() => openDetailForCand(c, 'scorecards')}>
                                     <Award className="h-3 w-3 text-purple-500" />
                                   </Button>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" title="Schedule"
+                                  <Button size="icon" variant="ghost" className="h-6 w-6" title="Schedule interview"
                                     onClick={() => openSlotDialog(c.id)}>
                                     <CalendarPlus className="h-3 w-3 text-blue-500" />
                                   </Button>
-                                  {c.stage === 'offer' && (
+                                  {(c.stage === 'offer' || c.stage === 'hired') && (
                                     <Button size="icon" variant="ghost" className="h-6 w-6" title="Offer Letter"
                                       onClick={() => openDetailForCand(c, 'offer')}>
                                       <FileText className="h-3 w-3 text-emerald-500" />
@@ -1021,7 +1236,7 @@ export default function Recruitment() {
           {requisitions.map(jr => {
             const cfg = JR_STATUS_CFG[jr.status];
             const canManagerApprove = isManager && jr.status === 'pending_manager';
-            const canHrApprove = isAdmin && jr.status === 'pending_hr';
+            const canHrApprove      = isAdmin   && jr.status === 'pending_hr';
             return (
               <Card key={jr.id} data-testid={`card-jr-${jr.id}`}>
                 <CardContent className="p-4">
@@ -1046,7 +1261,6 @@ export default function Recruitment() {
                       {jr.justification && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{jr.justification}</p>
                       )}
-                      {/* Approval trail */}
                       <div className="flex gap-3 mt-2 flex-wrap">
                         {jr.manager_approved_at && (
                           <span className="text-[10px] text-emerald-600 flex items-center gap-1">
@@ -1077,13 +1291,11 @@ export default function Recruitment() {
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap shrink-0">
-                      {/* Submit draft */}
                       {jr.status === 'draft' && jr.requested_by === currentUser?.id && (
                         <Button size="sm" onClick={() => submitJr(jr)} data-testid={`btn-submit-jr-${jr.id}`}>
                           Submit for Approval
                         </Button>
                       )}
-                      {/* Manager approve/reject */}
                       {canManagerApprove && (
                         <>
                           <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300"
@@ -1098,7 +1310,6 @@ export default function Recruitment() {
                           </Button>
                         </>
                       )}
-                      {/* HR approve/reject */}
                       {canHrApprove && (
                         <>
                           <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300"
@@ -1137,6 +1348,64 @@ export default function Recruitment() {
 
       {/* Candidate detail dialog */}
       <CandidateDetailDialog />
+
+      {/* PDF Preview dialog */}
+      <Dialog open={!!previewBlobUrl} onOpenChange={o => { if (!o) { if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null); } }}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-4 pb-2 flex flex-row items-center justify-between">
+            <DialogTitle>Offer Letter Preview</DialogTitle>
+            <Button size="sm" variant="ghost" onClick={() => { if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null); }}>
+              <XIcon className="h-4 w-4" />
+            </Button>
+          </DialogHeader>
+          {previewBlobUrl && (
+            <iframe src={previewBlobUrl} title="Offer Letter Preview" className="flex-1 w-full border-0" />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Rubric config dialog */}
+      <Dialog open={rubricDialogOpen} onOpenChange={setRubricDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />Configure Scoring Rubric
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">{rubricTargetPosting?.title} — customise the scoring categories for this posting</p>
+          </DialogHeader>
+          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            {rubricDraft.map((r, i) => (
+              <div key={r.id} className="flex items-center gap-2 group">
+                <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Input value={r.label}
+                  onChange={e => setRubricDraft(d => d.map((item, idx) => idx === i ? { ...item, label: e.target.value } : item))}
+                  className="flex-1 h-8 text-sm" />
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400 opacity-0 group-hover:opacity-100"
+                  onClick={() => setRubricDraft(d => d.filter((_, idx) => idx !== i))}>
+                  <XIcon className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input placeholder="New category name…" value={rubricNewLabel}
+              onChange={e => setRubricNewLabel(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRubricCategory(); } }}
+              className="flex-1 h-8 text-sm" />
+            <Button size="sm" variant="outline" onClick={addRubricCategory}>
+              <Plus className="h-3.5 w-3.5 mr-1" />Add
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+            <AlertTriangle className="h-3 w-3" />
+            Existing scorecards will still display their original scores; only new scorecards will use this rubric.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRubricDialogOpen(false)}>Cancel</Button>
+            <Button onClick={saveRubric}>Save Rubric</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Job Posting dialog */}
       <Dialog open={jobDialogOpen} onOpenChange={setJobDialogOpen}>
@@ -1229,16 +1498,23 @@ export default function Recruitment() {
       {/* Interview Schedule dialog */}
       <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle><CalendarPlus className="inline h-4 w-4 mr-1" />Schedule Interview</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-4 w-4" />Schedule Interview
+              {outlookConnected && (
+                <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600">
+                  Outlook connected — invite will be sent
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Date & Time</Label><Input type="datetime-local" value={slotForm.scheduled_at} onChange={e => setSlotForm(f => ({ ...f, scheduled_at: e.target.value }))} /></div>
               <div><Label>Duration (minutes)</Label>
                 <Select value={slotForm.duration_minutes} onValueChange={v => setSlotForm(f => ({ ...f, duration_minutes: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {['30','45','60','90','120'].map(d => <SelectItem key={d} value={d}>{d} min</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{['30','45','60','90','120'].map(d => <SelectItem key={d} value={d}>{d} min</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -1265,7 +1541,7 @@ export default function Recruitment() {
                           ? [...f.interviewer_ids, p.id]
                           : f.interviewer_ids.filter(id => id !== p.id),
                       }))} className="h-3.5 w-3.5" />
-                    {p.full_name}
+                    {p.full_name}{p.email ? ` (${p.email})` : ''}
                   </label>
                 ))}
               </div>
@@ -1370,7 +1646,7 @@ export default function Recruitment() {
             <div className="flex gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-md border border-emerald-100 dark:border-emerald-800">
               <AlertTriangle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
               <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                HR will be notified to begin onboarding. You can optionally link this candidate to an existing staff profile.
+                This will create an onboarding record, mark the requisition as filled, and redirect you to Staff Onboarding.
               </p>
             </div>
             <div>

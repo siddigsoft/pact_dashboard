@@ -7,6 +7,7 @@ const SCOPES = [
   'User.Read',
   'Calendars.Read',
   'Calendars.ReadBasic',
+  'Calendars.ReadWrite',
 ];
 
 let msalInstance: PublicClientApplication | null = null;
@@ -199,6 +200,41 @@ export function useOutlookCalendar() {
     }
   }, [account]);
 
+  const createEvent = useCallback(async (event: {
+    subject: string;
+    start: string;   // ISO string
+    end: string;     // ISO string
+    location?: string;
+    body?: string;
+    attendeeEmails?: string[];
+  }): Promise<string | null> => {
+    if (!account) return null;
+    try {
+      const token = await acquireToken();
+      const payload = {
+        subject: event.subject,
+        start: { dateTime: event.start, timeZone: 'UTC' },
+        end:   { dateTime: event.end,   timeZone: 'UTC' },
+        location: event.location ? { displayName: event.location } : undefined,
+        body: event.body ? { contentType: 'text', content: event.body } : undefined,
+        attendees: (event.attendeeEmails ?? []).map(email => ({
+          emailAddress: { address: email },
+          type: 'required',
+        })),
+      };
+      const res = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.id ?? null;
+    } catch {
+      return null;
+    }
+  }, [account]);
+
   return {
     account,
     isConnected: !!account,
@@ -211,6 +247,7 @@ export function useOutlookCalendar() {
     disconnect,
     fetchMyEvents,
     fetchTeamAvailability,
+    createEvent,
     hasClientId: !!CLIENT_ID,
   };
 }
