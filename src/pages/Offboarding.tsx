@@ -68,6 +68,7 @@ export default function Offboarding() {
   const [editingAssets, setEditingAssets] = useState<{ id: string; name: string; asset_type: string; assignment_id: string }[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [returningAssetId, setReturningAssetId] = useState<string | null>(null);
+  const [assetReturnDialog, setAssetReturnDialog] = useState<{ assignmentId: string; assetId: string; assetName: string; condition: string; notes: string } | null>(null);
   const [form, setForm] = useState({
     user_id: '', last_working_date: format(new Date(),'yyyy-MM-dd'), reason: '',
     pro_rated_salary: 0, leave_encashment: 0, eosb_payout: 0, bonus_or_incentive: 0,
@@ -213,13 +214,19 @@ export default function Offboarding() {
     setAssetsLoading(false);
   };
 
-  const handleMarkAssetReturned = async (assignmentId: string, assetId: string) => {
+  const handleMarkAssetReturned = async (assignmentId: string, assetId: string, condition: string, notes: string) => {
     setReturningAssetId(assignmentId);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      await supabase.from('hr_asset_assignments').update({ returned_date: today, updated_at: new Date().toISOString() }).eq('id', assignmentId);
-      await supabase.from('hr_assets').update({ status: 'available', updated_at: new Date().toISOString() }).eq('id', assetId);
+      await supabase.from('hr_asset_assignments').update({
+        returned_date: today,
+        condition_at_return: condition,
+        notes: notes || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', assignmentId);
+      await supabase.from('hr_assets').update({ status: 'available', current_condition: condition, updated_at: new Date().toISOString() }).eq('id', assetId);
       toast({ title: 'Asset marked returned' });
+      setAssetReturnDialog(null);
       if (editing) fetchEditingAssets(editing.user_id);
       qc.invalidateQueries({ queryKey: ['hr-assets'] });
     } catch (e: any) {
@@ -532,7 +539,7 @@ export default function Offboarding() {
                               variant="outline"
                               className="h-7 text-xs gap-1 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100"
                               disabled={returningAssetId === a.assignment_id}
-                              onClick={() => handleMarkAssetReturned(a.assignment_id, a.id)}
+                              onClick={() => setAssetReturnDialog({ assignmentId: a.assignment_id, assetId: a.id, assetName: a.name, condition: 'good', notes: '' })}
                               data-testid={`button-offboarding-return-${a.assignment_id}`}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -598,6 +605,50 @@ export default function Offboarding() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Asset Return Dialog — captures condition + notes before confirming */}
+      <Dialog open={!!assetReturnDialog} onOpenChange={v => !v && setAssetReturnDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Record Asset Return</DialogTitle></DialogHeader>
+          {assetReturnDialog && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Recording return of <strong>{assetReturnDialog.assetName}</strong>.
+              </p>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Condition at Return</Label>
+                <Select value={assetReturnDialog.condition} onValueChange={v => setAssetReturnDialog(p => p ? { ...p, condition: v } : p)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['excellent','good','fair','damaged'].map(c => (
+                      <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Notes (optional)</Label>
+                <Input
+                  value={assetReturnDialog.notes}
+                  onChange={e => setAssetReturnDialog(p => p ? { ...p, notes: e.target.value } : p)}
+                  placeholder="Any damage or handover notes…"
+                  className="h-9"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssetReturnDialog(null)}>Cancel</Button>
+            <Button
+              disabled={returningAssetId === assetReturnDialog?.assignmentId}
+              onClick={() => assetReturnDialog && handleMarkAssetReturned(assetReturnDialog.assignmentId, assetReturnDialog.assetId, assetReturnDialog.condition, assetReturnDialog.notes)}
+              data-testid="button-confirm-asset-return"
+            >
+              {returningAssetId === assetReturnDialog?.assignmentId ? 'Saving…' : 'Confirm Return'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

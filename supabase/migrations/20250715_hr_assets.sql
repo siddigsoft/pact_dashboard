@@ -57,9 +57,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_assign_per_asset
 ALTER TABLE hr_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hr_asset_assignments ENABLE ROW LEVEL SECURITY;
 
--- hr_assets: all authenticated users can read; admins/HR can write
+-- hr_assets: HR/admin roles can see all; employees can only see assets
+--            that were ever assigned to them (least-privilege)
 CREATE POLICY IF NOT EXISTS "hr_assets_select"
-  ON hr_assets FOR SELECT USING (auth.uid() IS NOT NULL);
+  ON hr_assets FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles
+            WHERE id = auth.uid()
+              AND role IN ('admin','super_admin','hr_admin','ict'))
+    OR EXISTS (SELECT 1 FROM hr_asset_assignments
+               WHERE asset_id = hr_assets.id
+                 AND user_id = auth.uid())
+  );
 
 CREATE POLICY IF NOT EXISTS "hr_assets_insert_admin"
   ON hr_assets FOR INSERT WITH CHECK (
