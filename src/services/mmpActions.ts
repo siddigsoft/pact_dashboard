@@ -636,13 +636,13 @@ export async function fetchForwardedSiteEntries(mmpFileId: string) {
   try {
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
+      .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data, status, verified_at, verified_by, accepted_by')
       .eq('mmp_file_id', mmpFileId);
     if (error) {
       if (error.message?.includes('column') || error.code === '42703') {
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('mmp_site_entries')
-          .select('id, dispatched_at, additional_data')
+          .select('id, dispatched_at, additional_data, status')
           .eq('mmp_file_id', mmpFileId);
         if (fallbackError) throw fallbackError;
         return fallbackData || [];

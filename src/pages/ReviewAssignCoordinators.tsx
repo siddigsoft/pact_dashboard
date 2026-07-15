@@ -43,7 +43,16 @@ const ReviewAssignCoordinators: FC = () => {
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
   const [expandedLocalities, setExpandedLocalities] = useState({} as Record<string, boolean>);
   const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
-  const [forwardedSiteDetails, setForwardedSiteDetails] = useState<Map<string, { coordinatorId: string | null, forwardedAt: string | null, forwardedById: string | null }>>(new Map());
+  const [forwardedSiteDetails, setForwardedSiteDetails] = useState<Map<string, {
+    coordinatorId: string | null;
+    forwardedAt: string | null;
+    forwardedById: string | null;
+    status: string | null;
+    verifiedAt: string | null;
+    statePermit: boolean;
+    statePermitNotRequired: boolean;
+    localityPermit: boolean;
+  }>>(new Map());
   const [statePermitSiteIds, setStatePermitSiteIds] = useState<Set<string>>(new Set());
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -126,10 +135,19 @@ const ReviewAssignCoordinators: FC = () => {
             if (hasStatePermit) {
               statePermitIds.add(entry.id);
             }
+            const ad = typeof entry.additional_data === 'string'
+              ? (() => { try { return JSON.parse(entry.additional_data); } catch { return {}; } })()
+              : (entry.additional_data || {});
+            const isTruthy = (v: any) => v === true || v === 1 || v === '1' || v === 'true' || v === 'yes';
             details.set(entry.id, {
-              coordinatorId: entry.forwarded_to_user_id ?? entry.additional_data?.assigned_to ?? null,
+              coordinatorId: entry.forwarded_to_user_id ?? ad?.assigned_to ?? null,
               forwardedAt: entry.forwarded_at ?? entry.dispatched_at ?? null,
               forwardedById: entry.forwarded_by_user_id ?? null,
+              status: entry.status ?? null,
+              verifiedAt: entry.verified_at ?? null,
+              statePermit: isTruthy(ad?.state_permit_attached),
+              statePermitNotRequired: isTruthy(ad?.state_permit_not_required),
+              localityPermit: isTruthy(ad?.locality_permit_attached),
             });
           });
           
@@ -830,6 +848,28 @@ const ReviewAssignCoordinators: FC = () => {
                         return u?.fullName || u?.full_name || u?.name || u?.email || null;
                       })();
 
+                // ── Coordinator action status per forwarded site ──────────────
+                const CP_DONE_STATUSES = ['cp_verified','permits_attached','cp_verification','verified','approved','costed','approved_and_costed','completed'];
+                const coordActionSummary = (() => {
+                  const total = forwardedSites.length;
+                  if (total === 0) return null;
+                  let cpVerified = 0, statePerm = 0, statePermNA = 0, localityPerm = 0;
+                  forwardedSites.forEach((s: any) => {
+                    const d = forwardedSiteDetails.get(s.id);
+                    if (!d) return;
+                    const st = (d.status || '').toLowerCase().trim().replace(/\s+/g,'_');
+                    if (CP_DONE_STATUSES.includes(st) || !!d.verifiedAt) cpVerified++;
+                    if (d.statePermit) statePerm++;
+                    if (d.statePermitNotRequired) statePermNA++;
+                    if (d.localityPermit) localityPerm++;
+                  });
+                  const statePermDone = statePerm + statePermNA;
+                  const allCpDone = cpVerified === total;
+                  const allStateDone = statePermDone === total;
+                  const allLocalityDone = localityPerm === total;
+                  return { total, cpVerified, statePerm, statePermNA, statePermDone, localityPerm, allCpDone, allStateDone, allLocalityDone };
+                })();
+
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center flex-wrap gap-1 mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
@@ -872,8 +912,55 @@ const ReviewAssignCoordinators: FC = () => {
                       )}
                     </div>
                     {hasForwardedSites && !hasUnforwardedSites && (
-                      <div className="mb-3 text-sm text-green-700 font-medium">
+                      <div className="mb-2 text-sm text-green-700 font-medium">
                         ✓ All sites in this group have been forwarded
+                      </div>
+                    )}
+                    {/* ── Coordinator action progress ── */}
+                    {hasForwardedSites && coordActionSummary && (
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        {/* CP Verification */}
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
+                          coordActionSummary.allCpDone
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : coordActionSummary.cpVerified > 0
+                              ? 'bg-amber-50 border-amber-300 text-amber-700'
+                              : 'bg-red-50 border-red-200 text-red-600'
+                        }`}>
+                          {coordActionSummary.allCpDone ? '✓' : coordActionSummary.cpVerified > 0 ? '◐' : '○'}
+                          CP Verified {coordActionSummary.cpVerified}/{coordActionSummary.total}
+                        </span>
+                        {/* State Permit */}
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
+                          coordActionSummary.allStateDone
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : coordActionSummary.statePermDone > 0
+                              ? 'bg-amber-50 border-amber-300 text-amber-700'
+                              : 'bg-red-50 border-red-200 text-red-600'
+                        }`}>
+                          {coordActionSummary.allStateDone ? '✓' : coordActionSummary.statePermDone > 0 ? '◐' : '○'}
+                          State Permit {coordActionSummary.statePermDone}/{coordActionSummary.total}
+                          {coordActionSummary.statePermNA > 0 && (
+                            <span className="opacity-70">({coordActionSummary.statePermNA} N/A)</span>
+                          )}
+                        </span>
+                        {/* Locality Permit */}
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
+                          coordActionSummary.allLocalityDone
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : coordActionSummary.localityPerm > 0
+                              ? 'bg-amber-50 border-amber-300 text-amber-700'
+                              : 'bg-slate-50 border-slate-200 text-slate-500'
+                        }`}>
+                          {coordActionSummary.allLocalityDone ? '✓' : coordActionSummary.localityPerm > 0 ? '◐' : '○'}
+                          Locality Permit {coordActionSummary.localityPerm}/{coordActionSummary.total}
+                        </span>
+                        {/* All-done badge */}
+                        {coordActionSummary.allCpDone && coordActionSummary.allStateDone && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                            ✓ Coordinator done
+                          </span>
+                        )}
                       </div>
                     )}
                     {hasUnforwardedSites && (
