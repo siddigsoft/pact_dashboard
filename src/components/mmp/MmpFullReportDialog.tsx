@@ -14,17 +14,39 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
+//
+// "Covered" = visit is genuinely terminal-complete. Aligned with
+// TERMINAL_COMPLETION_RAW_STATUSES in src/utils/siteCompletionStatus.ts.
+//   - 'submitted'              enumerator self-reported to WFP ODK (Phase A terminal)
+//   - 'wfp_confirmed'          WFP confirmed receipt (Phase C gold standard)
+//   - 'completed'              legacy pre-Phase-A terminal value
+//   - 'verified'               legacy permit-verified terminal value
+//
+// NOT counted as covered (moved to in_progress):
+//   - 'approved', 'cp_verified', 'locality_permit_verified',
+//     'approved_and_costed', 'costed'
+//   These are post-submission workflow steps, NOT confirmation of visit completion.
+//   Including them was inflating coverage (e.g. Red Sea showing 100%).
+//
+// 'not_covered' and 'cancelled' → Attention (terminal but visit did not happen).
+//
 const DONE_STATUSES = new Set([
-  'wfp_confirmed', 'completed', 'verified', 'approved', 'cp_verified',
-  'locality_permit_verified', 'approved_and_costed', 'costed',
+  'wfp_confirmed',
+  'completed',
+  'verified',
+  'submitted',
 ]);
 const IN_PROGRESS_STATUSES = new Set([
   'accepted', 'claimed', 'in_progress', 'ongoing', 'dispatched', 'assigned',
   'forwarded', 'forwarded_to_coordinator', 'forwarded_to_fom', 'permits_attached',
-  'with_coordinators', 'submitted', 'acknowledged', 'site_claim',
+  'with_coordinators', 'acknowledged', 'site_claim',
+  // post-submission workflow steps — visit happened but approval chain in progress
+  'approved', 'cp_verified', 'locality_permit_verified', 'approved_and_costed', 'costed',
 ]);
 const ATTENTION_STATUSES = new Set([
   'rejected', 'declined', 'returned', 'returned_to_fom', 'recalled', 'sent_back',
+  // terminal non-visits — officially documented as not covered or cancelled
+  'not_covered', 'cancelled',
 ]);
 
 type EntryClass = 'done' | 'in_progress' | 'attention' | 'pending';
