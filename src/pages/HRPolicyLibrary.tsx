@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
@@ -16,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   FileText, Plus, Search, Filter, CheckCircle2, Clock, AlertTriangle,
   Globe, Archive, Loader2, Eye, Edit, Trash2, Download, Users, BookOpen,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Upload, X, Paperclip, Link, CalendarCheck, UserCircle,
 } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 
@@ -46,6 +46,9 @@ interface PolicyForm {
   content_text: string;
   file_url: string;
   required_roles: string[];
+  description: string;
+  review_date: string;
+  owner: string;
 }
 
 interface Employee {
@@ -92,6 +95,7 @@ const ALL_ROLES = [
 const DEFAULT_FORM: PolicyForm = {
   title: '', category: 'HR', version: '1.0',
   effective_date: '', content_text: '', file_url: '', required_roles: [],
+  description: '', review_date: '', owner: '',
 };
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
@@ -116,6 +120,9 @@ export default function HRPolicyLibrary() {
   const [deleteConfirm, setDeleteConfirm] = useState<Policy | null>(null);
   const [form, setForm]   = useState<PolicyForm>(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Compliance filters
   const [cmpPolicyFilter, setCmpPolicyFilter]   = useState('all');
@@ -239,14 +246,53 @@ export default function HRPolicyLibrary() {
   }, {});
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
-  const openCreate = () => { setForm({ ...DEFAULT_FORM }); setPolicyDialog({ mode: 'add' }); };
+  const openCreate = () => { setForm({ ...DEFAULT_FORM }); setUploadedFileName(null); setPolicyDialog({ mode: 'add' }); };
   const openEdit = (p: Policy) => {
     setForm({
       title: p.title, category: p.category, version: p.version,
       effective_date: p.effective_date ?? '', content_text: p.content_text ?? '',
       file_url: p.file_url ?? '', required_roles: p.required_roles ?? [],
+      description: (p as any).description ?? '',
+      review_date: (p as any).review_date ?? '',
+      owner: (p as any).owner ?? '',
     });
+    setUploadedFileName(p.file_url ? decodeURIComponent(p.file_url.split('/').pop() ?? '') : null);
     setPolicyDialog({ mode: 'edit', policy: p });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ALLOWED = ['application/pdf','application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    if (!ALLOWED.includes(file.type)) {
+      toast({ title: 'Unsupported file type', description: 'Please upload PDF, Word (.doc/.docx) or Excel (.xls/.xlsx)', variant: 'destructive' });
+      return;
+    }
+    setUploading(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `policies/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabase.storage.from('hr-policies').upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage.from('hr-policies').getPublicUrl(path);
+      setForm(f => ({ ...f, file_url: urlData.publicUrl }));
+      setUploadedFileName(file.name);
+      toast({ title: 'File uploaded', description: file.name });
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeFile = () => {
+    setForm(f => ({ ...f, file_url: '' }));
+    setUploadedFileName(null);
   };
 
   const handleSave = async () => {
@@ -263,8 +309,11 @@ export default function HRPolicyLibrary() {
         content_text:   form.content_text.trim() || null,
         file_url:       form.file_url.trim() || null,
         required_roles: form.required_roles,
+        description:    form.description.trim() || null,
+        review_date:    form.review_date || null,
+        owner:          form.owner.trim() || null,
         updated_at:     new Date().toISOString(),
-      };
+      } as any;
       if (policyDialog?.mode === 'edit' && policyDialog.policy) {
         const { error } = await supabase.from('hr_policies').update(payload).eq('id', policyDialog.policy.id);
         if (error) throw error;
@@ -723,8 +772,80 @@ export default function HRPolicyLibrary() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">External File URL (optional)</label>
-                <Input value={form.file_url} onChange={e => setForm(f => ({ ...f, file_url: e.target.value }))} placeholder="https://…" className="h-9" />
+                <label className="text-xs font-medium text-muted-foreground">Short Description / Summary</label>
+                <Textarea
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="One or two sentences summarising what this policy covers…"
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Next Review Date</label>
+                  <Input type="date" value={form.review_date} onChange={e => setForm(f => ({ ...f, review_date: e.target.value }))} className="h-9" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><UserCircle className="h-3 w-3" /> Policy Owner</label>
+                  <Input value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} placeholder="e.g. HR Manager" className="h-9" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Paperclip className="h-3 w-3" /> Attach Document</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                {uploadedFileName || form.file_url ? (
+                  <div className="flex items-center gap-2 p-2.5 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+                    <FileText className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 truncate flex-1">
+                      {uploadedFileName ?? form.file_url.split('/').pop()}
+                    </span>
+                    {form.file_url && (
+                      <a href={form.file_url} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-800">
+                        <Eye className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    <button type="button" onClick={removeFile} className="text-red-500 hover:text-red-700">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 border-dashed border-border hover:border-[#0F2041] hover:bg-muted/40 transition-colors disabled:opacity-50"
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {uploading ? 'Uploading…' : 'Click to upload PDF, Word or Excel'}
+                    </span>
+                  </button>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] text-muted-foreground">or paste a link</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <Input
+                    value={form.file_url}
+                    onChange={e => { setForm(f => ({ ...f, file_url: e.target.value })); if (!e.target.value) setUploadedFileName(null); else setUploadedFileName(null); }}
+                    placeholder="https://sharepoint.com/…"
+                    className="h-8 text-xs"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">Required Roles (leave empty = all staff)</label>
