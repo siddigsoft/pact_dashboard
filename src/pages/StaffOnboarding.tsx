@@ -10,10 +10,16 @@ function pct(n: number, d: number) { return d > 0 ? Math.round(n / d * 100) : 0;
 function fmt(n: string | null) { return n ? format(new Date(n), 'dd MMM yy') : '—'; }
 
 /* ── Tracker view (admin-only) ──────────────────────────── */
+interface PendingHire {
+  id: string; full_name: string; job_title: string | null;
+  expected_start_date: string | null; profile_id: string | null; created_at: string;
+}
+
 function TrackerView() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [salaryMap, setSalaryMap] = useState<Record<string, boolean>>({});
   const [retainerMap, setRetainerMap] = useState<Record<string, boolean>>({});
+  const [pendingHires, setPendingHires] = useState<PendingHire[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterDone, setFilterDone] = useState<'all' | 'complete' | 'incomplete'>('all');
@@ -21,10 +27,16 @@ function TrackerView() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [pRes, sRes, rRes] = await Promise.all([
+      const [pRes, sRes, rRes, onbRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,role,department_id,bank_account,contract_type,contract_start_date,contract_end_date,is_employee,employee_id,created_at').eq('is_employee', true).order('full_name'),
         (supabase as any).from('employee_salary_config').select('user_id'),
         (supabase as any).from('current_user_classifications').select('user_id').eq('is_active', true),
+        // Pending new hires: candidates marked hired but not yet linked to a profile
+        (supabase as any).from('hr_onboarding_records')
+          .select('id,full_name,job_title,expected_start_date,profile_id,created_at')
+          .is('profile_id', null)
+          .order('created_at', { ascending: false })
+          .limit(20),
       ]);
       setProfiles(pRes.data ?? []);
       const sm: Record<string, boolean> = {};
@@ -33,6 +45,7 @@ function TrackerView() {
       const rm: Record<string, boolean> = {};
       (rRes.data ?? []).forEach((r: any) => { rm[r.user_id] = true; });
       setRetainerMap(rm);
+      if (!onbRes.error) setPendingHires(onbRes.data ?? []);
       setLoading(false);
     };
     load();
@@ -138,6 +151,44 @@ function TrackerView() {
             <div style={{ height: '100%', width: `${overall.total > 0 ? pct(overall.complete, overall.total) : 0}%`, background: 'linear-gradient(90deg, #0F2041, #2563eb)', borderRadius: 999, transition: 'width 0.5s ease' }} />
           </div>
         </div>
+
+        {/* Pending New Hires — candidates hired via Recruitment but not yet set up */}
+        {pendingHires.length > 0 && (
+          <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1.5px solid #f97316' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f97316' }} />
+              <span style={{ fontWeight: 700, fontSize: 13, color: '#9a3412' }}>
+                {pendingHires.length} Pending New Hire{pendingHires.length !== 1 ? 's' : ''} — Profile Setup Required
+              </span>
+              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 4 }}>
+                Hired via Recruitment module, not yet linked to a system account
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {pendingHires.map(h => (
+                <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fff7ed', borderRadius: 10, border: '1px solid #fed7aa' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>{h.full_name}</div>
+                    {h.job_title && <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{h.job_title}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    {h.expected_start_date && (
+                      <div style={{ fontSize: 11, color: '#9a3412', fontWeight: 600 }}>
+                        Start: {fmt(h.expected_start_date)}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                      Hired {fmt(h.created_at)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+              Go to <strong>Recruitment → Candidates</strong> and link each hire to their system profile.
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>

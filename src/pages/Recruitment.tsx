@@ -463,9 +463,11 @@ export default function Recruitment() {
       if (jr?.department_id) {
         try {
           await supabase.rpc('increment_headcount_filled' as any, {
-            p_department_id:  jr.department_id,
-            p_position_title: jr.title,
-            p_fiscal_year:    new Date().getFullYear(),
+            p_department_id:    jr.department_id,
+            p_position_title:   jr.title,
+            p_fiscal_year:      new Date().getFullYear(),
+            p_hired_candidate:  hiredDialog.full_name,
+            p_hired_start_date: hiredDialog.offer_start_date ?? null,
           });
         } catch (e) { console.warn('[Recruitment] headcount sync failed:', e); }
       }

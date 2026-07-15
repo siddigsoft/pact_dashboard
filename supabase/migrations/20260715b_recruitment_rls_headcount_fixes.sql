@@ -79,20 +79,23 @@ CREATE POLICY hr_scores_select ON hr_candidate_scores FOR SELECT
   );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 3. Headcount sync — add filled_count to the EXISTING hr_headcount_plans table
+-- 3. Headcount sync — extend hr_headcount_plans with hire attribution columns
 --    (HeadcountPlanning.tsx already uses this table; we extend it in-place)
 -- ─────────────────────────────────────────────────────────────────────────
 ALTER TABLE hr_headcount_plans
-  ADD COLUMN IF NOT EXISTS filled_count int NOT NULL DEFAULT 0
-    CHECK (filled_count >= 0);
+  ADD COLUMN IF NOT EXISTS filled_count         int  NOT NULL DEFAULT 0 CHECK (filled_count >= 0),
+  ADD COLUMN IF NOT EXISTS last_hired_candidate text,
+  ADD COLUMN IF NOT EXISTS last_hired_date      date;
 
--- RPC: safely increment filled_count when a candidate is hired.
+-- RPC: safely increment filled_count and record hire attribution when a candidate is hired.
 -- SECURITY DEFINER runs as the DB owner, so it can bypass RLS for the update;
--- but an explicit role-guard inside the body ensures only HR/manager/admin can call it.
+-- an explicit role-guard inside the body ensures only HR/manager/admin can call it.
 CREATE OR REPLACE FUNCTION increment_headcount_filled(
-  p_department_id  uuid,
-  p_position_title text,
-  p_fiscal_year    int DEFAULT EXTRACT(year FROM now())::int
+  p_department_id       uuid,
+  p_position_title      text,
+  p_fiscal_year         int  DEFAULT EXTRACT(year FROM now())::int,
+  p_hired_candidate     text DEFAULT NULL,
+  p_hired_start_date    date DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -110,10 +113,12 @@ BEGIN
     RAISE EXCEPTION 'Insufficient privileges: only HR or managers may update headcount';
   END IF;
 
-  -- Increment filled_count on the matching plan row (best-effort match by dept + title + year).
-  -- If no matching row exists yet, the UPDATE is a no-op (doesn't create phantom rows).
+  -- Increment filled_count and record who was hired on the matching plan row.
+  -- Best-effort match by dept + title + year; no-op if no matching row exists.
   UPDATE hr_headcount_plans
-  SET    filled_count = filled_count + 1
+  SET    filled_count         = filled_count + 1,
+         last_hired_candidate = COALESCE(p_hired_candidate, last_hired_candidate),
+         last_hired_date      = COALESCE(p_hired_start_date, last_hired_date)
   WHERE  fiscal_year    = p_fiscal_year
     AND  (department_id = p_department_id OR department_id IS NULL)
     AND  lower(position_title) = lower(p_position_title);
@@ -123,3 +128,98 @@ $$;
 -- Restrict execution: revoke PUBLIC, grant only to authenticated users (role guard is inside)
 REVOKE ALL ON FUNCTION increment_headcount_filled FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION increment_headcount_filled TO authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 4. hr_manager role gap fixes across all recruitment tables
+--    The UI treats hr_manager as admin-capable; RLS must match.
+-- ─────────────────────────────────────────────────────────────────────────
+
+-- JR: update admin policy to include hr_manager
+DROP POLICY IF EXISTS hr_jr_update_admin ON hr_job_requisitions;
+CREATE POLICY hr_jr_update_admin ON hr_job_requisitions FOR UPDATE
+  USING (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+              AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+              AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  );
+
+-- JR: manager-layer policy also needs hr_manager
+DROP POLICY IF EXISTS hr_jr_update_manager ON hr_job_requisitions;
+CREATE POLICY hr_jr_update_manager ON hr_job_requisitions FOR UPDATE
+  USING (
+    status = 'pending_manager'
+    AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                  AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager','manager'))
+  )
+  WITH CHECK (
+    status IN ('pending_hr', 'rejected')
+    AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                  AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager','manager'))
+  );
+
+-- Scorecard: hr_manager should be able to insert/update/delete scorecards
+DROP POLICY IF EXISTS hr_scores_insert ON hr_candidate_scores;
+CREATE POLICY hr_scores_insert ON hr_candidate_scores FOR INSERT
+  WITH CHECK (
+    interviewer_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager','manager'))
+  );
+
+DROP POLICY IF EXISTS hr_scores_update ON hr_candidate_scores;
+CREATE POLICY hr_scores_update ON hr_candidate_scores FOR UPDATE
+  USING (
+    interviewer_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  )
+  WITH CHECK (
+    interviewer_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  );
+
+DROP POLICY IF EXISTS hr_scores_delete ON hr_candidate_scores;
+CREATE POLICY hr_scores_delete ON hr_candidate_scores FOR DELETE
+  USING (
+    interviewer_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  );
+
+-- Onboarding records: hr_manager should have full access
+DROP POLICY IF EXISTS hr_onboarding_all ON hr_onboarding_records;
+CREATE POLICY hr_onboarding_all ON hr_onboarding_records FOR ALL
+  USING (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+              AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager','manager'))
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+              AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager','manager'))
+  );
+
+-- Interview slots: hr_manager can update and delete
+DROP POLICY IF EXISTS hr_slots_update ON hr_interview_slots;
+CREATE POLICY hr_slots_update ON hr_interview_slots FOR UPDATE
+  USING (
+    created_by = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  )
+  WITH CHECK (
+    created_by = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  );
+
+DROP POLICY IF EXISTS hr_slots_delete ON hr_interview_slots;
+CREATE POLICY hr_slots_delete ON hr_interview_slots FOR DELETE
+  USING (
+    created_by = auth.uid()
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+                AND p.role IN ('super_admin','admin','hr','hr_admin','hr_manager'))
+  );
