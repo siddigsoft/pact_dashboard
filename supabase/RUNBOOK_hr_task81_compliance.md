@@ -45,8 +45,10 @@ public abuse, set a shared secret in Supabase Dashboard → Edge Functions → S
 ALERT_FUNCTION_SECRET = <generate a strong random value, e.g. openssl rand -hex 32>
 ```
 
-When the secret is set, the function validates `x-alert-secret` header on every
-request. The pg_cron invocation must pass this header (see curl example below).
+**The function is fail-closed:** if `ALERT_FUNCTION_SECRET` is not set in Edge
+Function Secrets, ALL requests (including pg_cron) are rejected with 401.
+You MUST configure this secret before the function will process any alerts.
+The pg_cron invocation must pass the secret via `x-alert-secret` header.
 
 ### Deploy
 ```bash

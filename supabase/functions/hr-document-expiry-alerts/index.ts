@@ -6,10 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-alert-secret',
 }
 
-// ── Security: require shared secret header when invoked externally ──────────
+// ── Security: ALERT_FUNCTION_SECRET is REQUIRED — fail-closed ───────────────
+// If the secret env var is not set, ALL requests are rejected to prevent
+// unauthenticated abuse of the service-role-powered email/notification fan-out.
 function authorised(req: Request): boolean {
   const expectedSecret = Deno.env.get('ALERT_FUNCTION_SECRET')
-  if (!expectedSecret) return true            // not configured → allow (service-role internal)
+  if (!expectedSecret) return false           // fail-closed: missing secret = deny all
   const provided = req.headers.get('x-alert-secret')
   return provided === expectedSecret
 }
@@ -309,8 +311,8 @@ serve(async (req) => {
         const label     = daysLeft <= 0 ? `Ended on ${expDate}` : `Ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'} (${expDate})`
         const actionUrl = `/users/${row.id}?section=employment`
 
-        // Manager alert fires at T-14 specifically
-        const managerBucket = thresholdBucket(daysLeft, [PROBATION_THRESHOLD, ...DOC_THRESHOLDS])
+        // Manager alert fires ONLY at exactly T-14 (probation-specific threshold)
+        const managerBucket = daysLeft === PROBATION_THRESHOLD ? PROBATION_THRESHOLD : null
         if (managerBucket !== null && row.reports_to) {
           const mgr = await getProfile(row.reports_to)
           const urgency = daysLeft <= 7 ? 'high' : 'medium'
