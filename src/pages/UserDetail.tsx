@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type FC } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { isProtectedOwner } from "@/lib/protected-accounts";
@@ -147,6 +148,7 @@ const UserDetail: FC = () => {
   const [profileFolderPath, setProfileFolderPath] = useState<string | null>(null);
   const [folderSyncing, setFolderSyncing] = useState(false);
   const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
+  const [perfTrend, setPerfTrend] = useState<{ period: string; rating: number }[]>([]);
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
   const savedDepartmentIdRef = useRef<string | null>(null);
@@ -326,6 +328,24 @@ const UserDetail: FC = () => {
       .then(({ data }) => {
         if (data?.professional_summary) setEmpSummary(data.professional_summary);
         if (data?.profile_folder_path)  setProfileFolderPath(data.profile_folder_path);
+      });
+  }, [user?.id]);
+
+  // Load last 4 completed review scores for sparkline trend
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('performance_reviews')
+      .select('review_period, overall_rating, reviewed_at')
+      .eq('reviewee_id', user.id)
+      .eq('status', 'completed')
+      .not('overall_rating', 'is', null)
+      .order('reviewed_at', { ascending: true })
+      .limit(4)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setPerfTrend(data.map((r: any) => ({ period: r.review_period ?? '—', rating: Number(r.overall_rating) })));
+        }
       });
   }, [user?.id]);
 
@@ -1772,7 +1792,8 @@ const UserDetail: FC = () => {
             })()}
 
             {/* ── PERFORMANCE SECTION ─────────────────────────────────────── */}
-            {activeSection === 'performance' && (<div className="p-5 sm:p-6">
+            {activeSection === 'performance' && (<div className="p-5 sm:p-6 space-y-6">
+              {/* Task-based KPIs */}
               {user.performance ? (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {[
@@ -1787,14 +1808,49 @@ const UserDetail: FC = () => {
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : null}
+
+              {/* Review Score Trend — sparkline from last 4 completed review cycles */}
+              {perfTrend.length > 0 ? (
+                <div className="bg-muted/20 rounded-xl p-5 border border-border/40">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <Award className="h-3.5 w-3.5" />Review Score Trend (last {perfTrend.length} cycles)
+                  </h3>
+                  <div className="h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={perfTrend} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                        <XAxis dataKey="period" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                        <YAxis domain={[0, 5]} ticks={[1,2,3,4,5]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          contentStyle={{ fontSize: 12, borderRadius: 8, padding: '4px 10px' }}
+                          formatter={(v: number) => [`${v.toFixed(1)} / 5`, 'Rating']}
+                        />
+                        <ReferenceLine y={3} stroke="#e2e8f0" strokeDasharray="4 2" />
+                        <Line
+                          type="monotone" dataKey="rating" stroke="#f59e0b"
+                          strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    {perfTrend.map(pt => (
+                      <div key={pt.period} className="text-center">
+                        <p className="text-[10px] text-muted-foreground truncate max-w-16">{pt.period}</p>
+                        <p className="text-xs font-semibold text-amber-600">{pt.rating.toFixed(1)}★</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : !user.performance ? (
                 <div className="text-center py-16">
                   <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto mb-4">
                     <Award className="h-12 w-12 text-muted-foreground/40" />
                   </div>
                   <p className="text-muted-foreground">No performance data available yet.</p>
                 </div>
-              )}
+              ) : null}
             </div>)}
 
             {/* ── COMPENSATION SECTION ─────────────────────────────────────── */}

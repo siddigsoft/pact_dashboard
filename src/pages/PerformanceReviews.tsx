@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isValid } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Star, Plus, Edit2, Trash2, Loader2, CheckCircle2, Clock,
   User, Search, FileText, BarChart2, Send, ChevronDown, ChevronUp,
-  Award, Target, BookOpen, TrendingUp, X, Download,
+  Award, Target, BookOpen, TrendingUp, X, Download, Users,
+  GitMerge, Sliders, UserCheck, UserX, EyeOff, ArrowRight,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { Button } from '@/components/ui/button';
@@ -14,14 +15,20 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface Profile { id: string; full_name: string; role?: string; }
 
@@ -32,6 +39,9 @@ interface Review {
   review_period: string;
   review_type: string;
   status: string;
+  cycle_phase: string;
+  self_assessment_enabled: boolean;
+  peer_feedback_enabled: boolean;
   overall_rating: number | null;
   goals: Goal[];
   competencies: Competency[];
@@ -50,23 +60,61 @@ interface Review {
 interface Goal { id: string; title: string; description?: string; rating?: number; completion?: number; }
 interface Competency { id: string; name: string; rating: number; comments?: string; }
 
+interface SelfAssessment {
+  id: string;
+  review_id: string;
+  user_id: string;
+  ratings: Record<string, number>;
+  comments: string | null;
+  submitted_at: string | null;
+}
+
+interface PeerNomination {
+  id: string;
+  review_id: string;
+  reviewee_id: string;
+  nominee_id: string;
+  approved: boolean | null;
+  feedback: Record<string, { rating: number; comment: string }> | null;
+  submitted_at: string | null;
+  reviewee_name?: string;
+  review_period?: string;
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
 const COMPETENCIES_TEMPLATE: Omit<Competency, 'rating'>[] = [
-  { id: 'quality', name: 'Work Quality & Accuracy' },
-  { id: 'communication', name: 'Communication & Collaboration' },
-  { id: 'initiative', name: 'Initiative & Problem Solving' },
-  { id: 'teamwork', name: 'Teamwork & Interpersonal Skills' },
-  { id: 'leadership', name: 'Leadership & Mentoring' },
-  { id: 'adaptability', name: 'Adaptability & Learning' },
+  { id: 'quality',        name: 'Work Quality & Accuracy' },
+  { id: 'communication',  name: 'Communication & Collaboration' },
+  { id: 'initiative',     name: 'Initiative & Problem Solving' },
+  { id: 'teamwork',       name: 'Teamwork & Interpersonal Skills' },
+  { id: 'leadership',     name: 'Leadership & Mentoring' },
+  { id: 'adaptability',   name: 'Adaptability & Learning' },
 ];
 
 const STATUS_CFG: Record<string, { label: string; badge: string; icon: ReactNode }> = {
-  draft:     { label: 'Draft',           badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800', icon: <FileText className="h-3.5 w-3.5" /> },
-  submitted: { label: 'Self-Submitted',  badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40', icon: <Send className="h-3.5 w-3.5" /> },
-  in_review: { label: 'Manager Review',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40', icon: <Clock className="h-3.5 w-3.5" /> },
-  completed: { label: 'Completed',       badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  draft:     { label: 'Draft',          badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800',           icon: <FileText   className="h-3.5 w-3.5" /> },
+  submitted: { label: 'Self-Submitted', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40',         icon: <Send       className="h-3.5 w-3.5" /> },
+  in_review: { label: 'Manager Review', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40',      icon: <Clock      className="h-3.5 w-3.5" /> },
+  completed: { label: 'Completed',      badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40',icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+};
+
+const PHASE_CFG: Record<string, { label: string; color: string }> = {
+  not_started:    { label: 'Not Started',     color: 'bg-gray-100 text-gray-600' },
+  self_assessment:{ label: 'Self-Assessment', color: 'bg-blue-100 text-blue-700' },
+  peer_feedback:  { label: 'Peer Feedback',   color: 'bg-purple-100 text-purple-700' },
+  manager_review: { label: 'Manager Review',  color: 'bg-amber-100 text-amber-700' },
+  calibration:    { label: 'Calibration',     color: 'bg-orange-100 text-orange-700' },
+  published:      { label: 'Published',       color: 'bg-emerald-100 text-emerald-700' },
 };
 
 const REVIEW_TYPES = ['annual', 'mid_year', 'probation', 'project_completion', 'quarterly'];
+
+const PHASE_ORDER = ['not_started', 'self_assessment', 'peer_feedback', 'manager_review', 'calibration', 'published'];
+
+type ReviewTab = 'my' | 'all' | 'pending' | 'self-assess' | 'peer' | 'calibrate' | 'progress';
+
+// ── Sub-components ───────────────────────────────────────────────────────────
 
 function StarRating({ value, onChange, readonly }: { value: number; onChange?: (v: number) => void; readonly?: boolean }) {
   return (
@@ -82,89 +130,163 @@ function StarRating({ value, onChange, readonly }: { value: number; onChange?: (
   );
 }
 
+function PhaseBadge({ phase }: { phase: string }) {
+  const cfg = PHASE_CFG[phase] ?? PHASE_CFG.not_started;
+  return <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', cfg.color)}>{cfg.label}</span>;
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
+
 export default function PerformanceReviews() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const { hasAnyRole } = useAuthorization();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'manager']);
+  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin', 'manager']);
 
-  const [reviews, setReviews] = useState<Review[]>([]);
+  // ── Core data ──────────────────────────────────────────────────────────────
+  const [reviews, setReviews]   = useState<Review[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selfAssessments, setSelfAssessments] = useState<SelfAssessment[]>([]);
+  const [nominations, setNominations]         = useState<PeerNomination[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'my' | 'all' | 'pending'>('my');
+  const [tab, setTab]   = useState<ReviewTab>('my');
   const [search, setSearch] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [editing, setEditing] = useState<Review | null>(null);
-  const [viewing, setViewing] = useState<Review | null>(null);
-  const [saving, setSaving] = useState(false);
 
+  // ── Create/edit dialog ─────────────────────────────────────────────────────
+  const [dialogOpen, setDialogOpen]   = useState(false);
+  const [editing, setEditing]         = useState<Review | null>(null);
+  const [saving, setSaving]           = useState(false);
   const [form, setForm] = useState({
-    reviewee_id: '',
-    review_period: '',
-    review_type: 'annual',
-    self_assessment: '',
-    manager_comments: '',
-    strengths: '',
-    development_areas: '',
-    next_goals: '',
-    overall_rating: 0,
+    reviewee_id: '', review_period: '', review_type: 'annual',
+    self_assessment: '', manager_comments: '', strengths: '',
+    development_areas: '', next_goals: '', overall_rating: 0,
     goals: [] as Goal[],
     competencies: COMPETENCIES_TEMPLATE.map(c => ({ ...c, rating: 0, comments: '' })) as Competency[],
+    self_assessment_enabled: false,
+    peer_feedback_enabled:   false,
   });
 
-  useEffect(() => { fetchReviews(); fetchProfiles(); }, []);
+  // ── Detail view ────────────────────────────────────────────────────────────
+  const [detailOpen, setDetailOpen]   = useState(false);
+  const [viewing, setViewing]         = useState<Review | null>(null);
 
-  // Realtime: refresh when performance_reviews change so admins/HR
-  // see newly submitted reviews appear without manual refresh.
-  useEffect(() => {
-    const channel = supabase
-      .channel('performance-reviews-stream')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'performance_reviews' },
-        () => { fetchReviews(); },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+  // ── Self-assessment dialog ─────────────────────────────────────────────────
+  const [saOpen, setSaOpen]             = useState(false);
+  const [saReview, setSaReview]         = useState<Review | null>(null);
+  const [saRatings, setSaRatings]       = useState<Record<string, number>>({});
+  const [saComments, setSaComments]     = useState('');
+  const [saSubmitting, setSaSubmitting] = useState(false);
+
+  // ── Peer nomination dialog ─────────────────────────────────────────────────
+  const [nomOpen, setNomOpen]                 = useState(false);
+  const [nomReview, setNomReview]             = useState<Review | null>(null);
+  const [nomSearch, setNomSearch]             = useState('');
+  const [selectedNominees, setSelectedNominees] = useState<string[]>([]);
+  const [nomSubmitting, setNomSubmitting]     = useState(false);
+
+  // ── Peer feedback dialog ───────────────────────────────────────────────────
+  const [pfOpen, setPfOpen]           = useState(false);
+  const [pfNom, setPfNom]             = useState<PeerNomination | null>(null);
+  const [pfRatings, setPfRatings]     = useState<Record<string, number>>({});
+  const [pfComments, setPfComments]   = useState<Record<string, string>>({});
+  const [pfSubmitting, setPfSubmitting] = useState(false);
+
+  // ── Calibration dialog ─────────────────────────────────────────────────────
+  const [calibOpen, setCalibOpen]   = useState(false);
+  const [calibData, setCalibData]   = useState<Record<string, { adjusted: number; reason: string }>>({});
+  const [calibSaving, setCalibSaving] = useState(false);
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    const [revRes, saRes, nomRes, profRes] = await Promise.all([
+      supabase.from('performance_reviews').select('*').order('created_at', { ascending: false }),
+      supabase.from('hr_review_self_assessments').select('*'),
+      supabase.from('hr_review_peer_nominations').select('*'),
+      supabase.from('profiles').select('id, full_name, role').order('full_name'),
+    ]);
+
+    const pm = Object.fromEntries((profRes.data ?? []).map((p: any) => [p.id, p.full_name]));
+    setProfiles((profRes.data ?? []) as Profile[]);
+    setSelfAssessments((saRes.data ?? []) as SelfAssessment[]);
+
+    const revData = (revRes.data ?? []).map((r: any) => ({
+      ...r,
+      goals: r.goals ?? [],
+      competencies: r.competencies ?? [],
+      self_assessment_enabled: r.self_assessment_enabled ?? false,
+      peer_feedback_enabled:   r.peer_feedback_enabled ?? false,
+      cycle_phase: r.cycle_phase ?? 'manager_review',
+      reviewee_name: pm[r.reviewee_id] ?? 'Unknown',
+      reviewer_name: r.reviewer_id ? (pm[r.reviewer_id] ?? 'Unknown') : null,
+    }));
+    setReviews(revData);
+
+    const nomData = (nomRes.data ?? []).map((n: any) => {
+      const rev = revData.find((r: Review) => r.id === n.review_id);
+      return { ...n, reviewee_name: pm[n.reviewee_id] ?? 'Unknown', review_period: rev?.review_period ?? '' };
+    });
+    setNominations(nomData as PeerNomination[]);
+    setLoading(false);
   }, []);
 
-  async function fetchReviews() {
-    setLoading(true);
-    const { data } = await supabase.from('performance_reviews').select('*').order('created_at', { ascending: false });
-    if (data) {
-      const { data: profs } = await supabase.from('profiles').select('id, full_name');
-      const pm = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.full_name]));
-      setReviews(data.map((r: any) => ({
-        ...r,
-        goals: r.goals ?? [],
-        competencies: r.competencies ?? [],
-        reviewee_name: pm[r.reviewee_id] ?? 'Unknown',
-        reviewer_name: r.reviewer_id ? (pm[r.reviewer_id] ?? 'Unknown') : null,
-      })));
-    }
-    setLoading(false);
-  }
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  async function fetchProfiles() {
-    const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
-    if (data) setProfiles(data as Profile[]);
-  }
+  // Realtime
+  useEffect(() => {
+    const ch = supabase.channel('perf-reviews-360')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'performance_reviews' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_review_self_assessments' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_review_peer_nominations' }, () => fetchAll())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [fetchAll]);
 
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const myReviews     = reviews.filter(r => r.reviewee_id === currentUser?.id);
+  const pendingReviews = reviews.filter(r => r.status === 'submitted' && isAdmin);
+
+  // Reviews where the current user still needs to self-assess
+  const pendingSelfAssess = myReviews.filter(r =>
+    r.self_assessment_enabled &&
+    r.cycle_phase === 'self_assessment' &&
+    !selfAssessments.some(sa => sa.review_id === r.id && sa.submitted_at)
+  );
+
+  // Nominations where current user is the nominee, approved, and hasn't submitted feedback yet
+  const pendingPeerFeedback = nominations.filter(n =>
+    n.nominee_id === currentUser?.id &&
+    n.approved === true &&
+    !n.submitted_at
+  );
+
+  // Team reviews in calibration phase (admin)
+  const calibrationReviews = isAdmin
+    ? reviews.filter(r => r.cycle_phase === 'calibration' || r.status === 'completed')
+    : [];
+
+  const filtered = (
+    tab === 'my'     ? myReviews :
+    tab === 'pending' ? pendingReviews :
+    tab === 'self-assess' ? pendingSelfAssess :
+    tab === 'peer'   ? [] :
+    tab === 'calibrate' ? calibrationReviews :
+    reviews
+  ).filter(r => !search ||
+    r.reviewee_name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.review_period.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // ── Create / Edit ──────────────────────────────────────────────────────────
   function openNew() {
     setEditing(null);
     setForm({
-      reviewee_id: currentUser?.id ?? '',
-      review_period: '',
-      review_type: 'annual',
-      self_assessment: '',
-      manager_comments: '',
-      strengths: '',
-      development_areas: '',
-      next_goals: '',
-      overall_rating: 0,
+      reviewee_id: currentUser?.id ?? '', review_period: '', review_type: 'annual',
+      self_assessment: '', manager_comments: '', strengths: '',
+      development_areas: '', next_goals: '', overall_rating: 0,
       goals: [],
       competencies: COMPETENCIES_TEMPLATE.map(c => ({ ...c, rating: 0, comments: '' })),
+      self_assessment_enabled: false, peer_feedback_enabled: false,
     });
     setDialogOpen(true);
   }
@@ -172,19 +294,16 @@ export default function PerformanceReviews() {
   function openEdit(rev: Review) {
     setEditing(rev);
     setForm({
-      reviewee_id: rev.reviewee_id,
-      review_period: rev.review_period,
-      review_type: rev.review_type,
-      self_assessment: rev.self_assessment ?? '',
-      manager_comments: rev.manager_comments ?? '',
-      strengths: rev.strengths ?? '',
-      development_areas: rev.development_areas ?? '',
-      next_goals: rev.next_goals ?? '',
-      overall_rating: rev.overall_rating ?? 0,
+      reviewee_id: rev.reviewee_id, review_period: rev.review_period, review_type: rev.review_type,
+      self_assessment: rev.self_assessment ?? '', manager_comments: rev.manager_comments ?? '',
+      strengths: rev.strengths ?? '', development_areas: rev.development_areas ?? '',
+      next_goals: rev.next_goals ?? '', overall_rating: rev.overall_rating ?? 0,
       goals: rev.goals ?? [],
       competencies: rev.competencies?.length
         ? rev.competencies
         : COMPETENCIES_TEMPLATE.map(c => ({ ...c, rating: 0, comments: '' })),
+      self_assessment_enabled: rev.self_assessment_enabled ?? false,
+      peer_feedback_enabled:   rev.peer_feedback_enabled ?? false,
     });
     setDialogOpen(true);
   }
@@ -192,158 +311,331 @@ export default function PerformanceReviews() {
   async function handleSave(submitForReview = false) {
     if (!form.reviewee_id || !form.review_period) return;
     setSaving(true);
-
-    // Average only over competencies that were actually rated (rating > 0) so
-    // unrated ones (default 0) don't silently drag the overall score down.
-    const ratedCompetencies = form.competencies.filter(c => (c.rating ?? 0) > 0);
-    const avgRating = ratedCompetencies.length
-      ? ratedCompetencies.reduce((s, c) => s + (c.rating ?? 0), 0) / ratedCompetencies.length
+    const ratedComps = form.competencies.filter(c => (c.rating ?? 0) > 0);
+    const avgRating  = ratedComps.length
+      ? ratedComps.reduce((s, c) => s + c.rating, 0) / ratedComps.length
       : form.overall_rating;
 
+    const initialPhase = submitForReview
+      ? (form.self_assessment_enabled ? 'self_assessment' : 'manager_review')
+      : 'not_started';
+
     const payload: any = {
-      reviewee_id: form.reviewee_id,
-      review_period: form.review_period,
-      review_type: form.review_type,
+      reviewee_id: form.reviewee_id, review_period: form.review_period, review_type: form.review_type,
       self_assessment: form.self_assessment || null,
       manager_comments: isAdmin ? (form.manager_comments || null) : undefined,
-      strengths: form.strengths || null,
-      development_areas: form.development_areas || null,
+      strengths: form.strengths || null, development_areas: form.development_areas || null,
       next_goals: form.next_goals || null,
       overall_rating: Number(avgRating.toFixed(1)),
-      goals: form.goals,
-      competencies: form.competencies,
+      goals: form.goals, competencies: form.competencies,
+      self_assessment_enabled: form.self_assessment_enabled,
+      peer_feedback_enabled:   form.peer_feedback_enabled,
       status: submitForReview ? 'submitted' : 'draft',
+      cycle_phase: editing ? undefined : initialPhase,
       submitted_at: submitForReview ? new Date().toISOString() : null,
       reviewer_id: isAdmin ? currentUser?.id : undefined,
       updated_at: new Date().toISOString(),
     };
+    if (!editing) delete payload.cycle_phase;
 
-    if (editing) {
-      const { error } = await supabase.from('performance_reviews').update(payload).eq('id', editing.id);
-      if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); }
-      else {
-        toast({ title: submitForReview ? 'Review submitted for approval' : 'Review saved' });
-        if (submitForReview) {
-          // Notify admins/HR that a review is ready for their action
-          const revieweeName = reviews.find(r => r.id === editing.id)?.reviewee_name ?? 'Staff';
-          await NotificationTriggerService.sendToRoles(
-            ['super_admin', 'admin', 'hr'],
-            {
-              title: 'Performance Review Ready',
-              message: `A ${payload.review_type ?? 'performance'} review for ${revieweeName} (${payload.review_period}) has been submitted and awaits your approval.`,
-              titleAr: 'مراجعة الأداء جاهزة',
-              messageAr: `تم تقديم مراجعة ${payload.review_type ?? 'الأداء'} لـ ${revieweeName} (${payload.review_period}) وتنتظر موافقتك.`,
-              type: 'info',
-              category: 'approvals',
-              priority: 'high',
-              link: '/performance-reviews',
-              relatedEntityId: editing.id,
-              sendEmail: true,
-              emailActionUrl: '/performance-reviews',
-              emailActionLabel: 'Open Performance Reviews',
-            }
-          );
-        }
-        setDialogOpen(false);
-        fetchReviews();
-      }
+    const saveOp = editing
+      ? supabase.from('performance_reviews').update({ ...payload, cycle_phase: initialPhase }).eq('id', editing.id)
+      : supabase.from('performance_reviews').insert({ ...payload, cycle_phase: initialPhase, created_at: new Date().toISOString() }).select().single();
+
+    const { error } = await saveOp as any;
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
-      const { data: inserted, error } = await supabase.from('performance_reviews').insert({ ...payload, created_at: new Date().toISOString() }).select().single();
-      if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); }
-      else {
-        toast({ title: submitForReview ? 'Review submitted for approval' : 'Review created' });
-        if (submitForReview && inserted) {
-          await NotificationTriggerService.sendToRoles(
-            ['super_admin', 'admin', 'hr'],
-            {
-              title: 'Performance Review Ready',
-              message: `A new ${payload.review_type ?? 'performance'} review (${payload.review_period}) has been submitted and awaits approval.`,
-              titleAr: 'مراجعة أداء جديدة جاهزة',
-              messageAr: `تم تقديم مراجعة ${payload.review_type ?? 'أداء'} جديدة (${payload.review_period}) وتنتظر الموافقة.`,
-              type: 'info',
-              category: 'approvals',
-              priority: 'high',
-              link: '/performance-reviews',
-              relatedEntityId: inserted.id,
-              sendEmail: true,
-              emailActionUrl: '/performance-reviews',
-              emailActionLabel: 'Open Performance Reviews',
-            }
-          );
-        }
-        setDialogOpen(false);
-        fetchReviews();
+      toast({ title: submitForReview ? 'Review submitted' : 'Review saved' });
+      if (submitForReview && form.self_assessment_enabled) {
+        const revieweeName = profiles.find(p => p.id === form.reviewee_id)?.full_name ?? 'Staff';
+        await NotificationTriggerService.send({
+          userId: form.reviewee_id,
+          title: 'Self-Assessment Due',
+          message: `Your ${form.review_type} self-assessment for ${form.review_period} is ready. Please complete it before your manager review.`,
+          type: 'info', category: 'approvals', priority: 'high',
+          link: '/performance-reviews',
+          sendEmail: true, emailActionUrl: '/performance-reviews', emailActionLabel: 'Complete Self-Assessment',
+        });
       }
+      setDialogOpen(false);
+      fetchAll();
     }
     setSaving(false);
   }
 
   async function markCompleted(id: string) {
     const rev = reviews.find(r => r.id === id);
-    const { error: completeErr } = await supabase.from('performance_reviews').update({ status: 'completed', reviewed_at: new Date().toISOString(), reviewer_id: currentUser?.id }).eq('id', id);
-    if (completeErr) { toast({ title: 'Failed to complete review', description: completeErr.message, variant: 'destructive' }); return; }
-    // Notify the reviewee that their review has been completed
+    const { error } = await supabase.from('performance_reviews').update({
+      status: 'completed', cycle_phase: 'published', reviewed_at: new Date().toISOString(), reviewer_id: currentUser?.id,
+    }).eq('id', id);
+    if (error) { toast({ title: 'Failed', description: error.message, variant: 'destructive' }); return; }
     if (rev?.reviewee_id) {
       await NotificationTriggerService.send({
         userId: rev.reviewee_id,
         title: 'Performance Review Completed',
-        message: `Your ${rev.review_type ?? 'performance'} review for ${rev.review_period} has been completed. You can now view your results.`,
-        titleAr: 'اكتملت مراجعة الأداء',
-        messageAr: `اكتملت مراجعة ${rev.review_type ?? 'الأداء'} الخاصة بك للفترة ${rev.review_period}. يمكنك الآن الاطلاع على النتائج.`,
-        type: 'success',
-        category: 'team',
-        priority: 'high',
-        link: '/performance-reviews',
-        relatedEntityId: id,
-        sendEmail: true,
-        emailActionUrl: '/performance-reviews',
-        emailActionLabel: 'View My Review',
+        message: `Your ${rev.review_type} review for ${rev.review_period} has been completed. View your results.`,
+        type: 'success', category: 'team', priority: 'high',
+        link: '/performance-reviews', sendEmail: true,
+        emailActionUrl: '/performance-reviews', emailActionLabel: 'View My Review',
       });
     }
     toast({ title: 'Review marked completed' });
-    fetchReviews();
+    fetchAll();
   }
 
   async function deleteReview(id: string) {
     const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
-    if (error) { toast({ title: 'Failed to delete review', description: error.message, variant: 'destructive' }); return; }
+    if (error) { toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Review deleted' });
     setReviews(p => p.filter(r => r.id !== id));
   }
 
-  const myReviews = reviews.filter(r => r.reviewee_id === currentUser?.id);
-  const pendingReviews = reviews.filter(r => r.status === 'submitted' && isAdmin);
-  const filtered = (tab === 'my' ? myReviews : tab === 'pending' ? pendingReviews : reviews)
-    .filter(r => !search || r.reviewee_name?.toLowerCase().includes(search.toLowerCase()) || r.review_period.toLowerCase().includes(search.toLowerCase()));
+  // ── Self-Assessment ────────────────────────────────────────────────────────
+  function openSelfAssess(rev: Review) {
+    setSaReview(rev);
+    const existing = selfAssessments.find(sa => sa.review_id === rev.id && sa.user_id === currentUser?.id);
+    setSaRatings(existing?.ratings ?? {});
+    setSaComments(existing?.comments ?? '');
+    setSaOpen(true);
+  }
 
+  async function submitSelfAssessment() {
+    if (!saReview || !currentUser) return;
+    setSaSubmitting(true);
+    const existing = selfAssessments.find(sa => sa.review_id === saReview.id && sa.user_id === currentUser.id);
+    const payload = {
+      review_id: saReview.id, user_id: currentUser.id,
+      ratings: saRatings, comments: saComments || null, submitted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const op = existing
+      ? supabase.from('hr_review_self_assessments').update(payload).eq('id', existing.id)
+      : supabase.from('hr_review_self_assessments').insert(payload);
+    const { error } = await op;
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); setSaSubmitting(false); return; }
+
+    // Advance cycle phase
+    const nextPhase = saReview.peer_feedback_enabled ? 'peer_feedback' : 'manager_review';
+    await supabase.from('performance_reviews').update({ cycle_phase: nextPhase }).eq('id', saReview.id);
+
+    // Notify manager/HR
+    await NotificationTriggerService.sendToRoles(['super_admin', 'admin', 'hr', 'hr_admin', 'manager'], {
+      title: 'Self-Assessment Submitted',
+      message: `${currentUser?.email ?? 'An employee'} submitted their self-assessment for ${saReview.review_period}. Ready for peer feedback or manager review.`,
+      type: 'info', category: 'approvals', priority: 'normal',
+      link: '/performance-reviews', sendEmail: true,
+      emailActionUrl: '/performance-reviews', emailActionLabel: 'Open Reviews',
+    });
+
+    toast({ title: 'Self-assessment submitted' });
+    setSaOpen(false);
+    fetchAll();
+    setSaSubmitting(false);
+  }
+
+  // ── Peer Nominations ───────────────────────────────────────────────────────
+  function openNominate(rev: Review) {
+    setNomReview(rev);
+    setNomSearch('');
+    const existingNoms = nominations.filter(n => n.review_id === rev.id && n.reviewee_id === currentUser?.id);
+    setSelectedNominees(existingNoms.map(n => n.nominee_id));
+    setNomOpen(true);
+  }
+
+  async function submitNominations() {
+    if (!nomReview || !currentUser) return;
+    if (selectedNominees.length < 2) { toast({ title: 'Nominate at least 2 peers', variant: 'destructive' }); return; }
+    setNomSubmitting(true);
+    const existing = nominations.filter(n => n.review_id === nomReview.id && n.reviewee_id === currentUser.id).map(n => n.nominee_id);
+    const toAdd    = selectedNominees.filter(id => !existing.includes(id));
+    const toRemove = existing.filter(id => !selectedNominees.includes(id));
+    if (toAdd.length) {
+      await supabase.from('hr_review_peer_nominations').insert(
+        toAdd.map(nominee_id => ({ review_id: nomReview.id, reviewee_id: currentUser.id, nominee_id, approved: null }))
+      );
+    }
+    if (toRemove.length) {
+      for (const nid of toRemove) {
+        await supabase.from('hr_review_peer_nominations')
+          .delete().eq('review_id', nomReview.id).eq('reviewee_id', currentUser.id).eq('nominee_id', nid);
+      }
+    }
+    toast({ title: 'Nominations saved', description: 'Pending HR/manager approval.' });
+    setNomOpen(false);
+    fetchAll();
+    setNomSubmitting(false);
+  }
+
+  async function approveNomination(id: string, approved: boolean) {
+    const { error } = await supabase.from('hr_review_peer_nominations').update({ approved }).eq('id', id);
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    if (approved) {
+      const nom = nominations.find(n => n.id === id);
+      if (nom) {
+        await NotificationTriggerService.send({
+          userId: nom.nominee_id,
+          title: 'Peer Feedback Requested',
+          message: `You have been nominated to provide peer feedback for ${nom.reviewee_name} (${nom.review_period}). Please complete your feedback.`,
+          type: 'info', category: 'approvals', priority: 'high',
+          link: '/performance-reviews', sendEmail: true,
+          emailActionUrl: '/performance-reviews', emailActionLabel: 'Give Feedback',
+        });
+      }
+    }
+    fetchAll();
+  }
+
+  // ── Peer Feedback ──────────────────────────────────────────────────────────
+  function openPeerFeedback(nom: PeerNomination) {
+    setPfNom(nom);
+    const fb = nom.feedback ?? {};
+    const ratings: Record<string, number> = {};
+    const comments: Record<string, string> = {};
+    for (const comp of COMPETENCIES_TEMPLATE) {
+      ratings[comp.id]  = fb[comp.id]?.rating ?? 0;
+      comments[comp.id] = fb[comp.id]?.comment ?? '';
+    }
+    setPfRatings(ratings);
+    setPfComments(comments);
+    setPfOpen(true);
+  }
+
+  async function submitPeerFeedback() {
+    if (!pfNom) return;
+    setPfSubmitting(true);
+    const feedback: Record<string, { rating: number; comment: string }> = {};
+    for (const comp of COMPETENCIES_TEMPLATE) {
+      feedback[comp.id] = { rating: pfRatings[comp.id] ?? 0, comment: pfComments[comp.id] ?? '' };
+    }
+    const { error } = await supabase.from('hr_review_peer_nominations').update({
+      feedback, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }).eq('id', pfNom.id);
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); setPfSubmitting(false); return; }
+    toast({ title: 'Peer feedback submitted', description: 'Thank you — your response is anonymous to the reviewee.' });
+    setPfOpen(false);
+    fetchAll();
+    setPfSubmitting(false);
+  }
+
+  // ── Calibration ────────────────────────────────────────────────────────────
+  function openCalibration() {
+    const initial: Record<string, { adjusted: number; reason: string }> = {};
+    for (const rev of calibrationReviews) {
+      if (rev.overall_rating) initial[rev.id] = { adjusted: rev.overall_rating, reason: '' };
+    }
+    setCalibData(initial);
+    setCalibOpen(true);
+  }
+
+  async function saveCalibration() {
+    setCalibSaving(true);
+    const ops = Object.entries(calibData)
+      .filter(([revId, d]) => {
+        const rev = reviews.find(r => r.id === revId);
+        return rev && d.adjusted !== rev.overall_rating;
+      })
+      .map(([revId, d]) => {
+        const rev = reviews.find(r => r.id === revId)!;
+        return supabase.from('hr_review_calibration_adjustments').upsert({
+          review_id: revId, user_id: rev.reviewee_id,
+          original_score: rev.overall_rating!, adjusted_score: d.adjusted,
+          adjustment_reason: d.reason || null, adjusted_by: currentUser?.id,
+          adjusted_at: new Date().toISOString(),
+        }, { onConflict: 'review_id,user_id' });
+      });
+    await Promise.all(ops);
+
+    // Update overall_rating on reviews with adjustments
+    const updateOps = Object.entries(calibData)
+      .filter(([revId, d]) => {
+        const rev = reviews.find(r => r.id === revId);
+        return rev && d.adjusted !== rev.overall_rating;
+      })
+      .map(([revId, d]) =>
+        supabase.from('performance_reviews').update({
+          overall_rating: d.adjusted, cycle_phase: 'published',
+          status: 'completed', reviewed_at: new Date().toISOString(),
+        }).eq('id', revId)
+      );
+    await Promise.all(updateOps);
+
+    toast({ title: 'Calibration saved', description: 'Scores updated and cycle published.' });
+    setCalibOpen(false);
+    fetchAll();
+    setCalibSaving(false);
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
   function exportReviews() {
-    const rows = filtered.map(r => ({
+    exportToExcel(filtered.map(r => ({
       'Employee': r.reviewee_name ?? '',
       'Review Period': r.review_period,
       'Review Type': r.review_type,
       'Reviewer': r.reviewer_name ?? '',
       'Status': STATUS_CFG[r.status]?.label ?? r.status,
+      'Phase': PHASE_CFG[r.cycle_phase]?.label ?? r.cycle_phase,
       'Overall Rating': r.overall_rating ?? '',
-      'Submitted At': r.submitted_at ? format(new Date(r.submitted_at), 'yyyy-MM-dd') : '',
-      'Reviewed At': r.reviewed_at ? format(new Date(r.reviewed_at), 'yyyy-MM-dd') : '',
+      'Self-Assess Enabled': r.self_assessment_enabled ? 'Yes' : 'No',
+      'Peer Feedback Enabled': r.peer_feedback_enabled ? 'Yes' : 'No',
       'Strengths': r.strengths ?? '',
       'Development Areas': r.development_areas ?? '',
-      'Next Goals': r.next_goals ?? '',
-      'Self Assessment': r.self_assessment ?? '',
-      'Manager Comments': r.manager_comments ?? '',
-    }));
-    exportToExcel(rows, 'Performance Reviews', `performance-reviews-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    })), 'Performance Reviews', `performance-reviews-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
+  // ── Stats ──────────────────────────────────────────────────────────────────
   const stats = {
-    total: myReviews.length,
+    total:     myReviews.length,
     completed: myReviews.filter(r => r.status === 'completed').length,
-    avgRating: myReviews.filter(r => r.overall_rating).reduce((s, r) => s + (r.overall_rating ?? 0), 0) / (myReviews.filter(r => r.overall_rating).length || 1),
+    avgRating: (() => {
+      const rated = myReviews.filter(r => r.overall_rating);
+      return rated.length ? rated.reduce((s, r) => s + (r.overall_rating ?? 0), 0) / rated.length : 0;
+    })(),
     pending: pendingReviews.length,
   };
 
+  // ── Cycle progress board data ──────────────────────────────────────────────
+  const progressBoard = useMemo(() => {
+    const map: Record<string, Review[]> = {};
+    for (const phase of PHASE_ORDER) map[phase] = [];
+    for (const rev of reviews) {
+      const p = rev.cycle_phase ?? 'not_started';
+      (map[p] ?? (map['not_started'] = [])).push(rev);
+    }
+    return map;
+  }, [reviews]);
+
+  // ── Peer aggregate for manager view ───────────────────────────────────────
+  function getPeerAggregate(reviewId: string) {
+    const submitted = nominations.filter(n => n.review_id === reviewId && n.submitted_at && n.feedback);
+    if (!submitted.length) return null;
+    const agg: Record<string, { totalRating: number; count: number; comments: string[] }> = {};
+    for (const nom of submitted) {
+      for (const [cid, fb] of Object.entries(nom.feedback ?? {})) {
+        if (!agg[cid]) agg[cid] = { totalRating: 0, count: 0, comments: [] };
+        agg[cid].totalRating += fb.rating;
+        agg[cid].count++;
+        if (fb.comment) agg[cid].comments.push(fb.comment);
+      }
+    }
+    return agg;
+  }
+
+  // ── Distribution data for calibration chart ────────────────────────────────
+  const distData = useMemo(() => {
+    const buckets: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    for (const [revId, d] of Object.entries(calibData)) {
+      const bucket = String(Math.round(d.adjusted));
+      if (buckets[bucket] !== undefined) buckets[bucket]++;
+    }
+    return Object.entries(buckets).map(([score, count]) => ({ score, count }));
+  }, [calibData]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -351,20 +643,27 @@ export default function PerformanceReviews() {
             <Award className="h-6 w-6 text-amber-500" />
             Performance Reviews
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Appraisals, goal tracking, and competency ratings</p>
+          <p className="text-muted-foreground text-sm mt-0.5">360° appraisals, self-assessment & calibration</p>
         </div>
-        <Button onClick={openNew} data-testid="btn-new-review">
-          <Plus className="h-4 w-4 mr-1" /> Start Review
-        </Button>
+        <div className="flex gap-2">
+          {isAdmin && calibrationReviews.length > 0 && (
+            <Button variant="outline" onClick={openCalibration} data-testid="btn-calibrate">
+              <Sliders className="h-4 w-4 mr-1" />Calibrate Team
+            </Button>
+          )}
+          <Button onClick={openNew} data-testid="btn-new-review">
+            <Plus className="h-4 w-4 mr-1" />Start Review
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'My Reviews', value: stats.total, icon: <FileText className="h-4 w-4" />, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { label: 'Completed', value: stats.completed, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-          { label: 'Avg Rating', value: stats.avgRating ? stats.avgRating.toFixed(1) + ' ★' : '—', icon: <Star className="h-4 w-4" />, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-          { label: 'Pending Review', value: stats.pending, icon: <Clock className="h-4 w-4" />, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20' },
+          { label: 'My Reviews',     value: stats.total,     icon: <FileText     className="h-4 w-4" />, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/20' },
+          { label: 'Completed',      value: stats.completed, icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+          { label: 'Avg Rating',     value: stats.avgRating ? stats.avgRating.toFixed(1) + ' ★' : '—', icon: <Star className="h-4 w-4" />, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+          { label: 'Pending Review', value: stats.pending,   icon: <Clock        className="h-4 w-4" />, color: 'text-orange-600',  bg: 'bg-orange-50 dark:bg-orange-900/20' },
         ].map(s => (
           <div key={s.label} className={cn('rounded-lg p-3 flex items-center gap-3', s.bg)}>
             <span className={s.color}>{s.icon}</span>
@@ -376,107 +675,265 @@ export default function PerformanceReviews() {
         ))}
       </div>
 
-      {/* Tabs + Search */}
+      {/* Tab Bar */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
-        <Tabs value={tab} onValueChange={v => setTab(v as any)}>
-          <TabsList>
+        <Tabs value={tab} onValueChange={v => setTab(v as ReviewTab)}>
+          <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="my">My Reviews</TabsTrigger>
+            {pendingSelfAssess.length > 0 && (
+              <TabsTrigger value="self-assess" className="gap-1">
+                Self-Assess
+                <Badge className="h-4 px-1 text-[10px] bg-blue-500 text-white">{pendingSelfAssess.length}</Badge>
+              </TabsTrigger>
+            )}
+            {pendingPeerFeedback.length > 0 && (
+              <TabsTrigger value="peer" className="gap-1">
+                Peer Feedback
+                <Badge className="h-4 px-1 text-[10px] bg-purple-500 text-white">{pendingPeerFeedback.length}</Badge>
+              </TabsTrigger>
+            )}
             {isAdmin && <TabsTrigger value="all">All Staff</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="pending">Pending ({pendingReviews.length})</TabsTrigger>}
+            {isAdmin && (
+              <TabsTrigger value="pending" className="gap-1">
+                Pending
+                {pendingReviews.length > 0 && <Badge className="h-4 px-1 text-[10px] bg-amber-500 text-white">{pendingReviews.length}</Badge>}
+              </TabsTrigger>
+            )}
+            {isAdmin && <TabsTrigger value="calibrate">Calibration</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="progress">Cycle Progress</TabsTrigger>}
           </TabsList>
         </Tabs>
         <div className="flex gap-2 items-center">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input className="pl-8 w-48" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
+          {tab !== 'peer' && tab !== 'progress' && (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input className="pl-8 w-44" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+          )}
           <Button size="sm" variant="outline" onClick={exportReviews} data-testid="button-export-reviews">
-            <Download className="h-4 w-4 mr-1" /> Export
+            <Download className="h-4 w-4 mr-1" />Export
           </Button>
         </div>
       </div>
 
-      {/* List */}
-      {loading ? (
-        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <Award className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>No reviews found.</p>
-          <Button className="mt-4" variant="outline" onClick={openNew}>Start your first review</Button>
-        </div>
-      ) : (
+      {/* ── Tab: Peer Feedback (nominee view) ──────────────────────────────── */}
+      {tab === 'peer' && (
         <div className="space-y-3">
-          {filtered.map(rev => {
-            const st = STATUS_CFG[rev.status] ?? STATUS_CFG.draft;
-            return (
-              <Card key={rev.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setViewing(rev); setDetailOpen(true); }} data-testid={`review-card-${rev.id}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold">{rev.reviewee_name}</p>
-                        <Badge variant="outline" className="capitalize text-xs">{rev.review_type.replace('_', ' ')}</Badge>
-                        <span className={cn('flex items-center gap-1 text-xs px-2 py-0.5 rounded-full', st.badge)}>
-                          {st.icon}<span>{st.label}</span>
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">{rev.review_period}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                        {rev.reviewer_name && <span className="flex items-center gap-1"><User className="h-3 w-3" />Reviewer: {rev.reviewer_name}</span>}
-                        {rev.overall_rating != null && (
-                          <span className="flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                            {rev.overall_rating.toFixed(1)} / 5
-                          </span>
-                        )}
-                      </div>
+          {pendingPeerFeedback.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-20" />
+              <p>No pending peer feedback requests.</p>
+            </div>
+          ) : pendingPeerFeedback.map(nom => (
+            <Card key={nom.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{nom.reviewee_name}</p>
+                  <p className="text-sm text-muted-foreground">{nom.review_period}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                    <EyeOff className="h-3 w-3" />Your feedback is anonymous to the reviewee
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => openPeerFeedback(nom)} data-testid={`btn-peer-feedback-${nom.id}`}>
+                  Give Feedback
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Admin: pending approvals */}
+          {isAdmin && nominations.filter(n => n.approved === null).length > 0 && (
+            <div className="mt-6 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Nomination Approvals</p>
+              {nominations.filter(n => n.approved === null).map(nom => (
+                <Card key={nom.id}>
+                  <CardContent className="p-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {profiles.find(p => p.id === nom.nominee_id)?.full_name ?? '—'} →  peer of {nom.reviewee_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{nom.review_period}</p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      {isAdmin && rev.status === 'submitted' && (
-                        <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300" onClick={e => { e.stopPropagation(); markCompleted(rev.id); }}>
-                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />Complete
-                        </Button>
-                      )}
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={e => { e.stopPropagation(); openEdit(rev); }}>
-                        <Edit2 className="h-3.5 w-3.5" />
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300"
+                        onClick={() => approveNomination(nom.id, true)} data-testid={`btn-approve-nom-${nom.id}`}>
+                        <UserCheck className="h-3.5 w-3.5 mr-1" />Approve
                       </Button>
-                      {(isAdmin || rev.reviewee_id === currentUser?.id) && rev.status === 'draft' && (
-                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={e => { e.stopPropagation(); deleteReview(rev.id); }}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
+                      <Button size="sm" variant="outline" className="text-red-500 border-red-300"
+                        onClick={() => approveNomination(nom.id, false)} data-testid={`btn-reject-nom-${nom.id}`}>
+                        <UserX className="h-3.5 w-3.5 mr-1" />Reject
+                      </Button>
                     </div>
-                  </div>
-                  {rev.goals?.length > 0 && (
-                    <div className="mt-3 pt-3 border-t">
-                      <p className="text-xs text-muted-foreground mb-2">Goals ({rev.goals.filter(g => (g.completion ?? 0) >= 100).length}/{rev.goals.length} completed)</p>
-                      <Progress value={(rev.goals.filter(g => (g.completion ?? 0) >= 100).length / rev.goals.length) * 100} className="h-1.5" />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Create/Edit Dialog */}
+      {/* ── Tab: Cycle Progress (Kanban) ───────────────────────────────────── */}
+      {tab === 'progress' && (
+        <div className="overflow-x-auto pb-2">
+          <div className="flex gap-3 min-w-max">
+            {PHASE_ORDER.map(phase => {
+              const phCfg = PHASE_CFG[phase];
+              const phReviews = (progressBoard[phase] ?? []).filter(r =>
+                !search || r.reviewee_name?.toLowerCase().includes(search.toLowerCase())
+              );
+              return (
+                <div key={phase} className="w-56 flex-shrink-0">
+                  <div className={cn('text-xs font-semibold px-2 py-1 rounded-md mb-2', phCfg.color)}>
+                    {phCfg.label} ({phReviews.length})
+                  </div>
+                  <div className="space-y-2">
+                    {phReviews.map(rev => (
+                      <Card key={rev.id} className="hover:shadow cursor-pointer" onClick={() => { setViewing(rev); setDetailOpen(true); }}>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-sm font-medium truncate">{rev.reviewee_name}</p>
+                          <p className="text-xs text-muted-foreground">{rev.review_period}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs capitalize text-muted-foreground">{rev.review_type.replace('_', ' ')}</span>
+                            {rev.overall_rating && (
+                              <span className="text-xs font-medium text-amber-600">{rev.overall_rating.toFixed(1)}★</span>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {phReviews.length === 0 && (
+                      <div className="border border-dashed rounded-lg p-3 text-center text-xs text-muted-foreground">Empty</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Reviews List (my / all / pending / self-assess / calibrate) ─────── */}
+      {tab !== 'peer' && tab !== 'progress' && (
+        loading ? (
+          <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Award className="h-12 w-12 mx-auto mb-3 opacity-20" />
+            <p>{tab === 'self-assess' ? 'No self-assessments pending.' : 'No reviews found.'}</p>
+            {tab === 'my' && <Button className="mt-4" variant="outline" onClick={openNew}>Start your first review</Button>}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(rev => {
+              const st    = STATUS_CFG[rev.status] ?? STATUS_CFG.draft;
+              const mySa  = selfAssessments.find(sa => sa.review_id === rev.id && sa.user_id === currentUser?.id);
+              const myNoms = nominations.filter(n => n.review_id === rev.id && n.reviewee_id === currentUser?.id);
+              return (
+                <Card key={rev.id} className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => { setViewing(rev); setDetailOpen(true); }}
+                  data-testid={`review-card-${rev.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold">{rev.reviewee_name}</p>
+                          <Badge variant="outline" className="capitalize text-xs">{rev.review_type.replace('_', ' ')}</Badge>
+                          <span className={cn('flex items-center gap-1 text-xs px-2 py-0.5 rounded-full', st.badge)}>
+                            {st.icon}<span>{st.label}</span>
+                          </span>
+                          <PhaseBadge phase={rev.cycle_phase} />
+                          {rev.self_assessment_enabled && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">Self-Assess</Badge>}
+                          {rev.peer_feedback_enabled && <Badge variant="outline" className="text-xs text-purple-600 border-purple-300">360°</Badge>}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">{rev.review_period}</p>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                          {rev.reviewer_name && <span className="flex items-center gap-1"><User className="h-3 w-3" />Reviewer: {rev.reviewer_name}</span>}
+                          {rev.overall_rating != null && (
+                            <span className="flex items-center gap-1">
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />{rev.overall_rating.toFixed(1)} / 5
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 shrink-0 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
+                        {/* Self-assess button for employee */}
+                        {rev.self_assessment_enabled && rev.reviewee_id === currentUser?.id && !mySa?.submitted_at && (
+                          <Button size="sm" variant="outline" className="text-blue-600 border-blue-300 text-xs"
+                            onClick={() => openSelfAssess(rev)} data-testid={`btn-self-assess-${rev.id}`}>
+                            <BookOpen className="h-3.5 w-3.5 mr-1" />Self-Assess
+                          </Button>
+                        )}
+                        {/* Nominate peers button for employee */}
+                        {rev.peer_feedback_enabled && rev.reviewee_id === currentUser?.id && rev.cycle_phase === 'peer_feedback' && (
+                          <Button size="sm" variant="outline" className="text-purple-600 border-purple-300 text-xs"
+                            onClick={() => openNominate(rev)} data-testid={`btn-nominate-${rev.id}`}>
+                            <Users className="h-3.5 w-3.5 mr-1" />Nominate Peers
+                          </Button>
+                        )}
+                        {isAdmin && rev.status === 'submitted' && (
+                          <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300 text-xs"
+                            onClick={() => markCompleted(rev.id)} data-testid={`btn-complete-${rev.id}`}>
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />Complete
+                          </Button>
+                        )}
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(rev)}>
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        {(isAdmin || rev.reviewee_id === currentUser?.id) && rev.status === 'draft' && (
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => deleteReview(rev.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {rev.goals?.length > 0 && (
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-xs text-muted-foreground mb-2">Goals ({rev.goals.filter(g => (g.completion ?? 0) >= 100).length}/{rev.goals.length} completed)</p>
+                        <Progress value={(rev.goals.filter(g => (g.completion ?? 0) >= 100).length / rev.goals.length) * 100} className="h-1.5" />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          DIALOGS
+      ═══════════════════════════════════════════════════════════════════════ */}
+
+      {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Review' : 'Start Performance Review'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* 360° Toggles */}
+            {isAdmin && (
+              <div className="flex gap-6 p-3 bg-muted/30 rounded-lg border flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Switch id="sa-toggle" checked={form.self_assessment_enabled}
+                    onCheckedChange={v => setForm(p => ({ ...p, self_assessment_enabled: v }))} />
+                  <Label htmlFor="sa-toggle" className="text-sm cursor-pointer">Enable Self-Assessment</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch id="pf-toggle" checked={form.peer_feedback_enabled}
+                    onCheckedChange={v => setForm(p => ({ ...p, peer_feedback_enabled: v }))} />
+                  <Label htmlFor="pf-toggle" className="text-sm cursor-pointer">Enable 360° Peer Feedback</Label>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               {isAdmin && (
                 <div>
                   <Label>Employee *</Label>
                   <Select value={form.reviewee_id} onValueChange={v => setForm(p => ({ ...p, reviewee_id: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                    <SelectContent>
-                      {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               )}
@@ -488,16 +945,13 @@ export default function PerformanceReviews() {
                 <Label>Review Type</Label>
                 <Select value={form.review_type} onValueChange={v => setForm(p => ({ ...p, review_type: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {REVIEW_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t.replace('_', ' ')}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{REVIEW_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Self Assessment */}
             <div>
-              <Label className="flex items-center gap-1"><BookOpen className="h-3.5 w-3.5" />Self Assessment</Label>
+              <Label className="flex items-center gap-1"><BookOpen className="h-3.5 w-3.5" />Self Assessment Narrative</Label>
               <Textarea value={form.self_assessment} onChange={e => setForm(p => ({ ...p, self_assessment: e.target.value }))} rows={3} placeholder="Describe your achievements this period..." />
             </div>
 
@@ -529,21 +983,16 @@ export default function PerformanceReviews() {
                   {form.goals.map((goal, i) => (
                     <div key={goal.id} className="border rounded-lg p-3 space-y-2 bg-background">
                       <div className="flex gap-2">
-                        <Input
-                          value={goal.title}
-                          onChange={e => setForm(p => ({ ...p, goals: p.goals.map((g, j) => j === i ? { ...g, title: e.target.value } : g) }))}
-                          placeholder="Goal title"
-                          className="flex-1"
-                        />
+                        <Input value={goal.title} onChange={e => setForm(p => ({ ...p, goals: p.goals.map((g, j) => j === i ? { ...g, title: e.target.value } : g) }))} placeholder="Goal title" className="flex-1" />
                         <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0" onClick={() => setForm(p => ({ ...p, goals: p.goals.filter((_, j) => j !== i) }))}>
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground w-20">Completion</span>
-                        <Input type="range" min={0} max={100} value={goal.completion ?? 0}
+                        <input type="range" min={0} max={100} value={goal.completion ?? 0}
                           onChange={e => setForm(p => ({ ...p, goals: p.goals.map((g, j) => j === i ? { ...g, completion: Number(e.target.value) } : g) }))}
-                          className="flex-1 h-2" />
+                          className="flex-1 h-2 accent-primary" />
                         <span className="text-xs font-medium w-10 text-right">{goal.completion ?? 0}%</span>
                       </div>
                     </div>
@@ -552,25 +1001,20 @@ export default function PerformanceReviews() {
               )}
             </div>
 
-            {/* Strengths / Dev Areas */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5 text-emerald-500" />Strengths</Label>
-                <Textarea value={form.strengths} onChange={e => setForm(p => ({ ...p, strengths: e.target.value }))} rows={3} placeholder="Key strengths demonstrated..." />
+                <Textarea value={form.strengths} onChange={e => setForm(p => ({ ...p, strengths: e.target.value }))} rows={3} placeholder="Key strengths..." />
               </div>
               <div>
                 <Label>Development Areas</Label>
                 <Textarea value={form.development_areas} onChange={e => setForm(p => ({ ...p, development_areas: e.target.value }))} rows={3} placeholder="Areas to improve..." />
               </div>
             </div>
-
-            {/* Next Goals */}
             <div>
               <Label>Goals for Next Period</Label>
               <Textarea value={form.next_goals} onChange={e => setForm(p => ({ ...p, next_goals: e.target.value }))} rows={2} placeholder="What do you aim to achieve next period?" />
             </div>
-
-            {/* Manager Comments (admin only) */}
             {isAdmin && (
               <div>
                 <Label className="flex items-center gap-1"><User className="h-3.5 w-3.5" />Manager Comments</Label>
@@ -591,17 +1035,196 @@ export default function PerformanceReviews() {
         </DialogContent>
       </Dialog>
 
-      {/* View Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+      {/* ── Self-Assessment Dialog ─────────────────────────────────────────── */}
+      <Dialog open={saOpen} onOpenChange={setSaOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-blue-500" />
+              Self-Assessment — {saReview?.review_period}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">
+            Rate yourself on each competency honestly. Your manager will see your ratings alongside their own when completing your review.
+          </p>
+          <div className="space-y-3 py-2">
+            {COMPETENCIES_TEMPLATE.map(comp => (
+              <div key={comp.id} className="flex items-center justify-between border rounded-lg p-3">
+                <span className="text-sm font-medium">{comp.name}</span>
+                <StarRating value={saRatings[comp.id] ?? 0} onChange={v => setSaRatings(p => ({ ...p, [comp.id]: v }))} />
+              </div>
+            ))}
+            <div>
+              <Label>Overall Comments (optional)</Label>
+              <Textarea value={saComments} onChange={e => setSaComments(e.target.value)} rows={3} placeholder="Summarise your performance this period..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaOpen(false)}>Cancel</Button>
+            <Button onClick={submitSelfAssessment} disabled={saSubmitting} data-testid="btn-submit-self-assess">
+              {saSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+              Submit Self-Assessment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Peer Nomination Dialog ─────────────────────────────────────────── */}
+      <Dialog open={nomOpen} onOpenChange={setNomOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-purple-500" />Nominate Peers — {nomReview?.review_period}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">Select 2–5 colleagues who can provide meaningful feedback on your work.</p>
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input className="pl-8" placeholder="Search staff..." value={nomSearch} onChange={e => setNomSearch(e.target.value)} />
+          </div>
+          <div className="space-y-1 max-h-64 overflow-y-auto border rounded-lg p-2">
+            {profiles
+              .filter(p => p.id !== currentUser?.id && (!nomSearch || p.full_name.toLowerCase().includes(nomSearch.toLowerCase())))
+              .map(p => (
+                <div key={p.id} className={cn('flex items-center justify-between p-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors',
+                  selectedNominees.includes(p.id) && 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700')}
+                  onClick={() => setSelectedNominees(prev =>
+                    prev.includes(p.id)
+                      ? prev.filter(id => id !== p.id)
+                      : prev.length >= 5 ? prev : [...prev, p.id]
+                  )}>
+                  <span className="text-sm">{p.full_name}</span>
+                  {selectedNominees.includes(p.id) && <CheckCircle2 className="h-4 w-4 text-purple-600" />}
+                </div>
+              ))}
+          </div>
+          <p className="text-xs text-muted-foreground">{selectedNominees.length} / 5 selected (min 2)</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNomOpen(false)}>Cancel</Button>
+            <Button onClick={submitNominations} disabled={nomSubmitting || selectedNominees.length < 2} data-testid="btn-submit-nominations">
+              {nomSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Submit Nominations
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Peer Feedback Dialog ───────────────────────────────────────────── */}
+      <Dialog open={pfOpen} onOpenChange={setPfOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <EyeOff className="h-5 w-5 text-purple-500" />
+              Peer Feedback for {pfNom?.reviewee_name} — {pfNom?.review_period}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">Your response is anonymous to the reviewee. Ratings and comments are aggregated before sharing.</p>
+          <div className="space-y-3 py-2">
+            {COMPETENCIES_TEMPLATE.map(comp => (
+              <div key={comp.id} className="border rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{comp.name}</span>
+                  <StarRating value={pfRatings[comp.id] ?? 0} onChange={v => setPfRatings(p => ({ ...p, [comp.id]: v }))} />
+                </div>
+                <Input value={pfComments[comp.id] ?? ''} onChange={e => setPfComments(p => ({ ...p, [comp.id]: e.target.value }))}
+                  placeholder="Optional comment..." className="text-sm" />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPfOpen(false)}>Cancel</Button>
+            <Button onClick={submitPeerFeedback} disabled={pfSubmitting} data-testid="btn-submit-peer-feedback">
+              {pfSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+              Submit Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Calibration Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={calibOpen} onOpenChange={setCalibOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sliders className="h-5 w-5 text-orange-500" />Team Calibration
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">
+            Adjust individual scores before publishing. Adjusted scores override the manager's calculated rating.
+          </p>
+
+          {/* Distribution chart */}
+          <div className="h-28 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={distData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <XAxis dataKey="score" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" name="Staff" radius={[4,4,0,0]}>
+                  {distData.map((entry, i) => (
+                    <Cell key={i} fill={['#ef4444','#f97316','#eab308','#22c55e','#10b981'][i] ?? '#6366f1'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Calibration table */}
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {calibrationReviews.map(rev => {
+              const cd = calibData[rev.id] ?? { adjusted: rev.overall_rating ?? 0, reason: '' };
+              return (
+                <div key={rev.id} className="flex items-center gap-3 border rounded-lg p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{rev.reviewee_name}</p>
+                    <p className="text-xs text-muted-foreground">{rev.review_period}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">Orig: {rev.overall_rating?.toFixed(1) ?? '—'}</span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setCalibData(p => ({ ...p, [rev.id]: { ...cd, adjusted: Math.max(1, cd.adjusted - 0.5) } }))}
+                        className="h-6 w-6 rounded border text-muted-foreground hover:bg-muted flex items-center justify-center">
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="text-sm font-bold w-8 text-center text-primary">{cd.adjusted.toFixed(1)}</span>
+                      <button onClick={() => setCalibData(p => ({ ...p, [rev.id]: { ...cd, adjusted: Math.min(5, cd.adjusted + 0.5) } }))}
+                        className="h-6 w-6 rounded border text-muted-foreground hover:bg-muted flex items-center justify-center">
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <Input className="w-48 text-xs h-8" value={cd.reason} onChange={e => setCalibData(p => ({ ...p, [rev.id]: { ...cd, reason: e.target.value } }))}
+                    placeholder="Reason for adjustment..." />
+                </div>
+              );
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCalibOpen(false)}>Cancel</Button>
+            <Button onClick={saveCalibration} disabled={calibSaving} data-testid="btn-save-calibration">
+              {calibSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <GitMerge className="h-4 w-4 mr-1" />}
+              Save & Publish Calibration
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Review Detail Dialog (3-column for manager) ────────────────────── */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {viewing && (() => {
-            const st = STATUS_CFG[viewing.status] ?? STATUS_CFG.draft;
+            const st        = STATUS_CFG[viewing.status] ?? STATUS_CFG.draft;
+            const mySa      = selfAssessments.find(sa => sa.review_id === viewing.id);
+            const peerAgg   = getPeerAggregate(viewing.id);
+            const show3col  = isAdmin && (mySa?.submitted_at || peerAgg);
             return (
               <>
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
+                  <DialogTitle className="flex items-center gap-2 flex-wrap">
                     <Award className="h-5 w-5 text-amber-500" />
                     {viewing.reviewee_name} — {viewing.review_period}
+                    <PhaseBadge phase={viewing.cycle_phase} />
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
@@ -616,18 +1239,69 @@ export default function PerformanceReviews() {
                     )}
                   </div>
 
-                  {viewing.competencies?.length > 0 && (
+                  {/* 3-column competencies when self-assess/peer data available */}
+                  {show3col ? (
                     <div>
-                      <p className="text-sm font-semibold mb-2">Competency Ratings</p>
-                      <div className="space-y-1.5">
-                        {viewing.competencies.map(c => (
-                          <div key={c.id} className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">{c.name}</span>
-                            <StarRating value={c.rating} readonly />
-                          </div>
-                        ))}
+                      <p className="text-sm font-semibold mb-2">Competency Comparison</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs border-collapse">
+                          <thead>
+                            <tr>
+                              <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground">Competency</th>
+                              {mySa?.submitted_at && <th className="text-center py-1.5 px-2 font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-tl">Self</th>}
+                              {peerAgg && <th className="text-center py-1.5 px-2 font-medium text-purple-600 bg-purple-50 dark:bg-purple-900/20">Peers (avg)</th>}
+                              <th className="text-center py-1.5 px-2 font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 rounded-tr">Manager</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {COMPETENCIES_TEMPLATE.map(comp => {
+                              const mgrComp = viewing.competencies?.find(c => c.id === comp.id);
+                              const selfRating = mySa?.ratings?.[comp.id] ?? 0;
+                              const peerEntry  = peerAgg?.[comp.id];
+                              const peerAvg    = peerEntry ? peerEntry.totalRating / peerEntry.count : null;
+                              return (
+                                <tr key={comp.id} className="border-t hover:bg-muted/20">
+                                  <td className="py-2 pr-3 text-muted-foreground">{comp.name}</td>
+                                  {mySa?.submitted_at && (
+                                    <td className="py-2 px-2 text-center bg-blue-50/50 dark:bg-blue-900/10">
+                                      <StarRating value={selfRating} readonly />
+                                    </td>
+                                  )}
+                                  {peerAgg && (
+                                    <td className="py-2 px-2 text-center bg-purple-50/50 dark:bg-purple-900/10">
+                                      {peerAvg != null ? <StarRating value={Math.round(peerAvg)} readonly /> : <span className="text-muted-foreground">—</span>}
+                                    </td>
+                                  )}
+                                  <td className="py-2 px-2 text-center bg-amber-50/50 dark:bg-amber-900/10">
+                                    {mgrComp ? <StarRating value={mgrComp.rating} readonly /> : <span className="text-muted-foreground">—</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
+                      {mySa?.comments && (
+                        <div className="mt-3 bg-blue-50 dark:bg-blue-900/20 rounded p-3 border border-blue-100 dark:border-blue-800">
+                          <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1">Employee Self-Assessment Narrative</p>
+                          <p className="text-sm">{mySa.comments}</p>
+                        </div>
+                      )}
                     </div>
+                  ) : (
+                    viewing.competencies?.length > 0 && (
+                      <div>
+                        <p className="text-sm font-semibold mb-2">Competency Ratings</p>
+                        <div className="space-y-1.5">
+                          {viewing.competencies.map(c => (
+                            <div key={c.id} className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">{c.name}</span>
+                              <StarRating value={c.rating} readonly />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
                   )}
 
                   {viewing.goals?.length > 0 && (
@@ -636,10 +1310,7 @@ export default function PerformanceReviews() {
                       <div className="space-y-2">
                         {viewing.goals.map(g => (
                           <div key={g.id} className="text-sm">
-                            <div className="flex justify-between mb-0.5">
-                              <span>{g.title}</span>
-                              <span className="text-muted-foreground">{g.completion ?? 0}%</span>
-                            </div>
+                            <div className="flex justify-between mb-0.5"><span>{g.title}</span><span className="text-muted-foreground">{g.completion ?? 0}%</span></div>
                             <Progress value={g.completion ?? 0} className="h-1.5" />
                           </div>
                         ))}
@@ -669,40 +1340,21 @@ export default function PerformanceReviews() {
                     </div>
                   )}
 
-                  {/* H9 — Convert to Salary Increment shortcut */}
+                  {/* Salary increment shortcut */}
                   {viewing.status === 'completed' && viewing.overall_rating != null && viewing.overall_rating >= 3 && (
                     <div className="bg-amber-50 dark:bg-amber-900/20 rounded p-3 border border-amber-200 dark:border-amber-800">
-                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-2">
-                        Reward strong performance
-                      </p>
+                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-2">Reward strong performance</p>
                       <p className="text-xs text-muted-foreground mb-3">
-                        Suggested increment based on rating: {(() => {
-                          const r = viewing.overall_rating!;
-                          if (r >= 4.5) return '10%';
-                          if (r >= 4)   return '7%';
-                          if (r >= 3.5) return '5%';
-                          return '3%';
-                        })()}
+                        Suggested increment: {(() => { const r = viewing.overall_rating!; return r >= 4.5 ? '10%' : r >= 4 ? '7%' : r >= 3.5 ? '5%' : '3%'; })()}
                       </p>
-                      <Button
-                        size="sm"
-                        className="bg-amber-600 hover:bg-amber-700 text-white w-full"
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white w-full"
                         data-testid={`button-convert-to-increment-${viewing.id}`}
                         onClick={() => {
                           const r = viewing.overall_rating!;
                           const pct = r >= 4.5 ? 10 : r >= 4 ? 7 : r >= 3.5 ? 5 : 3;
-                          const reason = `Merit increment based on ${viewing.review_period} performance review (rating ${r.toFixed(1)}/5)`;
-                          const params = new URLSearchParams({
-                            prefill: viewing.reviewee_id,
-                            pct: String(pct),
-                            reason,
-                            review_id: viewing.id,
-                          });
-                          window.location.href = `/salary-increments?${params.toString()}`;
-                        }}
-                      >
-                        <TrendingUp className="h-4 w-4 mr-1.5" />
-                        Convert to Salary Increment
+                          window.location.href = `/salary-increments?prefill=${viewing.reviewee_id}&pct=${pct}&reason=Merit+increment+based+on+${viewing.review_period}&review_id=${viewing.id}`;
+                        }}>
+                        <TrendingUp className="h-4 w-4 mr-1.5" />Convert to Salary Increment
                       </Button>
                     </div>
                   )}
