@@ -79,77 +79,47 @@ CREATE POLICY hr_scores_select ON hr_candidate_scores FOR SELECT
   );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 3. Headcount Plan — tracks planned vs filled positions per department/year
+-- 3. Headcount sync — add filled_count to the EXISTING hr_headcount_plans table
+--    (HeadcountPlanning.tsx already uses this table; we extend it in-place)
 -- ─────────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS hr_headcount_plan (
-  id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  department_id   uuid        REFERENCES departments(id) ON DELETE SET NULL,
-  job_title       text        NOT NULL,
-  fiscal_year     int         NOT NULL DEFAULT EXTRACT(year FROM now()),
-  planned_count   int         NOT NULL DEFAULT 1,
-  filled_count    int         NOT NULL DEFAULT 0 CHECK (filled_count >= 0),
-  notes           text,
-  created_by      uuid        REFERENCES profiles(id) ON DELETE SET NULL,
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (department_id, job_title, fiscal_year)
-);
+ALTER TABLE hr_headcount_plans
+  ADD COLUMN IF NOT EXISTS filled_count int NOT NULL DEFAULT 0
+    CHECK (filled_count >= 0);
 
-CREATE INDEX IF NOT EXISTS idx_hr_headcount_dept ON hr_headcount_plan(department_id, fiscal_year);
-
-ALTER TABLE hr_headcount_plan ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS hr_headcount_select ON hr_headcount_plan;
-CREATE POLICY hr_headcount_select ON hr_headcount_plan FOR SELECT
-  USING (auth.role() = 'authenticated');
-
-DROP POLICY IF EXISTS hr_headcount_insert ON hr_headcount_plan;
-CREATE POLICY hr_headcount_insert ON hr_headcount_plan FOR INSERT
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-              AND p.role IN ('super_admin','admin','hr','hr_admin','manager'))
-  );
-
-DROP POLICY IF EXISTS hr_headcount_update ON hr_headcount_plan;
-CREATE POLICY hr_headcount_update ON hr_headcount_plan FOR UPDATE
-  USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-              AND p.role IN ('super_admin','admin','hr','hr_admin','manager'))
-  )
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-              AND p.role IN ('super_admin','admin','hr','hr_admin','manager'))
-  );
-
-DROP POLICY IF EXISTS hr_headcount_delete ON hr_headcount_plan;
-CREATE POLICY hr_headcount_delete ON hr_headcount_plan FOR DELETE
-  USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-              AND p.role IN ('super_admin','admin','hr','hr_admin'))
-  );
-
--- RPC to safely increment filled_count (avoids race conditions from frontend)
+-- RPC: safely increment filled_count when a candidate is hired.
+-- SECURITY DEFINER runs as the DB owner, so it can bypass RLS for the update;
+-- but an explicit role-guard inside the body ensures only HR/manager/admin can call it.
 CREATE OR REPLACE FUNCTION increment_headcount_filled(
-  p_department_id uuid,
-  p_job_title     text,
-  p_fiscal_year   int DEFAULT EXTRACT(year FROM now())::int
+  p_department_id  uuid,
+  p_position_title text,
+  p_fiscal_year    int DEFAULT EXTRACT(year FROM now())::int
 )
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_role text;
 BEGIN
-  -- Upsert: create the plan row if it doesn't exist, then increment
-  INSERT INTO hr_headcount_plan (department_id, job_title, fiscal_year, planned_count, filled_count, created_by)
-  VALUES (p_department_id, p_job_title, p_fiscal_year, 1, 1, auth.uid())
-  ON CONFLICT (department_id, job_title, fiscal_year)
-  DO UPDATE SET
-    filled_count = hr_headcount_plan.filled_count + 1,
-    updated_at   = now();
+  -- Role guard: only HR / manager / admin may mutate headcount plan data
+  SELECT role INTO v_role FROM profiles WHERE id = auth.uid();
+  IF v_role IS NULL OR v_role NOT IN (
+    'super_admin','admin','hr','hr_admin','hr_manager','manager'
+  ) THEN
+    RAISE EXCEPTION 'Insufficient privileges: only HR or managers may update headcount';
+  END IF;
+
+  -- Increment filled_count on the matching plan row (best-effort match by dept + title + year).
+  -- If no matching row exists yet, the UPDATE is a no-op (doesn't create phantom rows).
+  UPDATE hr_headcount_plans
+  SET    filled_count = filled_count + 1
+  WHERE  fiscal_year    = p_fiscal_year
+    AND  (department_id = p_department_id OR department_id IS NULL)
+    AND  lower(position_title) = lower(p_position_title);
 END;
 $$;
 
--- Only HR/admin/manager can call this RPC
+-- Restrict execution: revoke PUBLIC, grant only to authenticated users (role guard is inside)
 REVOKE ALL ON FUNCTION increment_headcount_filled FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION increment_headcount_filled TO authenticated;

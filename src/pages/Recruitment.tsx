@@ -463,9 +463,9 @@ export default function Recruitment() {
       if (jr?.department_id) {
         try {
           await supabase.rpc('increment_headcount_filled' as any, {
-            p_department_id: jr.department_id,
-            p_job_title:     jr.title,
-            p_fiscal_year:   new Date().getFullYear(),
+            p_department_id:  jr.department_id,
+            p_position_title: jr.title,
+            p_fiscal_year:    new Date().getFullYear(),
           });
         } catch (e) { console.warn('[Recruitment] headcount sync failed:', e); }
       }
@@ -809,8 +809,27 @@ export default function Recruitment() {
 
   // ── Candidate detail dialog ────────────────────────────────────────────────
   function CandidateDetailDialog() {
+    // ── All hooks declared unconditionally (Rules of Hooks) ──────────────────
+    const [offerSalary,   setOfferSalary]   = useState('');
+    const [offerCurrency, setOfferCurrency] = useState('SDG');
+    const [offerStart,    setOfferStart]    = useState('');
+    const [savingOffer,   setSavingOffer]   = useState(false);
+    const [sendingEmail,  setSendingEmail]  = useState(false);
+
     const c = detailCand;
+
+    // Sync offer fields whenever a different candidate is opened
+    useEffect(() => {
+      if (c) {
+        setOfferSalary(String(c.salary_offer ?? ''));
+        setOfferCurrency(c.offer_currency ?? 'SDG');
+        setOfferStart(c.offer_start_date ?? '');
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [c?.id]);
+
     if (!c) return null;
+
     const posting = postings.find(p => p.id === c.job_posting_id);
     const rubric  = getEffectiveRubric(posting ?? null);
     const cScores = candidateScores(c.id);
@@ -826,12 +845,6 @@ export default function Recruitment() {
         : 0;
       return { subject: r.label, score: Math.round(avg * 10) / 10, fullMark: 5 };
     });
-
-    const [offerSalary,   setOfferSalary]   = useState(String(c.salary_offer ?? ''));
-    const [offerCurrency, setOfferCurrency] = useState(c.offer_currency ?? 'SDG');
-    const [offerStart,    setOfferStart]    = useState(c.offer_start_date ?? '');
-    const [savingOffer,   setSavingOffer]   = useState(false);
-    const [sendingEmail,  setSendingEmail]  = useState(false);
 
     async function saveOfferDetails() {
       setSavingOffer(true);
