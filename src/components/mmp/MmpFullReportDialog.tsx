@@ -36,17 +36,22 @@ import autoTable from 'jspdf-autotable';
 //   submitted     — enumerator self-reported to WFP ODK (Phase A terminal)
 // "verified", "approved", "costed" etc. are post-submission approval-chain
 // steps and must NOT count as covered — they inflated coverage (e.g. Red Sea 100%).
+// COVERED = only truly WFP-confirmed or legacy-completed visits.
+// Everything else — including submitted, verified, approved, costed — is
+// still in the approval/confirmation pipeline and must NOT count as covered.
 const DONE_STATUSES = new Set([
-  'wfp_confirmed',
-  'completed',
-  'submitted',
+  'wfp_confirmed', // WFP confirmed — gold standard
+  'completed',     // legacy pre-Phase-A terminal value
 ]);
 const IN_PROGRESS_STATUSES = new Set([
   'accepted', 'claimed', 'in_progress', 'ongoing', 'dispatched', 'assigned',
   'forwarded', 'forwarded_to_coordinator', 'forwarded_to_fom', 'permits_attached',
   'with_coordinators', 'acknowledged', 'site_claim',
-  // post-submission workflow steps — visit happened but approval chain in progress
-  'approved', 'cp_verified', 'locality_permit_verified', 'approved_and_costed', 'costed',
+  // post-submission steps: enumerator done but not yet WFP-confirmed
+  'submitted', 'submitted_for_review',
+  // post-verification approval chain: supervisor/FOM/finance steps, NOT terminal
+  'verified', 'approved', 'cp_verified', 'locality_permit_verified',
+  'approved_and_costed', 'costed',
 ]);
 const ATTENTION_STATUSES = new Set([
   'rejected', 'declined', 'returned', 'returned_to_fom', 'recalled', 'sent_back',

@@ -163,14 +163,12 @@ const nextStep = (status: string): string => {
 
 // VERIFIED = truly WFP-confirmed terminal completion.
 // Only wfp_confirmed is the gold standard; completed is the legacy equivalent.
+// VERIFIED = only WFP-confirmed or legacy-completed visits count as "covered".
 const VERIFIED_STATUSES = new Set([
   'wfp_confirmed', 'completed',
 ]);
-// DC_COMPLETED = visit done by field staff, still going through approval chain.
-// 'submitted' / 'submitted_for_review' = enumerator submitted, supervisor pending.
-// 'verified', 'approved', 'costed', 'cp_verified' = post-submission approvals —
-// visit happened but not yet WFP-confirmed. Previously these were in VERIFIED_STATUSES
-// which inflated coverage numbers (e.g. Red Sea showing 100% when it should not).
+// DC_COMPLETED = field staff finished their part but not yet WFP-confirmed.
+// Includes post-submission approval steps (submitted → verified → approved → costed).
 const DC_COMPLETED_STATUSES = new Set([
   'submitted', 'submitted_for_review',
   'verified', 'approved', 'approved and costed', 'approved_and_costed',
