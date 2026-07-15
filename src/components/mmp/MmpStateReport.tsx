@@ -874,8 +874,7 @@ export default function MmpStateReport({
         <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', padding: '6px 20px', fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '4px 16px', backgroundColor: 'var(--muted)/0.3' }} className="bg-muted/30">
           {[
             { label: 'Total Sites',       value: cycleSummary.totalSites,        cls: 'font-bold text-foreground' },
-            { label: 'Verified',          value: cycleSummary.verified,           cls: 'text-green-700 dark:text-green-400' },
-            { label: 'Completed (DC)',    value: cycleSummary.dcCompleted,        cls: 'text-teal-700 dark:text-teal-400' },
+            { label: 'Completed',         value: cycleSummary.verified,           cls: 'text-green-700 dark:text-green-400' },
             { label: 'Field Work',        value: cycleSummary.inProgress,         cls: 'text-blue-700 dark:text-blue-400' },
             { label: 'Awaiting Dispatch', value: cycleSummary.awaitingDispatch,   cls: 'text-indigo-700 dark:text-indigo-400' },
             { label: 'Pending',           value: cycleSummary.pending,            cls: 'text-amber-700 dark:text-amber-400' },
@@ -934,8 +933,7 @@ export default function MmpStateReport({
                 <div className="space-y-1 text-sm">
                   {[
                     { label: 'Total Sites',                  value: cycleSummary.totalSites,          cls: '' },
-                    { label: 'Verified / Approved',          value: cycleSummary.verified,            cls: 'text-green-700 dark:text-green-400' },
-                    { label: 'Completed (DC)',               value: cycleSummary.dcCompleted,         cls: 'text-teal-700 dark:text-teal-400' },
+                    { label: 'Completed / WFP Confirmed',   value: cycleSummary.verified,            cls: 'text-green-700 dark:text-green-400' },
                     { label: 'Active Field Work',            value: cycleSummary.inProgress,          cls: 'text-blue-700 dark:text-blue-400' },
                     { label: 'Awaiting Dispatch',            value: cycleSummary.awaitingDispatch,    cls: 'text-sky-700 dark:text-sky-400' },
                     { label: 'Pending / Not Started',        value: cycleSummary.pending,             cls: 'text-amber-700 dark:text-amber-400' },
@@ -952,8 +950,7 @@ export default function MmpStateReport({
                 </div>
                 {cycleSummary.totalSites > 0 && (
                   <div className="mt-3 h-3 rounded-full overflow-hidden bg-muted flex">
-                    <div className="bg-green-500" style={{ width: `${(cycleSummary.verified         / cycleSummary.totalSites) * 100}%` }} title="Verified / Approved" />
-                    <div className="bg-teal-500"  style={{ width: `${(cycleSummary.dcCompleted      / cycleSummary.totalSites) * 100}%` }} title="Completed (DC)" />
+                    <div className="bg-green-500" style={{ width: `${(cycleSummary.verified         / cycleSummary.totalSites) * 100}%` }} title="Completed / WFP Confirmed" />
                     <div className="bg-blue-400"  style={{ width: `${(cycleSummary.inProgress       / cycleSummary.totalSites) * 100}%` }} title="Active Field Work" />
                     <div className="bg-sky-400"   style={{ width: `${(cycleSummary.awaitingDispatch / cycleSummary.totalSites) * 100}%` }} title="Awaiting Dispatch" />
                     <div className="bg-amber-400" style={{ width: `${(cycleSummary.pending          / cycleSummary.totalSites) * 100}%` }} title="Pending / Not Started" />
@@ -1183,7 +1180,7 @@ export default function MmpStateReport({
                             <th className="text-left px-3 py-2 font-medium w-6" />
                             <th className="text-left px-3 py-2 font-medium">Activity Type</th>
                             <th className="text-center px-3 py-2 font-medium">Total Sites</th>
-                            <th className="text-center px-3 py-2 font-medium">Verified</th>
+                            <th className="text-center px-3 py-2 font-medium">Completed</th>
                             <th className="text-center px-3 py-2 font-medium">Remaining</th>
                             <th className="text-right px-3 py-2 font-medium">Coverage</th>
                             <th className="px-3 py-2 w-28" />
@@ -1458,7 +1455,7 @@ export default function MmpStateReport({
                     <span className="pl-7">Data Collector / Enumerator</span>
                     <span className="text-center">Claimed</span>
                     <span className="text-center text-teal-700 dark:text-teal-400">DC Done</span>
-                    <span className="text-center text-green-700 dark:text-green-400">Verified</span>
+                    <span className="text-center text-green-700 dark:text-green-400">Completed</span>
                     <span className="text-center text-blue-700">In Progress</span>
                     <span>First Claim</span>
                     <span>Last Activity</span>
