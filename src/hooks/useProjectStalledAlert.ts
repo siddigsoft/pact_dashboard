@@ -126,7 +126,7 @@ async function checkStalledProjects(userId: string) {
       message_en: `"${p.name}" has not advanced its flow stage in ${daysStalled} days. Review and take action.`,
       message_ar: `لم يتقدم "${p.name}" في مراحل سير العمل منذ ${daysStalled} يوماً. يُرجى المراجعة واتخاذ الإجراء اللازم.`,
       priority: 'high',
-      action_url: `/projects/${p.id}`,
+      action_url: `/projects/${p.id}?tab=flow`,
       entity_id: p.id,
       entity_type: 'project',
       event_type: 'project_stalled',

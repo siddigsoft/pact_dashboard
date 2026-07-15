@@ -263,7 +263,7 @@ async function sendStageNotifications(
       triggered_by: advancedById,
       triggered_by_name: advancedByName,
       workflow_stage: nextStageLabel,
-      action_url: `/projects/${projectId}`,
+      action_url: `/projects/${projectId}?tab=flow`,
       send_email: true,
       metadata: {
         project_name: projectName,
@@ -298,7 +298,7 @@ async function sendStageCompletedNotification(
       triggered_by: actorId,
       triggered_by_name: actorName,
       workflow_stage: stageLabel,
-      action_url: `/projects/${projectId}`,
+      action_url: `/projects/${projectId}?tab=flow`,
       send_email: true,
       metadata: {
         project_name: projectName,

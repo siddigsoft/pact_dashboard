@@ -103,7 +103,7 @@ async function checkOverdueMilestones(userId: string) {
         priority: 'high',
         status: 'pending',
         triggered_by: userId,
-        action_url: `/projects/${milestone.project_id}`,
+        action_url: `/projects/${milestone.project_id}?tab=flow`,
         email_sent: false,
       });
     }

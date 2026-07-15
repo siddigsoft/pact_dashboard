@@ -73,7 +73,7 @@ async function checkOverdueTasks(userId: string) {
     message_en: `You have ${count} overdue task${count !== 1 ? 's' : ''}${critical > 0 ? ` including ${critical} critical` : ''}. The oldest, "${oldest.title}", is ${oldestDaysAgo} day${oldestDaysAgo !== 1 ? 's' : ''} past due.`,
     priority: critical > 0 ? 'high' : 'medium',
     status: 'pending',
-    action_url: '/tasks',
+    action_url: '/my-tasks',
     email_sent: false,
   }]);
 }

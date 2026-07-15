@@ -1752,7 +1752,7 @@ PACT Command Center | مركز قيادة باكت`;
         { label: 'Site', value: siteName },
         { label: 'Status', value: 'Pending Review' },
       ],
-      actionUrl: '/costs',
+      actionUrl: '/cost-submission',
       actionLabel: 'View Submission',
     });
   },
@@ -1800,7 +1800,7 @@ PACT Command Center | مركز قيادة باكت`;
         message: `${submitterName} (${submitterEmail}) has submitted a new ${fundingLabel.toLowerCase()} request titled "${requestTitle}" for your review and approval.`,
         messageAr: `قام ${submitterName} (${submitterEmail}) بتقديم ${fundingLabelAr} جديد بعنوان "${requestTitle}" لمراجعتك والموافقة عليه.`,
         type: 'warning',
-        actionUrl: '/costs',
+        actionUrl: '/cost-submission',
         actionLabel: 'Review Submission',
         details: [
           { label: 'Submitted By / مقدم من', value: submitterName },
@@ -1871,7 +1871,7 @@ PACT Command Center | مركز قيادة باكت`;
         message: `${submitterName} (${submitterEmail}) has submitted a new ${fundingLabel.toLowerCase()} request titled "${requestTitle}" that requires your awareness.`,
         messageAr: `قام ${submitterName} (${submitterEmail}) بتقديم ${fundingLabelAr} جديد بعنوان "${requestTitle}" لإطلاعك عليه.`,
         type: 'warning',
-        actionUrl: '/costs',
+        actionUrl: '/cost-submission',
         actionLabel: 'View Submission',
         details: [
           { label: 'Submitted By / مقدم من', value: submitterName },
