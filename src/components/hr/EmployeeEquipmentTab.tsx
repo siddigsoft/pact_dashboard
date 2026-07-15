@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Laptop, Phone, CreditCard, Car, Tablet, Camera, Radio, Package, Loader2, AlertTriangle, Plus, RotateCcw } from "lucide-react";
+import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 
 const ASSET_TYPE_ICONS: Record<string, React.ElementType> = {
   laptop: Laptop, phone: Phone, access_card: CreditCard, sim_card: Package,
@@ -108,8 +109,26 @@ export default function EmployeeEquipmentTab({ userId, isAdmin }: { userId: stri
         notes: assignForm.notes || null,
       });
       if (assignErr) throw assignErr;
+      const selectedAsset = availableAssets.find(a => a.id === assignForm.assetId);
       const { error: statusErr } = await supabase.from('hr_assets').update({ status: 'assigned', current_condition: assignForm.condition, updated_at: new Date().toISOString() }).eq('id', assignForm.assetId);
       if (statusErr) throw statusErr;
+      // Notify the employee that equipment was issued to them
+      if (selectedAsset) {
+        try {
+          const typeLabel = ASSET_TYPE_LABELS[selectedAsset.asset_type] ?? selectedAsset.asset_type;
+          await NotificationTriggerService.send({
+            userId,
+            title: 'Equipment issued to you',
+            titleAr: 'تم إصدار معدات باسمك',
+            message: `${typeLabel} "${selectedAsset.name}" has been issued to you by HR. Please confirm receipt.`,
+            messageAr: `تم إصدار ${typeLabel} "${selectedAsset.name}" باسمك من قِبل الموارد البشرية. يُرجى تأكيد الاستلام.`,
+            type: 'info',
+            category: 'system',
+            priority: 'normal',
+            link: '/profile',
+          });
+        } catch (e) { console.error('Assignment notification failed', e); }
+      }
       toast({ title: 'Asset assigned' });
       setAssignDialog(false);
       load();

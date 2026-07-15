@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { exportToExcel } from '@/utils/report-export';
+import { exportMultiSheetExcel } from '@/utils/report-export';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -101,6 +102,8 @@ export default function HRAssets() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
+  const [deptFilter, setDeptFilter] = useState('all');
 
   // Dialogs
   const [assetDialog, setAssetDialog] = useState<{ mode: 'add' | 'edit'; asset?: Asset } | null>(null);
@@ -146,22 +149,45 @@ export default function HRAssets() {
     },
   });
 
-  const { data: employees = [] } = useQuery<{ id: string; full_name: string }[]>({
+  const { data: employees = [] } = useQuery<{ id: string; full_name: string; department_id: string | null }[]>({
     queryKey: ['hr-assets-employees'],
     enabled: isAdmin,
     queryFn: async () => {
-      const { data, error } = await supabase.from('profiles').select('id, full_name').eq('is_active', true).order('full_name');
+      const { data, error } = await supabase.from('profiles').select('id, full_name, department_id').eq('is_active', true).order('full_name');
       if (error) throw error;
-      return (data ?? []) as { id: string; full_name: string }[];
+      return (data ?? []) as { id: string; full_name: string; department_id: string | null }[];
+    },
+  });
+
+  const { data: departments = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['hr-assets-departments'],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('departments').select('id, name').order('name');
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
     },
   });
 
   const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: ['hr-assets'] }), [qc]);
 
   // ── Filters ──────────────────────────────────────────────────────────────
+  const empDeptMap = Object.fromEntries(employees.map(e => [e.id, e.department_id]));
+
   const filtered = assets.filter(a => {
     if (typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
     if (statusFilter !== 'all' && a.status !== statusFilter) return false;
+    if (assignedToFilter !== 'all') {
+      if (assignedToFilter === 'unassigned') {
+        if (a.assigned_to_id) return false;
+      } else {
+        if (a.assigned_to_id !== assignedToFilter) return false;
+      }
+    }
+    if (deptFilter !== 'all') {
+      const assignedDept = a.assigned_to_id ? empDeptMap[a.assigned_to_id] : null;
+      if (assignedDept !== deptFilter) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       return a.name.toLowerCase().includes(q) ||
@@ -229,6 +255,21 @@ export default function HRAssets() {
       if (aErr) throw aErr;
       const { error: sErr } = await supabase.from('hr_assets').update({ status: 'assigned', current_condition: assignForm.condition, updated_at: new Date().toISOString() }).eq('id', assignDialog.id);
       if (sErr) throw sErr;
+      // Notify the employee
+      try {
+        const typeName = ASSET_TYPES.find(t => t.value === assignDialog.asset_type)?.label ?? assignDialog.asset_type;
+        await NotificationTriggerService.send({
+          userId: assignForm.userId,
+          title: 'Equipment issued to you',
+          titleAr: 'تم إصدار معدات باسمك',
+          message: `${typeName} "${assignDialog.name}" has been issued to you by HR. Please confirm receipt.`,
+          messageAr: `تم إصدار ${typeName} "${assignDialog.name}" باسمك من قِبل الموارد البشرية. يُرجى تأكيد الاستلام.`,
+          type: 'info',
+          category: 'system',
+          priority: 'normal',
+          link: '/profile',
+        });
+      } catch (e) { console.error('Assignment notification failed', e); }
       toast({ title: 'Asset assigned' });
       setAssignDialog(null);
       invalidate();
@@ -259,23 +300,50 @@ export default function HRAssets() {
     } finally { setSaving(false); }
   };
 
-  // ── Excel Export ──────────────────────────────────────────────────────────
-  const handleExport = () => {
-    const rows = filtered.map(a => ({
+  // ── Excel Export (multi-sheet: Assets + Assignment History) ──────────────
+  const handleExport = async () => {
+    const assetRows = filtered.map(a => ({
       'Asset Name': a.name,
       'Type': ASSET_TYPES.find(t => t.value === a.asset_type)?.label ?? a.asset_type,
       'Serial Number': a.serial_number ?? '',
       'Model': a.model ?? '',
       'Status': STATUS_META[a.status]?.label ?? a.status,
       'Condition': a.current_condition ? (a.current_condition.charAt(0).toUpperCase() + a.current_condition.slice(1)) : '',
-      'Assigned To': a.assigned_to_name ?? '',
+      'Currently Assigned To': a.assigned_to_name ?? '',
       'Assignment Date': a.assigned_date ?? '',
       'Purchase Date': a.purchase_date ?? '',
       'Purchase Value': a.purchase_value ?? '',
       'Notes': a.notes ?? '',
     }));
-    exportToExcel(rows, `hr-assets-${new Date().toISOString().slice(0, 10)}`);
-    toast({ title: 'Excel exported' });
+
+    // Fetch full assignment history for the visible asset set
+    const assetIds = filtered.map(a => a.id);
+    let historyRows: Record<string, string | number>[] = [];
+    if (assetIds.length > 0) {
+      const { data: hist } = await supabase
+        .from('hr_asset_assignments')
+        .select('id, asset_id, user_id, assigned_date, returned_date, condition_at_assignment, condition_at_return, notes, asset:hr_assets(name, asset_type), employee:profiles!user_id(full_name), assigner:profiles!assigned_by(full_name)')
+        .in('asset_id', assetIds)
+        .order('assigned_date', { ascending: false });
+      const capitalize = (s: string | null) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+      historyRows = (hist ?? []).map((h: any) => ({
+        'Asset Name': h.asset?.name ?? '',
+        'Asset Type': ASSET_TYPES.find(t => t.value === h.asset?.asset_type)?.label ?? (h.asset?.asset_type ?? ''),
+        'Employee': h.employee?.full_name ?? '',
+        'Assigned Date': h.assigned_date ?? '',
+        'Returned Date': h.returned_date ?? 'Outstanding',
+        'Condition at Assignment': capitalize(h.condition_at_assignment),
+        'Condition at Return': capitalize(h.condition_at_return),
+        'Assigned By': h.assigner?.full_name ?? '',
+        'Notes': h.notes ?? '',
+      }));
+    }
+
+    exportMultiSheetExcel([
+      { name: 'Assets', data: assetRows },
+      { name: 'Assignment History', data: historyRows },
+    ], `hr-assets-${new Date().toISOString().slice(0, 10)}`);
+    toast({ title: 'Excel exported', description: `${assetRows.length} assets · ${historyRows.length} assignment records` });
   };
 
   // ── Retire ────────────────────────────────────────────────────────────────
@@ -347,6 +415,23 @@ export default function HRAssets() {
             {Object.entries(STATUS_META).map(([v, m]) => <SelectItem key={v} value={v}>{m.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+          <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Assigned To" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Employees</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {departments.length > 0 && (
+          <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Department" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Asset Table */}

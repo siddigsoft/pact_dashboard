@@ -71,7 +71,7 @@ const TAB_GROUPS = [
       { id: 'skills',      emoji: '⚡', label: 'Skills & Languages',     description: 'Professional skills, language proficiencies, and competency levels recorded for this staff member.' },
       { id: 'training',    emoji: '🏅', label: 'Training & Certs',       description: 'Training courses, professional certifications, licenses, and workshops attended.' },
       { id: 'dependents',  emoji: '👨‍👩‍👧', label: 'Dependents',            description: 'Family members, dependents, and designated insurance/benefit beneficiaries.' },
-      { id: 'equipment',   emoji: '🖥️', label: 'Equipment',   adminOnly: true, description: 'Organizational assets currently or previously assigned to this employee — laptops, phones, access cards, and other issued equipment.' },
+      { id: 'equipment',   emoji: '🖥️', label: 'Equipment',   description: 'Organizational assets currently or previously assigned to this employee — laptops, phones, access cards, and other issued equipment.' },
     ],
   },
   {

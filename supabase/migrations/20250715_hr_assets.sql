@@ -48,6 +48,11 @@ CREATE INDEX IF NOT EXISTS idx_hr_assign_asset         ON hr_asset_assignments(a
 CREATE INDEX IF NOT EXISTS idx_hr_assign_user          ON hr_asset_assignments(user_id);
 CREATE INDEX IF NOT EXISTS idx_hr_assign_active        ON hr_asset_assignments(user_id) WHERE returned_date IS NULL;
 
+-- Enforce one active assignment per asset (prevents double-issuing)
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_assign_per_asset
+  ON hr_asset_assignments(asset_id)
+  WHERE returned_date IS NULL;
+
 -- 4. Row Level Security
 ALTER TABLE hr_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hr_asset_assignments ENABLE ROW LEVEL SECURITY;
