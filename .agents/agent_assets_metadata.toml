@@ -72,3 +72,9 @@ id = "YFwH_h27YB-kJ8Ng8Zn9q"
 uri = "file://pre_funding_ALL_IN_ONE.zip"
 type = "unspecified"
 title = "Pre-Funding — Complete SQL (download)"
+
+[[outputs]]
+id = "OFpKdqv1IBwyLLDPNHy2C"
+uri = "file://TESTING_MANUAL_2026-07-15.md"
+type = "text"
+title = "Testing Manual — 2026-07-15"
