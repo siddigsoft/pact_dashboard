@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS hr_job_requisitions (
   id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   title                 text        NOT NULL,
   department_id         uuid        REFERENCES departments(id)  ON DELETE SET NULL,
-  hub_id                uuid        REFERENCES hubs(id)         ON DELETE SET NULL,
+  hub_id                text        REFERENCES hubs(id)         ON DELETE SET NULL,
   headcount             int         NOT NULL DEFAULT 1,
   justification         text,
   salary_band           text,                    -- free-text band, e.g. "Grade 5 — SDG 80 000–110 000"

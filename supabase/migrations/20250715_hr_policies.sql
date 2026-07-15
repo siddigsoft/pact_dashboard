@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS hr_policies (
   required_roles  text[] NOT NULL DEFAULT '{}',
   published_at    timestamptz,
   created_by      uuid REFERENCES profiles(id),
-  hub_id          uuid REFERENCES hubs(id),
+  hub_id          text REFERENCES hubs(id),
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
