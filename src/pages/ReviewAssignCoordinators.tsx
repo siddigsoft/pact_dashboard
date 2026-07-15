@@ -43,7 +43,7 @@ const ReviewAssignCoordinators: FC = () => {
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
   const [expandedLocalities, setExpandedLocalities] = useState({} as Record<string, boolean>);
   const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
-  const [forwardedSiteDetails, setForwardedSiteDetails] = useState<Map<string, { coordinatorId: string | null, forwardedAt: string | null }>>(new Map());
+  const [forwardedSiteDetails, setForwardedSiteDetails] = useState<Map<string, { coordinatorId: string | null, forwardedAt: string | null, forwardedById: string | null }>>(new Map());
   const [statePermitSiteIds, setStatePermitSiteIds] = useState<Set<string>>(new Set());
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -113,7 +113,7 @@ const ReviewAssignCoordinators: FC = () => {
           
           const forwarded = new Set<string>();
           const statePermitIds = new Set<string>();
-          const details = new Map<string, { coordinatorId: string | null, forwardedAt: string | null }>();
+          const details = new Map<string, { coordinatorId: string | null, forwardedAt: string | null, forwardedById: string | null }>();
           siteEntries.forEach((entry: any) => {
             const hasForwardedAt = !!entry.forwarded_at;
             const hasDispatchedAt = !!entry.dispatched_at;
@@ -129,6 +129,7 @@ const ReviewAssignCoordinators: FC = () => {
             details.set(entry.id, {
               coordinatorId: entry.forwarded_to_user_id ?? entry.additional_data?.assigned_to ?? null,
               forwardedAt: entry.forwarded_at ?? entry.dispatched_at ?? null,
+              forwardedById: entry.forwarded_by_user_id ?? null,
             });
           });
           
@@ -797,7 +798,7 @@ const ReviewAssignCoordinators: FC = () => {
                 // Build coordinator info for forwarded sites in this group
                 const groupForwardedDetails = forwardedSites
                   .map((s: any) => forwardedSiteDetails.get(s.id))
-                  .filter(Boolean) as { coordinatorId: string | null, forwardedAt: string | null }[];
+                  .filter(Boolean) as { coordinatorId: string | null, forwardedAt: string | null, forwardedById: string | null }[];
                 const uniqueCoordIds = [...new Set(groupForwardedDetails.map(d => d.coordinatorId).filter(Boolean))];
                 const latestForwardedAt = groupForwardedDetails
                   .map(d => d.forwardedAt)
@@ -818,6 +819,16 @@ const ReviewAssignCoordinators: FC = () => {
                       return isNaN(d.getTime()) ? null : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                     })()
                   : null;
+                // Who forwarded — pick the most common forwardedById across sites in the group
+                const uniqueForwarderIds = [...new Set(groupForwardedDetails.map(d => d.forwardedById).filter(Boolean))];
+                const forwarderName = uniqueForwarderIds.length === 0
+                  ? null
+                  : uniqueForwarderIds.length > 1
+                    ? 'Multiple'
+                    : (() => {
+                        const u = users.find((u: any) => u.id === uniqueForwarderIds[0]);
+                        return u?.fullName || u?.full_name || u?.name || u?.email || null;
+                      })();
 
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
@@ -842,10 +853,15 @@ const ReviewAssignCoordinators: FC = () => {
                         </span>
                       )}
                       {hasForwardedSites && coordName && (
-                        <span className="ml-2 text-sm text-indigo-700 font-normal flex items-center gap-1">
+                        <span className="ml-2 text-sm text-indigo-700 font-normal flex items-center gap-1 flex-wrap">
                           → <span className="font-medium">{coordName}</span>
                           {forwardedDateStr && (
                             <span className="text-muted-foreground font-normal">· {forwardedDateStr}</span>
+                          )}
+                          {forwarderName && (
+                            <span className="text-muted-foreground font-normal">
+                              · forwarded by <span className="font-medium text-gray-700">{forwarderName}</span>
+                            </span>
                           )}
                         </span>
                       )}
