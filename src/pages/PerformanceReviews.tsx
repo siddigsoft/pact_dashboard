@@ -425,6 +425,25 @@ export default function PerformanceReviews() {
     fetchAll();
   }
 
+  async function moveToCalibration(id: string) {
+    const rev = reviews.find(r => r.id === id);
+    if (!rev) return;
+    const { error } = await supabase.from('performance_reviews')
+      .update({ cycle_phase: 'calibration', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) { toast({ title: 'Failed', description: error.message, variant: 'destructive' }); return; }
+    // Notify reviewer/HR that review is ready for calibration
+    await NotificationTriggerService.send({
+      userId: currentUser!.id,
+      title: 'Review Moved to Calibration',
+      message: `${rev.reviewee_name}'s ${rev.review_period} review is now in the calibration queue.`,
+      type: 'info', category: 'team', priority: 'normal',
+      link: '/performance-reviews',
+    });
+    toast({ title: 'Moved to calibration queue' });
+    fetchAll();
+  }
+
   async function deleteReview(id: string) {
     const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
     if (error) { toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' }); return; }
@@ -938,7 +957,15 @@ export default function PerformanceReviews() {
                             <Users className="h-3.5 w-3.5 mr-1" />Nominate Peers
                           </Button>
                         )}
-                        {isAdmin && rev.status === 'submitted' && (
+                        {/* Move to calibration — only for manager_review phase reviews */}
+                        {isAdmin && rev.cycle_phase === 'manager_review' && rev.status === 'submitted' && (
+                          <Button size="sm" variant="outline" className="text-orange-600 border-orange-300 text-xs"
+                            onClick={() => moveToCalibration(rev.id)} data-testid={`btn-calibrate-${rev.id}`}>
+                            <Sliders className="h-3.5 w-3.5 mr-1" />Calibrate
+                          </Button>
+                        )}
+                        {/* Complete — only for reviews that are NOT going through calibration */}
+                        {isAdmin && rev.status === 'submitted' && rev.cycle_phase !== 'calibration' && rev.cycle_phase !== 'manager_review' && (
                           <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300 text-xs"
                             onClick={() => markCompleted(rev.id)} data-testid={`btn-complete-${rev.id}`}>
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />Complete
@@ -1044,7 +1071,7 @@ export default function PerformanceReviews() {
                         </thead>
                         <tbody>
                           {form.competencies.map((comp, i) => {
-                            const saRating = mySa?.competencies?.[comp.id]?.rating;
+                            const saRating = mySa?.ratings?.[comp.id];
                             const peerEntry = peerAgg?.[comp.id];
                             const peerAvg = peerEntry && peerEntry.count > 0
                               ? peerEntry.totalRating / peerEntry.count : null;
