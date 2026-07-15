@@ -7,7 +7,7 @@ import {
   Search, Users, BarChart2, TableIcon, Filter, Copy, X, ShieldCheck,
   CreditCard, Clock, CalendarOff, Calendar, Activity, GraduationCap,
   Briefcase, UserPlus, LogOut, MessageSquare, TrendingUp, Wallet,
-  Plus, Minus, FileDown, GitBranch, ExternalLink, Wrench,
+  Plus, Minus, FileDown, GitBranch, ExternalLink, Wrench, Package,
 } from 'lucide-react';
 import EOSBPanel from '@/components/hr/EOSBPanel';
 import SalaryAdvancesPanel from '@/components/hr/SalaryAdvancesPanel';
@@ -48,6 +48,7 @@ const DisciplinaryPanel    = lazy(() => import('./DisciplinaryTracking'));
 const OrgChartPanel        = lazy(() => import('./OrgChart'));
 const BenefitsPanel        = lazy(() => import('./BenefitsAdministration'));
 const HeadcountPanel       = lazy(() => import('./HeadcountPlanning'));
+const AssetsPanel          = lazy(() => import('./HRAssets'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type HRSection = 'pay' | 'time-leave' | 'people' | 'analytics';
@@ -57,6 +58,7 @@ type HRTab =
   | 'performance' | 'training' | 'contracts' | 'positions' | 'onboarding' | 'offboarding'
   | 'recruitment' | 'disciplinary' | 'org-chart' | 'benefits' | 'headcount'
   | 'overview' | 'hr-analytics' | 'wa-broadcast'
+  | 'equipment'
   // legacy aliases kept for backwards-compat URL links
   | 'hr-tools';
 
@@ -100,6 +102,7 @@ const SECTIONS: SectionDef[] = [
       { id: 'org-chart',   label: 'Org Chart',             icon: GitBranch,     adminOnly: false, description: 'Visualise the reporting hierarchy across the organisation, expand or collapse teams, and search for any staff member.' },
       { id: 'benefits',    label: 'Benefits Administration', icon: Wallet,      adminOnly: true,  description: 'Manage health insurance, pension, and other benefit plans, and track which staff are enrolled in each.' },
       { id: 'headcount',   label: 'Headcount Planning',    icon: TrendingUp,    adminOnly: true,  description: 'Plan budgeted vs. current headcount by department and quarter, track planned hires, and forecast salary cost impact.' },
+      { id: 'equipment',   label: 'Equipment & Assets',    icon: Package,       adminOnly: true,  description: 'Track organizational assets — laptops, phones, radios, vehicles — issue equipment to staff, record returns, and flag unreturned items during offboarding.' },
     ],
   },
   {
@@ -229,6 +232,7 @@ export default function HRHub() {
         {tab === 'org-chart' && <Suspense fallback={<PanelLoader />}><OrgChartPanel /></Suspense>}
         {tab === 'benefits' && isAdmin && <Suspense fallback={<PanelLoader />}><BenefitsPanel /></Suspense>}
         {tab === 'headcount' && isAdmin && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
+        {tab === 'equipment' && isAdmin && <Suspense fallback={<PanelLoader />}><AssetsPanel /></Suspense>}
 
         {/* Analytics & Comms */}
         {tab === 'overview' && isAdmin && <HROverviewPanel />}

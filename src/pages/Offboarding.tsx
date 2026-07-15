@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,9 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LogOut, Plus, FileText, Download, CheckCircle2 } from 'lucide-react';
+import { LogOut, Plus, FileText, Download, CheckCircle2, Package, RotateCcw, AlertTriangle } from 'lucide-react';
 import { format, differenceInMonths, parseISO } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -63,12 +64,21 @@ export default function Offboarding() {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editing, setEditing] = useState<Offboarding | null>(null);
+  const [pendingComplete, setPendingComplete] = useState<Offboarding | null>(null);
+  const [editingAssets, setEditingAssets] = useState<{ id: string; name: string; asset_type: string; assignment_id: string }[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [returningAssetId, setReturningAssetId] = useState<string | null>(null);
   const [form, setForm] = useState({
     user_id: '', last_working_date: format(new Date(),'yyyy-MM-dd'), reason: '',
     pro_rated_salary: 0, leave_encashment: 0, eosb_payout: 0, bonus_or_incentive: 0,
     outstanding_advances: 0, outstanding_loans: 0, other_deductions: 0, currency: 'SDG',
     notes: '',
   });
+
+  useEffect(() => {
+    if (editing) fetchEditingAssets(editing.user_id);
+    else setEditingAssets([]);
+  }, [editing?.user_id]);
 
   const { data: cases = [], isLoading } = useQuery<Offboarding[]>({
     queryKey: ['offboarding-cases'],
@@ -185,11 +195,40 @@ export default function Offboarding() {
     qc.invalidateQueries({ queryKey: ['offboarding-cases'] });
   };
 
-  const complete = async (c: Offboarding) => {
+  const fetchEditingAssets = async (userId: string) => {
+    setAssetsLoading(true);
+    const { data } = await supabase
+      .from('hr_asset_assignments')
+      .select('id, asset_id, asset:hr_assets(id, name, asset_type)')
+      .eq('user_id', userId)
+      .is('returned_date', null);
+    setEditingAssets(
+      (data ?? []).map((a: any) => ({
+        id: a.asset?.id ?? a.asset_id,
+        name: a.asset?.name ?? 'Unknown Asset',
+        asset_type: a.asset?.asset_type ?? 'other',
+        assignment_id: a.id,
+      }))
+    );
+    setAssetsLoading(false);
+  };
+
+  const handleMarkAssetReturned = async (assignmentId: string, assetId: string) => {
+    setReturningAssetId(assignmentId);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await supabase.from('hr_asset_assignments').update({ returned_date: today, updated_at: new Date().toISOString() }).eq('id', assignmentId);
+      await supabase.from('hr_assets').update({ status: 'available', updated_at: new Date().toISOString() }).eq('id', assetId);
+      toast({ title: 'Asset marked returned' });
+      if (editing) fetchEditingAssets(editing.user_id);
+      qc.invalidateQueries({ queryKey: ['hr-assets'] });
+    } catch (e: any) {
+      toast({ title: 'Failed', description: e.message, variant: 'destructive' });
+    } finally { setReturningAssetId(null); }
+  };
+
+  const doComplete = async (c: Offboarding) => {
     if (!user?.id) return;
-    const allDone = CHECKLIST_ITEMS.every(i => c.checklist?.[i.key]);
-    if (!allDone) { toast({ title: 'Complete the checklist first / أكمل قائمة المهام أولاً', variant: 'destructive' }); return; }
-    // Mark inactive in profiles
     const { error: profileErr } = await supabase.from('profiles').update({ is_active: false }).eq('id', c.user_id);
     if (profileErr) { toast({ title: 'Failed to deactivate profile', description: profileErr.message, variant: 'destructive' }); return; }
     const { error } = await supabase.from('offboarding_cases').update({
@@ -197,7 +236,25 @@ export default function Offboarding() {
     }).eq('id', c.id);
     if (error) { toast({ title: 'Failed / فشل', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Offboarding completed / تم الإنهاء', description: `${c.user_name} marked inactive.` });
+    setPendingComplete(null);
     qc.invalidateQueries({ queryKey: ['offboarding-cases'] });
+  };
+
+  const complete = async (c: Offboarding) => {
+    if (!user?.id) return;
+    const allDone = CHECKLIST_ITEMS.every(i => c.checklist?.[i.key]);
+    if (!allDone) { toast({ title: 'Complete the checklist first / أكمل قائمة المهام أولاً', variant: 'destructive' }); return; }
+    // Check for outstanding assets
+    const { data: outstanding } = await supabase
+      .from('hr_asset_assignments')
+      .select('id')
+      .eq('user_id', c.user_id)
+      .is('returned_date', null);
+    if ((outstanding ?? []).length > 0) {
+      setPendingComplete(c);
+      return;
+    }
+    await doComplete(c);
   };
 
   const exportPdf = (c: Offboarding) => {
@@ -408,7 +465,7 @@ export default function Offboarding() {
       </Dialog>
 
       {/* View / Edit dialog */}
-      <Dialog open={!!editing} onOpenChange={v => !v && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={v => { if (!v) { setEditing(null); setEditingAssets([]); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-view-offboarding">
           {editing && (
             <>
@@ -433,6 +490,61 @@ export default function Offboarding() {
                   </CardContent>
                 </Card>
 
+                {/* Equipment Clearance card — loads on open */}
+                <Card className={editingAssets.length > 0 ? 'border-amber-300' : ''}>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Package className="w-4 h-4 text-orange-500" />
+                      Equipment Clearance / تسليم المعدات
+                      {assetsLoading && <span className="text-xs text-muted-foreground ml-1">Loading…</span>}
+                      {!assetsLoading && editingAssets.length > 0 && (
+                        <Badge variant="outline" className="ml-auto text-[10px] bg-amber-100 text-amber-700 border-amber-300">
+                          {editingAssets.length} unreturned
+                        </Badge>
+                      )}
+                      {!assetsLoading && editingAssets.length === 0 && (
+                        <Badge variant="outline" className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 border-emerald-300">
+                          All clear
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {assetsLoading ? (
+                      <div className="text-sm text-muted-foreground">Checking asset records…</div>
+                    ) : editingAssets.length === 0 ? (
+                      <p className="text-sm text-emerald-700">No outstanding equipment — all assets accounted for.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-amber-700 flex items-center gap-1.5 mb-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          The following assets have not been returned:
+                        </p>
+                        {editingAssets.map(a => (
+                          <div key={a.assignment_id} className="flex items-center justify-between gap-3 p-2 rounded-lg border bg-amber-50/50 border-amber-200">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Package className="h-4 w-4 text-orange-500 shrink-0" />
+                              <span className="text-sm font-medium truncate">{a.name}</span>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{a.asset_type}</Badge>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100"
+                              disabled={returningAssetId === a.assignment_id}
+                              onClick={() => handleMarkAssetReturned(a.assignment_id, a.id)}
+                              data-testid={`button-offboarding-return-${a.assignment_id}`}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              {returningAssetId === a.assignment_id ? 'Returning…' : 'Mark Returned'}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader><CardTitle className="text-sm">Exit Checklist / قائمة المهام</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
@@ -452,12 +564,40 @@ export default function Offboarding() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => exportPdf(editing)}><Download className="w-4 h-4 mr-2"/>Export PDF</Button>
-                <Button onClick={() => setEditing(null)}>Close</Button>
+                <Button onClick={() => { setEditing(null); setEditingAssets([]); }}>Close</Button>
               </DialogFooter>
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Asset override AlertDialog — shown when complete() finds outstanding assets */}
+      <AlertDialog open={!!pendingComplete} onOpenChange={v => !v && setPendingComplete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Outstanding Equipment / معدات لم تُسلَّم
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingComplete?.user_name} still has unreturned assets on record.
+              HR admin override will complete offboarding without equipment clearance — this should be recorded manually.
+              <br /><br />
+              هذا الموظف لديه معدات لم تُسلَّم بعد. تجاوز الحظر يعني إتمام الإجراء دون تسليم المعدات.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => pendingComplete && doComplete(pendingComplete)}
+              data-testid="button-override-complete"
+            >
+              Override & Complete / تجاوز وإتمام
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
