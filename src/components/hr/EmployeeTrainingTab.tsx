@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, X, Loader2, Award, BookOpen, Shield, GraduationCap, Wrench, Edit, Trash2 } from "lucide-react";
+import { Plus, X, Loader2, Award, BookOpen, Shield, GraduationCap, Wrench, Edit, Trash2, ExternalLink } from "lucide-react";
 import { format, parseISO, isValid, differenceInDays } from "date-fns";
 
 interface Cert {
@@ -15,6 +15,7 @@ interface Cert {
   issue_date: string | null;
   expiry_date: string | null;
   cert_number: string | null;
+  file_url: string | null;
   notes: string | null;
   status: string;
 }
@@ -27,7 +28,7 @@ const CERT_TYPES = [
   { value: "workshop",      label: "Workshop",       Icon: Wrench,        color: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300" },
 ];
 
-const EMPTY = { title: "", issuing_org: "", cert_type: "training", issue_date: "", expiry_date: "", cert_number: "", notes: "" };
+const EMPTY = { title: "", issuing_org: "", cert_type: "training", issue_date: "", expiry_date: "", cert_number: "", file_url: "", notes: "" };
 
 const fmtDate = (d: string | null) => {
   if (!d) return null;
@@ -72,7 +73,7 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
   const openAdd = () => { setEditId(null); setForm({ ...EMPTY }); };
   const openEdit = (c: Cert) => {
     setEditId(c.id);
-    setForm({ title: c.title, issuing_org: c.issuing_org || "", cert_type: c.cert_type, issue_date: c.issue_date || "", expiry_date: c.expiry_date || "", cert_number: c.cert_number || "", notes: c.notes || "" });
+    setForm({ title: c.title, issuing_org: c.issuing_org || "", cert_type: c.cert_type, issue_date: c.issue_date || "", expiry_date: c.expiry_date || "", cert_number: c.cert_number || "", file_url: c.file_url || "", notes: c.notes || "" });
   };
   const cancel = () => { setForm(null); setEditId(null); };
 
@@ -88,6 +89,7 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
         issue_date: form.issue_date || null,
         expiry_date: form.expiry_date || null,
         cert_number: form.cert_number.trim() || null,
+        file_url: form.file_url.trim() || null,
         notes: form.notes.trim() || null,
         status: "active",
       };
@@ -173,6 +175,10 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
               <label className="text-xs text-muted-foreground">Certificate / Reference No.</label>
               <Input value={form.cert_number} onChange={e => setF("cert_number", e.target.value)} placeholder="Optional" className="h-9 text-sm" />
             </div>
+            <div className="sm:col-span-2 space-y-1">
+              <label className="text-xs text-muted-foreground">Certificate URL / Link</label>
+              <Input value={form.file_url} onChange={e => setF("file_url", e.target.value)} placeholder="https://… certificate or document link" className="h-9 text-sm" />
+            </div>
             <div className="sm:col-span-2 lg:col-span-3 space-y-1">
               <label className="text-xs text-muted-foreground">Notes</label>
               <Input value={form.notes} onChange={e => setF("notes", e.target.value)} placeholder="Optional notes" className="h-9 text-sm" />
@@ -222,6 +228,11 @@ export default function EmployeeTrainingTab({ userId, isAdmin }: { userId: strin
                     {c.cert_number && <span>· #{c.cert_number}</span>}
                   </p>
                   {c.notes && <p className="text-xs text-muted-foreground italic mt-0.5">{c.notes}</p>}
+                  {c.file_url && (
+                    <a href={c.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-0.5">
+                      <ExternalLink className="h-3 w-3" /> View Certificate
+                    </a>
+                  )}
                 </div>
                 {isAdmin && (
                   <div className="flex gap-1 shrink-0">

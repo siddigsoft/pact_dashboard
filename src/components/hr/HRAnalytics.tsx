@@ -27,7 +27,7 @@ export default function HRAnalytics() {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('id,role,department_id,contract_type,created_at,is_employee')
+        .select('id,role,department_id,contract_type,created_at,hire_date,is_employee')
         .eq('is_employee', true);
       return data ?? [];
     },
@@ -49,7 +49,7 @@ export default function HRAnalytics() {
       const sixMonthsAgo = subMonths(new Date(), 6).toISOString().slice(0, 10);
       const { data } = await supabase
         .from('leave_requests')
-        .select('id,user_id,leave_type,start_date,duration_days,status')
+        .select('id,user_id,leave_type,start_date,days_count,status')
         .gte('start_date', sixMonthsAgo)
         .eq('status', 'approved');
       return data ?? [];
@@ -111,7 +111,7 @@ export default function HRAnalytics() {
     const cnt: Record<string, number> = {};
     leaveReqs.forEach((r: any) => {
       const k = r.leave_type ?? 'other';
-      cnt[k] = (cnt[k] ?? 0) + (Number(r.duration_days) || 1);
+      cnt[k] = (cnt[k] ?? 0) + (Number(r.days_count) || 1);
     });
     return Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([name, days]) => ({
       name: name.charAt(0).toUpperCase() + name.replace(/_/g, ' ').slice(1), days,
@@ -129,7 +129,7 @@ export default function HRAnalytics() {
       month: label,
       days: leaveReqs
         .filter((r: any) => r.start_date?.startsWith(key))
-        .reduce((s: number, r: any) => s + (Number(r.duration_days) || 1), 0),
+        .reduce((s: number, r: any) => s + (Number(r.days_count) || 1), 0),
     }));
   }, [leaveReqs]);
 
@@ -138,8 +138,9 @@ export default function HRAnalytics() {
     if (!profiles.length) return 0;
     const now = Date.now();
     const total = profiles.reduce((s: number, p: any) => {
-      if (!p.created_at) return s;
-      return s + Math.round((now - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30));
+      const startDate = p.hire_date || p.created_at;
+      if (!startDate) return s;
+      return s + Math.round((now - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24 * 30));
     }, 0);
     return Math.round(total / profiles.length);
   }, [profiles]);
@@ -153,7 +154,7 @@ export default function HRAnalytics() {
         {[
           { label: 'Total Employees',     value: profiles.length,     color: 'text-[#0F2041] dark:text-blue-300', accent: 'bg-blue-500'   },
           { label: 'Avg Tenure (months)', value: avgTenureMonths,     color: 'text-violet-700 dark:text-violet-300', accent: 'bg-violet-500' },
-          { label: 'Leave Days (6m)',     value: leaveReqs.reduce((s: number, r: any) => s + (Number(r.duration_days) || 1), 0), color: 'text-amber-700 dark:text-amber-300', accent: 'bg-amber-500' },
+          { label: 'Leave Days (6m)',     value: leaveReqs.reduce((s: number, r: any) => s + (Number(r.days_count) || 1), 0), color: 'text-amber-700 dark:text-amber-300', accent: 'bg-amber-500' },
           { label: 'Unique Roles',        value: new Set(profiles.map((p: any) => p.role).filter(Boolean)).size, color: 'text-teal-700 dark:text-teal-300', accent: 'bg-teal-500' },
         ].map(k => (
           <Card key={k.label} className="overflow-hidden">

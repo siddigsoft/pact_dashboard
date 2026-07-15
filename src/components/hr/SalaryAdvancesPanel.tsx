@@ -218,6 +218,10 @@ export default function SalaryAdvancesPanel() {
     setSavingRecovery(true);
     const adv = (advances ?? []).find(a => a.id === recoveryAdvId);
     const outstanding = adv ? getOutstanding(recoveryAdvId, adv.amount) : 0;
+    if (recAmt > outstanding + 0.01) {
+      toast({ title: 'Amount exceeds outstanding balance', description: `Maximum recoverable: ${adv?.currency ?? ''} ${outstanding.toLocaleString('en-US', { maximumFractionDigits: 2 })}`, variant: 'destructive' });
+      setSavingRecovery(false); return;
+    }
 
     const { error } = await supabase.from('hr_salary_advance_recoveries' as any).insert({
       advance_id: recoveryAdvId,

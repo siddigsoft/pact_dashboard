@@ -136,7 +136,12 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
     if (!eduForm) return;
     setEduSaving(true);
     try {
-      const payload = { ...eduForm, profile_id: userId };
+      const yr = eduForm.graduation_year;
+      if (yr !== null && yr !== undefined && (isNaN(yr) || yr < 1950 || yr > 2099)) {
+        toast({ title: 'Invalid graduation year', description: 'Please enter a year between 1950 and 2099', variant: 'destructive' });
+        setEduSaving(false); return;
+      }
+      const payload = { ...eduForm, graduation_year: yr && !isNaN(yr) ? yr : null, profile_id: userId };
       if (eduForm.id) {
         const { error } = await supabase.from('hr_employee_education').update(payload).eq('id', eduForm.id);
         if (error) throw error;
