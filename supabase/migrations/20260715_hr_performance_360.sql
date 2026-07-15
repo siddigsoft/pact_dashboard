@@ -35,23 +35,40 @@ CREATE INDEX IF NOT EXISTS idx_hr_review_sa_user   ON hr_review_self_assessments
 
 ALTER TABLE hr_review_self_assessments ENABLE ROW LEVEL SECURITY;
 
+-- Helper: is the calling user the reviewer of this self-assessment's parent review?
+--   Used to scope manager access to their own team only (not cross-org).
 DROP POLICY IF EXISTS hr_review_sa_own_rw ON hr_review_self_assessments;
 CREATE POLICY hr_review_sa_own_rw ON hr_review_self_assessments
   FOR ALL
   USING (
+    -- Employee reads/writes their own assessment
     user_id = auth.uid()
+    -- HR/admin global access
+    OR EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin')
+    )
+    -- Manager: team-scoped — must be the assigned reviewer of this review
     OR EXISTS (
       SELECT 1 FROM profiles p
+      JOIN performance_reviews pr ON pr.id = hr_review_self_assessments.review_id
       WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
+        AND p.role = 'manager'
+        AND pr.reviewer_id = auth.uid()
     )
   )
   WITH CHECK (
     user_id = auth.uid()
     OR EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin')
+    )
+    OR EXISTS (
       SELECT 1 FROM profiles p
+      JOIN performance_reviews pr ON pr.id = hr_review_self_assessments.review_id
       WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
+        AND p.role = 'manager'
+        AND pr.reviewer_id = auth.uid()
     )
   );
 
@@ -77,65 +94,65 @@ CREATE INDEX IF NOT EXISTS idx_hr_review_pn_nominee  ON hr_review_peer_nominatio
 
 ALTER TABLE hr_review_peer_nominations ENABLE ROW LEVEL SECURITY;
 
--- Reviewee can nominate peers (INSERT own rows); nominee can submit feedback (UPDATE own rows);
--- HR/admin can do everything.
+-- Reviewee can nominate peers; nominee can submit feedback; HR/admin global;
+-- Managers: team-scoped access via performance_reviews.reviewer_id.
 DROP POLICY IF EXISTS hr_review_pn_reviewee_insert ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_reviewee_insert ON hr_review_peer_nominations
   FOR INSERT WITH CHECK (
     reviewee_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_peer_nominations.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   );
 
 DROP POLICY IF EXISTS hr_review_pn_select ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_select ON hr_review_peer_nominations
   FOR SELECT USING (
-    -- Reviewee can only see nominations before feedback is submitted (they know who they nominated;
-    -- once the nominee submits, submitted_at is set and the row is hidden from the reviewee
-    -- to prevent de-anonymising peer feedback).
+    -- Reviewee: only pre-submission rows (submitted_at IS NULL) to prevent de-anonymising feedback
     (reviewee_id = auth.uid() AND submitted_at IS NULL)
     OR nominee_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    -- Manager: team-scoped (must own the review)
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_peer_nominations.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   );
 
 DROP POLICY IF EXISTS hr_review_pn_update ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_update ON hr_review_peer_nominations
   FOR UPDATE
-  -- USING evaluates the OLD row:
-  --   Nominee: must be approved AND not yet submitted (prevents pre-approval and re-submission bypass).
-  --   HR/admin: unrestricted.
+  -- USING checks OLD row: nominee must be approved AND not yet submitted (prevents bypass/re-submission)
   USING (
     (nominee_id = auth.uid() AND approved = true AND submitted_at IS NULL)
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_peer_nominations.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   )
-  -- WITH CHECK evaluates the NEW row: nominee must remain the owner.
-  -- No submitted_at constraint here — that is what allows setting it on first submission.
+  -- WITH CHECK checks NEW row: nominee stays owner (allows setting submitted_at on first submit)
   WITH CHECK (
     nominee_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_peer_nominations.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   );
 
 DROP POLICY IF EXISTS hr_review_pn_delete ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_delete ON hr_review_peer_nominations
   FOR DELETE USING (
-    -- Reviewee may only retract a nomination before HR has approved it and before any
-    -- feedback has been submitted (preserves audit integrity once the process is in flight).
+    -- Reviewee: only before approval (audit integrity once process is in flight)
     (reviewee_id = auth.uid() AND approved IS NULL AND submitted_at IS NULL)
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_peer_nominations.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -158,22 +175,26 @@ CREATE INDEX IF NOT EXISTS idx_hr_review_cal_review ON hr_review_calibration_adj
 
 ALTER TABLE hr_review_calibration_adjustments ENABLE ROW LEVEL SECURITY;
 
+-- HR/admin: global calibration access; Manager: team-scoped via reviewer_id; Employee: read own.
 DROP POLICY IF EXISTS hr_review_cal_admin_all ON hr_review_calibration_adjustments;
 CREATE POLICY hr_review_cal_admin_all ON hr_review_calibration_adjustments
   FOR ALL
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_calibration_adjustments.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
-        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
-    )
+    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin'))
+    OR EXISTS (SELECT 1 FROM profiles p
+        JOIN performance_reviews pr ON pr.id = hr_review_calibration_adjustments.review_id
+        WHERE p.id = auth.uid() AND p.role = 'manager' AND pr.reviewer_id = auth.uid())
   );
 
+-- Reviewed employee can read their own calibration adjustment (for transparency)
 DROP POLICY IF EXISTS hr_review_cal_select_own ON hr_review_calibration_adjustments;
 CREATE POLICY hr_review_cal_select_own ON hr_review_calibration_adjustments
   FOR SELECT USING (user_id = auth.uid());
