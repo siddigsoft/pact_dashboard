@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS hr_policies (
   effective_date  date,
   content_text    text,
   file_url        text,
-  required_roles  text[] NOT NULL DEFAULT '{}',  -- empty = all employees
+  required_roles  text[] NOT NULL DEFAULT '{}',
   published_at    timestamptz,
   created_by      uuid REFERENCES profiles(id),
   hub_id          uuid REFERENCES hubs(id),
@@ -37,54 +37,64 @@ CREATE TABLE IF NOT EXISTS hr_policy_acknowledgements (
 );
 
 -- 3. Indexes
-CREATE INDEX IF NOT EXISTS idx_hr_policies_status       ON hr_policies(status);
-CREATE INDEX IF NOT EXISTS idx_hr_policies_category     ON hr_policies(category);
-CREATE INDEX IF NOT EXISTS idx_hr_ack_policy            ON hr_policy_acknowledgements(policy_id);
-CREATE INDEX IF NOT EXISTS idx_hr_ack_user              ON hr_policy_acknowledgements(user_id);
-CREATE INDEX IF NOT EXISTS idx_hr_ack_policy_user       ON hr_policy_acknowledgements(policy_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_hr_policies_status   ON hr_policies(status);
+CREATE INDEX IF NOT EXISTS idx_hr_policies_category ON hr_policies(category);
+CREATE INDEX IF NOT EXISTS idx_hr_ack_policy        ON hr_policy_acknowledgements(policy_id);
+CREATE INDEX IF NOT EXISTS idx_hr_ack_user          ON hr_policy_acknowledgements(user_id);
+CREATE INDEX IF NOT EXISTS idx_hr_ack_policy_user   ON hr_policy_acknowledgements(policy_id, user_id);
 
 -- 4. Row Level Security
 ALTER TABLE hr_policies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hr_policy_acknowledgements ENABLE ROW LEVEL SECURITY;
 
--- hr_policies: HR/admin can CRUD all; employees can read published policies
-CREATE POLICY IF NOT EXISTS "hr_policies_select_admin"
+-- ── hr_policies policies ──────────────────────────────────────────────────────
+-- Drop first (idempotent re-run safety) then recreate.
+
+DROP POLICY IF EXISTS "hr_policies_select_admin" ON hr_policies;
+CREATE POLICY "hr_policies_select_admin"
   ON hr_policies FOR SELECT USING (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
             AND role IN ('admin','super_admin','hr_admin','ict'))
     OR status = 'published'
   );
 
-CREATE POLICY IF NOT EXISTS "hr_policies_insert_admin"
+DROP POLICY IF EXISTS "hr_policies_insert_admin" ON hr_policies;
+CREATE POLICY "hr_policies_insert_admin"
   ON hr_policies FOR INSERT WITH CHECK (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
             AND role IN ('admin','super_admin','hr_admin','ict'))
   );
 
-CREATE POLICY IF NOT EXISTS "hr_policies_update_admin"
+DROP POLICY IF EXISTS "hr_policies_update_admin" ON hr_policies;
+CREATE POLICY "hr_policies_update_admin"
   ON hr_policies FOR UPDATE USING (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
             AND role IN ('admin','super_admin','hr_admin','ict'))
   );
 
-CREATE POLICY IF NOT EXISTS "hr_policies_delete_admin"
+DROP POLICY IF EXISTS "hr_policies_delete_admin" ON hr_policies;
+CREATE POLICY "hr_policies_delete_admin"
   ON hr_policies FOR DELETE USING (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
             AND role IN ('admin','super_admin','hr_admin','ict'))
   );
 
--- hr_policy_acknowledgements: employees see own; admins see all; employees can insert own
-CREATE POLICY IF NOT EXISTS "hr_ack_select"
+-- ── hr_policy_acknowledgements policies ──────────────────────────────────────
+
+DROP POLICY IF EXISTS "hr_ack_select" ON hr_policy_acknowledgements;
+CREATE POLICY "hr_ack_select"
   ON hr_policy_acknowledgements FOR SELECT USING (
     user_id = auth.uid()
     OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
                AND role IN ('admin','super_admin','hr_admin','ict'))
   );
 
-CREATE POLICY IF NOT EXISTS "hr_ack_insert_self"
+DROP POLICY IF EXISTS "hr_ack_insert_self" ON hr_policy_acknowledgements;
+CREATE POLICY "hr_ack_insert_self"
   ON hr_policy_acknowledgements FOR INSERT WITH CHECK (user_id = auth.uid());
 
-CREATE POLICY IF NOT EXISTS "hr_ack_delete_admin"
+DROP POLICY IF EXISTS "hr_ack_delete_admin" ON hr_policy_acknowledgements;
+CREATE POLICY "hr_ack_delete_admin"
   ON hr_policy_acknowledgements FOR DELETE USING (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
             AND role IN ('admin','super_admin','hr_admin','ict'))

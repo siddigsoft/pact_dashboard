@@ -53,6 +53,7 @@ interface Employee {
   email: string | null;
   role: string | null;
   department_id: string | null;
+  hub_id: string | null;
 }
 
 interface Acknowledgement {
@@ -122,6 +123,7 @@ export default function HRPolicyLibrary() {
   // Compliance filters
   const [cmpPolicyFilter, setCmpPolicyFilter]   = useState('all');
   const [cmpDeptFilter, setCmpDeptFilter]       = useState('all');
+  const [cmpHubFilter, setCmpHubFilter]         = useState('all');
   const [cmpStatusFilter, setCmpStatusFilter]   = useState('all');
   const [expandedRow, setExpandedRow]           = useState<string | null>(null);
 
@@ -144,7 +146,7 @@ export default function HRPolicyLibrary() {
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['hr-policy-employees'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('profiles').select('id, full_name, email, role, department_id').eq('is_active', true).order('full_name');
+      const { data, error } = await supabase.from('profiles').select('id, full_name, email, role, department_id, hub_id').eq('is_active', true).order('full_name');
       if (error) throw error;
       return (data ?? []) as Employee[];
     },
@@ -159,6 +161,17 @@ export default function HRPolicyLibrary() {
       return (data ?? []) as { id: string; name: string }[];
     },
     enabled: isAdmin,
+  });
+
+  const { data: hubs = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['hr-policy-hubs'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hubs').select('id, name').order('name').limit(100);
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    enabled: isAdmin,
+    staleTime: 300_000,
   });
 
   const { data: acks = [] } = useQuery<Acknowledgement[]>({
@@ -216,6 +229,7 @@ export default function HRPolicyLibrary() {
   const filteredCompliance = complianceRows.filter(r => {
     if (cmpPolicyFilter !== 'all' && r.policy.id !== cmpPolicyFilter) return false;
     if (cmpDeptFilter !== 'all' && r.employee.department_id !== cmpDeptFilter) return false;
+    if (cmpHubFilter !== 'all' && r.employee.hub_id !== cmpHubFilter) return false;
     if (cmpStatusFilter !== 'all' && r.status !== cmpStatusFilter) return false;
     return true;
   });
@@ -598,6 +612,13 @@ export default function HRPolicyLibrary() {
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
                   {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={cmpHubFilter} onValueChange={setCmpHubFilter}>
+                <SelectTrigger className="w-40 h-8 text-xs"><SelectValue placeholder="All Hubs" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Hubs</SelectItem>
+                  {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={cmpStatusFilter} onValueChange={setCmpStatusFilter}>
