@@ -260,9 +260,14 @@ export default function PerformanceReviews() {
     !n.submitted_at
   );
 
-  // Team reviews in calibration phase only (admin). Never re-open already-published reviews.
+  // Calibration scope: HR/admin see all team reviews in calibration; managers see only the
+  // reviews they own (reviewer_id = currentUser.id) to enforce team-scoped calibration.
+  const isHrOrAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hr_admin']);
   const calibrationReviews = isAdmin
-    ? reviews.filter(r => r.cycle_phase === 'calibration')
+    ? reviews.filter(r =>
+        r.cycle_phase === 'calibration' &&
+        (isHrOrAdmin || r.reviewer_id === currentUser?.id)
+      )
     : [];
 
   const filtered = (
@@ -852,6 +857,46 @@ export default function PerformanceReviews() {
           </Button>
         </div>
       </div>
+
+      {/* ── Tab: Pending — nomination approvals section (always visible to admin) ── */}
+      {tab === 'pending' && isAdmin && nominations.filter(n => n.approved === null).length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-purple-500" />
+            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Pending Peer Nomination Approvals
+              <Badge className="ml-2 bg-purple-500 text-white h-4 px-1.5 text-[10px]">
+                {nominations.filter(n => n.approved === null).length}
+              </Badge>
+            </p>
+          </div>
+          {nominations.filter(n => n.approved === null).map(nom => (
+            <Card key={nom.id}>
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    <span className="text-purple-600">{profiles.find(p => p.id === nom.nominee_id)?.full_name ?? '—'}</span>
+                    {' '}nominated as peer for{' '}
+                    <span className="font-semibold">{nom.reviewee_name}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">{nom.review_period}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-300"
+                    onClick={() => approveNomination(nom.id, true)} data-testid={`btn-approve-nom-pending-${nom.id}`}>
+                    <UserCheck className="h-3.5 w-3.5 mr-1" />Approve
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-500 border-red-300"
+                    onClick={() => approveNomination(nom.id, false)} data-testid={`btn-reject-nom-pending-${nom.id}`}>
+                    <UserX className="h-3.5 w-3.5 mr-1" />Reject
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {pendingReviews.length > 0 && <div className="border-t pt-3 mt-1" />}
+        </div>
+      )}
 
       {/* ── Tab: Peer Feedback (nominee view) ──────────────────────────────── */}
       {tab === 'peer' && (
@@ -1493,8 +1538,17 @@ export default function PerformanceReviews() {
                                     </td>
                                   )}
                                   {peerAgg && (
-                                    <td className="py-2 px-2 text-center bg-purple-50/50 dark:bg-purple-900/10">
-                                      {peerAvg != null ? <StarRating value={Math.round(peerAvg)} readonly /> : <span className="text-muted-foreground">—</span>}
+                                    <td className="py-2 px-2 bg-purple-50/50 dark:bg-purple-900/10">
+                                      <div className="flex flex-col items-center gap-1">
+                                        {peerAvg != null ? <StarRating value={Math.round(peerAvg)} readonly /> : <span className="text-muted-foreground text-xs">—</span>}
+                                        {peerEntry && peerEntry.comments.filter(Boolean).length > 0 && (
+                                          <div className="w-full max-w-48 space-y-0.5">
+                                            {peerEntry.comments.filter(Boolean).map((c, ci) => (
+                                              <p key={ci} className="text-[10px] text-purple-700 dark:text-purple-300 italic truncate max-w-full" title={c}>"{c}"</p>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
                                     </td>
                                   )}
                                   <td className="py-2 px-2 text-center bg-amber-50/50 dark:bg-amber-900/10">
