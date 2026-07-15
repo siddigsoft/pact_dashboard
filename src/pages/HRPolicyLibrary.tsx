@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -87,11 +88,6 @@ const ALL_ROLES = [
   'project_manager', 'program_manager',
 ];
 
-function isHrAdmin(role?: string | null) {
-  if (!role) return false;
-  const r = role.toLowerCase();
-  return ['admin','super_admin','superadmin','hr_admin','ict'].includes(r);
-}
 
 const DEFAULT_FORM: PolicyForm = {
   title: '', category: 'HR', version: '1.0',
@@ -103,7 +99,8 @@ export default function HRPolicyLibrary() {
   const { profile } = useUser() as any;
   const { toast }   = useToast();
   const qc          = useQueryClient();
-  const isAdmin     = isHrAdmin(profile?.role);
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const isAdmin     = isSuperAdmin() || hasAnyRole(['admin', 'super_admin', 'superadmin', 'hr_admin', 'ict']);
 
   // View mode
   const [view, setView] = useState<'library' | 'compliance'>('library');
