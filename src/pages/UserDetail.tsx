@@ -34,6 +34,8 @@ import EmployeePersonalTab from "@/components/hr/EmployeePersonalTab";
 import EmployeeEducationTab from "@/components/hr/EmployeeEducationTab";
 import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
 import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
+import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
+import { generateEmployeeCV } from "@/utils/employeeCvExport";
 
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
@@ -54,6 +56,7 @@ const TAB_GROUPS = [
       { id: 'education',   emoji: '🎓', label: 'Education & Experience', description: 'Academic qualifications, institutions, graduation years, and prior work experience history.' },
       { id: 'documents',   emoji: '📁', label: 'Document Vault',         description: 'Uploaded staff documents — contracts, national IDs, certificates, and other files.' },
       { id: 'skills',      emoji: '⚡', label: 'Skills & Languages',     description: 'Professional skills, language proficiencies, and competency levels recorded for this staff member.' },
+      { id: 'training',    emoji: '🏅', label: 'Training & Certs',       description: 'Training courses, professional certifications, licenses, and workshops attended.' },
     ],
   },
   {
@@ -115,6 +118,7 @@ const UserDetail: FC = () => {
   const [taskDigestOptOut, setTaskDigestOptOut] = useState<boolean>(false);
   const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
   const [empSaving, setEmpSaving] = useState(false);
+  const [cvExporting, setCvExporting] = useState(false);
   const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
@@ -918,6 +922,32 @@ const UserDetail: FC = () => {
               <div className="flex items-center gap-1.5 shrink-0">
                 <button onClick={() => navigate(`/signatures?user=${user.id}`)} className="flex items-center gap-1.5 text-[11px] font-semibold text-white/70 bg-white/8 hover:bg-white/15 border border-white/10 rounded-lg px-3 py-1.5 transition-all">
                   <Mail className="h-3 w-3" /><span className="hidden sm:inline">Send Email</span>
+                </button>
+                <button
+                  disabled={cvExporting}
+                  onClick={async () => {
+                    setCvExporting(true);
+                    try {
+                      await generateEmployeeCV(user, {
+                        departmentName: departments.find(d => d.id === empDepartmentId)?.name,
+                        contractStart:  empContractStart,
+                        contractEnd:    empContractEnd,
+                        employmentType: empType,
+                        reportsToName:  allUsers.find(u => u.id === empReportsTo)?.full_name ?? undefined,
+                        hubName:        hubs.find(h => h.id === user.hubId)?.name || user.hubId || undefined,
+                      });
+                    } catch (e: any) {
+                      toast({ title: 'CV export failed', description: e.message, variant: 'destructive' });
+                    } finally { setCvExporting(false); }
+                  }}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="button-export-cv"
+                  title="Export CV as UN P11 / World Bank format PDF"
+                >
+                  {cvExporting
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Download className="h-3 w-3" />}
+                  <span className="hidden sm:inline">{cvExporting ? 'Exporting…' : 'Export CV'}</span>
                 </button>
                 {isAdmin && (
                   <button onClick={() => navigate('/hr?tab=offboarding')} className="flex items-center gap-1.5 text-[11px] font-semibold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg px-3 py-1.5 transition-all">
@@ -1843,6 +1873,11 @@ const UserDetail: FC = () => {
             {/* ── SKILLS SECTION ───────────────────────────────────────────── */}
             {activeSection === 'skills' && (<div className="p-5 sm:p-6">
               <EmployeeSkillsTab userId={user.id} isAdmin={!!isAdmin} />
+            </div>)}
+
+            {/* ── TRAINING & CERTIFICATIONS SECTION ────────────────────────── */}
+            {activeSection === 'training' && (<div className="p-5 sm:p-6">
+              <EmployeeTrainingTab userId={user.id} isAdmin={!!isAdmin} />
             </div>)}
 
             {/* ── ACCESS & SECURITY SECTION ────────────────────────────────── */}
