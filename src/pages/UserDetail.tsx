@@ -32,6 +32,8 @@ import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel } from "@/utils/roleMapp
 import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCompletenessIndicator";
 import EmployeePersonalTab from "@/components/hr/EmployeePersonalTab";
 import EmployeeEducationTab from "@/components/hr/EmployeeEducationTab";
+import EmployeeDependentsTab from "@/components/hr/EmployeeDependentsTab";
+import EmployeeITAccountsTab from "@/components/hr/EmployeeITAccountsTab";
 import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
 import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
@@ -66,6 +68,7 @@ const TAB_GROUPS = [
       { id: 'documents',   emoji: '📁', label: 'Document Vault',         description: 'Uploaded staff documents — contracts, national IDs, certificates, and other files.' },
       { id: 'skills',      emoji: '⚡', label: 'Skills & Languages',     description: 'Professional skills, language proficiencies, and competency levels recorded for this staff member.' },
       { id: 'training',    emoji: '🏅', label: 'Training & Certs',       description: 'Training courses, professional certifications, licenses, and workshops attended.' },
+      { id: 'dependents',  emoji: '👨‍👩‍👧', label: 'Dependents',            description: 'Family members, dependents, and designated insurance/benefit beneficiaries.' },
     ],
   },
   {
@@ -78,7 +81,8 @@ const TAB_GROUPS = [
   {
     id: 'system', label: 'System', color: '#ef4444', Icon: ShieldCheck,
     tabs: [
-      { id: 'access', emoji: '🔒', label: 'Access & Security',           description: 'User role assignment, login history, two-factor authentication status, and page-level permission overrides.' },
+      { id: 'access',      emoji: '🔒', label: 'Access & Security',       description: 'User role assignment, login history, two-factor authentication status, and page-level permission overrides.' },
+      { id: 'it-accounts', emoji: '💻', label: 'IT Accounts',            description: 'Provisioned system accounts, usernames, and access status across organizational tools.' },
     ],
   },
 ];
@@ -126,6 +130,8 @@ const UserDetail: FC = () => {
   const [empReportsTo, setEmpReportsTo] = useState<string>("");
   const [taskDigestOptOut, setTaskDigestOptOut] = useState<boolean>(false);
   const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
+  const [empProbationEnd, setEmpProbationEnd] = useState<string>("");
+  const [empWorkingPattern, setEmpWorkingPattern] = useState<string>("");
   const [empSaving, setEmpSaving] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
   const [showCvMenu, setShowCvMenu] = useState(false);
@@ -408,13 +414,15 @@ const UserDetail: FC = () => {
       // Load task digest opt-out from profile
       supabase
         .from("profiles")
-        .select("task_digest_opt_out, country_code")
+        .select("task_digest_opt_out, country_code, probation_end_date, working_pattern")
         .eq("id", user.id)
         .single()
         .then(({ data }) => {
           if (data) {
             setTaskDigestOptOut(data.task_digest_opt_out === true);
             if (data.country_code) setEmpCountryCode(data.country_code);
+            setEmpProbationEnd((data as any).probation_end_date ?? "");
+            setEmpWorkingPattern((data as any).working_pattern ?? "");
           }
         });
     }
@@ -449,6 +457,8 @@ const UserDetail: FC = () => {
         reports_to: empReportsTo || null,
         task_digest_opt_out: taskDigestOptOut,
         country_code: empCountryCode || 'SD',
+        probation_end_date: empProbationEnd || null,
+        working_pattern: empWorkingPattern || null,
         is_employee: hasEmploymentData,
         updated_at: new Date().toISOString(),
       };
@@ -1472,6 +1482,40 @@ const UserDetail: FC = () => {
                 </div>
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Probation End Date</h4>
+                  {isAdmin ? (
+                    <Input type="date" value={empProbationEnd} onChange={e => setEmpProbationEnd(e.target.value)} className="h-11" data-testid="input-probation-end" />
+                  ) : (
+                    <p className="font-semibold text-base">{empProbationEnd || "—"}</p>
+                  )}
+                  {empProbationEnd && (() => {
+                    const d = Math.ceil((new Date(empProbationEnd).getTime() - Date.now()) / 86400000);
+                    if (d < 0) return <p className="text-xs text-amber-600 font-medium">Probation period ended — confirm employment</p>;
+                    if (d <= 14) return <p className="text-xs text-amber-600 font-medium">Ends in {d} day{d === 1 ? "" : "s"} — review required</p>;
+                    return <p className="text-xs text-muted-foreground">Ends in {d} days</p>;
+                  })()}
+                </div>
+
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Working Pattern</h4>
+                  {isAdmin ? (
+                    <Select value={empWorkingPattern || "none"} onValueChange={v => setEmpWorkingPattern(v === "none" ? "" : v)}>
+                      <SelectTrigger className="h-11" data-testid="select-working-pattern"><SelectValue placeholder="Select pattern…" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Not Specified</SelectItem>
+                        <SelectItem value="office">Office (Full-time on-site)</SelectItem>
+                        <SelectItem value="hybrid">Hybrid (Mixed office & remote)</SelectItem>
+                        <SelectItem value="remote">Remote (Full-time remote)</SelectItem>
+                        <SelectItem value="field">Field-based</SelectItem>
+                        <SelectItem value="flexible">Flexible Hours</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-base capitalize">{empWorkingPattern || "—"}</p>
+                  )}
+                </div>
+
+                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employee ID</h4>
                   {user.employeeId ? (
                     <p className="font-semibold text-base font-mono">{user.employeeId}</p>
@@ -2063,6 +2107,11 @@ const UserDetail: FC = () => {
               <EmployeeTrainingTab userId={user.id} isAdmin={!!isAdmin} />
             </div>)}
 
+            {/* ── DEPENDENTS SECTION ───────────────────────────────────────── */}
+            {activeSection === 'dependents' && (<div className="p-5 sm:p-6">
+              <EmployeeDependentsTab userId={user.id} isAdmin={!!isAdmin} />
+            </div>)}
+
             {/* ── ACCESS & SECURITY SECTION ────────────────────────────────── */}
             {activeSection === 'access' && (
               <div className="p-5 sm:p-6 space-y-5">
@@ -2172,6 +2221,11 @@ const UserDetail: FC = () => {
                 )}
               </div>
             )}
+
+            {/* ── IT ACCOUNTS SECTION ──────────────────────────────────────── */}
+            {activeSection === 'it-accounts' && (<div className="p-5 sm:p-6">
+              <EmployeeITAccountsTab userId={user.id} isAdmin={!!isAdmin} />
+            </div>)}
 
             </Card>
         </div>

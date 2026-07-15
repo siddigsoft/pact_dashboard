@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Loader2, Zap, Globe, Users, X } from "lucide-react";
+import { Plus, Trash2, Loader2, Zap, Globe, Users, X, Target, CheckCircle2, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Skill { id?: string; skill_name: string; skill_level?: string; category?: string; }
@@ -26,12 +26,20 @@ const PROF_COLOR: Record<string, string> = {
   native: 'bg-emerald-100 text-emerald-800',
 };
 
+interface Position { id: string; title: string; skills_required?: string[] | null; }
+
 export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const { toast } = useToast();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [langs,  setLangs]  = useState<Lang[]>([]);
   const [refs,   setRefs]   = useState<Ref[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Skills Gap
+  const [showGap, setShowGap] = useState(false);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [gapPositionId, setGapPositionId] = useState<string>('');
+  const [loadingPositions, setLoadingPositions] = useState(false);
 
   const [skillForm, setSkillForm] = useState<Skill | null>(null);
   const [langForm,  setLangForm]  = useState<Lang | null>(null);
@@ -53,6 +61,17 @@ export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string;
     };
     load();
   }, [userId]);
+
+  useEffect(() => {
+    if (!showGap || positions.length > 0) return;
+    const loadPos = async () => {
+      setLoadingPositions(true);
+      const { data } = await supabase.from('positions').select('id, title, skills_required').order('title');
+      setPositions((data || []).filter(p => p.skills_required && (p.skills_required as any[]).length > 0));
+      setLoadingPositions(false);
+    };
+    loadPos();
+  }, [showGap]);
 
   const saveSkill = async () => {
     if (!skillForm?.skill_name) return;
@@ -140,8 +159,96 @@ export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string;
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
+  // Skills gap computation
+  const selectedPosition = positions.find(p => p.id === gapPositionId);
+  const requiredSkills: string[] = selectedPosition?.skills_required ?? [];
+  const empSkillNames = skills.map(s => s.skill_name.toLowerCase().trim());
+  const covered = requiredSkills.filter(r => empSkillNames.some(e => e.includes(r.toLowerCase().trim()) || r.toLowerCase().trim().includes(e)));
+  const missing  = requiredSkills.filter(r => !empSkillNames.some(e => e.includes(r.toLowerCase().trim()) || r.toLowerCase().trim().includes(e)));
+  const gapPct = requiredSkills.length > 0 ? Math.round((covered.length / requiredSkills.length) * 100) : 0;
+
   return (
     <div className="space-y-8">
+
+      {/* ── Skills Gap Panel ─────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-border/50 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowGap(v => !v)}
+          className="w-full flex items-center gap-3 px-5 py-3.5 border-b border-border/40 border-l-4 border-l-violet-500 bg-muted/25 hover:bg-muted/40 transition-colors text-left"
+        >
+          <span className="flex items-center justify-center h-7 w-7 rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
+            <Target className="h-3.5 w-3.5" />
+          </span>
+          <h3 className="font-semibold text-sm flex-1">Skills Gap Analysis</h3>
+          {selectedPosition && requiredSkills.length > 0 && (
+            <Badge className={`text-[10px] mr-2 ${gapPct >= 80 ? 'bg-green-100 text-green-800' : gapPct >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+              {gapPct}% match
+            </Badge>
+          )}
+          <span className="text-xs text-muted-foreground">{showGap ? '▲ Hide' : '▼ Compare with position'}</span>
+        </button>
+        {showGap && (
+          <div className="p-5 bg-background space-y-4">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+              <div className="flex-1 space-y-1">
+                <label className="text-xs text-muted-foreground font-medium">Compare against position</label>
+                {loadingPositions ? (
+                  <div className="flex items-center gap-2 h-9 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading positions…</div>
+                ) : positions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No positions with defined required skills found. Add skills to a position in the Positions page first.</p>
+                ) : (
+                  <Select value={gapPositionId} onValueChange={setGapPositionId}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select a position to compare…" /></SelectTrigger>
+                    <SelectContent>
+                      {positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title} ({(p.skills_required ?? []).length} skills)</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {gapPositionId && requiredSkills.length > 0 && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${gapPct >= 80 ? 'bg-green-500' : gapPct >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${gapPct}%` }} />
+                  </div>
+                  <span className={`text-sm font-bold ${gapPct >= 80 ? 'text-green-600' : gapPct >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{gapPct}%</span>
+                </div>
+              )}
+            </div>
+
+            {gapPositionId && requiredSkills.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Covered skills */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Has ({covered.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {covered.length === 0
+                      ? <p className="text-xs text-muted-foreground italic">None matched yet</p>
+                      : covered.map(s => (
+                          <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-200">{s}</span>
+                        ))}
+                  </div>
+                </div>
+                {/* Missing skills */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" /> Gap ({missing.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {missing.length === 0
+                      ? <p className="text-xs text-green-600 font-semibold">✓ All required skills covered!</p>
+                      : missing.map(s => (
+                          <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">{s}</span>
+                        ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── Skills ──────────────────────────────────────────────────────────── */}
       <div>

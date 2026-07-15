@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Edit, Save, X, User, Globe, Heart, Droplets, MapPin, CreditCard,
   Calendar, Phone, Mail, AlertCircle, Home, Loader2, CheckCircle2, FileText,
+  ShieldCheck,
 } from "lucide-react";
 
 interface PersonalData {
@@ -36,6 +37,11 @@ interface PersonalData {
   residential_address_line2?: string;
   residential_city?: string;
   residential_country?: string;
+  tax_id?: string;
+  tax_id_type?: string;
+  visa_type?: string;
+  visa_expiry?: string;
+  visa_number?: string;
 }
 
 const EMPTY: PersonalData = {
@@ -48,6 +54,7 @@ const EMPTY: PersonalData = {
   address_line1: '', address_line2: '', city: '', permanent_state: '', country: 'Sudan',
   residential_address_line1: '', residential_address_line2: '',
   residential_city: '', residential_country: '',
+  tax_id: '', tax_id_type: '', visa_type: '', visa_expiry: '', visa_number: '',
 };
 
 const ID_TYPES = [
@@ -314,6 +321,74 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
             <InfoField label="National ID Number" value={data.national_id_no} mono />
             <InfoField label="Passport Number" value={data.passport_no} mono />
             <InfoField label="Passport Expiry" value={data.passport_expiry ? new Date(data.passport_expiry).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : ''} />
+          </InfoGrid>
+        )}
+      </SectionCard>
+
+      {/* ── 2b. Compliance & Work Authorization ──────────────────────────── */}
+      <SectionCard accent="border-l-emerald-500" iconBg="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" icon={<ShieldCheck className="h-3.5 w-3.5" />} title="Compliance & Work Authorization">
+        {editMode ? (
+          <FormGrid>
+            <FormField label="Tax ID Type">
+              <Select value={form.tax_id_type || ''} onValueChange={f('tax_id_type')}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select type…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sudan_tin">Sudan TIN (Tax Identification Number)</SelectItem>
+                  <SelectItem value="personal_income_tax">Personal Income Tax File</SelectItem>
+                  <SelectItem value="vat_reg">VAT Registration</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Tax ID / TIN Number"><Input value={form.tax_id || ''} onChange={e => f('tax_id')(e.target.value)} placeholder="Tax ID number" className="h-9 font-mono" /></FormField>
+            <FormField label="Visa / Work Permit Type">
+              <Select value={form.visa_type || ''} onValueChange={f('visa_type')}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select type…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None / Not Applicable</SelectItem>
+                  <SelectItem value="work_permit">Work Permit</SelectItem>
+                  <SelectItem value="residence_permit">Residence Permit</SelectItem>
+                  <SelectItem value="business_visa">Business Visa</SelectItem>
+                  <SelectItem value="diplomatic">Diplomatic</SelectItem>
+                  <SelectItem value="humanitarian">Humanitarian</SelectItem>
+                  <SelectItem value="student">Student Visa</SelectItem>
+                  <SelectItem value="transit">Transit Visa</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Visa / Permit Number"><Input value={form.visa_number || ''} onChange={e => f('visa_number')(e.target.value)} placeholder="Visa or permit number" className="h-9 font-mono" /></FormField>
+            <FormField label="Visa / Permit Expiry Date"><Input type="date" value={form.visa_expiry || ''} onChange={e => f('visa_expiry')(e.target.value)} className="h-9" /></FormField>
+          </FormGrid>
+        ) : (
+          <InfoGrid>
+            <InfoField label="Tax ID Type" value={
+              form.tax_id_type === 'sudan_tin' ? 'Sudan TIN' :
+              form.tax_id_type === 'personal_income_tax' ? 'Personal Income Tax' :
+              form.tax_id_type === 'vat_reg' ? 'VAT Registration' :
+              data.tax_id_type || undefined
+            } />
+            <InfoField label="Tax ID / TIN Number" value={data.tax_id} mono />
+            <InfoField label="Visa / Work Permit" value={
+              data.visa_type === 'none' ? 'Not Applicable' :
+              data.visa_type === 'work_permit' ? 'Work Permit' :
+              data.visa_type === 'residence_permit' ? 'Residence Permit' :
+              data.visa_type === 'business_visa' ? 'Business Visa' :
+              data.visa_type === 'diplomatic' ? 'Diplomatic' :
+              data.visa_type === 'humanitarian' ? 'Humanitarian' :
+              data.visa_type ? data.visa_type : undefined
+            } />
+            <InfoField label="Visa / Permit No." value={data.visa_number} mono />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Visa / Permit Expiry</p>
+              {data.visa_expiry ? (() => {
+                const d = Math.ceil((new Date(data.visa_expiry).getTime() - Date.now()) / 86400000);
+                const dateStr = new Date(data.visa_expiry).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+                if (d < 0) return <span className="text-xs font-semibold text-destructive">Expired — {dateStr}</span>;
+                if (d <= 30) return <span className="text-xs font-semibold text-amber-600">⚠ {dateStr} ({d}d left)</span>;
+                return <span className="text-sm font-medium text-foreground">{dateStr}</span>;
+              })() : <p className="text-sm text-muted-foreground/50 italic">—</p>}
+            </div>
           </InfoGrid>
         )}
       </SectionCard>
