@@ -53,9 +53,25 @@ ALTER TABLE hr_policy_acknowledgements ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "hr_policies_select_admin" ON hr_policies;
 CREATE POLICY "hr_policies_select_admin"
   ON hr_policies FOR SELECT USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid()
-            AND role IN ('admin','super_admin','hr_admin','ict'))
-    OR status = 'published'
+    -- HR/admin can read all policies regardless of status or targeting
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid()
+        AND role IN ('admin','super_admin','hr_admin','ict')
+    )
+    -- Other authenticated users can only read published policies that apply
+    -- to their role: required_roles empty (= all staff) OR their role is listed
+    OR (
+      status = 'published'
+      AND (
+        array_length(required_roles, 1) IS NULL
+        OR array_length(required_roles, 1) = 0
+        OR EXISTS (
+          SELECT 1 FROM profiles
+          WHERE id = auth.uid() AND role = ANY(required_roles)
+        )
+      )
+    )
   );
 
 DROP POLICY IF EXISTS "hr_policies_insert_admin" ON hr_policies;
