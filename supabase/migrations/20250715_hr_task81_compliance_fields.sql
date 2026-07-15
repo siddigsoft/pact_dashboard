@@ -23,10 +23,11 @@ ALTER TABLE hr_employee_personal
 -- ── 2. Add probation and working-pattern columns to profiles ─────────────────
 
 ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS probation_end_date  date,
-  ADD COLUMN IF NOT EXISTS working_pattern     text CHECK (
+  ADD COLUMN IF NOT EXISTS probation_end_date   date,
+  ADD COLUMN IF NOT EXISTS probation_confirmed  boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS working_pattern      text CHECK (
     working_pattern IS NULL OR working_pattern IN (
-      'office','hybrid','remote','field','flexible'
+      'full-time','part-time','remote','hybrid','field'
     )
   );
 
@@ -91,8 +92,6 @@ CREATE POLICY hr_dependents_admin_all ON hr_employee_dependents
 CREATE POLICY hr_dependents_self_read ON hr_employee_dependents
   FOR SELECT USING (profile_id = auth.uid());
 
+-- IT Accounts: HR/Super Admin only — no self-read (sensitive system metadata)
 CREATE POLICY hr_it_accounts_admin_all ON hr_it_accounts
   FOR ALL USING (is_hr_admin()) WITH CHECK (is_hr_admin());
-
-CREATE POLICY hr_it_accounts_self_read ON hr_it_accounts
-  FOR SELECT USING (profile_id = auth.uid());

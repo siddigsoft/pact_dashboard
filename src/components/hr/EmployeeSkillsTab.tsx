@@ -28,7 +28,7 @@ const PROF_COLOR: Record<string, string> = {
 
 interface Position { id: string; title: string; skills_required?: string[] | null; }
 
-export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+export default function EmployeeSkillsTab({ userId, isAdmin, empType }: { userId: string; isAdmin: boolean; empType?: string }) {
   const { toast } = useToast();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [langs,  setLangs]  = useState<Lang[]>([]);
@@ -40,6 +40,7 @@ export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string;
   const [positions, setPositions] = useState<Position[]>([]);
   const [gapPositionId, setGapPositionId] = useState<string>('');
   const [loadingPositions, setLoadingPositions] = useState(false);
+  const [autoMatchedTitle, setAutoMatchedTitle] = useState<string>('');
 
   const [skillForm, setSkillForm] = useState<Skill | null>(null);
   const [langForm,  setLangForm]  = useState<Lang | null>(null);
@@ -66,8 +67,25 @@ export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string;
     if (!showGap || positions.length > 0) return;
     const loadPos = async () => {
       setLoadingPositions(true);
-      const { data } = await supabase.from('positions').select('id, title, skills_required').order('title');
-      setPositions((data || []).filter(p => p.skills_required && (p.skills_required as any[]).length > 0));
+      // Fetch positions with required skills
+      const [{ data: posData }, { data: expData }] = await Promise.all([
+        supabase.from('positions').select('id, title, skills_required').order('title'),
+        // Fetch user's current job experience to get their current role title
+        supabase.from('hr_employee_experience').select('job_title, is_current').eq('profile_id', userId).eq('is_current', true).limit(1),
+      ]);
+      const filtered = (posData || []).filter(p => p.skills_required && (p.skills_required as any[]).length > 0);
+      setPositions(filtered);
+
+      // Auto-select current position: match against current experience job title or empType
+      const currentTitle = (expData && expData[0]?.job_title) || empType || '';
+      if (currentTitle && filtered.length > 0 && !gapPositionId) {
+        const needle = currentTitle.toLowerCase();
+        const match = filtered.find(p => p.title.toLowerCase().includes(needle) || needle.includes(p.title.toLowerCase()));
+        if (match) {
+          setGapPositionId(match.id);
+          setAutoMatchedTitle(match.title);
+        }
+      }
       setLoadingPositions(false);
     };
     loadPos();
@@ -192,13 +210,20 @@ export default function EmployeeSkillsTab({ userId, isAdmin }: { userId: string;
           <div className="p-5 bg-background space-y-4">
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
               <div className="flex-1 space-y-1">
-                <label className="text-xs text-muted-foreground font-medium">Compare against position</label>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground font-medium">Compare against position</label>
+                  {autoMatchedTitle && gapPositionId && (
+                    <span className="text-[10px] font-semibold text-violet-600 bg-violet-100 border border-violet-200 rounded-full px-2 py-0.5">
+                      ✦ Auto-matched to current role
+                    </span>
+                  )}
+                </div>
                 {loadingPositions ? (
                   <div className="flex items-center gap-2 h-9 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading positions…</div>
                 ) : positions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No positions with defined required skills found. Add skills to a position in the Positions page first.</p>
+                  <p className="text-xs text-muted-foreground italic">No positions with defined required skills found. Add required skills to a position first.</p>
                 ) : (
-                  <Select value={gapPositionId} onValueChange={setGapPositionId}>
+                  <Select value={gapPositionId} onValueChange={v => { setGapPositionId(v); setAutoMatchedTitle(''); }}>
                     <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select a position to compare…" /></SelectTrigger>
                     <SelectContent>
                       {positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title} ({(p.skills_required ?? []).length} skills)</SelectItem>)}

@@ -82,7 +82,7 @@ const TAB_GROUPS = [
     id: 'system', label: 'System', color: '#ef4444', Icon: ShieldCheck,
     tabs: [
       { id: 'access',      emoji: '🔒', label: 'Access & Security',       description: 'User role assignment, login history, two-factor authentication status, and page-level permission overrides.' },
-      { id: 'it-accounts', emoji: '💻', label: 'IT Accounts',            description: 'Provisioned system accounts, usernames, and access status across organizational tools.' },
+      { id: 'it-accounts', emoji: '💻', label: 'IT Accounts', adminOnly: true, description: 'Provisioned system accounts, usernames, and access status across organizational tools.' },
     ],
   },
 ];
@@ -131,6 +131,7 @@ const UserDetail: FC = () => {
   const [taskDigestOptOut, setTaskDigestOptOut] = useState<boolean>(false);
   const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
   const [empProbationEnd, setEmpProbationEnd] = useState<string>("");
+  const [empProbationConfirmed, setEmpProbationConfirmed] = useState<boolean>(false);
   const [empWorkingPattern, setEmpWorkingPattern] = useState<string>("");
   const [empSaving, setEmpSaving] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
@@ -414,7 +415,7 @@ const UserDetail: FC = () => {
       // Load task digest opt-out from profile
       supabase
         .from("profiles")
-        .select("task_digest_opt_out, country_code, probation_end_date, working_pattern")
+        .select("task_digest_opt_out, country_code, probation_end_date, probation_confirmed, working_pattern")
         .eq("id", user.id)
         .single()
         .then(({ data }) => {
@@ -422,6 +423,7 @@ const UserDetail: FC = () => {
             setTaskDigestOptOut(data.task_digest_opt_out === true);
             if (data.country_code) setEmpCountryCode(data.country_code);
             setEmpProbationEnd((data as any).probation_end_date ?? "");
+            setEmpProbationConfirmed((data as any).probation_confirmed === true);
             setEmpWorkingPattern((data as any).working_pattern ?? "");
           }
         });
@@ -458,6 +460,7 @@ const UserDetail: FC = () => {
         task_digest_opt_out: taskDigestOptOut,
         country_code: empCountryCode || 'SD',
         probation_end_date: empProbationEnd || null,
+        probation_confirmed: empProbationConfirmed,
         working_pattern: empWorkingPattern || null,
         is_employee: hasEmploymentData,
         updated_at: new Date().toISOString(),
@@ -1081,11 +1084,13 @@ const UserDetail: FC = () => {
         {/* ── Level 2: Group tabs ── */}
         <div className="px-5 pt-3 flex items-end gap-1.5">
           {TAB_GROUPS.map(g => {
+            const visibleTabs = g.tabs.filter(t => !(t as any).adminOnly || isAdmin);
+            if (visibleTabs.length === 0) return null;
             const isActive = activeGroup.id === g.id;
             return (
               <button
                 key={g.id}
-                onClick={() => { setActiveSection(g.tabs[0].id); setDropOpen(false); }}
+                onClick={() => { setActiveSection(visibleTabs[0].id); setDropOpen(false); }}
                 className={`group relative flex items-center gap-2 px-4 pt-2.5 pb-3 rounded-t-xl text-sm font-semibold transition-all duration-150 border border-b-0 shrink-0 ${isActive ? 'text-white' : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/10'}`}
                 style={isActive ? { backgroundColor: `${g.color}1e`, borderColor: `${g.color}40` } : {}}
               >
@@ -1096,7 +1101,7 @@ const UserDetail: FC = () => {
                   className={`ml-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${isActive ? '' : 'text-gray-500 bg-white/5'}`}
                   style={isActive ? { backgroundColor: `${g.color}44`, color: g.color } : {}}
                 >
-                  {g.tabs.length}
+                  {visibleTabs.length}
                 </span>
               </button>
             );
@@ -1135,10 +1140,10 @@ const UserDetail: FC = () => {
               <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: `${accent}25`, backgroundColor: `${accent}12` }}>
                 <span className="text-[13px]">{activeTabInGroup.emoji}</span>
                 <span className="text-[12px] font-bold text-white tracking-wide">{activeGroup.label}</span>
-                <span className="ml-auto text-[10px] text-gray-400">{activeGroup.tabs.length} pages</span>
+                <span className="ml-auto text-[10px] text-gray-400">{activeGroup.tabs.filter(t => !(t as any).adminOnly || isAdmin).length} pages</span>
               </div>
               <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {activeGroup.tabs.map(t => {
+                {activeGroup.tabs.filter(t => !(t as any).adminOnly || isAdmin).map(t => {
                   const isActive = activeSection === t.id;
                   return (
                     <button
@@ -1482,17 +1487,42 @@ const UserDetail: FC = () => {
                 </div>
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Probation End Date</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Probation Status</h4>
+                    {empProbationConfirmed
+                      ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">✅ Confirmed</span>
+                      : empProbationEnd
+                        ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">🕐 In Probation</span>
+                        : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted/30 border border-border/40 rounded-full px-2 py-0.5">— Not Set</span>
+                    }
+                  </div>
                   {isAdmin ? (
-                    <Input type="date" value={empProbationEnd} onChange={e => setEmpProbationEnd(e.target.value)} className="h-11" data-testid="input-probation-end" />
+                    <div className="space-y-2">
+                      <label className="text-[11px] text-muted-foreground">Probation End Date</label>
+                      <Input type="date" value={empProbationEnd} onChange={e => { setEmpProbationEnd(e.target.value); if (e.target.value) setEmpProbationConfirmed(false); }} className="h-11" data-testid="input-probation-end" />
+                    </div>
                   ) : (
                     <p className="font-semibold text-base">{empProbationEnd || "—"}</p>
                   )}
-                  {empProbationEnd && (() => {
+                  {empProbationEnd && !empProbationConfirmed && (() => {
                     const d = Math.ceil((new Date(empProbationEnd).getTime() - Date.now()) / 86400000);
-                    if (d < 0) return <p className="text-xs text-amber-600 font-medium">Probation period ended — confirm employment</p>;
-                    if (d <= 14) return <p className="text-xs text-amber-600 font-medium">Ends in {d} day{d === 1 ? "" : "s"} — review required</p>;
-                    return <p className="text-xs text-muted-foreground">Ends in {d} days</p>;
+                    return (
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-xs font-medium ${d <= 0 ? 'text-red-500' : d <= 14 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                          {d <= 0 ? `Ended ${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} ago` : `Ends in ${d} day${d === 1 ? '' : 's'}`}
+                        </p>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => { setEmpProbationConfirmed(true); setEmpProbationEnd(""); }}
+                            className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg px-2.5 py-1 transition-all"
+                            data-testid="btn-confirm-employment"
+                          >
+                            ✓ Confirm Employment
+                          </button>
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
 
@@ -1503,11 +1533,11 @@ const UserDetail: FC = () => {
                       <SelectTrigger className="h-11" data-testid="select-working-pattern"><SelectValue placeholder="Select pattern…" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Not Specified</SelectItem>
-                        <SelectItem value="office">Office (Full-time on-site)</SelectItem>
-                        <SelectItem value="hybrid">Hybrid (Mixed office & remote)</SelectItem>
-                        <SelectItem value="remote">Remote (Full-time remote)</SelectItem>
+                        <SelectItem value="full-time">Full-Time</SelectItem>
+                        <SelectItem value="part-time">Part-Time</SelectItem>
+                        <SelectItem value="remote">Remote</SelectItem>
+                        <SelectItem value="hybrid">Hybrid</SelectItem>
                         <SelectItem value="field">Field-based</SelectItem>
-                        <SelectItem value="flexible">Flexible Hours</SelectItem>
                       </SelectContent>
                     </Select>
                   ) : (
@@ -2099,7 +2129,7 @@ const UserDetail: FC = () => {
 
             {/* ── SKILLS SECTION ───────────────────────────────────────────── */}
             {activeSection === 'skills' && (<div className="p-5 sm:p-6">
-              <EmployeeSkillsTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeeSkillsTab userId={user.id} isAdmin={!!isAdmin} empType={empType} />
             </div>)}
 
             {/* ── TRAINING & CERTIFICATIONS SECTION ────────────────────────── */}
