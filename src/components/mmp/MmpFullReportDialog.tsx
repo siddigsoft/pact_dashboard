@@ -30,10 +30,15 @@ import autoTable from 'jspdf-autotable';
 //
 // 'not_covered' and 'cancelled' → Attention (terminal but visit did not happen).
 //
+// Only truly terminal statuses count as "Covered":
+//   wfp_confirmed — WFP confirmed receipt (gold standard)
+//   completed     — legacy pre-Phase-A terminal value
+//   submitted     — enumerator self-reported to WFP ODK (Phase A terminal)
+// "verified", "approved", "costed" etc. are post-submission approval-chain
+// steps and must NOT count as covered — they inflated coverage (e.g. Red Sea 100%).
 const DONE_STATUSES = new Set([
   'wfp_confirmed',
   'completed',
-  'verified',
   'submitted',
 ]);
 const IN_PROGRESS_STATUSES = new Set([

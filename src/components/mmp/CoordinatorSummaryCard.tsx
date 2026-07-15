@@ -627,9 +627,12 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
 
     // Normalise status to lowercase for reliable matching regardless of DB casing
     // Keep these sets IDENTICAL to MmpStateReport's constants so both show the same counts
+    // "Done" = visit genuinely terminal-complete (WFP confirmed or legacy complete).
+    // 'verified', 'approved', 'costed', 'cp_verified' are post-submission approval
+    // steps — the DC finished their part but the site is NOT yet WFP-confirmed.
+    // Moving them to inProgressStatuses fixes inflated "X done / Y sites" counts.
     const verifiedStatuses = new Set([
-      'verified', 'approved', 'approved and costed', 'costed',
-      'completed', 'wfp_confirmed', 'submitted', 'submitted_for_review', 'cp_verified',
+      'completed', 'wfp_confirmed', 'submitted', 'submitted_for_review',
     ]);
     const returnedStatuses = new Set([
       'returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom',
@@ -643,6 +646,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
     const inProgressStatuses = new Set([
       'dispatched', 'accepted', 'claimed', 'ongoing', 'site_claim',
       'in_progress', 'inprogress', 'permits_attached', 'acknowledged',
+      // post-submission approval chain — DC done, coordinator/FOM approvals pending
+      'verified', 'approved', 'approved and costed', 'approved_and_costed',
+      'costed', 'cp_verified', 'locality_permit_verified',
     ]);
 
     // Human-readable labels for every known status (keyed by normalised lowercase)

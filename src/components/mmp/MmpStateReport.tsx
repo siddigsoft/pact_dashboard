@@ -120,14 +120,18 @@ const stageInfo = (cat: string): { stage: number; total: number; label: string }
 
 const nextStep = (status: string): string => {
   const s = (status || '').toLowerCase().trim();
-  // Complete
-  if (['verified','approved','approved and costed','costed','wfp_confirmed','cp_verified'].includes(s))
-    return 'No action needed — complete';
+  // Fully confirmed — no further action needed
+  if (s === 'wfp_confirmed')
+    return 'No action needed — WFP confirmed';
   if (s === 'completed')
-    return 'Coordinator: review and verify the completed visit data';
-  // Pending supervisor sign-off
+    return 'No action needed — visit complete (legacy)';
+  // Post-submission approval chain — visit done, coordinator/FOM still processing
   if (['submitted','submitted_for_review'].includes(s))
     return 'Supervisor: verify and approve the submitted data';
+  if (['verified','cp_verified'].includes(s))
+    return 'FOM / Coordinator: review verified data and confirm with WFP';
+  if (['approved','approved and costed','approved_and_costed','costed'].includes(s))
+    return 'Finance: process costing then confirm with WFP';
   // Pre-dispatch: not assigned yet
   if (s === 'pending' || s === '' || s === 'not_covered' || s === 'new' || s === 'cancelled' || s === 'written_off')
     return 'FOM / Coordinator: assign a coordinator and dispatch';
@@ -157,13 +161,20 @@ const nextStep = (status: string): string => {
   return 'Review status with field team';
 };
 
+// VERIFIED = truly WFP-confirmed terminal completion.
+// Only wfp_confirmed is the gold standard; completed is the legacy equivalent.
 const VERIFIED_STATUSES = new Set([
-  'verified', 'approved', 'approved and costed', 'costed',
-  'wfp_confirmed', 'cp_verified',
+  'wfp_confirmed', 'completed',
 ]);
-// DC has completed the visit but coordinator has not yet verified/approved
+// DC_COMPLETED = visit done by field staff, still going through approval chain.
+// 'submitted' / 'submitted_for_review' = enumerator submitted, supervisor pending.
+// 'verified', 'approved', 'costed', 'cp_verified' = post-submission approvals —
+// visit happened but not yet WFP-confirmed. Previously these were in VERIFIED_STATUSES
+// which inflated coverage numbers (e.g. Red Sea showing 100% when it should not).
 const DC_COMPLETED_STATUSES = new Set([
-  'completed', 'submitted', 'submitted_for_review',
+  'submitted', 'submitted_for_review',
+  'verified', 'approved', 'approved and costed', 'approved_and_costed',
+  'costed', 'cp_verified', 'locality_permit_verified',
 ]);
 const AWAITING_DISPATCH_STATUSES = new Set([
   'forwarded', 'forwarded_to_fom', 'forwarded_fom',
