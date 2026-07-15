@@ -13,6 +13,7 @@ import { AppRole } from "@/types/roles";
 import { sudanStates, getLocalitiesByState, getHubNameForState, hubs, getStatesInHub } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -132,6 +133,7 @@ const UserDetail: FC = () => {
   const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
   const [empProbationEnd, setEmpProbationEnd] = useState<string>("");
   const [empProbationConfirmed, setEmpProbationConfirmed] = useState<boolean>(false);
+  const [showConfirmEmploymentDialog, setShowConfirmEmploymentDialog] = useState(false);
   const [empWorkingPattern, setEmpWorkingPattern] = useState<string>("");
   const [empSaving, setEmpSaving] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
@@ -1514,7 +1516,7 @@ const UserDetail: FC = () => {
                         {isAdmin && (
                           <button
                             type="button"
-                            onClick={() => { setEmpProbationConfirmed(true); setEmpProbationEnd(""); }}
+                            onClick={() => setShowConfirmEmploymentDialog(true)}
                             className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg px-2.5 py-1 transition-all"
                             data-testid="btn-confirm-employment"
                           >
@@ -2294,6 +2296,34 @@ const UserDetail: FC = () => {
         targetRole={editForm.role || ''}
         currentUserName={currentUser?.name || 'Platform Owner'}
       />
+
+      <AlertDialog open={showConfirmEmploymentDialog} onOpenChange={setShowConfirmEmploymentDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Employment</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark <strong>{user?.name || 'this employee'}</strong> as permanently employed, clearing their probation status. This action is logged and cannot be undone without admin access.
+              <br /><br />
+              Please make sure you have completed the probation review before confirming.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => {
+                setEmpProbationConfirmed(true);
+                setEmpProbationEnd("");
+                setShowConfirmEmploymentDialog(false);
+                toast({ title: "Employment confirmed", description: `${user?.name || 'Employee'} has been moved from probation to confirmed status. Save to apply.` });
+              }}
+              data-testid="btn-confirm-employment-confirm"
+            >
+              ✓ Confirm Employment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

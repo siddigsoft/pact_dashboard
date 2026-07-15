@@ -36,23 +36,58 @@ WHERE table_name IN ('hr_employee_dependents','hr_it_accounts');
 
 **Schedule:** Deploy and set up a daily cron (e.g., 07:00 UTC) using Supabase pg_cron or the edge function scheduler.
 
+### Security setup (required before deploy)
+
+The function uses `--no-verify-jwt` so it can be called from pg_cron. To prevent
+public abuse, set a shared secret in Supabase Dashboard → Edge Functions → Secrets:
+
+```
+ALERT_FUNCTION_SECRET = <generate a strong random value, e.g. openssl rand -hex 32>
+```
+
+When the secret is set, the function validates `x-alert-secret` header on every
+request. The pg_cron invocation must pass this header (see curl example below).
+
 ### Deploy
 ```bash
 supabase functions deploy hr-document-expiry-alerts --no-verify-jwt
 ```
 
+### Schedule (pg_cron — run daily at 07:00 UTC)
+```sql
+SELECT cron.schedule(
+  'hr-document-expiry-alerts-daily',
+  '0 7 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/hr-document-expiry-alerts',
+    headers := '{"Content-Type":"application/json","x-alert-secret":"<ALERT_FUNCTION_SECRET>"}'::jsonb,
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
 ### Manual trigger (testing)
 ```bash
 curl -X POST https://<PROJECT_REF>.supabase.co/functions/v1/hr-document-expiry-alerts \
-  -H "Authorization: Bearer <SERVICE_ROLE_KEY>"
+  -H "Content-Type: application/json" \
+  -H "x-alert-secret: <ALERT_FUNCTION_SECRET>"
 ```
 
 ### Thresholds
-- **Passport / Visa expiry:** alerts at 90, 60, 30, 14, 7 days and on expiry
-- **Probation end:** alerts at 14 and 7 days before end date
+- **Passport / Visa / Certification expiry:** in-app + email to employee AND HR admins at **90, 30, 7 days** and on expiry
+- **Probation end (manager):** in-app + email to manager at **14 days** before end
+- **Probation end (HR):** in-app to HR admins at **90, 30, 7 days** and on expiry
 
-### Notification upsert key
-`recipient_id + entity_id + event_type` — deduplicates so re-runs don't flood inboxes.
+### Notification dedup strategy
+`event_type` encodes the threshold bucket (e.g. `passport_expiry_30d`) so each
+threshold level creates a distinct row. For certifications, `entity_id` = training
+record uuid (not profile_id) to avoid cross-cert collisions. HR copies use
+`entity_id = "<id>_hr"` to separate employee vs. HR admin rows.
+
+Result: re-runs on the same day are idempotent; the 90d, 30d, and 7d alerts are
+each preserved as separate notification records.
 
 ## UI Changes
 
