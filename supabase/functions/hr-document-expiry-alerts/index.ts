@@ -44,6 +44,7 @@ serve(async (req) => {
   try {
     const supabaseUrl    = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const APP_URL        = Deno.env.get('APP_URL') ?? 'https://app.pactorg.com'
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
@@ -147,7 +148,7 @@ serve(async (req) => {
             `PACT HR: Your passport ${label}`,
             emailHtml('Passport Expiry Notice', emp.full_name,
               `Your passport <strong>${row.passport_no || 'N/A'}</strong> ${label}. Please arrange renewal immediately.`,
-              actionUrl))
+              `${APP_URL}${actionUrl}`))
         }
 
         // Email: HR admins (one consolidated email per HR admin — fetch their addresses)
@@ -158,7 +159,7 @@ serve(async (req) => {
               `PACT HR Alert: ${emp.full_name} Passport ${label}`,
               emailHtml('Passport Expiry Alert', hr.full_name,
                 `Passport <strong>${row.passport_no || 'N/A'}</strong> for <strong>${emp.full_name}</strong> — ${label}. Please follow up.`,
-                actionUrl))
+                `${APP_URL}${actionUrl}`))
           }
         }
       }
@@ -201,7 +202,7 @@ serve(async (req) => {
             `PACT HR: Your ${docName} ${label}`,
             emailHtml('Visa / Work Permit Expiry Notice', emp.full_name,
               `Your ${docName} <strong>${row.visa_number || 'N/A'}</strong> ${label}. Please arrange renewal.`,
-              actionUrl))
+              `${APP_URL}${actionUrl}`))
         }
 
         // In-app + email: HR admins
@@ -223,7 +224,7 @@ serve(async (req) => {
               `PACT HR Alert: ${emp.full_name} ${docName} ${label}`,
               emailHtml('Visa / Work Permit Expiry Alert', hr.full_name,
                 `${docName} <strong>${row.visa_number || 'N/A'}</strong> for <strong>${emp.full_name}</strong> — ${label}.`,
-                actionUrl))
+                `${APP_URL}${actionUrl}`))
           }
         }
       }
@@ -267,7 +268,7 @@ serve(async (req) => {
             `PACT HR: Your certification "${certName}" ${label}`,
             emailHtml('Certification Expiry Notice', emp.full_name,
               `Your certification <strong>"${certName}"</strong> ${label}. Please arrange renewal.`,
-              actionUrl))
+              `${APP_URL}${actionUrl}`))
         }
 
         // In-app + email: HR admins — entity_id = cert_id + _hr to avoid row collision
@@ -290,7 +291,7 @@ serve(async (req) => {
               `PACT HR Alert: ${emp.full_name} — "${certName}" ${label}`,
               emailHtml('Certification Expiry Alert', hr.full_name,
                 `Certification <strong>"${certName}"</strong> for <strong>${emp.full_name}</strong> — ${label}.`,
-                actionUrl))
+                `${APP_URL}${actionUrl}`))
           }
         }
       }
@@ -333,7 +334,7 @@ serve(async (req) => {
               `PACT HR: Probation review required — ${row.full_name} (${daysLeft <= 0 ? 'ended' : `T-${managerBucket}d`})`,
               emailHtml('Probation Review Required', mgr.full_name,
                 `The probation period for <strong>${row.full_name}</strong> ${label}. Please confirm employment or contact HR to extend.`,
-                actionUrl))
+                `${APP_URL}${actionUrl}`))
           }
         }
 

@@ -97,9 +97,9 @@ const UserDetail: FC = () => {
   const [bankAccountFormOpen, setBankAccountFormOpen] = useState(false);
 
   const roleStr = (currentUser?.role || '').toLowerCase();
-  const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict';
+  const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
   const canEditBankAccount = isAdminRole;
-  const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict'].includes(String(r).toLowerCase())));
+  const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict', 'hr_admin'].includes(String(r).toLowerCase())));
   
   // Debug logging
   console.log('[UserDetail] currentUser role:', currentUser?.role, 'roleStr:', roleStr, 'isAdminRole:', isAdminRole, 'isAdmin:', isAdmin);

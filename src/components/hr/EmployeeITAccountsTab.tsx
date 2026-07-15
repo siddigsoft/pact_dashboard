@@ -48,6 +48,9 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
   const [accounts, setAccounts] = useState<ITAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<ITAccount | null>(null);
+  // Separate state for the free-text "Other" system name — avoids the disappearing-input bug
+  // where typing changes form.system_name away from 'Other' and hides the input
+  const [customSystemName, setCustomSystemName] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -63,13 +66,23 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
 
   const f = (key: keyof ITAccount) => (v: any) => setForm(p => p ? { ...p, [key]: v } : p);
 
+  const openForm = (acct: ITAccount) => {
+    const isCustom = acct.system_name && !COMMON_SYSTEMS.slice(0, -1).includes(acct.system_name);
+    setCustomSystemName(isCustom ? acct.system_name : '');
+    setForm(isCustom ? { ...acct, system_name: 'Other' } : { ...acct });
+  };
+
   const handleSave = async () => {
-    if (!form?.system_name) return;
+    const resolvedName = form?.system_name === 'Other' ? customSystemName.trim() : form?.system_name;
+    if (!resolvedName) {
+      toast({ title: 'System name is required', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, profile_id: userId, updated_at: new Date().toISOString() };
-      if (form.id) {
-        const { error } = await supabase.from('hr_it_accounts').update(payload).eq('id', form.id);
+      const payload = { ...form, system_name: resolvedName, profile_id: userId, updated_at: new Date().toISOString() };
+      if (form!.id) {
+        const { error } = await supabase.from('hr_it_accounts').update(payload).eq('id', form!.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('hr_it_accounts').insert(payload);
@@ -77,6 +90,7 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
       }
       await load();
       setForm(null);
+      setCustomSystemName('');
       toast({ title: 'IT Account saved' });
     } catch (e: any) {
       toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
@@ -96,6 +110,8 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
   const activeCount  = accounts.filter(a => a.status === 'active').length;
   const pendingCount = accounts.filter(a => a.status === 'pending').length;
 
+  const isSaveDisabled = saving || (form?.system_name === 'Other' ? !customSystemName.trim() : !form?.system_name);
+
   return (
     <div className="space-y-6">
 
@@ -110,7 +126,7 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
           </p>
         </div>
         {isAdmin && !form && (
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setForm({ ...EMPTY_ACCT })} data-testid="button-add-it-account">
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setCustomSystemName(''); setForm({ ...EMPTY_ACCT }); }} data-testid="button-add-it-account">
             <Plus className="h-3.5 w-3.5" /> Add Account
           </Button>
         )}
@@ -134,18 +150,27 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div className="space-y-1 sm:col-span-2 lg:col-span-1">
               <label className="text-xs text-muted-foreground">System / Application *</label>
-              <Select value={form.system_name} onValueChange={f('system_name')}>
+              <Select
+                value={form.system_name}
+                onValueChange={v => {
+                  f('system_name')(v);
+                  if (v !== 'Other') setCustomSystemName('');
+                }}
+              >
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select system…" /></SelectTrigger>
                 <SelectContent>
                   {COMMON_SYSTEMS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {/* Separate state for custom name — input stays mounted regardless of system_name value */}
               {form.system_name === 'Other' && (
                 <Input
-                  value={form.system_name === 'Other' ? '' : form.system_name}
-                  onChange={e => f('system_name')(e.target.value)}
+                  value={customSystemName}
+                  onChange={e => setCustomSystemName(e.target.value)}
                   placeholder="Enter system name"
                   className="h-9 mt-1"
+                  data-testid="input-custom-system-name"
+                  autoFocus
                 />
               )}
             </div>
@@ -185,10 +210,10 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={handleSave} disabled={saving || !form.system_name} className="gap-1.5" data-testid="button-save-it-account">
+            <Button size="sm" onClick={handleSave} disabled={isSaveDisabled} className="gap-1.5" data-testid="button-save-it-account">
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setForm(null)} data-testid="button-cancel-it-account">
+            <Button size="sm" variant="ghost" onClick={() => { setForm(null); setCustomSystemName(''); }} data-testid="button-cancel-it-account">
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -234,7 +259,7 @@ export default function EmployeeITAccountsTab({ userId, isAdmin }: { userId: str
                 </div>
                 {isAdmin && (
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setForm({ ...a })} data-testid={`button-edit-acct-${a.id}`}><Edit className="h-3 w-3" /></Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openForm({ ...a })} data-testid={`button-edit-acct-${a.id}`}><Edit className="h-3 w-3" /></Button>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => handleDelete(a.id)} data-testid={`button-delete-acct-${a.id}`}><Trash2 className="h-3 w-3" /></Button>
                   </div>
                 )}
