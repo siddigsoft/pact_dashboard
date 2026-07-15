@@ -90,7 +90,7 @@ serve(async (req) => {
       }
 
       // Now insert a fresh token
-      console.log(`[DEBUG v2] Inserting OTP for ${normalizedEmail}: otp=${generatedOtp}, expires=${expiresAt}`)
+      console.log(`[DEBUG v2] Inserting OTP for ${normalizedEmail}, expires=${expiresAt}`)
       
       const { data: insertData, error: storeError } = await supabase
         .from('password_reset_tokens')
@@ -357,7 +357,7 @@ serve(async (req) => {
     if (storedToken) {
       const isExpired = new Date(storedToken.expires_at) < new Date()
       isValid = storedToken.otp === otp && !isExpired
-      console.log(`OTP verification for ${normalizedEmail}: stored=${storedToken.otp}, provided=${otp}, expired=${isExpired}, valid=${isValid}`)
+      console.log(`OTP verification for ${normalizedEmail}: expired=${isExpired}, valid=${isValid}`)
     } else {
       console.log(`No token found in database for ${normalizedEmail}`)
     }

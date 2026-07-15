@@ -31,15 +31,12 @@ export async function testConnection(timeoutMs: number = 3000): Promise<boolean>
           const parsed = JSON.parse(storedSession);
           accessToken = parsed?.access_token || null;
           
-          // Log token info for debugging
           console.log('[SessionHealth] 📋 Token Info:', {
             hasToken: !!accessToken,
-            tokenPreview: accessToken ? `${accessToken.substring(0, 20)}...` : null,
             expiresAt: parsed?.expires_at ? new Date(parsed.expires_at * 1000).toISOString() : null,
             expiresIn: parsed?.expires_at ? `${parsed.expires_at - Math.floor(Date.now() / 1000)}s` : null,
             hasRefreshToken: !!parsed?.refresh_token,
             userId: parsed?.user?.id || null,
-            storageKey: supabaseKey,
           });
         }
       } catch (e) {
