@@ -407,7 +407,9 @@ const CostSubmission = () => {
     proofPreviews: Array<{ url: string | null; name: string }>;
     notes: string;
     uploading: boolean;
-  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
+    preFundId: string | null;
+    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
 
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
@@ -1844,8 +1846,20 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
-  const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
-    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
+  const openMarkAsPaidDialog = async (oc: OperationalCostSubmission) => {
+    // Load active pre-funds for the "Charge to Pre-Fund" selector
+    let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
+    try {
+      const { data: pfData } = await supabase
+        .from('pre_fund_requests' as any)
+        .select('id, name, currency, available_balance')
+        .in('status', ['active', 'low_balance'])
+        .order('name');
+      preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+        id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+      }));
+    } catch (_) {}
+    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds });
   };
 
   const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1911,33 +1925,57 @@ const CostSubmission = () => {
           title: "Payment Sent / تم إرسال الدفعة",
           description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
         });
-        // Auto-link to active pre-fund — awaited so linkage outcome is reported before dialog closes
+        // Link to pre-fund — use explicitly selected fund, or fall back to auto-detection
         try {
-          const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
-          const pfResult = await linkPaymentToPreFund({
-            amount: oc.amount_cents / 100,
-            currency: oc.currency,
-            countryId: (oc as any).country_id ?? null,
-            projectId: (oc as any).project_id ?? null,
-            costCategory: (oc as any).expense_category ?? null,
-            sourceTable: 'operational_cost_submissions',
-            sourceId: oc.id,
-            reference: oc.reference_number ?? null,
-            description: (oc as any).title ?? (oc as any).description ?? null,
-            paymentDate: now,
-            createdBy: currentUser.id,
-            userId: oc.submitted_by ?? null,
-          });
-          if (pfResult.linked) {
-            toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
-          } else if (pfResult.needsManualSelection) {
-            toast({
-              title: 'Manual Fund Link Required',
-              description: `${pfResult.message} Candidates: ${(pfResult.candidates ?? []).map(c => c.name).join(', ')}.`,
-              variant: 'destructive',
+          const { linkPaymentToPreFund, linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+          const selectedPreFundId = markAsPaidDialog.preFundId;
+          if (selectedPreFundId) {
+            const selectedFundInfo = markAsPaidDialog.preFunds.find(f => f.id === selectedPreFundId);
+            const pfResult = await linkPaymentToKnownFund({
+              fundId: selectedPreFundId,
+              fundName: selectedFundInfo?.name ?? selectedPreFundId,
+              amount: oc.amount_cents / 100,
+              currency: oc.currency,
+              sourceTable: 'operational_cost_submissions',
+              sourceId: oc.id,
+              reference: oc.reference_number ?? null,
+              description: (oc as any).title ?? (oc as any).description ?? null,
+              paymentDate: now,
+              createdBy: currentUser.id,
+              userId: oc.submitted_by ?? null,
+              receiptUrl: proofUrl,
             });
+            if (pfResult.linked) {
+              toast({ title: 'Charged to Pre-Fund', description: `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()} deducted from "${selectedFundInfo?.name ?? selectedPreFundId}".` });
+            } else {
+              toast({ title: 'Pre-Fund link failed', description: pfResult.message, variant: 'destructive' });
+            }
           } else {
-            console.warn('[Pre-Fund] Auto-link skipped:', pfResult.message);
+            const pfResult = await linkPaymentToPreFund({
+              amount: oc.amount_cents / 100,
+              currency: oc.currency,
+              countryId: (oc as any).country_id ?? null,
+              projectId: (oc as any).project_id ?? null,
+              costCategory: (oc as any).expense_category ?? null,
+              sourceTable: 'operational_cost_submissions',
+              sourceId: oc.id,
+              reference: oc.reference_number ?? null,
+              description: (oc as any).title ?? (oc as any).description ?? null,
+              paymentDate: now,
+              createdBy: currentUser.id,
+              userId: oc.submitted_by ?? null,
+            });
+            if (pfResult.linked) {
+              toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
+            } else if (pfResult.needsManualSelection) {
+              toast({
+                title: 'Manual Fund Link Required',
+                description: `${pfResult.message} Candidates: ${(pfResult.candidates ?? []).map(c => c.name).join(', ')}.`,
+                variant: 'destructive',
+              });
+            } else {
+              console.warn('[Pre-Fund] Auto-link skipped:', pfResult.message);
+            }
           }
         } catch (pfErr: any) {
           console.warn('[Pre-Fund] Linkage error (payment still marked paid):', pfErr?.message);
@@ -1971,7 +2009,7 @@ const CostSubmission = () => {
           currentUser?.id
         );
         markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
         fetchOperationalCosts();
       }
     } catch (err: any) {
@@ -8846,7 +8884,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !markAsPaidDialog.uploading) {
             markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
+            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
           }
         }}
       >
@@ -8963,6 +9001,47 @@ const CostSubmission = () => {
                 </label>
               </div>
 
+              {/* Charge to Pre-Fund */}
+              {markAsPaidDialog.preFunds.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Charge to Pre-Fund / خصم من التمويل المسبق
+                    {markAsPaidDialog.preFundId
+                      ? <span className="ml-1 text-xs font-normal text-emerald-600">✓ Selected</span>
+                      : <span className="ml-1 text-xs font-normal text-muted-foreground">(optional — select to deduct from fund)</span>
+                    }
+                  </Label>
+                  <Select
+                    value={markAsPaidDialog.preFundId ?? 'none'}
+                    onValueChange={v => setMarkAsPaidDialog(prev => ({ ...prev, preFundId: v === 'none' ? null : v }))}
+                    disabled={markAsPaidDialog.uploading}
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="select-mark-paid-pre-fund">
+                      <SelectValue placeholder="Select a pre-fund…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No pre-fund —</SelectItem>
+                      {markAsPaidDialog.preFunds.map(f => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {markAsPaidDialog.preFundId && (() => {
+                    const f = markAsPaidDialog.preFunds.find(x => x.id === markAsPaidDialog.preFundId);
+                    const amt = markAsPaidDialog.submission ? markAsPaidDialog.submission.amount_cents / 100 : 0;
+                    const after = (f?.available_balance ?? 0) - amt;
+                    return (
+                      <p className={`text-xs ${after < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
+                        After payment: {f?.currency} {after.toLocaleString()} remaining
+                        {after < 0 && ' ⚠ Exceeds available balance'}
+                      </p>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Payment notes */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
@@ -8987,7 +9066,7 @@ const CostSubmission = () => {
               variant="outline"
               onClick={() => {
                 markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false });
+                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
               }}
               disabled={markAsPaidDialog.uploading}
               data-testid="button-cancel-mark-paid"

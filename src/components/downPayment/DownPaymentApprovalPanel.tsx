@@ -329,6 +329,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const [processing, setProcessing] = useState(false);
   const [payProofFile, setPayProofFile] = useState<File | null>(null);
   const [payProofPreviewUrl, setPayProofPreviewUrl] = useState<string | null>(null);
+  const [singlePayPreFunds, setSinglePayPreFunds] = useState<Array<{ id: string; name: string; currency: string; available_balance: number }>>([]);
+  const [singlePayPreFundId, setSinglePayPreFundId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
   const [completedSubTab, setCompletedSubTab] = useState<'paid_waiting' | 'confirmed'>('paid_waiting');
   const [showFilters, setShowFilters] = useState(true);
@@ -720,6 +722,34 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       });
 
       if (success) {
+        // Link to selected pre-fund (if any) — done after processPayment so the source record exists
+        if (singlePayPreFundId) {
+          try {
+            const { linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+            const fundInfo = singlePayPreFunds.find(f => f.id === singlePayPreFundId);
+            const pfResult = await linkPaymentToKnownFund({
+              fundId: singlePayPreFundId,
+              fundName: fundInfo?.name ?? singlePayPreFundId,
+              amount: paymentAmount,
+              currency: selectedRequest.currency || 'SDG',
+              sourceTable: 'down_payment_requests',
+              sourceId: selectedRequest.id,
+              reference: selectedRequest.requestNumber ?? null,
+              description: selectedRequest.siteName ?? null,
+              paymentDate: new Date().toISOString(),
+              createdBy: currentUser.id,
+              userId: selectedRequest.requestedBy ?? null,
+              receiptUrl: receiptUrl ?? null,
+            });
+            if (pfResult.linked) {
+              toast({ title: 'Charged to Pre-Fund', description: `SDG ${paymentAmount.toLocaleString()} deducted from "${fundInfo?.name ?? singlePayPreFundId}".` });
+            } else {
+              toast({ title: 'Pre-Fund link failed', description: pfResult.message, variant: 'destructive' });
+            }
+          } catch (pfErr: any) {
+            console.warn('[Pre-Fund] Linkage error (payment still processed):', pfErr?.message);
+          }
+        }
         closeDialog();
       }
     } finally {
@@ -893,11 +923,23 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     setPayProofPreviewUrl(preview);
   };
 
-  const openActionDialog = (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
+  const openActionDialog = async (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
     setSelectedRequest(request);
     setAction(actionType);
     if (actionType === 'pay') {
       setPaymentAmount(request.remainingAmount || request.requestedAmount);
+      setSinglePayPreFundId(null);
+      // Load active pre-funds for "Charge to Pre-Fund" selector
+      try {
+        const { data: pfData } = await supabase
+          .from('pre_fund_requests' as any)
+          .select('id, name, currency, available_balance')
+          .in('status', ['active', 'low_balance'])
+          .order('name');
+        setSinglePayPreFunds(((pfData ?? []) as any[]).map((f: any) => ({
+          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+        })));
+      } catch (_) { setSinglePayPreFunds([]); }
     }
     if (actionType === 'approve') {
       setCustomAmount(request.requestedAmount);
@@ -4444,6 +4486,46 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     data-testid="textarea-payment-notes"
                   />
                 </div>
+
+                {/* Charge to Pre-Fund */}
+                {singlePayPreFunds.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Charge to Pre-Fund / خصم من التمويل المسبق
+                      {singlePayPreFundId
+                        ? <span className="ml-1 text-xs font-normal text-emerald-600">✓ Selected</span>
+                        : <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
+                      }
+                    </Label>
+                    <Select
+                      value={singlePayPreFundId ?? 'none'}
+                      onValueChange={v => setSinglePayPreFundId(v === 'none' ? null : v)}
+                      disabled={processing}
+                    >
+                      <SelectTrigger className="h-9 text-sm" data-testid="select-process-payment-pre-fund">
+                        <SelectValue placeholder="Select a pre-fund…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— No pre-fund —</SelectItem>
+                        {singlePayPreFunds.map(f => (
+                          <SelectItem key={f.id} value={f.id}>
+                            {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {singlePayPreFundId && (() => {
+                      const f = singlePayPreFunds.find(x => x.id === singlePayPreFundId);
+                      const after = (f?.available_balance ?? 0) - paymentAmount;
+                      return (
+                        <p className={`text-xs ${after < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
+                          After payment: {f?.currency} {after.toLocaleString()} remaining
+                          {after < 0 && ' ⚠ Exceeds available balance'}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">

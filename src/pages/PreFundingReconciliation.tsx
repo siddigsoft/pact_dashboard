@@ -1835,6 +1835,34 @@ export default function PreFundingReconciliation() {
                       </div>
                     ))}
                   </div>
+
+                  {/* ── Category Breakdown ─────────────────────────────────────── */}
+                  {transactions.length > 0 && (() => {
+                    const payTxns = transactions.filter(t => t.transaction_type === 'payment');
+                    const dpTotal  = payTxns.filter(t => t.source_table === 'down_payment_requests').reduce((s, t) => s + t.amount, 0);
+                    const ocsTotal = payTxns.filter(t => t.source_table === 'operational_cost_submissions').reduce((s, t) => s + t.amount, 0);
+                    const otherTotal = payTxns.filter(t => !t.source_table || (t.source_table !== 'down_payment_requests' && t.source_table !== 'operational_cost_submissions')).reduce((s, t) => s + t.amount, 0);
+                    const grandTotal = dpTotal + ocsTotal + otherTotal;
+                    if (grandTotal === 0) return null;
+                    return (
+                      <div className="mt-3 pt-3 border-t border-border/60">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5 font-medium">Paid-Out Breakdown</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { label: 'Down Payments', value: dpTotal, color: 'text-sky-600' },
+                            { label: 'Cost Submissions', value: ocsTotal, color: 'text-violet-600' },
+                            ...(otherTotal > 0 ? [{ label: 'Other', value: otherTotal, color: 'text-muted-foreground' }] : []),
+                          ].map(s => (
+                            <div key={s.label} className="bg-muted/30 rounded-md p-1.5 text-center">
+                              <p className="text-[9px] text-muted-foreground truncate">{s.label}</p>
+                              <p className={`text-xs font-bold font-mono ${s.color}`}>{selectedFund.currency} {formatNumber(s.value, 0)}</p>
+                              <p className="text-[9px] text-muted-foreground">{grandTotal > 0 ? Math.round(s.value / grandTotal * 100) : 0}%</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
 
