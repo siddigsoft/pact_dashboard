@@ -274,11 +274,14 @@ export default function Recruitment() {
   const [hiredDialog,    setHiredDialog]    = useState<Candidate|null>(null);
   const [hiredProfileId, setHiredProfileId] = useState('');
 
+  // Calendar integrations
+  const [googleCalConnected, setGoogleCalConnected] = useState(false);
+
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const [jobsRes, candRes, jrRes, scoresRes, slotsRes, deptRes, hubRes, profRes] = await Promise.all([
+    const [jobsRes, candRes, jrRes, scoresRes, slotsRes, deptRes, hubRes, profRes, integRes] = await Promise.all([
       supabase.from('hr_job_postings'     as any).select('*').order('opened_at', { ascending: false }),
       supabase.from('hr_candidates'       as any).select('*').order('applied_at', { ascending: false }),
       supabase.from('hr_job_requisitions' as any).select('*').order('created_at', { ascending: false }),
@@ -287,6 +290,10 @@ export default function Recruitment() {
       supabase.from('departments').select('id, name').order('name'),
       supabase.from('hubs').select('id, name').order('name'),
       supabase.from('profiles').select('id, full_name, email').order('full_name'),
+      supabase.from('user_integrations' as any)
+        .select('google_calendar_connected')
+        .eq('user_id', currentUser?.id ?? '')
+        .maybeSingle(),
     ]);
     if (jobsRes.error?.code === '42P01') { setMissingTable(true); setLoading(false); return; }
     if (jobsRes.data)   setPostings(jobsRes.data   as unknown as JobPosting[]);
@@ -297,6 +304,7 @@ export default function Recruitment() {
     if (deptRes.data)   setDepts(deptRes.data  as Dept[]);
     if (hubRes.data)    setHubs(hubRes.data    as Hub[]);
     if (profRes.data)   setProfiles(profRes.data as Profile[]);
+    if (integRes.data)  setGoogleCalConnected(!!(integRes.data as any)?.google_calendar_connected);
     setLoading(false);
   }
 
@@ -443,12 +451,24 @@ export default function Recruitment() {
     if (hiredProfileId) update.linked_profile_id = hiredProfileId;
     await supabase.from('hr_candidates' as any).update(update).eq('id', hiredDialog.id);
 
-    // 2. Mark linked JR as 'filled'
+    // 2. Mark linked JR as 'filled' + sync headcount plan
     if (posting?.requisition_id) {
+      const jr = requisitions.find(r => r.id === posting.requisition_id);
       await supabase.from('hr_job_requisitions' as any)
         .update({ status: 'filled' })
         .eq('id', posting.requisition_id)
         .in('status', ['approved']);
+
+      // Increment the headcount plan counter so directors can see planned vs filled
+      if (jr?.department_id) {
+        try {
+          await supabase.rpc('increment_headcount_filled' as any, {
+            p_department_id: jr.department_id,
+            p_job_title:     jr.title,
+            p_fiscal_year:   new Date().getFullYear(),
+          });
+        } catch (e) { console.warn('[Recruitment] headcount sync failed:', e); }
+      }
     }
 
     // 3. Create onboarding record
@@ -550,22 +570,62 @@ export default function Recruitment() {
       } catch (e) { console.warn('[Recruitment] slot notify failed:', e); }
     }
 
-    // Outlook calendar event (best-effort if connected)
-    if (outlookConnected && attendeeEmails.length > 0) {
-      try {
-        await createOutlookEvent({
+    // ── Calendar events (best-effort; run both providers in parallel) ─────────
+    const calendarTasks: Promise<void>[] = [];
+
+    if (outlookConnected) {
+      calendarTasks.push(
+        createOutlookEvent({
           subject: subjectLine,
           start: startDt.toISOString(),
           end:   endDt.toISOString(),
           location: slotForm.location || slotForm.meeting_link || undefined,
           body: slotForm.notes || `Interview with ${cand?.full_name ?? 'candidate'} for ${posting?.title ?? 'the position'}.`,
           attendeeEmails,
-        });
-        toast({ title: 'Interview scheduled + Outlook invite sent' });
-      } catch (e) {
-        console.warn('[Recruitment] Outlook event creation failed:', e);
-        toast({ title: 'Interview scheduled', description: 'Outlook invite could not be sent.' });
+        }).catch(e => console.warn('[Recruitment] Outlook event creation failed:', e))
+      );
+    }
+
+    if (googleCalConnected) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        calendarTasks.push(
+          fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-event`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+                apikey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+              },
+              body: JSON.stringify({
+                summary:        subjectLine,
+                start:          startDt.toISOString(),
+                end:            endDt.toISOString(),
+                location:       slotForm.location || slotForm.meeting_link || undefined,
+                description:    slotForm.notes || `Interview with ${cand?.full_name ?? 'candidate'} for ${posting?.title ?? 'the position'}.`,
+                attendeeEmails,
+              }),
+            }
+          )
+            .then(async res => {
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                console.warn('[Recruitment] Google Calendar event failed:', err);
+              }
+            })
+            .catch(e => console.warn('[Recruitment] Google Calendar event error:', e))
+        );
       }
+    }
+
+    if (calendarTasks.length > 0) {
+      await Promise.allSettled(calendarTasks);
+      const providers: string[] = [];
+      if (outlookConnected) providers.push('Outlook');
+      if (googleCalConnected) providers.push('Google Calendar');
+      toast({ title: 'Interview scheduled', description: `Calendar invite sent via ${providers.join(' & ')}.` });
     } else {
       toast({ title: 'Interview scheduled' });
     }
@@ -1499,12 +1559,22 @@ export default function Recruitment() {
       <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
               <CalendarPlus className="h-4 w-4" />Schedule Interview
               {outlookConnected && (
                 <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600">
-                  Outlook connected — invite will be sent
+                  Outlook ✓
                 </Badge>
+              )}
+              {googleCalConnected && (
+                <Badge variant="outline" className="text-[10px] border-green-400 text-green-700">
+                  Google Calendar ✓
+                </Badge>
+              )}
+              {(outlookConnected || googleCalConnected) && (
+                <span className="text-[10px] text-muted-foreground font-normal">
+                  — invite will be sent
+                </span>
               )}
             </DialogTitle>
           </DialogHeader>

@@ -1,6 +1,13 @@
 # Runbook: Recruitment 360° — JR Workflow, Scoring & Offer Letters
 
-**Migration file:** `supabase/migrations/20260715_hr_recruitment_jr_scoring.sql`
+**Migration files:**
+1. `supabase/migrations/20260715_hr_recruitment_jr_scoring.sql` — core tables & indexes
+2. `supabase/migrations/20260715b_recruitment_rls_headcount_fixes.sql` — security fixes + headcount plan
+
+**Edge functions:**
+- `supabase/functions/google-calendar-event/index.ts` — creates Google Calendar events using the user's stored OAuth token
+
+> **Apply both migrations in order. Deploy the new edge function alongside.**
 
 ## Overview
 
