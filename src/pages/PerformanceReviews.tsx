@@ -260,9 +260,9 @@ export default function PerformanceReviews() {
     !n.submitted_at
   );
 
-  // Team reviews in calibration phase (admin)
+  // Team reviews in calibration phase only (admin). Never re-open already-published reviews.
   const calibrationReviews = isAdmin
-    ? reviews.filter(r => r.cycle_phase === 'calibration' || r.status === 'completed')
+    ? reviews.filter(r => r.cycle_phase === 'calibration')
     : [];
 
   const filtered = (
@@ -316,8 +316,12 @@ export default function PerformanceReviews() {
       ? ratedComps.reduce((s, c) => s + c.rating, 0) / ratedComps.length
       : form.overall_rating;
 
+    // Determine starting phase: self-assessment first if enabled; peer-feedback next if only
+    // peer is enabled; otherwise go straight to manager_review.
     const initialPhase = submitForReview
-      ? (form.self_assessment_enabled ? 'self_assessment' : 'manager_review')
+      ? (form.self_assessment_enabled ? 'self_assessment'
+         : form.peer_feedback_enabled  ? 'peer_feedback'
+         : 'manager_review')
       : 'not_started';
 
     const payload: any = {
@@ -366,6 +370,35 @@ export default function PerformanceReviews() {
 
   async function markCompleted(id: string) {
     const rev = reviews.find(r => r.id === id);
+
+    // Gate: block completion if self-assessment is required but not yet submitted
+    if (rev?.self_assessment_enabled) {
+      const hasSa = selfAssessments.some(sa => sa.review_id === id && sa.submitted_at);
+      if (!hasSa) {
+        toast({
+          title: 'Cannot complete review',
+          description: 'The employee must submit their self-assessment before this review can be finalised.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    // Gate: block completion if still in peer-feedback phase (outstanding nominees)
+    if (rev?.cycle_phase === 'peer_feedback') {
+      const outstanding = nominations.filter(
+        n => n.review_id === id && n.approved && !n.submitted_at
+      );
+      if (outstanding.length > 0) {
+        toast({
+          title: 'Cannot complete review',
+          description: `${outstanding.length} approved peer(s) have not yet submitted feedback. Use "Skip peer feedback" to advance manually.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     const { error } = await supabase.from('performance_reviews').update({
       status: 'completed', cycle_phase: 'published', reviewed_at: new Date().toISOString(), reviewer_id: currentUser?.id,
     }).eq('id', id);

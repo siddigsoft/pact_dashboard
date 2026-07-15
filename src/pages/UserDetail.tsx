@@ -340,11 +340,13 @@ const UserDetail: FC = () => {
       .eq('reviewee_id', user.id)
       .eq('status', 'completed')
       .not('overall_rating', 'is', null)
-      .order('reviewed_at', { ascending: true })
+      .order('reviewed_at', { ascending: false })
       .limit(4)
       .then(({ data }) => {
         if (data && data.length > 0) {
-          setPerfTrend(data.map((r: any) => ({ period: r.review_period ?? '—', rating: Number(r.overall_rating) })));
+          // Reverse so chart shows oldest → newest (latest 4 cycles)
+          const latest = [...data].reverse();
+          setPerfTrend(latest.map((r: any) => ({ period: r.review_period ?? '—', rating: Number(r.overall_rating) })));
         }
       });
   }, [user?.id]);

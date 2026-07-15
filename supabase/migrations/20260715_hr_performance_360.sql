@@ -92,7 +92,10 @@ CREATE POLICY hr_review_pn_reviewee_insert ON hr_review_peer_nominations
 DROP POLICY IF EXISTS hr_review_pn_select ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_select ON hr_review_peer_nominations
   FOR SELECT USING (
-    reviewee_id = auth.uid()
+    -- Reviewee can only see nominations before feedback is submitted (they know who they nominated;
+    -- once the nominee submits, submitted_at is set and the row is hidden from the reviewee
+    -- to prevent de-anonymising peer feedback).
+    (reviewee_id = auth.uid() AND submitted_at IS NULL)
     OR nominee_id = auth.uid()
     OR EXISTS (
       SELECT 1 FROM profiles p WHERE p.id = auth.uid()
