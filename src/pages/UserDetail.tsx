@@ -36,6 +36,7 @@ import EmployeeEducationTab from "@/components/hr/EmployeeEducationTab";
 import EmployeeDependentsTab from "@/components/hr/EmployeeDependentsTab";
 import EmployeeITAccountsTab from "@/components/hr/EmployeeITAccountsTab";
 import EmployeeEquipmentTab from "@/components/hr/EmployeeEquipmentTab";
+import EmployeePoliciesTab from "@/components/hr/EmployeePoliciesTab";
 import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
 import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
@@ -72,6 +73,7 @@ const TAB_GROUPS = [
       { id: 'training',    emoji: '🏅', label: 'Training & Certs',       description: 'Training courses, professional certifications, licenses, and workshops attended.' },
       { id: 'dependents',  emoji: '👨‍👩‍👧', label: 'Dependents',            description: 'Family members, dependents, and designated insurance/benefit beneficiaries.' },
       { id: 'equipment',   emoji: '🖥️', label: 'Equipment',   description: 'Organizational assets currently or previously assigned to this employee — laptops, phones, access cards, and other issued equipment.' },
+      { id: 'policies',    emoji: '📋', label: 'Policy Acknowledgements', description: 'Track which organizational policies this employee has read and formally acknowledged, including timestamps and digital sign-off records.' },
     ],
   },
   {
@@ -2259,6 +2261,11 @@ const UserDetail: FC = () => {
             {/* ── EQUIPMENT SECTION ────────────────────────────────────────── */}
             {activeSection === 'equipment' && (<div className="p-5 sm:p-6">
               <EmployeeEquipmentTab userId={user.id} isAdmin={!!isAdmin} />
+            </div>)}
+
+            {/* ── POLICIES SECTION ──────────────────────────────────────────── */}
+            {activeSection === 'policies' && (<div className="p-5 sm:p-6">
+              <EmployeePoliciesTab userId={user.id} userRole={user.role as string | undefined} userName={user.fullName ?? undefined} />
             </div>)}
 
             {/* ── IT ACCOUNTS SECTION ──────────────────────────────────────── */}
