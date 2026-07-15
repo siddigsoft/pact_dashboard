@@ -80,7 +80,10 @@ const SitesDisplayTable = memo(function SitesDisplayTable({ siteRows, mmpId, edi
       if (mmpIds.includes(mmp.id) && Array.isArray(mmp.siteEntries)) {
         // Filter out completed sites and format for MMPSiteEntriesTable
         mmp.siteEntries
-          .filter((entry: any) => entry.status?.toLowerCase() !== 'completed')
+          .filter((entry: any) => {
+            const s = (entry.status || '').toLowerCase();
+            return s !== 'completed' && s !== 'wfp_confirmed';
+          })
           .forEach((entry: any) => {
             entries.push({
               ...entry,

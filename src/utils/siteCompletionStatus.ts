@@ -47,6 +47,30 @@ export const isTerminalCompletionRawStatus = (
 };
 
 /**
+ * Raw mmp_site_entries statuses that count as COVERED in reports and dashboards.
+ *
+ * Stricter than TERMINAL_COMPLETION_RAW_STATUSES (which is used for cycle-close
+ * gates and can include submitted / not_covered / cancelled).  Coverage numbers
+ * must only reflect genuine WFP-confirmed visits:
+ *   wfp_confirmed — WFP confirmed receipt (current gold standard)
+ *   completed     — legacy pre-Phase-A terminal value
+ *
+ * Do NOT add 'submitted', 'verified', 'approved', 'costed' etc. — those are
+ * post-submission approval steps and must show as "In Progress" in reports.
+ */
+export const COVERED_RAW_STATUSES: ReadonlySet<string> = new Set([
+  'wfp_confirmed',
+  'completed',
+]);
+
+export const isCoveredRawStatus = (
+  rawStatus: string | null | undefined,
+): boolean => {
+  const s = (rawStatus ?? '').toString().toLowerCase().trim();
+  return COVERED_RAW_STATUSES.has(s);
+};
+
+/**
  * Raw statuses that count as "paid" — the fee is now owed to the enumerator.
  * Only wfp_confirmed qualifies. submitted does NOT trigger payment.
  */

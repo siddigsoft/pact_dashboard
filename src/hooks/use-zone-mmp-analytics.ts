@@ -170,7 +170,10 @@ export function useZoneMmpAnalytics(): ZoneAnalyticsResult {
       supplementary: filteredMmpFiles.filter(m => (m as any).classification === 'supplementary').length,
     };
 
-    const completedVisits = filteredSiteVisits.filter(v => v.status === 'completed').length;
+    // Count both 'wfp_confirmed' (current gold standard) and 'completed' (legacy)
+    const completedVisits = filteredSiteVisits.filter(v =>
+      v.status === 'wfp_confirmed' || v.status === 'completed'
+    ).length;
     const completionRate = filteredSiteVisits.length > 0
       ? Math.round((completedVisits / filteredSiteVisits.length) * 100)
       : 0;
