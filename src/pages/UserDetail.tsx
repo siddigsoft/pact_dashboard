@@ -119,6 +119,7 @@ const UserDetail: FC = () => {
   const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
   const [empSaving, setEmpSaving] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
+  const [empSummary, setEmpSummary] = useState<string>("");
   const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
@@ -288,6 +289,13 @@ const UserDetail: FC = () => {
       setAvailableLocalities([]);
     }
   }, [editForm.stateId, editMode]);
+
+  // Load professional summary for overview banner
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('hr_employee_personal').select('professional_summary').eq('profile_id', user.id).maybeSingle()
+      .then(({ data }) => { if (data?.professional_summary) setEmpSummary(data.professional_summary); });
+  }, [user?.id]);
 
   // Fetch city/address from hr_employee_personal for non-field-staff
   useEffect(() => {
@@ -1144,6 +1152,29 @@ const UserDetail: FC = () => {
                   </div>
                 );
               })()}
+
+              {/* ── Professional Summary card ────────────────────────────────── */}
+              {empSummary ? (
+                <div className="rounded-xl border border-border/40 bg-gradient-to-br from-muted/20 to-transparent p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5" /> Professional Summary
+                    </h3>
+                    {isAdmin && !editMode && (
+                      <button onClick={() => setActiveSection('personal')} className="text-[10px] text-primary hover:underline">Edit →</button>
+                    )}
+                  </div>
+                  <p className="text-sm leading-relaxed text-foreground/90">{empSummary}</p>
+                </div>
+              ) : isAdmin && !editMode && (
+                <button
+                  onClick={() => setActiveSection('personal')}
+                  className="w-full flex items-center gap-2 p-3.5 rounded-xl border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm text-muted-foreground hover:text-primary group"
+                >
+                  <FileText className="h-4 w-4 group-hover:text-primary" />
+                  <span>Add Professional Summary / Background — shown at the top of the CV export</span>
+                </button>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">

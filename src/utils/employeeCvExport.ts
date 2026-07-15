@@ -22,7 +22,9 @@ const fmtDate = (d?: string | null): string => {
 };
 
 const DEGREE_LABELS: Record<string, string> = {
-  phd: 'PhD / Doctorate', masters: "Master's Degree", bachelors: "Bachelor's Degree",
+  phd: 'PhD / Doctorate',
+  master: "Master's Degree", masters: "Master's Degree",
+  bachelor: "Bachelor's Degree", bachelors: "Bachelor's Degree",
   diploma: 'Diploma', associate: 'Associate Degree', certificate: 'Certificate',
   professional: 'Professional Certification', high_school: 'High School',
   vocational: 'Vocational Training', other: 'Other',
@@ -182,15 +184,40 @@ export async function generateEmployeeCV(user: any, ctx: CVContext = {}): Promis
   const tAlt:  any = { fillColor: LIGHT };
 
   // ════════════════════════════════════════════════════════════════════════
+  // PROFESSIONAL SUMMARY (unnumbered — appears right after banner)
+  // ════════════════════════════════════════════════════════════════════════
+  if (personal?.professional_summary) {
+    checkPage(18);
+    doc.setFillColor(...LIGHT);
+    doc.setDrawColor(...BORDER);
+    const summaryLines = doc.splitTextToSize(personal.professional_summary, CW - 8);
+    const summaryH = summaryLines.length * 5 + 8;
+    doc.rect(M, y, CW, summaryH, 'FD');
+    doc.setFillColor(...NAVY2);
+    doc.rect(M, y, 3, summaryH, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...MID);
+    doc.text('PROFESSIONAL SUMMARY', M + 5, y + 5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...DARK);
+    summaryLines.forEach((ln: string, i: number) => {
+      doc.text(ln, M + 5, y + 10 + i * 5);
+    });
+    y += summaryH + 5;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // SECTION 1 — PERSONAL INFORMATION
   // ════════════════════════════════════════════════════════════════════════
   section('Personal Information');
   infoGrid([
-    ['Date of Birth',   fmtDate(personal?.date_of_birth),  'Gender',          personal?.gender        || '—'],
-    ['Nationality',     personal?.nationality       || '—', 'Marital Status',  personal?.marital_status || '—'],
-    ['National ID No.', personal?.national_id_number || '—','Passport No.',   personal?.passport_number || '—'],
-    ['Passport Expiry', fmtDate(personal?.passport_expiry), 'Blood Type',     personal?.blood_type     || '—'],
-    ['Country of Birth',personal?.country_of_birth  || '—', 'Place of Birth', personal?.place_of_birth || '—'],
+    ['Date of Birth',   fmtDate(personal?.date_of_birth),   'Gender',         personal?.gender         || '—'],
+    ['Nationality',     personal?.nationality        || '—', 'Marital Status', personal?.marital_status || '—'],
+    ['National ID No.', personal?.national_id_no     || '—', 'Passport No.',  personal?.passport_no    || '—'],
+    ['Passport Expiry', fmtDate(personal?.passport_expiry),  'Blood Type',    personal?.blood_type     || '—'],
+    ['Address',         personal?.address_line1      || '—', 'City / Country', [personal?.city, personal?.country].filter(Boolean).join(', ') || '—'],
   ]);
 
   // ════════════════════════════════════════════════════════════════════════

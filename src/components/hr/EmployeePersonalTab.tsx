@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Edit, Save, X, User, Globe, Heart, Droplets, MapPin, CreditCard,
-  Calendar, Phone, Mail, AlertCircle, Home, Loader2, CheckCircle2,
+  Calendar, Phone, Mail, AlertCircle, Home, Loader2, CheckCircle2, FileText,
 } from "lucide-react";
 
 interface PersonalData {
   id?: string;
+  professional_summary?: string;
   date_of_birth?: string;
   gender?: string;
   nationality?: string;
@@ -37,6 +39,7 @@ interface PersonalData {
 }
 
 const EMPTY: PersonalData = {
+  professional_summary: '',
   date_of_birth: '', gender: '', nationality: '', marital_status: '',
   blood_type: '', id_type: '', national_id_no: '', passport_no: '',
   passport_expiry: '', secondary_phone: '', personal_email: '',
@@ -221,6 +224,30 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
           </span>
         )}
       </div>
+
+      {/* ── 0. Professional Summary / Background ─────────────────────────── */}
+      <SectionCard accent="border-l-violet-500" iconBg="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400" icon={<FileText className="h-3.5 w-3.5" />} title="Professional Summary / Background" action={editBtn}>
+        {editMode ? (
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">Write a 2–4 sentence professional bio. This appears at the top of the exported CV (UN P11 / World Bank format).</p>
+            <Textarea
+              value={form.professional_summary || ''}
+              onChange={e => f('professional_summary')(e.target.value)}
+              placeholder="e.g. Humanitarian professional with over 8 years of experience in field coordination, monitoring & evaluation, and logistics management across East Africa and the Horn of Africa. Proven track record in managing complex multi-donor programs and leading cross-functional teams in challenging environments."
+              rows={5}
+              className="resize-none text-sm leading-relaxed"
+            />
+            <p className="text-xs text-muted-foreground text-right">{(form.professional_summary || '').length} characters</p>
+          </div>
+        ) : data.professional_summary ? (
+          <p className="text-sm leading-relaxed text-foreground/90">{data.professional_summary}</p>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground/60 italic">
+            <FileText className="h-4 w-4 shrink-0" />
+            <span>No professional summary added yet.{isAdmin ? ' Click Edit to add one.' : ''}</span>
+          </div>
+        )}
+      </SectionCard>
 
       {/* ── 1. Personal Identity ─────────────────────────────────────────── */}
       <SectionCard accent="border-l-blue-500" iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" icon={<User className="h-3.5 w-3.5" />} title="Personal Identity" action={editBtn}>
