@@ -106,17 +106,18 @@ CREATE POLICY hr_review_pn_select ON hr_review_peer_nominations
 DROP POLICY IF EXISTS hr_review_pn_update ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_update ON hr_review_peer_nominations
   FOR UPDATE
-  -- USING evaluates the OLD row: nominee can only target a row that hasn't been submitted yet
-  -- (prevents re-submission). HR/admin can update any row.
+  -- USING evaluates the OLD row:
+  --   Nominee: must be approved AND not yet submitted (prevents pre-approval and re-submission bypass).
+  --   HR/admin: unrestricted.
   USING (
-    (nominee_id = auth.uid() AND submitted_at IS NULL)
+    (nominee_id = auth.uid() AND approved = true AND submitted_at IS NULL)
     OR EXISTS (
       SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
     )
   )
   -- WITH CHECK evaluates the NEW row: nominee must remain the owner.
-  -- No submitted_at constraint here — that is what allows setting it on submission.
+  -- No submitted_at constraint here — that is what allows setting it on first submission.
   WITH CHECK (
     nominee_id = auth.uid()
     OR EXISTS (
@@ -128,7 +129,9 @@ CREATE POLICY hr_review_pn_update ON hr_review_peer_nominations
 DROP POLICY IF EXISTS hr_review_pn_delete ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_delete ON hr_review_peer_nominations
   FOR DELETE USING (
-    reviewee_id = auth.uid()
+    -- Reviewee may only retract a nomination before HR has approved it and before any
+    -- feedback has been submitted (preserves audit integrity once the process is in flight).
+    (reviewee_id = auth.uid() AND approved IS NULL AND submitted_at IS NULL)
     OR EXISTS (
       SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')

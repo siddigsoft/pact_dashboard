@@ -574,8 +574,58 @@ export default function PerformanceReviews() {
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); setPfSubmitting(false); return; }
     toast({ title: 'Peer feedback submitted', description: 'Thank you — your response is anonymous to the reviewee.' });
     setPfOpen(false);
-    fetchAll();
     setPfSubmitting(false);
+
+    // Auto-advance to manager_review when ALL approved nominations for this review are now submitted
+    const reviewId = pfNom.review_id;
+    const { data: allNoms } = await supabase
+      .from('hr_review_peer_nominations')
+      .select('id, submitted_at, approved')
+      .eq('review_id', reviewId)
+      .eq('approved', true);
+    const allApprovedNoms = allNoms ?? [];
+    // Include this just-submitted nom (DB may not have refreshed yet)
+    const stillPending = allApprovedNoms.filter(n => n.id !== pfNom.id && !n.submitted_at);
+    if (stillPending.length === 0 && allApprovedNoms.length > 0) {
+      const { error: phaseErr } = await supabase.from('performance_reviews').update({
+        cycle_phase: 'manager_review', updated_at: new Date().toISOString(),
+      }).eq('id', reviewId).eq('cycle_phase', 'peer_feedback');
+      if (!phaseErr) {
+        const rev = reviews.find(r => r.id === reviewId);
+        if (rev?.reviewer_id) {
+          await NotificationTriggerService.send({
+            userId: rev.reviewer_id,
+            title: 'Peer Feedback Complete — Review Ready',
+            message: `All peer feedback for ${rev.reviewee_name}'s ${rev.review_period} review is in. Please complete the manager review.`,
+            type: 'info', category: 'approvals', priority: 'high',
+            link: '/performance-reviews', sendEmail: true,
+            emailActionUrl: '/performance-reviews', emailActionLabel: 'Start Manager Review',
+          });
+        }
+      }
+    }
+    fetchAll();
+  }
+
+  async function skipPeerFeedback(reviewId: string) {
+    const rev = reviews.find(r => r.id === reviewId);
+    if (!rev) return;
+    const { error } = await supabase.from('performance_reviews').update({
+      cycle_phase: 'manager_review', updated_at: new Date().toISOString(),
+    }).eq('id', reviewId);
+    if (error) { toast({ title: 'Failed', description: error.message, variant: 'destructive' }); return; }
+    if (rev.reviewer_id) {
+      await NotificationTriggerService.send({
+        userId: rev.reviewer_id,
+        title: 'Peer Feedback Skipped — Review Ready',
+        message: `Peer feedback was skipped for ${rev.reviewee_name}'s ${rev.review_period} review. Please complete the manager review.`,
+        type: 'warning', category: 'approvals', priority: 'high',
+        link: '/performance-reviews', sendEmail: true,
+        emailActionUrl: '/performance-reviews', emailActionLabel: 'Start Manager Review',
+      });
+    }
+    toast({ title: 'Peer feedback skipped', description: 'Review advanced to manager review.' });
+    fetchAll();
   }
 
   // ── Calibration ────────────────────────────────────────────────────────────
@@ -955,6 +1005,13 @@ export default function PerformanceReviews() {
                           <Button size="sm" variant="outline" className="text-purple-600 border-purple-300 text-xs"
                             onClick={() => openNominate(rev)} data-testid={`btn-nominate-${rev.id}`}>
                             <Users className="h-3.5 w-3.5 mr-1" />Nominate Peers
+                          </Button>
+                        )}
+                        {/* Skip peer feedback — admin can advance if nominees are unresponsive */}
+                        {isAdmin && rev.cycle_phase === 'peer_feedback' && (
+                          <Button size="sm" variant="outline" className="text-muted-foreground border-muted text-xs"
+                            onClick={() => skipPeerFeedback(rev.id)} data-testid={`btn-skip-peer-${rev.id}`}>
+                            <UserX className="h-3.5 w-3.5 mr-1" />Skip Peer
                           </Button>
                         )}
                         {/* Move to calibration — only for manager_review phase reviews */}
