@@ -229,11 +229,11 @@ serve(async (req) => {
       }
     }
 
-    // ── 3. Training / Certification Expiry ────────────────────────────────────
+    // ── 3. Certification Expiry (staff_certifications table) ──────────────────
     {
       const { data } = await supabase
-        .from('hr_employee_training')
-        .select('id, profile_id, course_name, certificate_name, expiry_date')
+        .from('staff_certifications')
+        .select('id, user_id, title, expiry_date')
         .not('expiry_date', 'is', null)
 
       for (const row of (data ?? []) as any[]) {
@@ -241,20 +241,19 @@ serve(async (req) => {
         const bucket   = thresholdBucket(daysLeft, DOC_THRESHOLDS)
         if (bucket === null) continue
 
-        const emp       = await getProfile(row.profile_id)
+        const emp       = await getProfile(row.user_id)
         const hrIds     = await getHRAdminIds()
-        const certName  = row.certificate_name || row.course_name || 'Certificate'
+        const certName  = row.title || 'Certificate'
         const expDate   = new Date(row.expiry_date).toLocaleDateString('en-GB')
         const label     = daysLeft <= 0 ? `Expired on ${expDate}` : `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} (${expDate})`
         const urgency   = urgencyFromDays(daysLeft)
-        // Use training record id (not profile_id) to avoid collisions across multiple certs
         const evtType   = `certification_expiry_${bucket}d`
-        const actionUrl = `/users/${row.profile_id}?section=training`
+        const actionUrl = `/users/${row.user_id}?section=training`
 
-        // In-app + email: employee — entity_id = training record id
+        // In-app + email: employee — entity_id = cert record id (unique per cert row)
         await upsertNotif([{
           event_type: evtType, entity_type: 'hr_document', entity_id: row.id,
-          recipient_id: row.profile_id,
+          recipient_id: row.user_id,
           title_en: `Your certification "${certName}" ${label}`,
           title_ar: `شهادتك "${certName}" ${daysLeft <= 0 ? 'منتهية الصلاحية' : 'تنتهي قريباً'}`,
           message_en: `Certification "${certName}" — ${label}. Please arrange renewal.`,
@@ -271,7 +270,7 @@ serve(async (req) => {
               actionUrl))
         }
 
-        // In-app + email: HR admins — use `row.id + _hr` as entity_id
+        // In-app + email: HR admins — entity_id = cert_id + _hr to avoid row collision
         await upsertNotif(hrIds.map((id: string) => ({
           event_type: `${evtType}_hr`, entity_type: 'hr_document',
           entity_id: `${row.id}_hr`,
