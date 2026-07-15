@@ -19,6 +19,7 @@ interface Policy {
   content_text: string | null;
   file_url: string | null;
   published_at: string | null;
+  required_roles: string[];
 }
 
 interface Acknowledgement {
@@ -36,7 +37,23 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other:        'bg-gray-100 text-gray-700 border-gray-200',
 };
 
-export default function EmployeePoliciesTab({ userId, userRole, userName }: { userId: string; userRole?: string; userName?: string }) {
+/** Returns true if the policy applies to this employee's role */
+function policyAppliesTo(policy: Policy, userRole?: string): boolean {
+  if (!policy.required_roles || policy.required_roles.length === 0) return true;
+  if (!userRole) return true; // unknown role — show all to be safe
+  const role = userRole.toLowerCase();
+  return policy.required_roles.some(r => r.toLowerCase() === role);
+}
+
+export default function EmployeePoliciesTab({
+  userId,
+  userRole,
+  userName,
+}: {
+  userId: string;
+  userRole?: string;
+  userName?: string;
+}) {
   const { toast } = useToast();
   const [policies, setPolicies]   = useState<Policy[]>([]);
   const [acks, setAcks]           = useState<Acknowledgement[]>([]);
@@ -54,7 +71,7 @@ export default function EmployeePoliciesTab({ userId, userRole, userName }: { us
       const [polRes, ackRes] = await Promise.all([
         supabase
           .from('hr_policies')
-          .select('id, title, category, version, effective_date, content_text, file_url, published_at')
+          .select('id, title, category, version, effective_date, content_text, file_url, published_at, required_roles')
           .eq('status', 'published')
           .order('effective_date', { ascending: false }),
         supabase
@@ -63,26 +80,23 @@ export default function EmployeePoliciesTab({ userId, userRole, userName }: { us
           .eq('user_id', userId),
       ]);
       const allPolicies = (polRes.data ?? []) as Policy[];
-      const myAcks = (ackRes.data ?? []) as Acknowledgement[];
 
-      // Filter to policies that apply to this user's role
-      const applicable = allPolicies.filter(p => {
-        // We can't easily filter server-side by required_roles array here without an RPC,
-        // so we fetch all published and filter client-side once we have the roles field
-        return true;
-      });
+      // ── Role-based filtering ───────────────────────────────────────────────
+      // Only show policies that target this employee's role (or all staff).
+      const applicable = allPolicies.filter(p => policyAppliesTo(p, userRole));
+
       setPolicies(applicable);
-      setAcks(myAcks);
+      setAcks((ackRes.data ?? []) as Acknowledgement[]);
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, userRole]);
 
   useEffect(() => { load(); }, [load]);
-
   useEffect(() => { if (ackDialog) { setAckChecked(false); setAckName(userName ?? ''); } }, [ackDialog, userName]);
 
-  const getAck = (policy: Policy) => acks.find(a => a.policy_id === policy.id && a.policy_version === policy.version);
+  const getAck = (policy: Policy) =>
+    acks.find(a => a.policy_id === policy.id && a.policy_version === policy.version);
 
   const getStatus = (policy: Policy) => {
     if (getAck(policy)) return 'acknowledged';
@@ -93,22 +107,34 @@ export default function EmployeePoliciesTab({ userId, userRole, userName }: { us
     return 'pending';
   };
 
-  const pending   = policies.filter(p => getStatus(p) !== 'acknowledged');
+  const pending      = policies.filter(p => getStatus(p) !== 'acknowledged');
   const acknowledged = policies.filter(p => getStatus(p) === 'acknowledged');
-  const displayed = showAcked ? policies : pending;
+  const displayed    = showAcked ? policies : pending;
 
   const handleAcknowledge = async () => {
     if (!ackDialog || !ackChecked || !ackName.trim()) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('hr_policy_acknowledgements').insert({
-        policy_id:      ackDialog.id,
-        user_id:        userId,
-        policy_version: ackDialog.version,
-        confirmed_name: ackName.trim(),
-        acknowledged_at: new Date().toISOString(),
+      // ── Server-side insertion via edge function ────────────────────────────
+      // This captures ip_address server-side from request headers so the
+      // audit record cannot be client-forged.
+      const { data, error } = await supabase.functions.invoke('acknowledge-policy', {
+        body: {
+          policy_id:      ackDialog.id,
+          policy_version: ackDialog.version,
+          confirmed_name: ackName.trim(),
+        },
       });
+
       if (error) throw error;
+      if (data?.error === 'already_acknowledged') {
+        toast({ title: 'Already acknowledged', description: 'You have already signed off on this version.' });
+        setAckDialog(null);
+        load();
+        return;
+      }
+      if (data?.error) throw new Error(data.error);
+
       toast({ title: 'Policy acknowledged', description: `${ackDialog.title} v${ackDialog.version}` });
       setAckDialog(null);
       load();
