@@ -14,8 +14,20 @@ export function computeFolderName(
   return last ? `${empId}_${s(first)}_${s(last)}` : `${empId}_${s(first)}`;
 }
 
+// Root HR folder — all employee dossiers live under HR/{folderName}/
+export const HR_ROOT = 'HR';
+
+export function getEmployeeFolderPath(folderName: string): string {
+  return `${HR_ROOT}/${folderName}`;
+}
+
 export function getSummaryStoragePath(folderName: string): string {
-  return `profiles/${folderName}/PROFILE_SUMMARY.pdf`;
+  return `${HR_ROOT}/${folderName}/PROFILE_SUMMARY.pdf`;
+}
+
+export function getDocumentStoragePath(folderName: string, docType: string, fileName: string): string {
+  const safeFile = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `${HR_ROOT}/${folderName}/${docType}_${Date.now()}_${safeFile}`;
 }
 
 export async function syncProfileFolder(
@@ -31,7 +43,7 @@ export async function syncProfileFolder(
     }
 
     const folderName   = computeFolderName(user);
-    const folderPath   = `profiles/${folderName}`;
+    const folderPath   = getEmployeeFolderPath(folderName);
     const summaryPath  = getSummaryStoragePath(folderName);
 
     // 1. Generate PDF bytes (does NOT trigger a browser download)

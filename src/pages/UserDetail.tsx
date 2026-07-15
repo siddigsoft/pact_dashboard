@@ -1207,7 +1207,7 @@ const UserDetail: FC = () => {
                           {folderSyncing ? 'Updating workspace dossier…' : 'Workspace Dossier'}
                         </p>
                         {!folderSyncing && profileFolderPath && (
-                          <p className="text-[11px] text-muted-foreground font-mono">{profileFolderPath.replace('profiles/', '')}</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">HR / {profileFolderPath.replace(/^(HR|profiles)\//, '')}</p>
                         )}
                       </div>
                     </div>
@@ -1829,6 +1829,7 @@ const UserDetail: FC = () => {
                   setDocsVerified({ allVerified, verified, total })
                 }
                 onDocumentUploaded={() => void triggerFolderSync()}
+                hrFolderName={user.employeeId ? computeFolderName(user) : undefined}
               />
               <div className="border-t pt-6">
                 <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><FileSignature className="h-4 w-4 text-indigo-600" /> Employment Contracts</h3>

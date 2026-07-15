@@ -59,11 +59,13 @@ function isExpiringSoon(expiry?: string | null) {
 }
 
 export default function EmployeeDocumentsTab({
-  userId, isAdmin, currentUserId, onVerificationChange, onDocumentUploaded,
+  userId, isAdmin, currentUserId, onVerificationChange, onDocumentUploaded, hrFolderName,
 }: {
   userId: string; isAdmin: boolean; currentUserId?: string;
   onVerificationChange?: (allVerified: boolean, verified: number, total: number) => void;
   onDocumentUploaded?: () => void;
+  /** When set, new uploads go into HR/{hrFolderName}/ instead of the legacy {userId}/ path */
+  hrFolderName?: string;
 }) {
   const { toast } = useToast();
   const [docs, setDocs] = useState<HrDoc[]>([]);
@@ -103,7 +105,11 @@ export default function EmployeeDocumentsTab({
     if (!file) return;
     setUploading(true);
     try {
-      const path = `${userId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const safeFile = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      // If the employee has a named HR folder, place new docs there; otherwise use legacy userId path
+      const path = hrFolderName
+        ? `HR/${hrFolderName}/${uploadType}_${Date.now()}_${safeFile}`
+        : `${userId}/${Date.now()}_${safeFile}`;
       const { error: upErr } = await supabase.storage.from('staff-contracts').upload(path, file, { upsert: false });
       if (upErr) throw upErr;
       const { error: insErr } = await supabase.from('hr_employee_documents').insert({
