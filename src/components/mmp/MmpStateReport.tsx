@@ -163,17 +163,14 @@ const nextStep = (status: string): string => {
 
 // VERIFIED = truly WFP-confirmed terminal completion.
 // Only wfp_confirmed is the gold standard; completed is the legacy equivalent.
-// VERIFIED = only WFP-confirmed or legacy-completed visits count as "covered".
+// NOTHING ELSE counts as "completed" — submitted/verified/approved/costed are
+// still in the approval/confirmation pipeline, not terminal.
 const VERIFIED_STATUSES = new Set([
   'wfp_confirmed', 'completed',
 ]);
-// DC_COMPLETED = field staff finished their part but not yet WFP-confirmed.
-// Includes post-submission approval steps (submitted → verified → approved → costed).
-const DC_COMPLETED_STATUSES = new Set([
-  'submitted', 'submitted_for_review',
-  'verified', 'approved', 'approved and costed', 'approved_and_costed',
-  'costed', 'cp_verified', 'locality_permit_verified',
-]);
+// DC_COMPLETED = intentionally empty — no intermediate status counts as completed.
+// submitted, verified, approved, costed, approved_and_costed are all in IN_PROGRESS.
+const DC_COMPLETED_STATUSES = new Set<string>([]);
 const AWAITING_DISPATCH_STATUSES = new Set([
   'forwarded', 'forwarded_to_fom', 'forwarded_fom',
   'forwarded_to_coordinator', 'forwarded_to_coordinators',
@@ -182,6 +179,10 @@ const AWAITING_DISPATCH_STATUSES = new Set([
 const IN_PROGRESS_STATUSES = new Set([
   'dispatched', 'accepted', 'claimed', 'ongoing', 'site_claim',
   'in_progress', 'inprogress', 'permits_attached', 'acknowledged',
+  // post-submission approval chain — field work done but NOT WFP-confirmed yet
+  'submitted', 'submitted_for_review',
+  'verified', 'approved', 'approved and costed', 'approved_and_costed',
+  'costed', 'cp_verified', 'locality_permit_verified',
 ]);
 const RETURNED_STATUSES = new Set([
   'returned', 'returned_to_fom', 'recalled', 'sent_back', 'sent_back_to_fom',
