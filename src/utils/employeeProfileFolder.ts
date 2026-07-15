@@ -14,8 +14,8 @@ export function computeFolderName(
   return last ? `${empId}_${s(first)}_${s(last)}` : `${empId}_${s(first)}`;
 }
 
-// Root HR folder — all employee dossiers live under HR/{folderName}/
-export const HR_ROOT = 'HR';
+// Root path — all employee dossiers live under HR/Profiles/{folderName}/
+export const HR_ROOT = 'HR/Profiles';
 
 export function getEmployeeFolderPath(folderName: string): string {
   return `${HR_ROOT}/${folderName}`;

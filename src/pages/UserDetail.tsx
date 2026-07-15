@@ -1207,7 +1207,7 @@ const UserDetail: FC = () => {
                           {folderSyncing ? 'Updating workspace dossier…' : 'Workspace Dossier'}
                         </p>
                         {!folderSyncing && profileFolderPath && (
-                          <p className="text-[11px] text-muted-foreground font-mono">HR / {profileFolderPath.replace(/^(HR|profiles)\//, '')}</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">HR / Profiles / {profileFolderPath.replace(/^(HR\/Profiles|HR|profiles)\//, '')}</p>
                         )}
                       </div>
                     </div>
