@@ -36,6 +36,7 @@ import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
 import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
 import { generateEmployeeCV } from "@/utils/employeeCvExport";
+import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName } from "@/utils/employeeProfileFolder";
 
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
@@ -120,6 +121,8 @@ const UserDetail: FC = () => {
   const [empSaving, setEmpSaving] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
   const [empSummary, setEmpSummary] = useState<string>("");
+  const [profileFolderPath, setProfileFolderPath] = useState<string | null>(null);
+  const [folderSyncing, setFolderSyncing] = useState(false);
   const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
@@ -290,11 +293,17 @@ const UserDetail: FC = () => {
     }
   }, [editForm.stateId, editMode]);
 
-  // Load professional summary for overview banner
+  // Load professional summary + profile folder path for overview banner
   useEffect(() => {
     if (!user?.id) return;
-    supabase.from('hr_employee_personal').select('professional_summary').eq('profile_id', user.id).maybeSingle()
-      .then(({ data }) => { if (data?.professional_summary) setEmpSummary(data.professional_summary); });
+    supabase.from('hr_employee_personal')
+      .select('professional_summary, profile_folder_path')
+      .eq('profile_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.professional_summary) setEmpSummary(data.professional_summary);
+        if (data?.profile_folder_path)  setProfileFolderPath(data.profile_folder_path);
+      });
   }, [user?.id]);
 
   // Fetch city/address from hr_employee_personal for non-field-staff
@@ -480,11 +489,42 @@ const UserDetail: FC = () => {
       savedDepartmentIdRef.current = empDepartmentId || null;
 
       toast({ title: "Employment record updated" });
+      void triggerFolderSync();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An unexpected error occurred.";
       toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setEmpSaving(false);
+    }
+  };
+
+  // ── Workspace folder sync: triggered when profile reaches 100% completeness ──
+  const triggerFolderSync = async (freshUser?: any) => {
+    const u = freshUser || user;
+    if (!u) return;
+    // Require all 8 header-strip fields to be filled (100%)
+    const fields = [u.name, u.email, u.phone, u.hubId, u.employeeId, u.bankAccount, empDepartmentId, empContractStart];
+    if (!fields.every(Boolean)) return;
+    setFolderSyncing(true);
+    try {
+      const ctx = {
+        departmentName: departments.find((d: any) => d.id === empDepartmentId)?.name,
+        contractType:   empType,
+        contractStart:  empContractStart,
+        contractEnd:    empContractEnd,
+        employmentType: empType,
+        reportsToName:  allUsers.find((au: any) => au.id === empReportsTo)?.full_name ?? undefined,
+        hubName:        hubs.find((h: any) => h.id === u.hubId)?.name || u.hubId || undefined,
+      };
+      const { folderPath, error } = await syncProfileFolder(u, ctx);
+      if (folderPath) {
+        setProfileFolderPath(folderPath);
+        toast({ title: '📁 Workspace dossier updated', description: `Folder: ${computeFolderName(u)}`, variant: 'success' });
+      } else if (error) {
+        console.warn('[UserDetail] folder sync failed:', error);
+      }
+    } finally {
+      setFolderSyncing(false);
     }
   };
 
@@ -752,6 +792,7 @@ const UserDetail: FC = () => {
           variant: "success"
         });
         setEditMode(false); // <-- move this here so it only closes on success
+        void triggerFolderSync(mappedUser);
       } else {
         toast({
           title: "Update failed",
@@ -1152,6 +1193,55 @@ const UserDetail: FC = () => {
                   </div>
                 );
               })()}
+
+              {/* ── Workspace Dossier card ───────────────────────────────────── */}
+              {(profileFolderPath || folderSyncing) && (
+                <div className={`rounded-xl border p-4 space-y-3 transition-all ${folderSyncing ? 'border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800' : 'border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-800'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {folderSyncing
+                        ? <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400" />
+                        : <FolderOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+                      <div>
+                        <p className="font-semibold text-sm text-foreground">
+                          {folderSyncing ? 'Updating workspace dossier…' : 'Workspace Dossier'}
+                        </p>
+                        {!folderSyncing && profileFolderPath && (
+                          <p className="text-[11px] text-muted-foreground font-mono">{profileFolderPath.replace('profiles/', '')}</p>
+                        )}
+                      </div>
+                    </div>
+                    {!folderSyncing && profileFolderPath && isAdmin && (
+                      <button
+                        onClick={async () => {
+                          const url = await getProfileSummarySignedUrl(profileFolderPath);
+                          if (url) window.open(url, '_blank');
+                          else toast({ title: 'Could not open file', description: 'The summary PDF may not have been generated yet.', variant: 'destructive' });
+                        }}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-700 rounded-lg px-2.5 py-1.5 transition-all"
+                      >
+                        <FileText className="h-3.5 w-3.5" /> Open PROFILE_SUMMARY.pdf
+                      </button>
+                    )}
+                  </div>
+                  {!folderSyncing && (
+                    <div className="grid grid-cols-3 gap-2 text-[11px]">
+                      <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-emerald-100 dark:border-emerald-900 p-2 text-center">
+                        <p className="font-bold text-emerald-700 dark:text-emerald-300">PROFILE_SUMMARY.pdf</p>
+                        <p className="text-muted-foreground">Auto-generated CV</p>
+                      </div>
+                      <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-emerald-100 dark:border-emerald-900 p-2 text-center">
+                        <p className="font-bold text-emerald-700 dark:text-emerald-300">{docsVerified.total} document{docsVerified.total !== 1 ? 's' : ''}</p>
+                        <p className="text-muted-foreground">Uploaded to profile</p>
+                      </div>
+                      <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-emerald-100 dark:border-emerald-900 p-2 text-center">
+                        <p className="font-bold text-emerald-700 dark:text-emerald-300">Updated on save</p>
+                        <p className="text-muted-foreground">Never duplicated</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ── Professional Summary card ────────────────────────────────── */}
               {empSummary ? (
@@ -1738,6 +1828,7 @@ const UserDetail: FC = () => {
                 onVerificationChange={(allVerified, verified, total) =>
                   setDocsVerified({ allVerified, verified, total })
                 }
+                onDocumentUploaded={() => void triggerFolderSync()}
               />
               <div className="border-t pt-6">
                 <h3 className="font-bold text-sm mb-4 flex items-center gap-2"><FileSignature className="h-4 w-4 text-indigo-600" /> Employment Contracts</h3>

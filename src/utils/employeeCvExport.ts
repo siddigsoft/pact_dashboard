@@ -49,7 +49,11 @@ export interface CVContext {
 }
 
 // ── Main export function ─────────────────────────────────────────────────────
-export async function generateEmployeeCV(user: any, ctx: CVContext = {}): Promise<void> {
+export async function generateEmployeeCV(
+  user: any,
+  ctx: CVContext = {},
+  options?: { returnBytes?: boolean },
+): Promise<void | Uint8Array> {
 
   // Fetch all profile data in parallel
   const [
@@ -452,7 +456,11 @@ export async function generateEmployeeCV(user: any, ctx: CVContext = {}): Promis
     doc.text(`Page ${p} of ${totalPages}`, PW - M, PH - 4, { align: 'right' });
   }
 
-  // ── Save ─────────────────────────────────────────────────────────────────
+  // ── Save or return bytes ─────────────────────────────────────────────────
+  if (options?.returnBytes) {
+    const ab = doc.output('arraybuffer');
+    return new Uint8Array(ab);
+  }
   const safeName = (user.name || 'staff').replace(/[^a-z0-9]/gi, '_');
   doc.save(`${safeName}_P11_CV_${format(new Date(), 'yyyyMMdd')}.pdf`);
 }

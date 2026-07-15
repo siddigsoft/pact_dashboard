@@ -59,10 +59,11 @@ function isExpiringSoon(expiry?: string | null) {
 }
 
 export default function EmployeeDocumentsTab({
-  userId, isAdmin, currentUserId, onVerificationChange,
+  userId, isAdmin, currentUserId, onVerificationChange, onDocumentUploaded,
 }: {
   userId: string; isAdmin: boolean; currentUserId?: string;
   onVerificationChange?: (allVerified: boolean, verified: number, total: number) => void;
+  onDocumentUploaded?: () => void;
 }) {
   const { toast } = useToast();
   const [docs, setDocs] = useState<HrDoc[]>([]);
@@ -116,6 +117,7 @@ export default function EmployeeDocumentsTab({
       setShowUpload(false); setUploadNotes(''); setUploadExpiry('');
       if (fileRef.current) fileRef.current.value = '';
       await load();
+      onDocumentUploaded?.();
     } catch (err: any) {
       toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     } finally { setUploading(false); }
