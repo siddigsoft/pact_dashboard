@@ -1261,28 +1261,15 @@ const UserDetail: FC = () => {
                 </div>
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Country Code (for Employee ID)</h4>
-                  {isAdmin ? (
-                    <div className="space-y-1">
-                      <Input
-                        value={empCountryCode}
-                        onChange={e => setEmpCountryCode(e.target.value.toUpperCase().slice(0, 4))}
-                        placeholder="e.g. SD"
-                        maxLength={4}
-                        className="h-11 font-mono uppercase tracking-widest"
-                        data-testid="input-emp-country-code"
-                      />
-                      {!user.employeeId && empContractStart && (
-                        <p className="text-xs text-muted-foreground">
-                          Will generate: <span className="font-mono font-semibold">{(empCountryCode || 'XX').toUpperCase()}{empContractStart.replace(/-/g, '')}0001</span>
-                        </p>
-                      )}
-                      {user.employeeId && (
-                        <p className="text-xs text-green-600 font-medium">Employee ID already assigned: {user.employeeId}</p>
-                      )}
-                    </div>
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employee ID</h4>
+                  {user.employeeId ? (
+                    <p className="font-semibold text-base font-mono">{user.employeeId}</p>
                   ) : (
-                    <p className="font-semibold text-base font-mono">{empCountryCode || "—"}</p>
+                    <p className="text-sm text-muted-foreground italic">
+                      {empContractStart
+                        ? "Will be auto-assigned when you save"
+                        : "Set a contract start date to enable auto-assignment"}
+                    </p>
                   )}
                 </div>
 
