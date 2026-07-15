@@ -193,7 +193,7 @@ export default function PerformanceReviews() {
 
   // ── Calibration dialog ─────────────────────────────────────────────────────
   const [calibOpen, setCalibOpen]   = useState(false);
-  const [calibData, setCalibData]   = useState<Record<string, { adjusted: number; reason: string }>>({});
+  const [calibData, setCalibData]   = useState<Record<string, { compRatings: Record<string, number>; reason: string; overall: number }>>({});
   const [calibSaving, setCalibSaving] = useState(false);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
@@ -316,13 +316,17 @@ export default function PerformanceReviews() {
       ? ratedComps.reduce((s, c) => s + c.rating, 0) / ratedComps.length
       : form.overall_rating;
 
-    // Determine starting phase: self-assessment first if enabled; peer-feedback next if only
-    // peer is enabled; otherwise go straight to manager_review.
+    // Phase for NEW reviews only. Edits never reset cycle_phase — phase advances via explicit actions.
     const initialPhase = submitForReview
       ? (form.self_assessment_enabled ? 'self_assessment'
          : form.peer_feedback_enabled  ? 'peer_feedback'
          : 'manager_review')
       : 'not_started';
+
+    // When editing a draft/not_started and clicking "Submit for Review", advance the phase.
+    // All other edit saves preserve the existing cycle_phase and status.
+    const editingDraft = editing && (editing.status === 'draft' || editing.status === 'not_started');
+    const phaseForEdit = editingDraft && submitForReview ? initialPhase : undefined;
 
     const payload: any = {
       reviewee_id: form.reviewee_id, review_period: form.review_period, review_type: form.review_type,
@@ -334,17 +338,21 @@ export default function PerformanceReviews() {
       goals: form.goals, competencies: form.competencies,
       self_assessment_enabled: form.self_assessment_enabled,
       peer_feedback_enabled:   form.peer_feedback_enabled,
-      status: submitForReview ? 'submitted' : 'draft',
-      cycle_phase: editing ? undefined : initialPhase,
-      submitted_at: submitForReview ? new Date().toISOString() : null,
+      // Edits: only change status if submitting a draft; otherwise preserve existing status
+      status: submitForReview ? 'submitted' : (editing ? editing.status : 'draft'),
+      submitted_at: submitForReview ? new Date().toISOString() : undefined,
       reviewer_id: isAdmin ? currentUser?.id : undefined,
       updated_at: new Date().toISOString(),
     };
-    if (!editing) delete payload.cycle_phase;
 
     const saveOp = editing
-      ? supabase.from('performance_reviews').update({ ...payload, cycle_phase: initialPhase }).eq('id', editing.id)
-      : supabase.from('performance_reviews').insert({ ...payload, cycle_phase: initialPhase, created_at: new Date().toISOString() }).select().single();
+      ? supabase.from('performance_reviews').update({
+          ...payload,
+          ...(phaseForEdit ? { cycle_phase: phaseForEdit } : {}),
+        }).eq('id', editing.id)
+      : supabase.from('performance_reviews').insert({
+          ...payload, cycle_phase: initialPhase, created_at: new Date().toISOString(),
+        }).select().single();
 
     const { error } = await saveOp as any;
     if (error) {
@@ -553,47 +561,74 @@ export default function PerformanceReviews() {
 
   // ── Calibration ────────────────────────────────────────────────────────────
   function openCalibration() {
-    const initial: Record<string, { adjusted: number; reason: string }> = {};
+    const initial: Record<string, { compRatings: Record<string, number>; reason: string; overall: number }> = {};
     for (const rev of calibrationReviews) {
-      if (rev.overall_rating) initial[rev.id] = { adjusted: rev.overall_rating, reason: '' };
+      const compRatings: Record<string, number> = {};
+      for (const c of (rev.competencies ?? [])) {
+        compRatings[c.id] = c.rating ?? 0;
+      }
+      // Seed any missing competencies from template
+      for (const c of COMPETENCIES_TEMPLATE) {
+        if (!(c.id in compRatings)) compRatings[c.id] = 0;
+      }
+      initial[rev.id] = { compRatings, reason: '', overall: rev.overall_rating ?? 0 };
     }
     setCalibData(initial);
     setCalibOpen(true);
   }
 
+  function updateCalibComp(revId: string, compId: string, value: number) {
+    const rev = reviews.find(r => r.id === revId);
+    if (!rev) return;
+    setCalibData(p => {
+      const existing = p[revId] ?? {
+        compRatings: Object.fromEntries(COMPETENCIES_TEMPLATE.map(c => [c.id, 0])),
+        reason: '', overall: rev.overall_rating ?? 0,
+      };
+      const newRatings = { ...existing.compRatings, [compId]: value };
+      const vals = Object.values(newRatings).filter(v => (v as number) > 0) as number[];
+      const newOverall = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : existing.overall;
+      return { ...p, [revId]: { ...existing, compRatings: newRatings, overall: Number(newOverall.toFixed(1)) } };
+    });
+  }
+
   async function saveCalibration() {
     setCalibSaving(true);
-    const ops = Object.entries(calibData)
+    // Audit log: save calibration adjustments for reviews where overall changed
+    const adjOps = Object.entries(calibData)
       .filter(([revId, d]) => {
         const rev = reviews.find(r => r.id === revId);
-        return rev && d.adjusted !== rev.overall_rating;
+        return rev && d.overall !== rev.overall_rating;
       })
       .map(([revId, d]) => {
         const rev = reviews.find(r => r.id === revId)!;
         return supabase.from('hr_review_calibration_adjustments').upsert({
           review_id: revId, user_id: rev.reviewee_id,
-          original_score: rev.overall_rating!, adjusted_score: d.adjusted,
+          original_score: rev.overall_rating!, adjusted_score: d.overall,
           adjustment_reason: d.reason || null, adjusted_by: currentUser?.id,
           adjusted_at: new Date().toISOString(),
         }, { onConflict: 'review_id,user_id' });
       });
-    await Promise.all(ops);
+    await Promise.all(adjOps);
 
-    // Update overall_rating on reviews with adjustments
-    const updateOps = Object.entries(calibData)
-      .filter(([revId, d]) => {
-        const rev = reviews.find(r => r.id === revId);
-        return rev && d.adjusted !== rev.overall_rating;
-      })
-      .map(([revId, d]) =>
-        supabase.from('performance_reviews').update({
-          overall_rating: d.adjusted, cycle_phase: 'published',
-          status: 'completed', reviewed_at: new Date().toISOString(),
-        }).eq('id', revId)
-      );
+    // Update all calibrated reviews: per-competency ratings + overall + publish
+    const updateOps = Object.entries(calibData).map(([revId, d]) => {
+      const rev = reviews.find(r => r.id === revId)!;
+      const updatedComps = (rev.competencies ?? []).map((c: any) => ({
+        ...c,
+        rating: d.compRatings[c.id] !== undefined ? d.compRatings[c.id] : c.rating,
+      }));
+      return supabase.from('performance_reviews').update({
+        competencies: updatedComps,
+        overall_rating: d.overall,
+        cycle_phase: 'published',
+        status: 'completed',
+        reviewed_at: new Date().toISOString(),
+      }).eq('id', revId);
+    });
     await Promise.all(updateOps);
 
-    toast({ title: 'Calibration saved', description: 'Scores updated and cycle published.' });
+    toast({ title: 'Calibration saved', description: 'All scores updated and cycle published.' });
     setCalibOpen(false);
     fetchAll();
     setCalibSaving(false);
@@ -657,8 +692,8 @@ export default function PerformanceReviews() {
   // ── Distribution data for calibration chart ────────────────────────────────
   const distData = useMemo(() => {
     const buckets: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
-    for (const [revId, d] of Object.entries(calibData)) {
-      const bucket = String(Math.round(d.adjusted));
+    for (const [, d] of Object.entries(calibData)) {
+      const bucket = String(Math.round(d.overall));
       if (buckets[bucket] !== undefined) buckets[bucket]++;
     }
     return Object.entries(buckets).map(([score, count]) => ({ score, count }));
@@ -988,18 +1023,60 @@ export default function PerformanceReviews() {
               <Textarea value={form.self_assessment} onChange={e => setForm(p => ({ ...p, self_assessment: e.target.value }))} rows={3} placeholder="Describe your achievements this period..." />
             </div>
 
-            {/* Competency Ratings */}
-            <div>
-              <Label className="flex items-center gap-1 mb-2"><BarChart2 className="h-3.5 w-3.5" />Competency Ratings</Label>
-              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-                {form.competencies.map((comp, i) => (
-                  <div key={comp.id} className="flex items-center gap-3">
-                    <span className="text-sm flex-1 min-w-0">{comp.name}</span>
-                    <StarRating value={comp.rating} onChange={v => setForm(p => ({ ...p, competencies: p.competencies.map((c, j) => j === i ? { ...c, rating: v } : c) }))} />
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Competency Ratings — side-by-side Self / Peer / Manager when data exists */}
+            {(() => {
+              const mySa   = editing ? selfAssessments.find(sa => sa.review_id === editing.id && sa.submitted_at) : null;
+              const peerAgg = editing ? getPeerAggregate(editing.id) : null;
+              const show3col = isAdmin && editing && (mySa || peerAgg);
+              return (
+                <div>
+                  <Label className="flex items-center gap-1 mb-2"><BarChart2 className="h-3.5 w-3.5" />Competency Ratings</Label>
+                  {show3col ? (
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-muted/50 text-xs text-muted-foreground">
+                            <th className="text-left p-2 font-medium">Competency</th>
+                            {mySa  && <th className="p-2 text-center font-medium text-blue-600">Self</th>}
+                            {peerAgg && <th className="p-2 text-center font-medium text-purple-600">Peers avg</th>}
+                            <th className="p-2 text-center font-medium">Manager ★</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.competencies.map((comp, i) => {
+                            const saRating = mySa?.competencies?.[comp.id]?.rating;
+                            const peerEntry = peerAgg?.[comp.id];
+                            const peerAvg = peerEntry && peerEntry.count > 0
+                              ? peerEntry.totalRating / peerEntry.count : null;
+                            return (
+                              <tr key={comp.id} className="border-t hover:bg-muted/20">
+                                <td className="p-2 text-sm">{comp.name}</td>
+                                {mySa && <td className="p-2 text-center text-blue-600 font-medium">{saRating ? saRating.toFixed(1) : '—'}</td>}
+                                {peerAgg && <td className="p-2 text-center text-purple-600 font-medium">{peerAvg != null ? peerAvg.toFixed(1) : '—'}</td>}
+                                <td className="p-2">
+                                  <div className="flex justify-center">
+                                    <StarRating value={comp.rating} onChange={v => setForm(p => ({ ...p, competencies: p.competencies.map((c, j) => j === i ? { ...c, rating: v } : c) }))} />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+                      {form.competencies.map((comp, i) => (
+                        <div key={comp.id} className="flex items-center gap-3">
+                          <span className="text-sm flex-1 min-w-0">{comp.name}</span>
+                          <StarRating value={comp.rating} onChange={v => setForm(p => ({ ...p, competencies: p.competencies.map((c, j) => j === i ? { ...c, rating: v } : c) }))} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Goals */}
             <div>
@@ -1202,35 +1279,66 @@ export default function PerformanceReviews() {
             </ResponsiveContainer>
           </div>
 
-          {/* Calibration table */}
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {calibrationReviews.map(rev => {
-              const cd = calibData[rev.id] ?? { adjusted: rev.overall_rating ?? 0, reason: '' };
-              return (
-                <div key={rev.id} className="flex items-center gap-3 border rounded-lg p-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{rev.reviewee_name}</p>
-                    <p className="text-xs text-muted-foreground">{rev.review_period}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-muted-foreground">Orig: {rev.overall_rating?.toFixed(1) ?? '—'}</span>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setCalibData(p => ({ ...p, [rev.id]: { ...cd, adjusted: Math.max(1, cd.adjusted - 0.5) } }))}
-                        className="h-6 w-6 rounded border text-muted-foreground hover:bg-muted flex items-center justify-center">
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="text-sm font-bold w-8 text-center text-primary">{cd.adjusted.toFixed(1)}</span>
-                      <button onClick={() => setCalibData(p => ({ ...p, [rev.id]: { ...cd, adjusted: Math.min(5, cd.adjusted + 0.5) } }))}
-                        className="h-6 w-6 rounded border text-muted-foreground hover:bg-muted flex items-center justify-center">
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  <Input className="w-48 text-xs h-8" value={cd.reason} onChange={e => setCalibData(p => ({ ...p, [rev.id]: { ...cd, reason: e.target.value } }))}
-                    placeholder="Reason for adjustment..." />
-                </div>
-              );
-            })}
+          {/* Competency matrix table — rows = employees, cols = competencies */}
+          <div className="overflow-x-auto border rounded-lg max-h-96">
+            <table className="min-w-full text-xs border-collapse">
+              <thead className="sticky top-0 z-10 bg-muted/90">
+                <tr>
+                  <th className="text-left p-2 font-medium sticky left-0 bg-muted/90 border-b border-r min-w-36">Employee</th>
+                  {COMPETENCIES_TEMPLATE.map(c => (
+                    <th key={c.id} className="p-2 text-center font-medium border-b min-w-24">{c.name}</th>
+                  ))}
+                  <th className="p-2 text-center font-semibold border-b min-w-20 text-primary">Overall</th>
+                  <th className="p-2 text-left font-medium border-b min-w-40">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calibrationReviews.map(rev => {
+                  const cd = calibData[rev.id] ?? { compRatings: {}, reason: '', overall: rev.overall_rating ?? 0 };
+                  return (
+                    <tr key={rev.id} className="border-t hover:bg-muted/20">
+                      <td className="p-2 font-medium sticky left-0 bg-background border-r z-10 text-xs">
+                        <p className="truncate max-w-32">{rev.reviewee_name}</p>
+                        <p className="text-muted-foreground truncate max-w-32">{rev.review_period}</p>
+                      </td>
+                      {COMPETENCIES_TEMPLATE.map(c => {
+                        const origComp = rev.competencies?.find((x: any) => x.id === c.id);
+                        const orig = origComp?.rating ?? 0;
+                        const val = cd.compRatings[c.id] !== undefined ? cd.compRatings[c.id] : orig;
+                        const changed = val !== orig;
+                        return (
+                          <td key={c.id} className="p-1 text-center align-middle">
+                            <div className="flex items-center gap-0.5 justify-center">
+                              <button onClick={() => updateCalibComp(rev.id, c.id, Math.max(0, val - 0.5))}
+                                className="h-5 w-5 rounded border text-muted-foreground hover:bg-muted flex items-center justify-center">−</button>
+                              <span className={cn('w-7 text-center font-semibold', changed ? 'text-orange-500' : 'text-foreground')}>
+                                {val > 0 ? val.toFixed(1) : '—'}
+                              </span>
+                              <button onClick={() => updateCalibComp(rev.id, c.id, Math.min(5, val + 0.5))}
+                                className="h-5 w-5 rounded border text-muted-foreground hover:bg-muted flex items-center justify-center">+</button>
+                            </div>
+                            {changed && <p className="text-[9px] text-muted-foreground text-center">was {orig > 0 ? orig.toFixed(1) : '—'}</p>}
+                          </td>
+                        );
+                      })}
+                      <td className="p-2 text-center align-middle">
+                        <span className={cn('font-bold', cd.overall !== (rev.overall_rating ?? 0) ? 'text-orange-500' : 'text-primary')}>
+                          {cd.overall.toFixed(1)}
+                        </span>
+                        {cd.overall !== (rev.overall_rating ?? 0) && (
+                          <p className="text-[9px] text-muted-foreground">was {rev.overall_rating?.toFixed(1) ?? '—'}</p>
+                        )}
+                      </td>
+                      <td className="p-1 align-middle">
+                        <Input className="text-xs h-7 min-w-36" value={cd.reason}
+                          onChange={e => setCalibData(p => ({ ...p, [rev.id]: { ...cd, reason: e.target.value } }))}
+                          placeholder="Reason..." />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
           <DialogFooter>

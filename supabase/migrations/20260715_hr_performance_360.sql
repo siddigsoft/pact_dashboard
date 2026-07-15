@@ -105,8 +105,18 @@ CREATE POLICY hr_review_pn_select ON hr_review_peer_nominations
 
 DROP POLICY IF EXISTS hr_review_pn_update ON hr_review_peer_nominations;
 CREATE POLICY hr_review_pn_update ON hr_review_peer_nominations
-  FOR UPDATE USING (
+  FOR UPDATE
+  USING (
     nominee_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid()
+        AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
+    )
+  )
+  -- WITH CHECK restricts what a nominee can write: only their own row, and only before
+  -- they have already submitted (prevents re-submission / tampering with non-feedback fields).
+  WITH CHECK (
+    (nominee_id = auth.uid() AND submitted_at IS NULL)
     OR EXISTS (
       SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin', 'admin', 'hr', 'hr_admin', 'manager')
