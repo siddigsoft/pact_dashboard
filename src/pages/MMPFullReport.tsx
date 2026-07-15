@@ -15,14 +15,23 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 // ── Status classification ────────────────────────────────────────────────────
+// Only truly terminal statuses count as "Covered/Done":
+//   wfp_confirmed — WFP confirmed receipt (gold standard)
+//   completed     — legacy pre-Phase-A terminal value
+// Everything else — including submitted, verified, approved, costed,
+// approved_and_costed — is still in the approval/confirmation pipeline
+// and must NOT count as covered. These were inflating coverage numbers.
 const DONE_STATUSES = new Set([
-  'wfp_confirmed', 'completed', 'verified', 'approved', 'cp_verified',
-  'locality_permit_verified', 'approved_and_costed', 'costed',
+  'wfp_confirmed',
+  'completed',
 ]);
 const IN_PROGRESS_STATUSES = new Set([
   'accepted', 'claimed', 'in_progress', 'ongoing', 'dispatched', 'assigned',
   'forwarded', 'forwarded_to_coordinator', 'forwarded_to_fom', 'permits_attached',
-  'with_coordinators', 'submitted',
+  'with_coordinators', 'submitted', 'submitted_for_review',
+  // post-submission approval chain — NOT terminal completion
+  'verified', 'approved', 'cp_verified', 'locality_permit_verified',
+  'approved_and_costed', 'costed',
 ]);
 
 function classifyStatus(status: string): 'done' | 'in_progress' | 'pending' {
