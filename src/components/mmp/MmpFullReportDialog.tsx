@@ -112,7 +112,7 @@ interface Props {
 
 // ── Stat card left-border accent colours ─────────────────────────────
 const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num: string }> = {
-  total:       { border: 'border-l-teal-500',    icon: 'text-teal-500',    num: 'text-teal-700' },
+  total:       { border: 'border-l-blue-500',    icon: 'text-blue-500',    num: 'text-blue-700' },
   done:        { border: 'border-l-emerald-500', icon: 'text-emerald-500', num: 'text-emerald-700' },
   in_progress: { border: 'border-l-amber-500',  icon: 'text-amber-500',   num: 'text-amber-700' },
   attention:   { border: 'border-l-red-500',    icon: 'text-red-500',     num: 'text-red-700' },
@@ -815,21 +815,28 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <style>{`
+        .mmp-report-tabs [data-state=active] {
+          background: #3b7ef5 !important;
+          color: #fff !important;
+          box-shadow: 0 1px 4px rgba(59,126,245,0.35);
+        }
+      `}</style>
       <DialogContent
         className="max-w-5xl w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-gray-50 border-0 shadow-2xl text-foreground"
         onInteractOutside={e => e.preventDefault()}
       >
-        {/* Header — teal gradient */}
-        <DialogHeader className="px-5 pt-4 pb-4 flex-shrink-0 bg-gradient-to-r from-teal-700 to-teal-600">
+        {/* Header — PACT navy */}
+        <DialogHeader className="px-5 pt-4 pb-4 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-base font-bold text-white">
-                <div className="h-7 w-7 rounded-lg bg-white/15 flex items-center justify-center flex-shrink-0">
-                  <BarChart3 className="h-4 w-4 text-white" />
+                <div className="h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(59,126,245,0.25)', border: '1px solid rgba(59,126,245,0.4)' }}>
+                  <BarChart3 className="h-4 w-4" style={{ color: '#3b7ef5' }} />
                 </div>
                 Full MMP Status Report
               </DialogTitle>
-              <p className="text-xs text-teal-200 mt-1 truncate pl-9">
+              <p className="text-xs mt-1 truncate pl-9" style={{ color: 'rgba(59,126,245,0.8)' }}>
                 {mmpName}{mmp?.mmp_id ? ` · ${mmp.mmp_id}` : ''}{(mmp?.project as any)?.name ? ` · ${(mmp.project as any).name}` : ''}
               </p>
             </div>
@@ -839,7 +846,10 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 size="sm"
                 onClick={exportExcel}
                 disabled={!stats || excelLoading}
-                className="border-white/30 text-white bg-white/10 hover:bg-white/20 hover:border-white/50 h-8 text-xs"
+                className="h-8 text-xs text-white hover:text-white"
+                style={{ background: 'rgba(59,126,245,0.15)', border: '1px solid rgba(59,126,245,0.35)', borderRadius: 8 }}
+                onMouseOver={e => (e.currentTarget.style.background = 'rgba(59,126,245,0.28)')}
+                onMouseOut={e => (e.currentTarget.style.background = 'rgba(59,126,245,0.15)')}
               >
                 {excelLoading
                   ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -850,13 +860,18 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
                 size="sm"
                 onClick={exportPDF}
                 disabled={!stats}
-                className="bg-white/15 hover:bg-white/25 text-white border border-white/30 h-8 text-xs"
+                className="h-8 text-xs text-white border-0"
+                style={{ background: '#3b7ef5', borderRadius: 8, boxShadow: '0 2px 8px rgba(59,126,245,0.4)' }}
+                onMouseOver={e => (e.currentTarget.style.background = '#2563eb')}
+                onMouseOut={e => (e.currentTarget.style.background = '#3b7ef5')}
               >
                 <Download className="h-3.5 w-3.5 mr-1.5" />
                 PDF
               </Button>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/15 transition-colors ml-1">
-                <X className="h-4 w-4 text-white/80" />
+              <button onClick={onClose} className="p-1.5 rounded-lg transition-colors ml-1" style={{ color: 'rgba(255,255,255,0.6)' }}
+                onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.1)'; }}
+                onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}>
+                <X className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -865,7 +880,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         {/* Body */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center py-16">
-            <Loader2 className="h-7 w-7 animate-spin text-teal-600" />
+            <Loader2 className="h-7 w-7 animate-spin" style={{ color: '#3b7ef5' }} />
             <span className="ml-3 text-muted-foreground text-sm">Loading report data…</span>
           </div>
         ) : !stats ? (
@@ -901,46 +916,58 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
             </div>
 
             {/* Coverage strip */}
-            <div className="mx-5 mb-3 rounded-xl bg-white border border-gray-100 shadow-sm px-4 py-2.5 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 w-20 flex-shrink-0">Coverage</span>
-                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-2.5 rounded-full transition-all ${stats.coveragePct >= 70 ? 'bg-emerald-500' : stats.coveragePct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
-                    style={{ width: `${stats.coveragePct}%` }}
-                  />
+            <div className="mx-5 mb-3 rounded-xl flex-shrink-0 overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 100%)', border: '1px solid rgba(59,126,245,0.2)' }}>
+              <div className="flex items-center gap-4 px-4 py-3">
+                <div className="flex-shrink-0 text-center">
+                  <div className="text-[9px] font-bold uppercase tracking-widest mb-0.5" style={{ color: 'rgba(59,126,245,0.7)' }}>Coverage</div>
+                  <div className={`text-xl font-extrabold tabular-nums leading-none ${stats.coveragePct >= 70 ? 'text-emerald-400' : stats.coveragePct >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                    {stats.coveragePct}%
+                  </div>
                 </div>
-                <span className={`text-sm font-extrabold w-12 text-right tabular-nums ${stats.coveragePct >= 70 ? 'text-emerald-600' : stats.coveragePct >= 40 ? 'text-amber-600' : 'text-red-600'}`}>
-                  {stats.coveragePct}%
-                </span>
-                <span className="text-xs text-gray-400 hidden sm:block">{stats.stateCount} states · {stats.coordCount} coordinators</span>
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <div className="h-4 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div
+                      className={`h-4 rounded-full transition-all duration-700 ${stats.coveragePct >= 70 ? 'bg-emerald-500' : stats.coveragePct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${stats.coveragePct}%`, boxShadow: stats.coveragePct >= 70 ? '0 0 8px rgba(16,185,129,0.5)' : stats.coveragePct >= 40 ? '0 0 8px rgba(245,158,11,0.5)' : '0 0 8px rgba(239,68,68,0.5)' }}
+                    />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>0%</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>50%</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>100%</span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 text-right hidden sm:block">
+                  <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{stats.stateCount} states</div>
+                  <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{stats.coordCount} coordinators</div>
+                </div>
               </div>
             </div>
 
             {/* Tabs */}
             <Tabs value={tab} onValueChange={setTab} className="flex-1 overflow-hidden flex flex-col">
-              <TabsList className="flex-shrink-0 mx-5 w-auto justify-start bg-white border border-gray-200 shadow-sm p-1 rounded-xl gap-0.5">
-                <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
+              <TabsList className="mmp-report-tabs flex-shrink-0 mx-5 w-auto justify-start bg-white border border-gray-200 shadow-sm p-1 rounded-xl gap-0.5">
+                <TabsTrigger value="overview" className="text-xs data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <BarChart3 className="h-3.5 w-3.5 mr-1.5" />By State
                 </TabsTrigger>
-                <TabsTrigger value="coordinators" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
+                <TabsTrigger value="coordinators" className="text-xs data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <Users className="h-3.5 w-3.5 mr-1.5" />Coordinators
                 </TabsTrigger>
-                <TabsTrigger value="sites" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
+                <TabsTrigger value="sites" className="text-xs data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <MapPin className="h-3.5 w-3.5 mr-1.5" />All Sites ({entries.length.toLocaleString()})
                 </TabsTrigger>
-                <TabsTrigger value="breakdown" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
+                <TabsTrigger value="breakdown" className="text-xs data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <TrendingUp className="h-3.5 w-3.5 mr-1.5" />Status Breakdown
                 </TabsTrigger>
-                <TabsTrigger value="financial" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
+                <TabsTrigger value="financial" className="text-xs data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <DollarSign className="h-3.5 w-3.5 mr-1.5" />Financial
                   {(downPayments.length + costSubmissions.length) > 0 && (
-                    <span className="ml-1.5 text-[10px] bg-teal-100 text-teal-700 data-[state=active]:bg-white/20 data-[state=active]:text-white px-1.5 py-0.5 rounded-full font-bold">
+                    <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-700 data-[state=active]:bg-white/20 data-[state=active]:text-white px-1.5 py-0.5 rounded-full font-bold">
                       {downPayments.length + costSubmissions.length}
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="activity" className="text-xs data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
+                <TabsTrigger value="activity" className="text-xs data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-500 hover:text-gray-700 rounded-lg px-3 py-1.5">
                   <History className="h-3.5 w-3.5 mr-1.5" />Activity
                   {activityLogs.length > 0 && (
                     <span className="ml-1.5 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-bold">
