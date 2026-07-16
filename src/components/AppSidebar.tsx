@@ -1372,7 +1372,7 @@
       </Sidebar>
 
       {isSidebarCollapsed && (
-        <div className="fixed left-4 top-4 z-50 hidden sm:block">
+        <div className="fixed left-4 top-4 z-50">
           <SidebarTrigger className="h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-gray-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-gray-500 dark:hover:bg-slate-800" />
         </div>
       )}
