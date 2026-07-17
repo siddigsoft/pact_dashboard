@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/user/Desktop/pact/PACT_mobile/lib -name *call* -o -name *agora*)",
+      "Bash(flutter analyze:*)",
+      "mcp__vexp__get_context_capsule",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__get_project_url",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__list_edge_functions",
+      "mcp__supabase__get_edge_function",
+      "mcp__supabase__get_logs",
+      "mcp__supabase__deploy_edge_function",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('Backup Package:', d['client'][0]['client_info']['android_client_info']['package_name']\\)\")",
+      "Bash(xargs ls)",
+      "Bash(sed 's/.*lib\\\\\\\\/lib\\\\\\\\/')",
+      "Skill(impeccable)",
+      "Bash(node *)",
+      "Bash(dart analyze *)",
+      "Read(//c/Users/user/AppData/Local/Temp/claude/F--pact-PACT-mobile/792594f4-3ccc-4963-a92b-a812c08de608/tasks/**)",
+      "Bash(jobs -l)",
+      "Bash(xargs grep -l \"supervisor.*team\\\\|team.*supervisor\")",
+      "Bash(xargs grep -l \"Operational Report\")",
+      "Bash(xargs grep -l \"Coverage Dashboard\\\\|Financial Summary\")",
+      "Bash(grep -rln \"signature\\\\|Signature\" lib/screens/cost_submission_form_screen.dart lib/screens/cost_submission_screen.dart lib/widgets/cost_submission/*.dart)",
+      "Bash(grep -rln \"budget\\\\|Budget\" lib/screens/cost_submission_form_screen.dart lib/services/operational_cost_service.dart)",
+      "Bash(xargs grep -ln \"from\\('notifications'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python3 -c \"import datetime; print\\(datetime.datetime.utcfromtimestamp\\(1782065725\\)\\)\")",
+      "Bash(git config *)",
+      "Bash(git commit -m 'Fix notifications not loading for non-worker roles on login *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(ping -n 2 github.com)",
+      "Bash(ping -n 2 8.8.8.8)",
+      "Bash(git remote *)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
+}

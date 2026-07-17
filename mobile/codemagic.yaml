@@ -1,0 +1,66 @@
+# Codemagic CI/CD for PACT Mobile → Google Play (production draft)
+# Connect this repo at: https://github.com/Vaniahchristian/cicd-pact-app
+#
+# Required Codemagic setup (Team settings → Environment variables):
+#   Group "google_play":
+#     GCLOUD_SERVICE_ACCOUNT_CREDENTIALS  — Play Console API JSON key
+#   Android code signing (UI → Code signing identities):
+#     Upload release keystore as "pact_release_keystore"
+
+workflows:
+  android-release:
+    name: Android Release → Play Store
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      android_signing:
+        - pact_release_keystore
+      groups:
+        - google_play
+      vars:
+        PACKAGE_NAME: "com.pact.workflow"
+        GOOGLE_PLAY_TRACK: production
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    scripts:
+      - name: Install dependencies
+        script: flutter pub get
+
+      - name: Run analyzer
+        script: flutter analyze lib/main.dart --no-fatal-infos
+
+      - name: Set up Android code signing
+        script: |
+          if [ -z "$CM_KEYSTORE_PATH" ]; then
+            echo "ERROR: Release keystore not found."
+            echo "Upload your keystore in Codemagic → Teams → Code signing identities as 'pact_release_keystore'."
+            exit 1
+          fi
+          cat > "$CM_BUILD_DIR/android/key.properties" <<EOF
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=$CM_KEYSTORE_PATH
+          EOF
+
+      - name: Build Android App Bundle
+        script: flutter build appbundle --release
+
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/*.apk
+      - flutter_drive.log
+
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: true

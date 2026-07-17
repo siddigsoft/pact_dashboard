@@ -1,0 +1,4 @@
+storePassword=123456789
+keyPassword=123456789
+keyAlias=upload
+storeFile=C:\\Users\\PC\\pact-upload-keystore.jks

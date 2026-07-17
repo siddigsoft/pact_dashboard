@@ -1,0 +1,4 @@
+Category,Title,Quantity,Unit Cost,Currency,Description,Justification,Vendor (Optional),Reference # (Optional),Other Category Detail (if Other)
+Training,Workshop materials for data collectors,5,2500,SDG,Purchase of notebooks, pens, and reference guides for field training workshop,Required for upcoming Q2 training session with new field staff,Al-Nour Supplies,INV-2025-001,
+Transportation,Vehicle rental for site visits,3,15000,SDG,Rental of 4x4 vehicles for remote site access during monitoring visits,Sites are inaccessible by public transport, vehicles needed for 3-day field trip,Sudan Car Rental,SCR-4521,
+Other,Office generator fuel,10,500,SDG,Diesel fuel for backup generator during power outages,Essential for maintaining operations during frequent power cuts,Local Fuel Station,FUEL-2025-045,Generator Maintenance this is the template that shouls be downloaded as an excel when someone taps download template

@@ -1,0 +1,10 @@
+{
+  "name": "pact-sim",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@supabase/realtime-js": "^1.0.7",
+    "node-fetch": "^2.6.7",
+    "ws": "^8.13.0"
+  }
+}

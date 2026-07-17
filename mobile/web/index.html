@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Pact Consultancy Mobile App">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Security headers -->
+  <meta http-equiv="Content-Security-Policy" 
+        content="default-src 'self' blob: https:; 
+           script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://download.agora.io https://www.gstatic.com; 
+           connect-src 'self' wss: https: http://localhost:* blob: https://*.supabase.co https://accounts.google.com https://*.mapbox.com https://api.mapbox.com https://*.agora.io wss://*.agora.io https://www.gstatic.com;
+           img-src 'self' data: https: http: blob: https://*.mapbox.com https://api.mapbox.com;
+           font-src 'self' data: https://www.gstatic.com https://fonts.gstatic.com;
+           frame-src 'self' https: http://localhost:* https://*.google.com https://*.supabase.co;
+           style-src 'self' 'unsafe-inline' https:;">
+  
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="pact_mobile">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+
+  <title>Pact Consultancy</title>
+  
+  <!-- Flutter Web Initialization -->
+  <script src="flutter_bootstrap.js" async type="application/javascript"></script>
+</head>
+<body>
+  <!-- Agora Web RTC -->
+  <script src="https://download.agora.io/sdk/release/iris-web-rtc_n450_w4220_0.8.6.js"></script>
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+</body>
+</html>

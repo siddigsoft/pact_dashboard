@@ -1,0 +1,391 @@
+// lib/screens/chat_screen.dart
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_colors.dart';
+import '../widgets/modern_app_header.dart';
+
+class ChatScreen extends StatefulWidget {
+  const ChatScreen({super.key});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _hasNotification = true;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.backgroundGray,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(child: _buildChatMessages()),
+            _buildInputArea(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return ModernAppHeader(
+      title: 'Chat',
+      showBackButton: true,
+      onLeadingIconPressed: () {
+        HapticFeedback.lightImpact();
+        // Navigation logic would go here
+      },
+      actions: [
+        Stack(
+          children: [
+            HeaderActionButton(
+              icon: Icons.notifications_none_rounded,
+              color: AppColors.primaryBlue,
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                setState(() {
+                  _hasNotification = false;
+                });
+              },
+            ),
+            if (_hasNotification)
+              Positioned(
+                right: 4,
+                top: 4,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: AppColors.accentRed,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+  }
+
+  Widget _buildChatMessages() {
+    return ListView(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildReceivedMessage(
+          "Hey team, just finished the site survey at 123 Main St. Everything looks good, ready for installation.",
+          "Alex",
+          "09:30 AM",
+        ),
+        _buildSentMessage(
+          "Great, Alex! Thanks for the update. I'll schedule the installation for tomorrow morning.",
+          "Ethan",
+          "09:32 AM",
+        ),
+        _buildReceivedMessage(
+          "Sounds good, Ethan. Let me know if you need anything else from my end.",
+          "Alex",
+          "09:35 AM",
+        ),
+        _buildSentMessage(
+          "Will do. Also, there's a new safety bulletin regarding ladder usage. Please review it before tomorrow's installation.",
+          "Ethan",
+          "09:38 AM",
+        ),
+        _buildReceivedMessage(
+          "Got it. Will check it out now.",
+          "Alex",
+          "09:40 AM",
+        ),
+        _buildEmergencyAlert(),
+      ],
+    );
+  }
+
+  Widget _buildReceivedMessage(String message, String sender, String time) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AppColors.backgroundGray,
+            child: Text(
+              sender[0],
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Already using Expanded which helps prevent overflow
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sender,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textLight,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      message,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        color: AppColors.textDark,
+                      ),
+                      softWrap: true,
+                      maxLines: 10,
+                    ),
+                  )
+                  .animate()
+                  .fadeIn(duration: 400.ms)
+                  .slideY(begin: 0.2, end: 0, duration: 400.ms),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSentMessage(String message, String sender, String time) {
+    return Padding(
+          padding: const EdgeInsets.only(bottom: 16.0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Message content in the middle that adapts to available space
+                  Flexible(
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 12),
+                      constraints: BoxConstraints(
+                        maxWidth:
+                            constraints.maxWidth *
+                            0.7, // Limit width to 70% of container
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            sender,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textLight,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.blueGradient,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primaryBlue.withOpacity(0.2),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              message,
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                color: Colors.white,
+                              ),
+                              softWrap: true,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines:
+                                  10, // Limit number of lines to prevent extreme overflow
+                            ),
+                            )
+                            .animate()
+                            .fadeIn(duration: 400.ms)
+                            .slideY(begin: 0.2, end: 0, duration: 400.ms),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Avatar on right side with fixed width
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primaryBlue,
+                    child: Text(
+                      sender[0],
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        )
+        .animate()
+        .fadeIn(duration: 400.ms, delay: 100.ms)
+        .slideY(begin: 0.1, end: 0, duration: 300.ms);
+  }
+
+  Widget _buildEmergencyAlert() {
+    return Container(
+          margin: const EdgeInsets.symmetric(vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.accentRed,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accentRed.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize:
+                MainAxisSize.min, // Prevent overflow by using minimum space
+            children: [
+              const Icon(
+                Icons.notifications_active,
+                color: Colors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                // Make text flexible to prevent overflow
+                child: Text(
+                  'Emergency Alert',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        )
+        .animate(onPlay: (controller) => controller.repeat(reverse: true))
+        .fadeIn(duration: 500.ms)
+        .then()
+        .shimmer(duration: 1.seconds, delay: 500.ms)
+        .then()
+        .scale(
+          begin: const Offset(0.98, 0.98),
+          end: const Offset(1.02, 1.02),
+          duration: 1.seconds,
+        );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundGray,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.borderColor, width: 1),
+              ),
+              child: TextField(
+                controller: _messageController,
+                decoration: InputDecoration(
+                  hintText: 'Type a message...',
+                  hintStyle: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: AppColors.textLight,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Material(
+            color: AppColors.primaryBlue,
+            borderRadius: BorderRadius.circular(24),
+            child: InkWell(
+              onTap: () {
+                if (_messageController.text.isNotEmpty) {
+                  HapticFeedback.mediumImpact();
+                  // Send message logic would go here
+                  _messageController.clear();
+                }
+              },
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                child: const Icon(
+                  Icons.send_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
