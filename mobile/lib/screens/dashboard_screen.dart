@@ -65,6 +65,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _overdue = 0;
   double _earnings = 0.0;
   List<SiteVisit> _dataCollectorVisits = [];
+
+  // Project Activities (loaded alongside site visits)
+  List<Map<String, dynamic>> _projectActivities = [];
   int _streak = 0;
   double _completionRateDC = 0.0;
   int? _averageVisitTime;
@@ -752,6 +755,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // Calculate streak (simplified - consecutive days with completed visits)
       _streak = _calculateStreak(allVisits);
+
+      // Load project activities assigned to this user (runs alongside site visits)
+      await _loadProjectActivities();
 
       // Load location info
       await _loadLocationInfo();
