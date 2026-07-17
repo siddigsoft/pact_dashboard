@@ -36,6 +36,9 @@ interface Policy {
   hub_id: string | null;
   created_at: string;
   updated_at: string;
+  description: string | null;
+  review_date: string | null;
+  owner: string | null;
 }
 
 interface PolicyForm {
@@ -252,9 +255,9 @@ export default function HRPolicyLibrary() {
       title: p.title, category: p.category, version: p.version,
       effective_date: p.effective_date ?? '', content_text: p.content_text ?? '',
       file_url: p.file_url ?? '', required_roles: p.required_roles ?? [],
-      description: (p as any).description ?? '',
-      review_date: (p as any).review_date ?? '',
-      owner: (p as any).owner ?? '',
+      description: p.description ?? '',
+      review_date: p.review_date ?? '',
+      owner: p.owner ?? '',
     });
     setUploadedFileName(p.file_url ? decodeURIComponent(p.file_url.split('/').pop() ?? '') : null);
     setPolicyDialog({ mode: 'edit', policy: p });
@@ -520,9 +523,18 @@ export default function HRPolicyLibrary() {
                             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${sm.color}`}><sm.icon className="h-2.5 w-2.5 mr-1 inline" />{sm.label}</Badge>
                             <span className="text-[10px] font-mono text-muted-foreground">v{policy.version}</span>
                           </div>
+                          {policy.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{policy.description}</p>
+                          )}
                           <div className="flex flex-wrap gap-4 mt-1.5 text-xs text-muted-foreground">
                             {policy.effective_date && (
                               <span>Effective: {format(parseISO(policy.effective_date), 'd MMM yyyy')}</span>
+                            )}
+                            {policy.review_date && (
+                              <span className="flex items-center gap-1"><CalendarCheck className="h-3 w-3" />Review: {format(parseISO(policy.review_date), 'd MMM yyyy')}</span>
+                            )}
+                            {policy.owner && (
+                              <span className="flex items-center gap-1"><UserCircle className="h-3 w-3" />{policy.owner}</span>
                             )}
                             {policy.required_roles?.length > 0
                               ? <span className="flex items-center gap-1"><Users className="h-3 w-3" />{policy.required_roles.join(', ')}</span>
@@ -892,16 +904,44 @@ export default function HRPolicyLibrary() {
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[50vh] pr-3">
-            {viewPolicy?.content_text ? (
-              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{viewPolicy.content_text}</div>
-            ) : viewPolicy?.file_url ? (
-              <div className="flex flex-col items-center gap-3 py-8">
-                <FileText className="h-10 w-10 text-blue-400" />
-                <Button size="sm" onClick={() => window.open(viewPolicy.file_url!, '_blank')}>Open Document</Button>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground py-6 text-center">No content.</p>
-            )}
+            <div className="space-y-4">
+              {/* Metadata strip */}
+              {(viewPolicy?.description || viewPolicy?.owner || viewPolicy?.review_date || viewPolicy?.effective_date) && (
+                <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-1.5">
+                  {viewPolicy?.description && (
+                    <p className="text-sm text-muted-foreground">{viewPolicy.description}</p>
+                  )}
+                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                    {viewPolicy?.effective_date && (
+                      <span>Effective: <strong className="text-foreground">{format(parseISO(viewPolicy.effective_date), 'd MMM yyyy')}</strong></span>
+                    )}
+                    {viewPolicy?.review_date && (
+                      <span className="flex items-center gap-1">
+                        <CalendarCheck className="h-3 w-3" />
+                        Next Review: <strong className="text-foreground">{format(parseISO(viewPolicy.review_date), 'd MMM yyyy')}</strong>
+                      </span>
+                    )}
+                    {viewPolicy?.owner && (
+                      <span className="flex items-center gap-1">
+                        <UserCircle className="h-3 w-3" />
+                        Owner: <strong className="text-foreground">{viewPolicy.owner}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Content */}
+              {viewPolicy?.content_text ? (
+                <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{viewPolicy.content_text}</div>
+              ) : viewPolicy?.file_url ? (
+                <div className="flex flex-col items-center gap-3 py-8">
+                  <FileText className="h-10 w-10 text-blue-400" />
+                  <Button size="sm" onClick={() => window.open(viewPolicy.file_url!, '_blank')}>Open Document</Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground py-6 text-center">No content.</p>
+              )}
+            </div>
           </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewPolicy(null)}>Close</Button>
