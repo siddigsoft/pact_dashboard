@@ -20,6 +20,7 @@ class _CoordinatorDashboardScreenState
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _pendingVerifications = [];
   List<Map<String, dynamic>> _recentVisits = [];
+  List<Map<String, dynamic>> _projectActivities = [];
 
   @override
   void initState() {
@@ -46,10 +47,24 @@ class _CoordinatorDashboardScreenState
             .from('mmp_site_entries')
             .select('id, verification_status')
             .eq('coordinator_id', user.id),
+        // Project activities across all projects this coordinator manages
+        _supabase
+            .from('project_activities')
+            .select('''
+              id, title, activity_type, status, end_date,
+              location_hub, location_state,
+              project:projects(id, name),
+              assignments:project_activity_assignments(id, status, user_id)
+            ''')
+            .in_('project_id', await _getCoordinatorProjectIds(user.id))
+            .not('status', 'in', '("completed","cancelled")')
+            .order('end_date', ascending: true)
+            .limit(20),
       ]);
 
       final visits = List<Map<String, dynamic>>.from(results[0]);
       final siteEntries = List<Map<String, dynamic>>.from(results[1]);
+      final rawActivities = List<Map<String, dynamic>>.from(results[2]);
 
       if (!mounted) return;
       setState(() {
@@ -64,12 +79,18 @@ class _CoordinatorDashboardScreenState
           'verified_sites': siteEntries
               .where((s) => s['verification_status'] == 'verified')
               .length,
+          'active_activities': rawActivities.length,
+          'unassigned_activities': rawActivities
+              .where((a) =>
+                  (a['assignments'] as List?)?.isEmpty ?? true)
+              .length,
         };
         _recentVisits = visits.take(5).toList();
         _pendingVerifications = siteEntries
             .where((s) => s['verification_status'] == 'pending')
             .take(10)
             .toList();
+        _projectActivities = rawActivities;
         _isLoading = false;
       });
     } catch (e) {
@@ -140,9 +161,146 @@ class _CoordinatorDashboardScreenState
                         Icons.verified,
                         Colors.teal,
                       ),
+                      _statTile(
+                        'Active Activities',
+                        '${_stats['active_activities'] ?? 0}',
+                        Icons.assignment_outlined,
+                        const Color(0xFF1D6FA4),
+                      ),
+                      _statTile(
+                        'Unassigned',
+                        '${_stats['unassigned_activities'] ?? 0}',
+                        Icons.person_add_alt_outlined,
+                        Colors.deepOrange,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 18),
+
+                  // ── Project Activities Section ─────────────
+                  if (_projectActivities.isNotEmpty) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Project Activities',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          '${_projectActivities.length} active',
+                          style: const TextStyle(
+                              color: Color(0xFF1D6FA4), fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ..._projectActivities.map((a) {
+                      final proj = a['project'] as Map<String, dynamic>?;
+                      final assignments = a['assignments'] as List? ?? [];
+                      final isUnassigned = assignments.isEmpty;
+                      final endDate = a['end_date'] as String?;
+                      final isOverdue = endDate != null &&
+                          DateTime.tryParse(endDate)
+                                  ?.isBefore(DateTime.now()) ==
+                              true;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color: isOverdue
+                                ? Colors.red.shade200
+                                : isUnassigned
+                                    ? Colors.orange.shade200
+                                    : Colors.grey.shade200,
+                          ),
+                        ),
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.assignment_outlined,
+                            color: isOverdue
+                                ? Colors.red
+                                : isUnassigned
+                                    ? Colors.orange
+                                    : const Color(0xFF1D6FA4),
+                          ),
+                          title: Text(
+                            a['title'] ?? 'Activity',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (proj != null)
+                                Text(
+                                  proj['name'] ?? '',
+                                  style: const TextStyle(
+                                      color: Color(0xFF1D6FA4),
+                                      fontSize: 12),
+                                ),
+                              Row(
+                                children: [
+                                  if (isUnassigned)
+                                    const Text('⚠ Unassigned',
+                                        style: TextStyle(
+                                            color: Colors.orange,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600))
+                                  else
+                                    Text(
+                                      '${assignments.length} assigned',
+                                      style: const TextStyle(
+                                          color: Colors.green,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  if (endDate != null) ...[
+                                    const Text(' · ',
+                                        style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 11)),
+                                    Text(
+                                      endDate,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: isOverdue
+                                              ? Colors.red
+                                              : Colors.grey),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _statusColor(a['status'])
+                                  .withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              (a['status'] ?? '')
+                                  .toString()
+                                  .replaceAll('_', ' '),
+                              style: TextStyle(
+                                color: _statusColor(a['status']),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          isThreeLine: true,
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                  ],
+
+                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -267,6 +425,26 @@ class _CoordinatorDashboardScreenState
         ),
       ),
     );
+  }
+
+  Future<List<String>> _getCoordinatorProjectIds(String userId) async {
+    try {
+      final response = await _supabase
+          .from('project_team_members')
+          .select('project_id')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .inFilter('project_role', [
+            'project_coordinator',
+            'project_fom',
+            'project_supervisor',
+          ]);
+      return List<Map<String, dynamic>>.from(response)
+          .map((r) => r['project_id'] as String)
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Color _statusColor(String? s) {
