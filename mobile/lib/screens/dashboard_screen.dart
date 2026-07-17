@@ -773,6 +773,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _loadProjectActivities() async {
+    try {
+      if (_userId == null) return;
+      final response = await Supabase.instance.client
+          .from('project_activity_assignments')
+          .select('''
+            id,
+            status,
+            started_at,
+            completed_at,
+            activity:project_activities(
+              id, title, activity_type, custom_type_label,
+              location_hub, location_state, end_date, advance_allowed,
+              project:projects(id, name)
+            )
+          ''')
+          .eq('user_id', _userId!)
+          .not('status', 'in', '("completed","withdrawn")')
+          .order('created_at', ascending: true);
+
+      final activities = <Map<String, dynamic>>[];
+      for (final row in response as List) {
+        final act = row['activity'] as Map<String, dynamic>?;
+        if (act == null) continue;
+        final proj = act['project'] as Map<String, dynamic>?;
+        activities.add({
+          'assignment_id': row['id'],
+          'activity_id': act['id'],
+          'title': act['title'] ?? 'Activity',
+          'activity_type': act['activity_type'] ?? 'field_assessment',
+          'custom_type_label': act['custom_type_label'],
+          'location': act['location_hub'] ?? act['location_state'] ?? '',
+          'end_date': act['end_date'],
+          'advance_allowed': act['advance_allowed'] ?? false,
+          'project_name': proj?['name'] ?? 'Project',
+          'status': row['started_at'] != null ? 'in_progress' : (row['status'] ?? 'assigned'),
+        });
+      }
+      if (mounted) {
+        setState(() => _projectActivities = activities);
+      }
+    } catch (e) {
+      debugPrint('Error loading project activities: $e');
+    }
+  }
+
   Future<void> _loadLocationInfo() async {
     try {
       if (_userId == null) return;
@@ -1686,7 +1732,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 14),
           ...upcoming.take(10).map((visit) => _buildVisitListItem(visit)),
         ],
-        if (overdue.isEmpty && todaysVisits.isEmpty && upcoming.isEmpty)
+        if (overdue.isEmpty && todaysVisits.isEmpty && upcoming.isEmpty &&
+            _projectActivities.isEmpty)
           Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -1699,7 +1746,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No visits assigned at the moment.',
+                    'No assignments at the moment.',
                     style: GoogleFonts.poppins(color: AppColors.textLight),
                   ),
                   const SizedBox(height: 8),
@@ -1714,6 +1761,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
+
+        // ── Project Activities section ──────────────────────
+        if (_projectActivities.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F7FF),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBFD7F5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.assignment_outlined,
+                        color: Color(0xFF1D6FA4), size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Field Activities (${_projectActivities.length})',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1D6FA4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ..._projectActivities.map(
+                  (a) => _buildProjectActivityItem(a),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1964,6 +2048,205 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectActivityItem(Map<String, dynamic> activity) {
+    final status = activity['status'] as String? ?? 'assigned';
+    final title = activity['title'] as String? ?? 'Activity';
+    final projectName = activity['project_name'] as String? ?? 'Project';
+    final location = activity['location'] as String? ?? '';
+    final endDate = activity['end_date'] as String?;
+    final advanceAllowed = activity['advance_allowed'] as bool? ?? false;
+    final assignmentId = activity['assignment_id'] as String?;
+
+    final isOverdue = endDate != null &&
+        DateTime.tryParse(endDate)?.isBefore(DateTime.now()) == true &&
+        status != 'completed';
+
+    Color statusColor;
+    if (status == 'in_progress') {
+      statusColor = Colors.blue;
+    } else if (status == 'completed') {
+      statusColor = Colors.green;
+    } else {
+      statusColor = Colors.orange;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isOverdue ? Colors.red.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isOverdue ? Colors.red.shade200 : const Color(0xFFBFD7F5),
+          width: isOverdue ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      projectName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: const Color(0xFF1D6FA4),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (location.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        location,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.textLight,
+                        ),
+                      ),
+                    ],
+                    if (endDate != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today,
+                              size: 11, color: AppColors.textLight),
+                          const SizedBox(width: 3),
+                          Text(
+                            DateFormat('MMM dd, yyyy').format(
+                                DateTime.tryParse(endDate) ?? DateTime.now()),
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: isOverdue
+                                  ? Colors.red.shade700
+                                  : AppColors.textLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      status.replaceAll('_', ' ').toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                  if (advanceAllowed) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Advance',
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          if (assignmentId != null &&
+              (status == 'assigned' || status == 'claimed')) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  try {
+                    await Supabase.instance.client
+                        .from('project_activity_assignments')
+                        .update({
+                          'status': 'in_progress',
+                          'started_at': DateTime.now().toIso8601String(),
+                        })
+                        .eq('id', assignmentId);
+                    await _loadProjectActivities();
+                  } catch (e) {
+                    debugPrint('Error starting activity: $e');
+                  }
+                },
+                icon: const Icon(Icons.play_arrow_outlined, size: 14),
+                label: Text('Start Activity',
+                    style: GoogleFonts.poppins(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  side: const BorderSide(color: Color(0xFF1D6FA4)),
+                  foregroundColor: const Color(0xFF1D6FA4),
+                ),
+              ),
+            ),
+          ] else if (assignmentId != null && status == 'in_progress') ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  try {
+                    await Supabase.instance.client
+                        .from('project_activity_assignments')
+                        .update({
+                          'status': 'completed',
+                          'completed_at': DateTime.now().toIso8601String(),
+                        })
+                        .eq('id', assignmentId);
+                    await _loadProjectActivities();
+                  } catch (e) {
+                    debugPrint('Error completing activity: $e');
+                  }
+                },
+                icon: const Icon(Icons.check_circle_outline, size: 14),
+                label: Text('Mark Complete',
+                    style: GoogleFonts.poppins(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  side: BorderSide(color: Colors.green.shade600),
+                  foregroundColor: Colors.green.shade700,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
