@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/shimmer_loading.dart';
 import '../widgets/reusable_app_bar.dart';
+import 'project_detail_screen.dart';
 
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({super.key});
@@ -321,7 +322,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               ],
                             ),
                             isThreeLine: true,
-                            onTap: () => _showProjectDetail(p),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProjectDetailScreen(project: p),
+                              ),
+                            ),
                           ),
                         );
                       },
@@ -334,45 +340,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  void _showProjectDetail(Map<String, dynamic> p) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.95,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (_, controller) => ListView(
-          controller: controller,
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              p['name'] ?? 'Project Details',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            if (p['description'] != null)
-              Text(
-                p['description'],
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            const SizedBox(height: 16),
-            _detailRow('Status', p['status'] ?? 'N/A'),
-            _detailRow('Start Date', p['start_date'] ?? 'N/A'),
-            _detailRow('End Date', p['end_date'] ?? 'N/A'),
-            _detailRow('Budget', p['budget']?.toString() ?? 'N/A'),
-            _detailRow('Manager', p['manager_name'] ?? 'N/A'),
-          ],
-        ),
-      ),
-    );
-  }
+  // Bottom sheet replaced by ProjectDetailScreen — navigation handled inline.
 
-  Widget _detailRow(String label, String value) => Padding(
+  Widget _unusedDetailRow(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 10),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,10 +351,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           width: 110,
           child: Text(
             '$label:',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.grey,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
           ),
         ),
         Expanded(

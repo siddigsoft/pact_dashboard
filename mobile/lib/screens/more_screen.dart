@@ -27,6 +27,9 @@ import 'mmp_management_screen.dart';
 import 'monitoring_plan_screen.dart';
 import 'profile_screen.dart';
 import 'projects_screen.dart';
+import 'project_activities_screen.dart';
+import 'surveys_screen.dart';
+import 'my_advances_screen.dart';
 import 'questionnaire_analytics_screen.dart';
 import 'reconciliation_dashboard_screen.dart';
 import 'reports_screen.dart';
@@ -154,6 +157,16 @@ class _MoreScreenState extends State<MoreScreen> {
           'Calendar',
           () => _navigateToScreen(const CalendarScreen()),
         ),
+      _MoreItem(
+        Icons.assignment_outlined,
+        'My Activities',
+        () => _navigateToScreen(const ProjectActivitiesScreen()),
+      ),
+      _MoreItem(
+        Icons.poll_outlined,
+        'Surveys',
+        () => _navigateToScreen(const SurveysScreen()),
+      ),
       if (_isPureSupervisor)
         _MoreItem(
           Icons.map_outlined,
@@ -245,6 +258,11 @@ class _MoreScreenState extends State<MoreScreen> {
           'Cost Submission',
           () => _navigateToScreen(CostSubmissionScreen(userRole: _role)),
         ),
+      _MoreItem(
+        Icons.payments_outlined,
+        'My Advances',
+        () => _navigateToScreen(const MyAdvancesScreen()),
+      ),
       if (_canApproveFinance) ...[
         _MoreItem(
           Icons.payment,
@@ -263,6 +281,11 @@ class _MoreScreenState extends State<MoreScreen> {
           'Signatures',
           () => _navigateToScreen(const DigitalSignaturesScreen()),
         ),
+      _MoreItem(
+        Icons.folder_special,
+        'Projects',
+        () => _navigateToScreen(const ProjectsScreen()),
+      ),
       if (_showAllForAdmin) ...[
         _MoreItem(
           Icons.receipt_long,
@@ -278,11 +301,6 @@ class _MoreScreenState extends State<MoreScreen> {
           Icons.account_balance,
           'Budget',
           () => _navigateToScreen(const BudgetScreen()),
-        ),
-        _MoreItem(
-          Icons.folder_special,
-          'Projects',
-          () => _navigateToScreen(const ProjectsScreen()),
         ),
         _MoreItem(
           Icons.document_scanner,

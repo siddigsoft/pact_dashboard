@@ -4,6 +4,8 @@ import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../widgets/shimmer_loading.dart';
 import '../widgets/reusable_app_bar.dart';
+import 'project_activity_detail_screen.dart';
+import 'project_activities_screen.dart';
 
 class CoordinatorDashboardScreen extends StatefulWidget {
   const CoordinatorDashboardScreen({super.key});
@@ -184,13 +186,23 @@ class _CoordinatorDashboardScreenState
                       children: [
                         const Text(
                           'Project Activities',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         ),
-                        Text(
-                          '${_projectActivities.length} active',
-                          style: const TextStyle(
-                              color: Color(0xFF1D6FA4), fontSize: 13),
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ProjectActivitiesScreen(),
+                            ),
+                          ),
+                          child: const Text(
+                            'See All',
+                            style: TextStyle(
+                              color: Color(0xFF1D6FA4),
+                              fontSize: 13,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -294,6 +306,15 @@ class _CoordinatorDashboardScreenState
                             ),
                           ),
                           isThreeLine: true,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProjectActivityDetailScreen(
+                                activityId: a['id'] ?? '',
+                                activityTitle: a['title'] ?? 'Activity',
+                              ),
+                            ),
+                          ).then((_) => _loadData()),
                         ),
                       );
                     }),

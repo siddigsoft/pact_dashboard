@@ -22,6 +22,8 @@ import '../theme/app_colors.dart';
 import '../utils/user_role.dart';
 import 'my_tasks_screen.dart';
 import 'calendar_screen.dart';
+import 'project_activity_detail_screen.dart';
+import 'project_activities_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -1780,12 +1782,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const Icon(Icons.assignment_outlined,
                         color: Color(0xFF1D6FA4), size: 16),
                     const SizedBox(width: 6),
-                    Text(
-                      'Field Activities (${_projectActivities.length})',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1D6FA4),
+                    Expanded(
+                      child: Text(
+                        'Field Activities (${_projectActivities.length})',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1D6FA4),
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProjectActivitiesScreen(),
+                        ),
+                      ).then((_) => _loadProjectActivities()),
+                      child: Text(
+                        'See All',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFF1D6FA4),
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
                   ],
@@ -2075,7 +2095,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       statusColor = Colors.orange;
     }
 
-    return Container(
+    final activityId = activity['activity_id'] as String?;
+    return GestureDetector(
+      onTap: activityId != null
+          ? () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProjectActivityDetailScreen(
+                    activityId: activityId,
+                    activityTitle: title,
+                  ),
+                ),
+              ).then((_) => _loadProjectActivities())
+          : null,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -2249,7 +2282,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ],
       ),
-    );
+    ),  // Container
+    );  // GestureDetector
   }
 
   Widget _buildVisitListItem(SiteVisit visit, {bool isOverdue = false}) {
