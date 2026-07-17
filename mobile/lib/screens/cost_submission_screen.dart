@@ -28,6 +28,13 @@ class _Project {
   const _Project({required this.id, required this.name});
 }
 
+class _Activity {
+  final String id;
+  final String title;
+  final String? activityType;
+  const _Activity({required this.id, required this.title, this.activityType});
+}
+
 // ─────────────────────────────────────────────────────────────
 // Line item model  (mirrors createEmptyItem() in React)
 // ─────────────────────────────────────────────────────────────
@@ -142,6 +149,31 @@ final _userProjectsProvider = FutureProvider.autoDispose<List<_Project>>((
           (p) => _Project(
             id: p['id'].toString(),
             name: p['name']?.toString() ?? '',
+          ),
+        )
+        .toList();
+  } catch (_) {
+    return [];
+  }
+});
+
+final _projectActivitiesProvider = FutureProvider.autoDispose
+    .family<List<_Activity>, String?>((ref, projectId) async {
+  if (projectId == null || projectId.isEmpty) return [];
+  try {
+    final supabase = ref.watch(supabaseClientProvider);
+    final response = await supabase
+        .from('project_activities')
+        .select('id, title, activity_type')
+        .eq('project_id', projectId)
+        .not('status', 'in', '("completed","cancelled")')
+        .order('title');
+    return (response as List)
+        .map(
+          (a) => _Activity(
+            id: a['id'].toString(),
+            title: a['title']?.toString() ?? '',
+            activityType: a['activity_type']?.toString(),
           ),
         )
         .toList();
@@ -300,6 +332,7 @@ class _CostRequestFormState extends ConsumerState<_CostRequestForm> {
 
   FundingType _requestType = FundingType.advance;
   String? _selectedProjectId;
+  String? _selectedActivityId;
   DateTime _requestDate = DateTime.now();
   final _titleCtrl = TextEditingController();
   String _currency = 'SDG';
@@ -667,6 +700,7 @@ class _CostRequestFormState extends ConsumerState<_CostRequestForm> {
           'submitted_by': userId,
           'hub_id': userHubId,
           'project_id': _selectedProjectId,
+          'activity_id': _selectedActivityId,
           'expense_category': item.category.dbValue,
           'submitter_role': submitterRole,
           'amount_cents': item.amountCents,
@@ -726,6 +760,7 @@ class _CostRequestFormState extends ConsumerState<_CostRequestForm> {
     setState(() {
       _requestType = FundingType.advance;
       _selectedProjectId = null;
+      _selectedActivityId = null;
       _requestDate = DateTime.now();
       _currency = 'SDG';
       _lineItems = [_LineItem(id: const Uuid().v4())];
@@ -920,6 +955,17 @@ class _CostRequestFormState extends ConsumerState<_CostRequestForm> {
                     },
                   ),
                   const SizedBox(height: 16),
+
+                  // ── Activity (optional, loads after project is chosen) ──
+                  if (_selectedProjectId != null) ...[
+                    _buildActivityField(
+                      ref.watch(
+                        _projectActivitiesProvider(_selectedProjectId),
+                      ),
+                      isArabic,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // ── Request Title ──
                   TextFormField(
@@ -1263,9 +1309,64 @@ class _CostRequestFormState extends ConsumerState<_CostRequestForm> {
         items: projects
             .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
             .toList(),
-        onChanged: (v) => setState(() => _selectedProjectId = v),
+        onChanged: (v) => setState(() {
+          _selectedProjectId = v;
+          _selectedActivityId = null; // reset when project changes
+        }),
         validator: (v) => v == null ? (isArabic ? 'مطلوب' : 'Required') : null,
       ),
+    );
+  }
+
+  Widget _buildActivityField(
+    AsyncValue<List<_Activity>> async,
+    bool isArabic,
+  ) {
+    return async.when(
+      loading: () => InputDecorator(
+        decoration: InputDecoration(
+          labelText: isArabic ? 'النشاط (اختياري)' : 'Activity (optional)',
+          border: const OutlineInputBorder(),
+        ),
+        child: const LinearProgressIndicator(),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (activities) {
+        if (activities.isEmpty) return const SizedBox.shrink();
+        return DropdownButtonFormField<String>(
+          value: _selectedActivityId,
+          decoration: InputDecoration(
+            labelText: isArabic ? 'النشاط (اختياري)' : 'Activity (optional)',
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.assignment_outlined),
+            helperText: isArabic
+                ? 'اربط هذا الطلب بنشاط مشروع محدد'
+                : 'Link this request to a specific project activity',
+          ),
+          hint: Text(isArabic ? 'اختر نشاطاً' : 'Select an activity'),
+          items: [
+            DropdownMenuItem<String>(
+              value: null,
+              child: Text(
+                isArabic ? '— بدون نشاط —' : '— No activity —',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+            ...activities.map(
+              (a) => DropdownMenuItem(
+                value: a.id,
+                child: Text(
+                  a.activityType != null
+                      ? '${a.title} (${a.activityType})'
+                      : a.title,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+          onChanged: (v) => setState(() => _selectedActivityId = v),
+        );
+      },
     );
   }
 
