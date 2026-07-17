@@ -99,6 +99,7 @@ interface EditSubmissionData {
   reference_number: string | null;
    hub_id: string | null;
    project_id: string | null;
+   activity_id?: string | null;
    mmp_file_id: string | null;
    supporting_documents: any;
    status: string;
@@ -110,6 +111,12 @@ interface MmpOption {
   month: string | null;
   hub: string | null;
   status: string | null;
+}
+
+interface ActivityOption {
+  id: string;
+  title: string;
+  activity_type: string | null;
 }
 
 interface UnifiedCostRequestFormProps {
@@ -198,12 +205,36 @@ export default function UnifiedCostRequestForm({
    const [mmpId, setMmpId] = useState(editData?.mmp_file_id || defaultMmpId || '');
     const [mmps, setMmps] = useState<MmpOption[]>([]);
     const [mmpsLoading, setMmpsLoading] = useState(false);
+    const [activityId, setActivityId] = useState(editData?.activity_id || '');
+    const [activities, setActivities] = useState<ActivityOption[]>([]);
+    const [activitiesLoading, setActivitiesLoading] = useState(false);
 
     useEffect(() => {
       if (!editData && defaultMmpId) {
         setMmpId(defaultMmpId);
       }
     }, [defaultMmpId, editData]);
+
+    // Load project activities when projectId changes
+    useEffect(() => {
+      if (!projectId) {
+        setActivities([]);
+        setActivityId('');
+        return;
+      }
+      setActivitiesLoading(true);
+      supabase
+        .from('project_activities')
+        .select('id, title, activity_type')
+        .eq('project_id', projectId)
+        .not('status', 'in', '("completed","cancelled")')
+        .order('title')
+        .then(({ data }) => {
+          setActivities((data as ActivityOption[]) || []);
+          setActivitiesLoading(false);
+        })
+        .catch(() => setActivitiesLoading(false));
+    }, [projectId]);
 
     // Skip first render for the project→MMP reset effect so that editData's
     // mmp_file_id isn't cleared immediately on mount.
@@ -480,6 +511,7 @@ export default function UnifiedCostRequestForm({
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
            hub_id: resolvedHubId,
            project_id: resolvedProjectId,
+           activity_id: activityId || null,
            mmp_file_id: mmpId || null,
            mmp_id: mmpId || null,
            supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
@@ -556,6 +588,7 @@ export default function UnifiedCostRequestForm({
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
            hub_id: resolvedHubId,
            project_id: resolvedProjectId,
+           activity_id: activityId || null,
            mmp_file_id: resolvedMmpId,
            mmp_id: resolvedMmpId,
            supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
@@ -917,6 +950,47 @@ export default function UnifiedCostRequestForm({
                 : "No MMP selected — this cost will be recorded as a project expense only."}
             </p>
           </div>
+
+          {/* Activity — optional; links cost to a specific project activity */}
+          {projectId && activities.length > 0 && (
+            <div className="border-l-[3px] pl-3 rounded-r-xl border-muted-foreground/30">
+              <Label className="text-sm font-semibold mb-1.5 flex items-center gap-1.5 text-foreground">
+                <ClipboardList className="h-4 w-4" />
+                Project Activity
+                <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
+              </Label>
+              <Select
+                onValueChange={(v) => setActivityId(v === '__NONE__' ? '' : v)}
+                value={activityId || '__NONE__'}
+                disabled={activitiesLoading}
+              >
+                <SelectTrigger data-testid="select-activity" className="border-input transition-colors">
+                  <SelectValue placeholder={activitiesLoading ? "Loading activities…" : "Not linked to an activity"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {activitiesLoading ? (
+                    <SelectItem value="__LOADING__" disabled>Loading…</SelectItem>
+                  ) : (
+                    <>
+                      <SelectItem value="__NONE__">
+                        <span className="text-muted-foreground italic">Not linked to an activity</span>
+                      </SelectItem>
+                      {activities.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.activity_type ? `${a.title} (${a.activity_type})` : a.title}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {activityId
+                  ? "Cost will be tracked against the selected activity."
+                  : "No activity selected — cost is recorded at project level only."}
+              </p>
+            </div>
+          )}
 
           <div>
             <Label className="text-sm font-medium mb-1.5 block">
