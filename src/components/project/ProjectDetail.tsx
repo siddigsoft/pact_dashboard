@@ -42,6 +42,7 @@ import {
   History,
   ChevronDown,
   Percent,
+  FileBarChart2,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -54,6 +55,7 @@ import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
 import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
 import { CreateProjectBudgetDialog } from '@/components/budget/CreateProjectBudgetDialog';
 import { ProjectBudgetTab } from '@/components/budget/ProjectBudgetTab';
+import { ProjectReportsTab } from '@/components/project/ProjectReportsTab';
 import { CurrencySwitcher } from '@/components/currency/CurrencySwitcher';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -1026,6 +1028,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'milestones', label: 'Milestones',                                   icon: Flag },
             { value: 'risks',      label: 'Risks',                                        icon: ShieldAlert },
             { value: 'changelog',  label: 'Change Log',                                   icon: History },
+            { value: 'reports',    label: 'Reports',                                      icon: FileBarChart2 },
           ];
           const currentTab = projectTabs.find(t => t.value === activeTab) ?? projectTabs[0];
           const CurrentIcon = currentTab.icon;
@@ -1840,6 +1843,20 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <TabsContent value="changelog" className="mt-4 space-y-4">
           <StatusHistoryPanel entityType="project" entityId={project.id} />
           <ProjectChangeLogPanel projectId={project.id} />
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-4">
+          <ProjectReportsTab
+            project={project}
+            projectBudget={projectBudget}
+            budgetSummary={budgetSummary}
+            flow={flow.activeStages.length > 0 ? {
+              activeStages: flow.activeStages,
+              currentStage: flow.currentStage ?? null,
+              currentStageIndex: flow.currentStageIndex,
+              stageHistory: flow.stageHistory,
+            } : undefined}
+          />
         </TabsContent>
       </Tabs>
 

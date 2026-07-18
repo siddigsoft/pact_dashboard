@@ -85,6 +85,15 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   const [feeCurrency, setFeeCurrency] = useState('SDG');
   const [paymentDueDate, setPaymentDueDate] = useState('');
 
+  // Edit-fee dialog state (for existing members)
+  const [editFeeOpen, setEditFeeOpen] = useState(false);
+  const [editFeeUserId, setEditFeeUserId] = useState<string | null>(null);
+  const [editFeeType, setEditFeeType] = useState<TeamFeeType | ''>('');
+  const [editRate, setEditRate] = useState('');
+  const [editHours, setEditHours] = useState('');
+  const [editCurrency, setEditCurrency] = useState('SDG');
+  const [editDueDate, setEditDueDate] = useState('');
+
   const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
   const ACTIVE_MMP_ENTRY_STATUSES = ['Pending', 'pending', 'in_progress', 'In Progress', 'dispatched', 'Dispatched', 'accepted', 'Accepted'];
 
@@ -134,10 +143,11 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
   const filteredUsers = users.filter(user => {
     const isAlreadyTeamMember = teamMembers.some(member => member.userId === user.id);
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase()));
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = !q ||
+      (user.name || '').toLowerCase().includes(q) ||
+      (user.email || '').toLowerCase().includes(q) ||
+      (user.role || '').toLowerCase().includes(q);
     return !isAlreadyTeamMember && matchesSearch;
   });
 
@@ -149,6 +159,38 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     setFeeCurrency('SDG');
     setPaymentDueDate('');
     setSelectedRole('dataCollector');
+    setSearchTerm('');
+  };
+
+  const openEditFee = (member: ProjectTeamMember) => {
+    setEditFeeUserId(member.userId);
+    setEditFeeType(member.feeType || '');
+    setEditRate(member.rate?.toString() || '');
+    setEditHours(member.plannedHours?.toString() || '');
+    setEditCurrency(member.currency || 'SDG');
+    setEditDueDate(member.paymentDueDate || '');
+    setEditFeeOpen(true);
+  };
+
+  const handleSaveEditFee = () => {
+    if (!editFeeUserId) return;
+    const updatedTeam = teamMembers.map(m => {
+      if (m.userId !== editFeeUserId) return m;
+      return {
+        ...m,
+        feeType: editFeeType || undefined,
+        rate: editFeeType && editRate ? parseFloat(editRate) : undefined,
+        plannedHours: editFeeType === 'per_hour' && editHours ? parseFloat(editHours) : undefined,
+        currency: editFeeType ? editCurrency : undefined,
+        paymentDueDate: editFeeType && editDueDate ? editDueDate : undefined,
+        paymentStatus: editFeeType ? (m.paymentStatus || 'unpaid') : undefined,
+        amountPaid: editFeeType ? (m.amountPaid || 0) : undefined,
+      };
+    });
+    setTeamMembers(updatedTeam);
+    onTeamChange(updatedTeam);
+    setEditFeeOpen(false);
+    toast({ title: 'Fee updated', description: 'Professional fee has been saved.', variant: 'success' });
   };
 
   const handleAddTeamMember = (user: User) => {
@@ -302,34 +344,46 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                         </Select>
                       </TableCell>
                       <TableCell>
-                        {member.feeType ? (
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-1 text-xs font-medium">
-                              {member.feeType === 'per_hour' && <Clock className="h-3 w-3 text-blue-500" />}
-                              {member.feeType === 'fixed_fee' && <DollarSign className="h-3 w-3 text-green-500" />}
-                              {member.feeType === 'percent_budget' && <Percent className="h-3 w-3 text-violet-500" />}
-                              <span className="font-semibold">{fmtMoney(totalCost, member.currency)}</span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">{FEE_LABELS[member.feeType]}</p>
-                            {member.feeType && (
-                              <Select
-                                value={member.paymentStatus || 'unpaid'}
-                                onValueChange={v => handlePaymentStatusChange(member.userId, v as any)}
-                              >
-                                <SelectTrigger className="h-6 text-[11px] w-[110px] px-2">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                                  <SelectItem value="partially_paid">Partial</SelectItem>
-                                  <SelectItem value="paid">Paid</SelectItem>
-                                </SelectContent>
-                              </Select>
+                        <div className="flex items-start gap-1.5 group">
+                          <div className="flex-1">
+                            {member.feeType ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1 text-xs font-medium">
+                                  {member.feeType === 'per_hour' && <Clock className="h-3 w-3 text-blue-500" />}
+                                  {member.feeType === 'fixed_fee' && <DollarSign className="h-3 w-3 text-green-500" />}
+                                  {member.feeType === 'percent_budget' && <Percent className="h-3 w-3 text-violet-500" />}
+                                  <span className="font-semibold">{fmtMoney(totalCost, member.currency)}</span>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">{FEE_LABELS[member.feeType]}</p>
+                                <Select
+                                  value={member.paymentStatus || 'unpaid'}
+                                  onValueChange={v => handlePaymentStatusChange(member.userId, v as any)}
+                                >
+                                  <SelectTrigger className="h-6 text-[11px] w-[110px] px-2">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                                    <SelectItem value="partially_paid">Partial</SelectItem>
+                                    <SelectItem value="paid">Paid</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">No fee</span>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No fee</span>
-                        )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
+                            onClick={() => openEditFee(member)}
+                            title="Edit fee"
+                            data-testid={`button-edit-fee-${member.userId}`}
+                          >
+                            <Plus className="h-3 w-3 text-muted-foreground" />
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end">
@@ -359,6 +413,86 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
             </Button>
           </div>
         )}
+
+        {/* ── Edit Fee Dialog ─────────────────────────────────────── */}
+        <Dialog open={editFeeOpen} onOpenChange={v => { setEditFeeOpen(v); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {editFeeType ? 'Edit' : 'Set'} Professional Fee — {teamMembers.find(m => m.userId === editFeeUserId)?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Fee Type</Label>
+                  <Select value={editFeeType} onValueChange={v => setEditFeeType(v as TeamFeeType | '')}>
+                    <SelectTrigger><SelectValue placeholder="None (no fee)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="per_hour">Per Hour</SelectItem>
+                      <SelectItem value="fixed_fee">Fixed Fee (lump sum)</SelectItem>
+                      <SelectItem value="percent_budget">% of Project Budget</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {editFeeType !== 'percent_budget' && editFeeType && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Currency</Label>
+                    <Select value={editCurrency} onValueChange={setEditCurrency}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SDG">SDG</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="GBP">GBP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              {editFeeType && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      {editFeeType === 'per_hour' ? 'Hourly Rate' : editFeeType === 'percent_budget' ? '% of Budget' : 'Fixed Amount'}
+                    </Label>
+                    <Input type="number" min="0" step="0.01" value={editRate} onChange={e => setEditRate(e.target.value)}
+                      placeholder={editFeeType === 'percent_budget' ? 'e.g. 5' : '0.00'} />
+                  </div>
+                  {editFeeType === 'per_hour' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Planned Hours</Label>
+                      <Input type="number" min="0" value={editHours} onChange={e => setEditHours(e.target.value)} placeholder="e.g. 40" />
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Payment Due Date</Label>
+                    <Input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} />
+                  </div>
+                </div>
+              )}
+              {editFeeType && editRate && (
+                <div className="flex items-center gap-2 p-2.5 rounded-md bg-muted text-sm">
+                  <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <span className="text-muted-foreground">Estimated total:</span>
+                  <span className="font-bold text-emerald-600">
+                    {fmtMoney(
+                      editFeeType === 'per_hour' ? parseFloat(editRate || '0') * parseFloat(editHours || '0')
+                        : editFeeType === 'fixed_fee' ? parseFloat(editRate || '0')
+                        : (project.budget?.total || 0) * (parseFloat(editRate || '0') / 100),
+                      editFeeType === 'percent_budget' ? (project.budget?.currency || 'SDG') : editCurrency,
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditFeeOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveEditFee}>Save Fee</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Add Member Dialog */}
         <Dialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) resetFeeFields(); }}>
