@@ -79,9 +79,77 @@ await supabase.from('notifications')
 This acts as a belt-and-suspenders guard even on databases where the migration
 has not yet been applied.
 
+## Standing Developer Policy — Prevent Regression
+
+Every time a new table (or new column) is added that references `profiles(id)`,
+the migration **must** specify `ON DELETE SET NULL` or `ON DELETE CASCADE`.
+Omitting it silently re-introduces the user-delete bug.
+
+### Rule
+
+| Column type | Required rule | Why |
+|---|---|---|
+| Authorship / audit (`created_by`, `uploaded_by`, `assigned_by`, `triggered_by`, `approved_by`, …) | `ON DELETE SET NULL` | Preserve the record; null the author |
+| Ownership / subject (`profile_id`, `user_id` as PK-side) | `ON DELETE CASCADE` | Row is meaningless without the profile |
+
+### Migration Template
+
+Copy the appropriate pattern into every new migration that adds a profile FK:
+
+```sql
+-- ✅ Authorship column — preserve the row, null the author
+created_by   uuid REFERENCES profiles(id) ON DELETE SET NULL,
+uploaded_by  uuid REFERENCES profiles(id) ON DELETE SET NULL,
+
+-- ✅ Ownership column — delete the child row with the profile
+profile_id   uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+user_id      uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+
+-- ❌ NEVER write this — missing ON DELETE blocks user deletion
+created_by   uuid REFERENCES profiles(id),
+```
+
+### Pre-Release Health Check
+
+Before every major release (or after any migration that touches FK columns),
+run the discovery query in `supabase/CHECK_profile_fk_health.sql`:
+
+1. Open **Supabase Dashboard → SQL Editor → New query**.
+2. Paste the contents of `supabase/CHECK_profile_fk_health.sql`.
+3. Click **Run**.
+4. **Expected result: zero rows.**  Any row returned is a bare FK that will
+   block user deletes. Fix it using the ALTER TABLE patterns at the bottom of
+   that file (or in the "How to fix" section below).
+
+The file also contains fix templates so the repair is a copy-paste, not a
+from-scratch exercise.
+
+### How to Fix a Bare FK Discovered by the Check
+
+```sql
+-- Pattern A: authorship / audit column
+ALTER TABLE <table_name>
+  DROP CONSTRAINT IF EXISTS <constraint_name>;
+ALTER TABLE <table_name>
+  ADD CONSTRAINT <constraint_name>
+  FOREIGN KEY (<column_name>) REFERENCES profiles(id) ON DELETE SET NULL;
+
+-- Pattern B: ownership column
+ALTER TABLE <table_name>
+  DROP CONSTRAINT IF EXISTS <constraint_name>;
+ALTER TABLE <table_name>
+  ADD CONSTRAINT <constraint_name>
+  FOREIGN KEY (<column_name>) REFERENCES profiles(id) ON DELETE CASCADE;
+```
+
+Both patterns are idempotent (`DROP CONSTRAINT IF EXISTS` guards the drop).
+
+---
+
 ## Related Files
 
 - `supabase/migrations/20260718_fix_profile_fk_on_delete.sql` — the migration
+- `supabase/CHECK_profile_fk_health.sql` — standalone pre-release discovery query
 - `src/pages/Users.tsx` — app-level pre-cleanup fix
 - `supabase/migrations/20250715_hr_policies.sql` — original `hr_policies` table
 - `supabase/migrations/20250715_hr_assets.sql` — original `hr_assets` table
