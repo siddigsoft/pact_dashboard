@@ -644,11 +644,43 @@ const Users = () => {
         // Notifications where user is the recipient can be deleted (they are
         // the subject of those rows and have no value after account removal).
         await supabase.from('notifications').delete().eq('recipient_id', confirmDialog.userId);
-        
-        // Now delete the profile
-        const { error } = await supabase.from('profiles').delete().eq('id', confirmDialog.userId);
-        if (error) throw error;
-        toast({ title: "User deleted", description: "User has been permanently deleted" });
+
+        // Delete the profile row first so FK constraints are satisfied before
+        // the auth identity is removed.
+        const { error: profileDeleteError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', confirmDialog.userId);
+        if (profileDeleteError) throw profileDeleteError;
+
+        // Now delete the Supabase Auth record so the user can no longer log in
+        // or reset their password. This requires the service-role key which is
+        // only available server-side, so we call a dedicated Edge Function.
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const accessToken = currentSession?.access_token;
+        if (!accessToken) throw new Error('Session expired. Please refresh and try again.');
+
+        const { data: authDeleteResult, error: fnError } = await supabase.functions.invoke(
+          'admin-delete-user',
+          {
+            body: { userId: confirmDialog.userId },
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+
+        if (fnError) throw new Error(fnError.message);
+        if (authDeleteResult && !authDeleteResult.success) {
+          // Auth deletion failed — surface the error clearly but profile is
+          // already gone, so treat as a partial-success warning rather than
+          // a hard failure.
+          toast({
+            title: "Profile deleted — auth account not removed",
+            description: authDeleteResult.error ?? "Auth record could not be deleted. The user profile has been removed but they may still be able to log in.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "User deleted", description: "User account has been permanently deleted" });
+        }
       } else {
         const { error } = await supabase.from('profiles').update({ is_active: false }).eq('id', confirmDialog.userId);
         if (error) throw error;
