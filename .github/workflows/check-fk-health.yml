@@ -1,0 +1,103 @@
+name: FK Health — profiles ON DELETE check
+
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/CHECK_profile_fk_health.sql'
+      - '.github/workflows/check-fk-health.yml'
+  push:
+    branches: [master, main]
+    paths:
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+
+jobs:
+  fk-health:
+    name: Check profiles(id) FK ON DELETE rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Start the full local Supabase stack (Postgres + Auth + Storage).
+      # This gives us the complete schema environment — including auth.users,
+      # storage, and all Supabase extensions — that the migrations depend on.
+      - name: Start local Supabase stack
+        run: supabase start --ignore-health-check
+
+      # Apply every file in supabase/migrations/ in timestamp order,
+      # including any new migration added in this PR.
+      # supabase db reset drops the local DB and re-runs all migrations cleanly.
+      - name: Apply all migrations
+        run: supabase db reset --local
+
+      # Run the canonical discovery file directly — no SQL duplication.
+      # The local Supabase Postgres listens on port 54322 with the default creds.
+      # We wrap the file output in a row-count check so CI gets a clear pass/fail.
+      - name: Run FK health check (supabase/CHECK_profile_fk_health.sql)
+        run: |
+          LOCAL_DB_URL="postgresql://postgres:postgres@localhost:54322/postgres"
+
+          # Execute the canonical file and capture any rows it returns.
+          # --tuples-only suppresses the column headers and row-count footer
+          # so we can test for an empty result cleanly.
+          RESULT=$(psql "$LOCAL_DB_URL" \
+            --tuples-only \
+            --no-align \
+            --field-separator='|' \
+            --file=supabase/CHECK_profile_fk_health.sql 2>&1)
+
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::psql failed to run CHECK_profile_fk_health.sql against the local DB."
+            echo "$RESULT"
+            exit 1
+          fi
+
+          # Strip blank lines produced by comment blocks in the SQL file.
+          TRIMMED=$(echo "$RESULT" | sed '/^\s*$/d')
+
+          if [ -z "$TRIMMED" ]; then
+            echo "✅  FK health check passed — all profiles(id) foreign keys have an explicit ON DELETE rule."
+            exit 0
+          fi
+
+          # ── Failures found — print a clear, actionable error ──────────────
+          echo "::error::FK health check FAILED — bare profiles(id) foreign key(s) detected."
+          echo ""
+          echo "The following foreign key constraints reference profiles(id) with NO"
+          echo "ON DELETE rule.  This will block user deletion with a constraint error."
+          echo ""
+          echo "Offending constraints:"
+          echo "──────────────────────────────────────────────────────────────────────────────────────"
+          printf "%-35s %-25s %-52s\n" "TABLE" "COLUMN" "SUGGESTED FIX"
+          echo "──────────────────────────────────────────────────────────────────────────────────────"
+          while IFS='|' read -r table column constraint rule fix; do
+            [ -z "$table" ] && continue
+            printf "%-35s %-25s %-52s\n" "$table" "$column" "$fix"
+            echo "   Constraint: $constraint   Current rule: $rule"
+          done <<< "$TRIMMED"
+          echo ""
+          echo "HOW TO FIX (copy-paste into a new migration):"
+          echo ""
+          echo "  -- Audit/authorship columns (created_by, uploaded_by, triggered_by, …):"
+          echo "  ALTER TABLE <table> DROP CONSTRAINT IF EXISTS <constraint>;"
+          echo "  ALTER TABLE <table> ADD CONSTRAINT <constraint>"
+          echo "    FOREIGN KEY (<column>) REFERENCES profiles(id) ON DELETE SET NULL;"
+          echo ""
+          echo "  -- Ownership columns (profile_id, user_id as primary subject):"
+          echo "  ALTER TABLE <table> DROP CONSTRAINT IF EXISTS <constraint>;"
+          echo "  ALTER TABLE <table> ADD CONSTRAINT <constraint>"
+          echo "    FOREIGN KEY (<column>) REFERENCES profiles(id) ON DELETE CASCADE;"
+          echo ""
+          echo "Full guidance: supabase/CHECK_profile_fk_health.sql"
+          echo "              supabase/RUNBOOK_fix_profile_fk_on_delete.md"
+          exit 1
