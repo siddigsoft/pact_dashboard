@@ -451,14 +451,13 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded }: {
+function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialFiles }: {
   folderId: string | null; folderName: string; open: boolean; onClose: () => void;
-  currentUserId: string; onUploaded: () => void;
+  currentUserId: string; onUploaded: () => void; initialFiles?: File[];
 }) {
   const { toast } = useToast();
   const fileRef   = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
-  // Each entry tracks the File plus its relative path (populated for folder uploads)
   const [files, setFiles] = useState<Array<{ file: File; relativePath: string }>>([]);
   const [secLevel, setSecLevel] = useState<SecurityLevel>('internal');
   const [description, setDescription] = useState('');
@@ -466,6 +465,14 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentUploadingName, setCurrentUploadingName] = useState('');
+
+  // Pre-populate with files dropped onto the main area
+  useEffect(() => {
+    if (open && initialFiles && initialFiles.length > 0) {
+      setFiles(initialFiles.map(f => ({ file: f, relativePath: f.name })));
+    }
+    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); }
+  }, [open, initialFiles]);
 
   const addFiles = (raw: FileList | File[]) => {
     const entries = Array.from(raw).map(f => ({
@@ -1166,6 +1173,9 @@ export default function WorkspaceHub() {
   // ── Drag-and-drop state ───────────────────────────────────────────────────
   const [dragFileId, setDragFileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [isExternalDragOver, setIsExternalDragOver] = useState(false);
+  const [pendingDropFiles, setPendingDropFiles] = useState<File[]>([]);
+  const externalDragCounter = useRef(0);
 
   // ── Folder customization state ────────────────────────────────────────────
   const [folderCustomizeTarget, setFolderCustomizeTarget] = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
@@ -2101,16 +2111,16 @@ export default function WorkspaceHub() {
           </div>
 
           {/* Quick access */}
-          <div className="p-2">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 mb-1">Quick Access</p>
+          <div className="px-3 py-2">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 mb-1.5">Quick Access</p>
             {[
-              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false, color: '' },
-              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false, color: '' },
-              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false, color: '' },
-              { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false, color: '' },
-              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false, color: '' },
-              { id: null, label: 'Root (no folder)', icon: Folder, count: stats.root, droppable: true, color: '' },
-              { id: '__trash__', label: 'Recycle Bin', icon: Trash2, count: 0, droppable: false, color: 'text-red-500' },
+              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
+              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
+              { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false, iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
+              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false, iconBg: 'bg-sky-100', iconColor: 'text-sky-600' },
+              { id: null, label: 'Root (no folder)', icon: Folder, count: stats.root, droppable: true, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
+              { id: '__trash__', label: 'Recycle Bin', icon: Trash2, count: 0, droppable: false, iconBg: 'bg-red-100', iconColor: 'text-red-500' },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
               const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
@@ -2119,13 +2129,17 @@ export default function WorkspaceHub() {
                   onDragOver={item.droppable ? e => { e.preventDefault(); setDragOverFolderId('__root__'); } : undefined}
                   onDragLeave={item.droppable ? () => setDragOverFolderId(null) : undefined}
                   onDrop={item.droppable ? e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, null); } : undefined}
-                  className={cn('w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs font-medium transition-all',
-                    isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60',
+                  className={cn('w-full flex items-center gap-2.5 py-1.5 px-2 rounded-xl text-xs font-medium transition-all',
+                    isSelected ? 'bg-[#1D3461] text-white shadow-sm' : 'hover:bg-muted/70 text-foreground',
                     isRootDragOver && 'ring-2 ring-blue-400 bg-blue-50')}>
-                  <item.icon className={cn('h-3.5 w-3.5 flex-shrink-0', !isSelected && item.color)} />
+                  <div className={cn('h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
+                    isSelected ? 'bg-white/20' : item.iconBg)}>
+                    <item.icon className={cn('h-3.5 w-3.5', isSelected ? 'text-white' : item.iconColor)} />
+                  </div>
                   <span className="flex-1 text-left">{item.label}</span>
                   {isRootDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold">Drop here</span>}
-                  <span className={cn('text-[10px] px-1.5 rounded-full', isSelected ? 'bg-white/20' : 'bg-muted')}>{item.count}</span>
+                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium min-w-[20px] text-center',
+                    isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{item.count}</span>
                 </button>
               );
             })}
@@ -2184,7 +2198,42 @@ export default function WorkspaceHub() {
         </div>
 
         {/* ══ Main Content ════════════════════════════════════════════════ */}
-        <div className={cn('flex-1 flex flex-col min-w-0 overflow-hidden', selectedFile ? 'mr-[380px]' : '')}>
+        <div
+          className={cn('flex-1 flex flex-col min-w-0 overflow-hidden relative', selectedFile ? 'mr-[380px]' : '')}
+          onDragEnter={e => {
+            if (e.dataTransfer.types.includes('Files')) {
+              externalDragCounter.current++;
+              setIsExternalDragOver(true);
+            }
+          }}
+          onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+          onDragLeave={e => {
+            if (e.dataTransfer.types.includes('Files')) {
+              externalDragCounter.current--;
+              if (externalDragCounter.current <= 0) { externalDragCounter.current = 0; setIsExternalDragOver(false); }
+            }
+          }}
+          onDrop={e => {
+            if (!e.dataTransfer.types.includes('Files')) return;
+            e.preventDefault();
+            externalDragCounter.current = 0;
+            setIsExternalDragOver(false);
+            const dropped = Array.from(e.dataTransfer.files);
+            if (dropped.length > 0) { setPendingDropFiles(dropped); setUploadOpen(true); }
+          }}
+        >
+          {/* Full-area drop overlay */}
+          {isExternalDragOver && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#1D3461]/10 backdrop-blur-[2px] border-4 border-dashed border-[#1D3461]/50 rounded-none pointer-events-none">
+              <div className="bg-white rounded-3xl shadow-2xl px-10 py-8 flex flex-col items-center gap-3 border border-[#1D3461]/20">
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#1D3461] to-[#0F2041] flex items-center justify-center">
+                  <Upload className="h-8 w-8 text-white" />
+                </div>
+                <p className="text-lg font-bold text-[#0F2041]">Drop to upload</p>
+                <p className="text-sm text-muted-foreground">Release to add files to <span className="font-semibold text-[#1D3461]">{currentFolderName}</span></p>
+              </div>
+            </div>
+          )}
           {/* Breadcrumb bar */}
           {breadcrumbs.length > 0 && (
             <div className="flex items-center gap-1 px-5 py-2 border-b bg-muted/20 text-xs flex-shrink-0 flex-wrap">
@@ -2250,12 +2299,39 @@ export default function WorkspaceHub() {
             </div>
           )}
 
-          {/* Top bar */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b bg-card flex-shrink-0">
-            <div>
-              <h3 className="text-sm font-bold">{currentFolderName}</h3>
-              <p className="text-[11px] text-muted-foreground">{displayedFiles.length} file{displayedFiles.length !== 1 ? 's' : ''}</p>
+          {/* Folder hero header */}
+          <div className="px-5 py-3 border-b bg-gradient-to-r from-[#0F2041]/5 to-transparent flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#1D3461] to-[#0F2041] flex items-center justify-center shadow-sm flex-shrink-0">
+                {selectedFolderId === '__recent__' ? <Clock className="h-4.5 w-4.5 text-white" /> :
+                 selectedFolderId === '__pinned__' ? <Star className="h-4.5 w-4.5 text-white" /> :
+                 selectedFolderId === '__trash__' ? <Trash2 className="h-4.5 w-4.5 text-white" /> :
+                 selectedFolderId === '__all__' ? <FolderOpen className="h-4.5 w-4.5 text-white" /> :
+                 selectedFolderId === '__mine__' ? <User className="h-4.5 w-4.5 text-white" /> :
+                 <Folder className="h-4.5 w-4.5 text-white" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-bold text-[#0F2041] truncate">{currentFolderName}</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {displayedFiles.length} file{displayedFiles.length !== 1 ? 's' : ''}
+                  {displayedFiles.length > 0 && ` · ${fmtSize(displayedFiles.reduce((s, f) => s + f.file_size, 0))}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-[#1D3461]/30 text-[#1D3461] hover:bg-[#1D3461]/10 font-medium" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
+                    <Share2 className="h-3.5 w-3.5" />Share
+                  </Button>
+                )}
+                <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5 font-medium shadow-sm" onClick={() => setUploadOpen(true)}>
+                  <Upload className="h-3.5 w-3.5" />Upload
+                </Button>
+              </div>
             </div>
+          </div>
+
+          {/* Top bar — search + filters */}
+          <div className="flex items-center gap-2 px-5 py-2 border-b bg-card flex-shrink-0 flex-wrap">
             <div className="flex-1" />
 
             <div className="relative w-48">
@@ -2304,15 +2380,6 @@ export default function WorkspaceHub() {
               </button>
             </div>
 
-            {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__'].includes(selectedFolderId ?? '') && (
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-[#1D3461] text-[#1D3461] hover:bg-[#1D3461]/10 font-medium" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
-                <Share2 className="h-3.5 w-3.5" />Share Folder
-              </Button>
-            )}
-
-            <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1 font-medium" onClick={() => setUploadOpen(true)}>
-              <Upload className="h-3.5 w-3.5" />Upload
-            </Button>
           </div>
 
           {/* File area */}
@@ -2496,30 +2563,39 @@ export default function WorkspaceHub() {
                 </Button>
               </div>
             ) : displayedFiles.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
-                <div className="h-20 w-20 rounded-3xl bg-muted/30 flex items-center justify-center">
-                  {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? (
-                    <Filter className="h-10 w-10 opacity-30" />
-                  ) : (
-                    <Folder className="h-10 w-10 opacity-30" />
-                  )}
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium">
-                    {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? 'No files match your filters' : 'No files here yet'}
-                  </p>
-                  <p className="text-xs mt-1">
-                    {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? 'Try adjusting or clearing your filters' : 'Upload your first file to get started'}
-                  </p>
-                </div>
+              <div className="flex flex-col items-center justify-center h-full gap-5 text-muted-foreground px-8">
                 {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? (
-                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setSearchQuery(''); setTypeFilter('all'); setSecFilter('all'); }}>
-                    <X className="h-3.5 w-3.5" />Clear all filters
-                  </Button>
+                  <>
+                    <div className="h-20 w-20 rounded-3xl bg-muted/30 flex items-center justify-center">
+                      <Filter className="h-10 w-10 opacity-30" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-foreground">No files match your filters</p>
+                      <p className="text-xs mt-1 text-muted-foreground">Try adjusting or clearing your filters</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setSearchQuery(''); setTypeFilter('all'); setSecFilter('all'); }}>
+                      <X className="h-3.5 w-3.5" />Clear all filters
+                    </Button>
+                  </>
                 ) : (
-                  <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] gap-1.5" onClick={() => setUploadOpen(true)}>
-                    <Upload className="h-3.5 w-3.5" />Upload Files
-                  </Button>
+                  <>
+                    <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-[#1D3461]/10 to-[#0F2041]/5 flex items-center justify-center border-2 border-dashed border-[#1D3461]/20">
+                      <Folder className="h-12 w-12 text-[#1D3461]/30" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-foreground">No files here yet</p>
+                      <p className="text-xs mt-1 text-muted-foreground">Upload your first file to get started</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] gap-1.5 shadow-sm" onClick={() => setUploadOpen(true)}>
+                        <Upload className="h-3.5 w-3.5" />Upload Files
+                      </Button>
+                      <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
+                        <span>or drag &amp; drop files anywhere in this area</span>
+                      </p>
+                    </div>
+                  </>
+                
                 )}
               </div>
             ) : viewMode === 'list' ? (
@@ -2557,8 +2633,9 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
-          open={uploadOpen} onClose={() => setUploadOpen(false)}
+          open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropFiles([]); }}
           currentUserId={userId} onUploaded={refetch}
+          initialFiles={pendingDropFiles.length > 0 ? pendingDropFiles : undefined}
         />
 
         {/* New folder dialog */}
