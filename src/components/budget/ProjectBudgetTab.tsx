@@ -17,7 +17,7 @@ import {
   FileDown, Send, ThumbsUp, Loader2, RefreshCw, Zap,
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
-import { exportToExcel } from '@/utils/report-export';
+import { exportFormattedExcel } from '@/utils/formattedExcelExport';
 import { dispatchNotification } from '@/lib/notify';
 import type { ProjectBudget } from '@/types/budget';
 import type { Project } from '@/types/project';
@@ -284,36 +284,60 @@ export function ProjectBudgetTab({
 
   /* ── Excel export ── */
   const handleExport = () => {
-    const rows = [
-      ['Project', project.name],
-      ['Budget Status', projectBudget.status],
-      ['Budget Period', projectBudget.budgetPeriod],
-      ['Currency', currency],
-      ['Total Budget', totalBudgetCents / 100],
-      ['Total Spent', totalSpentCents / 100],
-      ['Remaining', remainingCents / 100],
-      ['Utilization %', utilizationPct.toFixed(1) + '%'],
-      [],
-      ['SPENDING BREAKDOWN'],
-      ['Operational Costs', opsCents / 100],
-      ['Advances / Down-payments', advCents / 100],
-      ['Pre-fund Disbursements', pfCents / 100],
-      [],
-      ['CATEGORY BREAKDOWN'],
-      ['Category', 'Budgeted', 'Spent', 'Remaining', '% Used'],
-      ...categoryBreakdown.map(r => [
-        r.label,
-        r.budgeted / 100,
-        r.spent / 100,
-        (r.budgeted - r.spent) / 100,
-        r.pct.toFixed(1) + '%',
-      ]),
-      [],
-      ['PRE-FUND REQUESTS'],
-      ['Name', 'Amount', 'Paid', 'Committed', 'Available Balance', 'Status'],
-      ...preFunds.map(p => [p.name, p.amount, p.paid_amount, p.committed_amount, p.available_balance, p.status]),
-    ];
-    exportToExcel(rows, 'Project Budget', `${project.name}_Budget_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    exportFormattedExcel({
+      reportTitle:   `PACT Command Center — ${project.name} Project Budget`,
+      subtitleLine:  `Status: ${projectBudget.status?.toUpperCase()} | Period: ${projectBudget.budgetPeriod?.replace('_', ' ')} | Currency: ${currency} | Generated: ${format(new Date(), 'MMMM d, yyyy')}`,
+      metaLine:      `Total Budget: ${currency} ${(totalBudgetCents / 100).toLocaleString()} | Spent: ${currency} ${(totalSpentCents / 100).toLocaleString()} | Remaining: ${currency} ${(remainingCents / 100).toLocaleString()} | Utilization: ${utilizationPct.toFixed(1)}%`,
+      filenamePrefix: `${project.name.replace(/\s+/g, '_')}_Budget`,
+      mainSheet: {
+        sheetName: 'Category Breakdown',
+        headers:   ['Category', `Budgeted (${currency})`, `Spent (${currency})`, `Remaining (${currency})`, 'Utilization %'],
+        rows: categoryBreakdown.map(r => [
+          r.label,
+          r.budgeted / 100,
+          r.spent / 100,
+          (r.budgeted - r.spent) / 100,
+          r.pct.toFixed(1) + '%',
+        ]),
+        totalsRow: [
+          'TOTAL',
+          totalBudgetCents / 100,
+          totalSpentCents / 100,
+          remainingCents / 100,
+          utilizationPct.toFixed(1) + '%',
+        ],
+        colWidths: [28, 20, 20, 20, 16],
+      },
+      summarySheet: {
+        title: `${project.name} — Budget Summary`,
+        rows: [
+          ['Metric', 'Value'],
+          ['Project', project.name],
+          ['Budget Status', projectBudget.status],
+          ['Budget Period', projectBudget.budgetPeriod?.replace('_', ' ')],
+          ['Fiscal Year', projectBudget.fiscalYear ? `FY ${projectBudget.fiscalYear}` : '—'],
+          ['Currency', currency],
+          ['', ''],
+          ['Total Budget', `${currency} ${(totalBudgetCents / 100).toLocaleString()}`],
+          ['Total Spent', `${currency} ${(totalSpentCents / 100).toLocaleString()}`],
+          ['Remaining', `${currency} ${(remainingCents / 100).toLocaleString()}`],
+          ['Utilization', `${utilizationPct.toFixed(1)}%`],
+          ['', ''],
+          ['Spending Source', `${currency} Amount`],
+          ['Operational Costs', `${currency} ${(opsCents / 100).toLocaleString()}`],
+          ['Advances / Down-payments', `${currency} ${(advCents / 100).toLocaleString()}`],
+          ['Pre-fund Disbursements', `${currency} ${(pfCents / 100).toLocaleString()}`],
+        ],
+        colWidths: [30, 24],
+      },
+      breakdownSheets: preFunds.length > 0 ? [{
+        title:     `${project.name} — Pre-Fund Requests`,
+        sheetName: 'Pre-Fund Requests',
+        headers:   ['Name', `Amount (${currency})`, `Paid (${currency})`, `Committed (${currency})`, `Available (${currency})`, 'Status'],
+        rows: preFunds.map(p => [p.name, p.amount, p.paid_amount, p.committed_amount, p.available_balance, p.status]),
+        colWidths: [32, 18, 18, 18, 18, 16],
+      }] : [],
+    });
   };
 
   /* ── Status badge ── */
