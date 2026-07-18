@@ -465,6 +465,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const [tags, setTags] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [currentUploadingName, setCurrentUploadingName] = useState('');
 
   const addFiles = (raw: FileList | File[]) => {
     const entries = Array.from(raw).map(f => ({
@@ -513,6 +514,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
       async function uploadOne(item: { file: File; relativePath: string }) {
         const { file: f, relativePath } = item;
+        setCurrentUploadingName(f.name);
         let targetFolderId: string | null = folderId;
         if (isFolderUpload) {
           const parts = relativePath.split('/');
@@ -677,8 +679,12 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
           {uploading && (
             <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[11px] text-muted-foreground truncate max-w-[260px]">{currentUploadingName || 'Preparing…'}</p>
+                <p className="text-[11px] font-semibold text-[#1D3461] flex-shrink-0">{progress}%</p>
+              </div>
               <Progress value={progress} className="h-2" />
-              <p className="text-[11px] text-muted-foreground mt-1 text-center">Uploading… {progress}%</p>
+              <p className="text-[11px] text-muted-foreground mt-1 text-center">{Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded</p>
             </div>
           )}
         </div>
@@ -1187,7 +1193,7 @@ export default function WorkspaceHub() {
       const { data } = await supabase.from('workspace_folders').select('*').eq('archived', false).order('name');
       return (data ?? []) as WFolder[];
     },
-    staleTime: 60_000,
+    staleTime: 300_000,
   });
 
   const { data: allFiles = [], refetch: refetchFiles } = useQuery<WFile[]>({
@@ -1203,7 +1209,7 @@ export default function WorkspaceHub() {
       }
       return files.map(f => ({ ...f, _uploaderName: f.created_by ? (nameMap[f.created_by] ?? 'Unknown') : 'Unknown' })) as WFile[];
     },
-    staleTime: 60_000,
+    staleTime: 300_000,
   });
 
   const { data: archivedFiles = [], refetch: refetchArchived } = useQuery<WFile[]>({
@@ -1220,7 +1226,7 @@ export default function WorkspaceHub() {
       return data.map(f => ({ ...f, _uploaderName: f.created_by ? (nameMap[f.created_by] ?? 'Unknown') : 'Unknown' })) as WFile[];
     },
     enabled: selectedFolderId === '__trash__',
-    staleTime: 30_000,
+    staleTime: 120_000,
   });
 
   const { data: archivedFolders = [], refetch: refetchArchivedFolders } = useQuery<WFolder[]>({
@@ -1230,7 +1236,7 @@ export default function WorkspaceHub() {
       return (data ?? []) as WFolder[];
     },
     enabled: selectedFolderId === '__trash__',
-    staleTime: 30_000,
+    staleTime: 120_000,
   });
 
   const refetch = useCallback(() => { refetchFolders(); refetchFiles(); if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); } }, [refetchFolders, refetchFiles, refetchArchived, refetchArchivedFolders, selectedFolderId]);
@@ -1384,13 +1390,30 @@ export default function WorkspaceHub() {
     toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved` });
   }
 
+  const lastSelectedIdxRef = useRef<number>(-1);
   function toggleFileSelection(fileId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    setSelectedFileIds(prev => {
-      const next = new Set(prev);
-      next.has(fileId) ? next.delete(fileId) : next.add(fileId);
-      return next;
-    });
+    const currentIdx = displayedFiles.findIndex(f => f.id === fileId);
+    if (e.shiftKey && lastSelectedIdxRef.current >= 0 && currentIdx >= 0) {
+      const start = Math.min(lastSelectedIdxRef.current, currentIdx);
+      const end   = Math.max(lastSelectedIdxRef.current, currentIdx);
+      const rangeIds = displayedFiles.slice(start, end + 1).map(f => f.id);
+      setSelectedFileIds(prev => { const n = new Set(prev); rangeIds.forEach(id => n.add(id)); return n; });
+    } else {
+      lastSelectedIdxRef.current = currentIdx;
+      setSelectedFileIds(prev => { const n = new Set(prev); n.has(fileId) ? n.delete(fileId) : n.add(fileId); return n; });
+    }
+  }
+
+  async function togglePinFile(file: WFile) {
+    const next = !file.is_pinned;
+    // Optimistic update
+    refetchFiles();
+    const { error } = await supabase.from('workspace_files').update({ is_pinned: next, updated_at: new Date().toISOString() }).eq('id', file.id);
+    if (error) { toast({ title: 'Failed to update pin', description: error.message, variant: 'destructive' }); return; }
+    if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, is_pinned: next } : null);
+    refetchFiles();
+    toast({ title: next ? 'File pinned' : 'File unpinned', description: file.name });
   }
 
   async function deleteFile(file: WFile) {
@@ -1824,6 +1847,40 @@ export default function WorkspaceHub() {
           <span className="text-xs text-muted-foreground">{fmtRelative(file.updated_at)}</span>
           <span className="text-[10px] text-muted-foreground">{file._uploaderName}</span>
         </div>
+        {/* Quick hover actions */}
+        <div className="hidden sm:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {(file.allow_download || canManageFile(file)) && !file.password_hash && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-green-600 hover:bg-green-50 transition-colors">
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Download</TooltipContent>
+            </Tooltip>
+          )}
+          {file.public_url && !['top_secret','restricted'].includes(file.security_level) && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.public_url!).then(() => toast({ title: 'Link copied', description: file.name })); }}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5 transition-colors">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={e => { e.stopPropagation(); togglePinFile(file); }}
+                className={cn('p-1.5 rounded-lg transition-colors', file.is_pinned ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50' : 'text-muted-foreground hover:text-amber-500 hover:bg-amber-50')}>
+                <Star className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{file.is_pinned ? 'Unpin' : 'Pin'}</TooltipContent>
+          </Tooltip>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
             <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all">
@@ -2017,6 +2074,15 @@ export default function WorkspaceHub() {
               <div className="flex-1 min-w-0">
                 <h2 className="text-sm font-bold text-[#0F2041]">Workspace Hub</h2>
                 <p className="text-[10px] text-muted-foreground">{stats.total} files · {fmtSize(stats.totalSize)}</p>
+                {stats.totalSize > 0 && (
+                  <div className="mt-1 w-full">
+                    <div className="h-1 rounded-full bg-muted overflow-hidden w-full">
+                      <div className="h-full bg-gradient-to-r from-[#1D3461] to-[#0F2041] rounded-full transition-all"
+                        style={{ width: `${Math.min(100, (stats.totalSize / (1024 * 1024 * 1024)) * 100)}%` }} />
+                    </div>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">{fmtSize(stats.totalSize)} used</p>
+                  </div>
+                )}
               </div>
               {isSuperAdmin && (
                 <button
@@ -2135,6 +2201,35 @@ export default function WorkspaceHub() {
                   )}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Active filter chips */}
+          {(secFilter !== 'all' || typeFilter !== 'all' || searchQuery.trim()) && (
+            <div className="flex items-center gap-2 px-5 py-1.5 border-b bg-muted/20 flex-shrink-0 flex-wrap">
+              <span className="text-[10px] text-muted-foreground font-medium">Filters:</span>
+              {searchQuery.trim() && (
+                <span className="flex items-center gap-1 text-[10px] bg-[#1D3461]/10 text-[#1D3461] border border-[#1D3461]/20 px-2 py-0.5 rounded-full font-medium">
+                  <Search className="h-2.5 w-2.5" />"{searchQuery}"
+                  <button onClick={() => setSearchQuery('')} className="hover:text-red-600 ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                </span>
+              )}
+              {typeFilter !== 'all' && (
+                <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+                  {typeFilter === 'image' ? '🖼' : typeFilter === 'pdf' ? '📄' : typeFilter === 'excel' ? '📊' : typeFilter === 'word' ? '📝' : typeFilter === 'zip' ? '📦' : '📁'} {typeFilter}
+                  <button onClick={() => setTypeFilter('all')} className="hover:text-red-600 ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                </span>
+              )}
+              {secFilter !== 'all' && (
+                <span className="flex items-center gap-1 text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+                  <Shield className="h-2.5 w-2.5" />{SEC_CFG[secFilter].label}
+                  <button onClick={() => setSecFilter('all')} className="hover:text-red-600 ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                </span>
+              )}
+              <button onClick={() => { setSearchQuery(''); setTypeFilter('all'); setSecFilter('all'); }}
+                className="text-[10px] text-muted-foreground hover:text-red-600 ml-auto transition-colors font-medium">
+                Clear all
+              </button>
             </div>
           )}
 
@@ -2403,13 +2498,25 @@ export default function WorkspaceHub() {
             ) : displayedFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
                 <div className="h-20 w-20 rounded-3xl bg-muted/30 flex items-center justify-center">
-                  <Folder className="h-10 w-10 opacity-30" />
+                  {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? (
+                    <Filter className="h-10 w-10 opacity-30" />
+                  ) : (
+                    <Folder className="h-10 w-10 opacity-30" />
+                  )}
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium">{searchQuery ? 'No files match your search' : 'No files here yet'}</p>
-                  <p className="text-xs mt-1">{searchQuery ? 'Try a different keyword' : 'Upload your first file to get started'}</p>
+                  <p className="text-sm font-medium">
+                    {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? 'No files match your filters' : 'No files here yet'}
+                  </p>
+                  <p className="text-xs mt-1">
+                    {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? 'Try adjusting or clearing your filters' : 'Upload your first file to get started'}
+                  </p>
                 </div>
-                {!searchQuery && (
+                {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? (
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setSearchQuery(''); setTypeFilter('all'); setSecFilter('all'); }}>
+                    <X className="h-3.5 w-3.5" />Clear all filters
+                  </Button>
+                ) : (
                   <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] gap-1.5" onClick={() => setUploadOpen(true)}>
                     <Upload className="h-3.5 w-3.5" />Upload Files
                   </Button>
