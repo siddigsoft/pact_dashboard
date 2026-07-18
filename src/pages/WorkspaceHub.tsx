@@ -449,11 +449,54 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
   );
 }
 
+// ─── Drag-drop folder reader (recursive, uses FileSystem API) ──────────────────
+
+async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File; relativePath: string}[]> {
+  const result: {file: File; relativePath: string}[] = [];
+
+  async function readEntry(entry: FileSystemEntry, pathPrefix: string): Promise<void> {
+    if (entry.isFile) {
+      const fe = entry as FileSystemFileEntry;
+      const file = await new Promise<File>((res, rej) => fe.file(res, rej));
+      result.push({ file, relativePath: pathPrefix + file.name });
+    } else if (entry.isDirectory) {
+      const de = entry as FileSystemDirectoryEntry;
+      const reader = de.createReader();
+      const readBatch = (): Promise<FileSystemEntry[]> =>
+        new Promise((res, rej) => reader.readEntries(res, rej));
+      let batch: FileSystemEntry[];
+      do {
+        batch = await readBatch();
+        for (const child of batch) await readEntry(child, pathPrefix + de.name + '/');
+      } while (batch.length > 0);
+    }
+  }
+
+  // Try FileSystem API first (supports folders + correct relative paths)
+  if (dataTransfer.items && dataTransfer.items.length > 0) {
+    const entries: FileSystemEntry[] = [];
+    for (let i = 0; i < dataTransfer.items.length; i++) {
+      const entry = (dataTransfer.items[i] as any).webkitGetAsEntry?.();
+      if (entry) entries.push(entry);
+    }
+    for (const entry of entries) await readEntry(entry, '');
+  }
+
+  // Fallback: plain file list (no folder support)
+  if (result.length === 0 && dataTransfer.files.length > 0) {
+    for (const f of Array.from(dataTransfer.files)) {
+      result.push({ file: f, relativePath: f.name });
+    }
+  }
+
+  return result;
+}
+
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialFiles }: {
+function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialEntries }: {
   folderId: string | null; folderName: string; open: boolean; onClose: () => void;
-  currentUserId: string; onUploaded: () => void; initialFiles?: File[];
+  currentUserId: string; onUploaded: () => void; initialEntries?: {file: File; relativePath: string}[];
 }) {
   const { toast } = useToast();
   const fileRef   = useRef<HTMLInputElement>(null);
@@ -467,13 +510,13 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const [currentUploadingName, setCurrentUploadingName] = useState('');
   const cancelledRef = useRef(false);
 
-  // Pre-populate with files dropped onto the main area
+  // Pre-populate with entries dropped onto the main area
   useEffect(() => {
-    if (open && initialFiles && initialFiles.length > 0) {
-      setFiles(initialFiles.map(f => ({ file: f, relativePath: f.name })));
+    if (open && initialEntries && initialEntries.length > 0) {
+      setFiles(initialEntries);
     }
     if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); }
-  }, [open, initialFiles]);
+  }, [open, initialEntries]);
 
   const addFiles = (raw: FileList | File[]) => {
     const entries = Array.from(raw).map(f => ({
@@ -624,7 +667,11 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           <div
             className="border-2 border-dashed border-[#1D3461]/30 hover:border-[#1D3461]/60 rounded-2xl p-5 text-center transition-colors bg-[#0F2041]/[0.02]"
             onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+            onDrop={async e => {
+              e.preventDefault();
+              const entries = await readDroppedItems(e.dataTransfer);
+              if (entries.length > 0) setFiles(prev => [...prev, ...entries]);
+            }}
           >
             <Upload className="h-7 w-7 text-[#1D3461]/40 mx-auto mb-2" />
             <p className="text-sm font-medium text-[#1D3461] mb-2.5">Drag files or a folder here</p>
@@ -1230,7 +1277,7 @@ export default function WorkspaceHub() {
   const [dragFileId, setDragFileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
-  const [pendingDropFiles, setPendingDropFiles] = useState<File[]>([]);
+  const [pendingDropEntries, setPendingDropEntries] = useState<{file: File; relativePath: string}[]>([]);
   const externalDragCounter = useRef(0);
 
   // ── Folder customization state ────────────────────────────────────────────
@@ -2269,13 +2316,13 @@ export default function WorkspaceHub() {
               if (externalDragCounter.current <= 0) { externalDragCounter.current = 0; setIsExternalDragOver(false); }
             }
           }}
-          onDrop={e => {
+          onDrop={async e => {
             if (!e.dataTransfer.types.includes('Files')) return;
             e.preventDefault();
             externalDragCounter.current = 0;
             setIsExternalDragOver(false);
-            const dropped = Array.from(e.dataTransfer.files);
-            if (dropped.length > 0) { setPendingDropFiles(dropped); setUploadOpen(true); }
+            const entries = await readDroppedItems(e.dataTransfer);
+            if (entries.length > 0) { setPendingDropEntries(entries); setUploadOpen(true); }
           }}
         >
           {/* Full-area drop overlay */}
@@ -2689,9 +2736,9 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
-          open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropFiles([]); }}
+          open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
-          initialFiles={pendingDropFiles.length > 0 ? pendingDropFiles : undefined}
+          initialEntries={pendingDropEntries.length > 0 ? pendingDropEntries : undefined}
         />
 
         {/* New folder dialog */}
