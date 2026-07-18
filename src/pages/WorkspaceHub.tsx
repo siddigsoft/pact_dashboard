@@ -465,6 +465,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentUploadingName, setCurrentUploadingName] = useState('');
+  const cancelledRef = useRef(false);
 
   // Pre-populate with files dropped onto the main area
   useEffect(() => {
@@ -484,9 +485,20 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
   async function handleUpload() {
     if (files.length === 0) return;
+    cancelledRef.current = false;
     setUploading(true); setProgress(0);
     const pendingOrphanPaths: string[] = [];
     let completed = 0;
+
+    // Race any promise against a per-file 45-second timeout
+    function withTimeout<T>(p: Promise<T>, ms = 45000): Promise<T> {
+      return Promise.race([
+        p,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — check your connection`)), ms)
+        ),
+      ]);
+    }
 
     try {
       // ── Folder-upload: reconstruct subfolder hierarchy in workspace_folders ──
@@ -507,10 +519,10 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           const name       = parts[parts.length - 1];
           const parentPath = parts.slice(0, -1).join('/');
           const parentId   = parentPath ? (folderIdMap[parentPath] ?? null) : folderId;
-          const { data: created, error: folderErr } = await (supabase as any)
+          const { data: created, error: folderErr } = await withTimeout((supabase as any)
             .from('workspace_folders')
             .insert({ name, parent_folder_id: parentId, security_level: secLevel, created_by: currentUserId, is_system_folder: false, archived: false })
-            .select('id').single();
+            .select('id').single());
           if (folderErr) throw folderErr;
           folderIdMap[folderPath] = created.id;
         }
@@ -520,6 +532,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
       const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 
       async function uploadOne(item: { file: File; relativePath: string }) {
+        if (cancelledRef.current) throw new Error('Upload cancelled');
         const { file: f, relativePath } = item;
         setCurrentUploadingName(f.name);
         let targetFolderId: string | null = folderId;
@@ -528,20 +541,23 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           const parentPath = parts.slice(0, -1).join('/');
           targetFolderId = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
         }
-        // Unique path: userId/timestamp_random_filename
         const path = `${currentUserId}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const { error: uploadErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
+        const { error: uploadErr } = await withTimeout(
+          supabase.storage.from('workspace-files').upload(path, f, { upsert: false })
+        );
         if (uploadErr) throw uploadErr;
         pendingOrphanPaths.push(path);
         const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
-        const { error: dbErr } = await supabase.from('workspace_files').insert({
-          folder_id: targetFolderId, name: f.name, description: description || null,
-          storage_path: path, public_url: urlData?.publicUrl ?? null,
-          file_size: f.size, mime_type: f.type, extension: ext,
-          security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
-          tags: tagList,
-        });
+        const { error: dbErr } = await withTimeout(
+          supabase.from('workspace_files').insert({
+            folder_id: targetFolderId, name: f.name, description: description || null,
+            storage_path: path, public_url: urlData?.publicUrl ?? null,
+            file_size: f.size, mime_type: f.type, extension: ext,
+            security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
+            tags: tagList,
+          }) as any
+        );
         if (dbErr) throw dbErr;
         const idx = pendingOrphanPaths.indexOf(path);
         if (idx >= 0) pendingOrphanPaths.splice(idx, 1);
@@ -549,26 +565,33 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
         setProgress(Math.round((completed / files.length) * 100));
       }
 
-      // Chunk into batches of 4 for parallel upload
       const CONCURRENCY = 4;
       for (let i = 0; i < files.length; i += CONCURRENCY) {
+        if (cancelledRef.current) break;
         const batch = files.slice(i, i + CONCURRENCY);
         await Promise.all(batch.map(uploadOne));
       }
 
-      toast({
-        title: `${files.length} file${files.length !== 1 ? 's' : ''} uploaded`,
-        description: isFolderUpload
-          ? `Folder structure recreated · Security: ${SEC_CFG[secLevel].label}`
-          : `Security: ${SEC_CFG[secLevel].label}`,
-      });
-      onUploaded(); onClose(); setFiles([]); setDescription(''); setTags('');
+      if (cancelledRef.current) {
+        if (pendingOrphanPaths.length > 0) {
+          try { await supabase.storage.from('workspace-files').remove(pendingOrphanPaths); } catch { /* best effort */ }
+        }
+        toast({ title: 'Upload cancelled', description: `${completed} of ${files.length} file${files.length !== 1 ? 's' : ''} were uploaded before cancellation.` });
+      } else {
+        toast({
+          title: `${files.length} file${files.length !== 1 ? 's' : ''} uploaded`,
+          description: isFolderUpload
+            ? `Folder structure recreated · Security: ${SEC_CFG[secLevel].label}`
+            : `Security: ${SEC_CFG[secLevel].label}`,
+        });
+        onUploaded(); onClose(); setFiles([]); setDescription(''); setTags('');
+      }
     } catch (e: any) {
       if (pendingOrphanPaths.length > 0) {
         try { await supabase.storage.from('workspace-files').remove(pendingOrphanPaths); } catch { /* best effort */ }
       }
       toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
-    } finally { setUploading(false); }
+    } finally { setUploading(false); cancelledRef.current = false; }
   }
 
   const isFolderMode = files.some(item => item.relativePath.includes('/'));
@@ -698,13 +721,24 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           {/* Upload progress */}
           {uploading && (
             <div className="rounded-xl border bg-[#0F2041]/5 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] text-muted-foreground truncate max-w-[260px]">{currentUploadingName || 'Preparing…'}</p>
-                <p className="text-[11px] font-bold text-[#1D3461] flex-shrink-0 ml-2">{progress}%</p>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Loader2 className="h-3 w-3 text-[#1D3461] animate-spin flex-shrink-0" />
+                  <p className="text-[11px] text-muted-foreground truncate">{currentUploadingName || 'Preparing…'}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <p className="text-[11px] font-bold text-[#1D3461]">{progress}%</p>
+                  <button
+                    onClick={() => { cancelledRef.current = true; }}
+                    className="text-[10px] text-red-500 hover:text-red-600 font-medium px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
               <Progress value={progress} className="h-1.5" />
               <p className="text-[10px] text-muted-foreground text-center">
-                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded
+                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded · times out after 45s per file
               </p>
             </div>
           )}
