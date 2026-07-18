@@ -575,24 +575,36 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4 text-[#1D3461]" />
-            Upload Files or Folders
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground">to {folderName || 'Root'}</p>
-        </DialogHeader>
+      <DialogContent className="max-w-lg flex flex-col gap-0 p-0 max-h-[88vh] overflow-hidden">
+        {/* ── Fixed header ── */}
+        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b flex-shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-[#1D3461] to-[#0F2041] flex items-center justify-center flex-shrink-0">
+                <Upload className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-[#0F2041]">Upload Files or Folders</h2>
+                <p className="text-[11px] text-muted-foreground">to <span className="font-medium text-[#1D3461]">{folderName || 'Root'}</span></p>
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-0.5">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-        <div className="space-y-4">
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
+
           {/* Drop zone */}
           <div
-            className="border-2 border-dashed border-[#1D3461]/30 hover:border-[#1D3461]/60 rounded-2xl p-6 text-center transition-colors"
+            className="border-2 border-dashed border-[#1D3461]/30 hover:border-[#1D3461]/60 rounded-2xl p-5 text-center transition-colors bg-[#0F2041]/[0.02]"
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
           >
-            <Upload className="h-8 w-8 text-[#1D3461]/40 mx-auto mb-2" />
-            <p className="text-sm font-medium text-[#1D3461] mb-3">Drag files or a folder here</p>
+            <Upload className="h-7 w-7 text-[#1D3461]/40 mx-auto mb-2" />
+            <p className="text-sm font-medium text-[#1D3461] mb-2.5">Drag files or a folder here</p>
             <div className="flex items-center justify-center gap-2">
               <button
                 type="button"
@@ -600,8 +612,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1D3461]/30 hover:bg-[#1D3461]/5 text-[#1D3461] transition-colors"
                 data-testid="button-pick-files"
               >
-                <FileText className="h-3.5 w-3.5" />
-                Choose Files
+                <FileText className="h-3.5 w-3.5" />Choose Files
               </button>
               <button
                 type="button"
@@ -609,102 +620,113 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#1D3461]/30 hover:bg-[#1D3461]/5 text-[#1D3461] transition-colors"
                 data-testid="button-pick-folder"
               >
-                <FolderOpen className="h-3.5 w-3.5" />
-                Choose Folder
+                <FolderOpen className="h-3.5 w-3.5" />Choose Folder
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">All file types supported · No size limit per file</p>
-            {/* Files input */}
-            <input
-              ref={fileRef} type="file" multiple className="hidden"
-              onChange={e => addFiles(e.target.files ?? [])}
-            />
-            {/* Folder input — webkitdirectory preserves relative paths */}
-            <input
-              ref={folderRef} type="file" multiple className="hidden"
-              // @ts-ignore — webkitdirectory is a non-standard but universally supported attribute
-              webkitdirectory=""
-              onChange={e => addFiles(e.target.files ?? [])}
-            />
+            <input ref={fileRef} type="file" multiple className="hidden" onChange={e => addFiles(e.target.files ?? [])} />
+            {/* @ts-ignore */}
+            <input ref={folderRef} type="file" multiple className="hidden" webkitdirectory="" onChange={e => addFiles(e.target.files ?? [])} />
           </div>
 
           {/* File list */}
           {files.length > 0 && (
-            <div className="space-y-1 max-h-40 overflow-y-auto">
+            <div className="rounded-xl border bg-muted/20 overflow-hidden">
               {isFolderMode && (
-                <p className="text-[11px] text-[#1D3461] font-medium flex items-center gap-1 mb-1">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border-b text-[11px] text-blue-700 font-medium">
                   <FolderOpen className="h-3 w-3" />
                   Folder upload — subfolders will be created automatically
-                </p>
+                </div>
               )}
-              {files.map((item, i) => {
-                const Icon = getFileIcon(item.file.type);
-                return (
-                  <div key={i} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="text-xs flex-1 truncate" title={item.relativePath}>
-                      {isFolderMode ? item.relativePath : item.file.name}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtSize(item.file.size)}</span>
-                    <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                );
-              })}
+              <div className="divide-y max-h-36 overflow-y-auto">
+                {files.map((item, i) => {
+                  const Icon = getFileIcon(item.file.type);
+                  return (
+                    <div key={i} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+                      <Icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-xs flex-1 truncate text-foreground" title={item.relativePath}>
+                        {isFolderMode ? item.relativePath : item.file.name}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0 px-1.5 py-0.5 bg-muted rounded">{fmtSize(item.file.size)}</span>
+                      <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 transition-colors">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="px-3 py-1.5 border-t bg-muted/10 text-[10px] text-muted-foreground">
+                {files.length} file{files.length !== 1 ? 's' : ''} · {fmtSize(files.reduce((s, f) => s + f.file.size, 0))} total
+              </div>
             </div>
           )}
 
           {/* Security level */}
           <div>
-            <label className="text-xs font-semibold mb-2 block">Security Level</label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <label className="text-xs font-semibold mb-2 block text-foreground">Security Level</label>
+            <div className="grid grid-cols-3 gap-2">
               {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
                 const Icon = cfg.icon;
+                const isSelected = secLevel === level;
                 return (
                   <button key={level} onClick={() => setSecLevel(level)}
-                    className={cn('flex flex-col items-center gap-1 p-2 rounded-xl border text-center transition-all text-[10px] font-semibold',
-                      secLevel === level ? `${cfg.bg} ${cfg.text} ${cfg.border} border-2` : 'border-border hover:bg-muted/30')}>
-                    <Icon className="h-4 w-4" />
-                    {cfg.label}
+                    className={cn(
+                      'flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all text-[11px] font-semibold',
+                      isSelected ? `${cfg.bg} ${cfg.text} ${cfg.border} border-2 shadow-sm` : 'border-border hover:bg-muted/40 text-muted-foreground'
+                    )}>
+                    <Icon className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? '' : 'opacity-60')} />
+                    <span>{cfg.label}</span>
                   </button>
                 );
               })}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1.5">{SEC_CFG[secLevel].desc}</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5 px-0.5">{SEC_CFG[secLevel].desc}</p>
           </div>
 
+          {/* Description */}
           <div>
-            <label className="text-xs font-semibold mb-1 block">Description (optional)</label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description…" className="text-xs min-h-[60px]" />
+            <label className="text-xs font-semibold mb-1 block text-foreground">Description <span className="font-normal text-muted-foreground">(optional)</span></label>
+            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description of these files…" className="text-xs min-h-[56px] resize-none" />
           </div>
 
+          {/* Tags */}
           <div>
-            <label className="text-xs font-semibold mb-1 block">Tags (comma-separated)</label>
+            <label className="text-xs font-semibold mb-1 block text-foreground">Tags <span className="font-normal text-muted-foreground">(comma-separated)</span></label>
             <Input value={tags} onChange={e => setTags(e.target.value)} placeholder="report, finance, Q1…" className="h-8 text-xs" />
           </div>
 
+          {/* Upload progress */}
           {uploading && (
-            <div>
-              <div className="flex items-center justify-between mb-1">
+            <div className="rounded-xl border bg-[#0F2041]/5 p-3 space-y-2">
+              <div className="flex items-center justify-between">
                 <p className="text-[11px] text-muted-foreground truncate max-w-[260px]">{currentUploadingName || 'Preparing…'}</p>
-                <p className="text-[11px] font-semibold text-[#1D3461] flex-shrink-0">{progress}%</p>
+                <p className="text-[11px] font-bold text-[#1D3461] flex-shrink-0 ml-2">{progress}%</p>
               </div>
-              <Progress value={progress} className="h-2" />
-              <p className="text-[11px] text-muted-foreground mt-1 text-center">{Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded</p>
+              <Progress value={progress} className="h-1.5" />
+              <p className="text-[10px] text-muted-foreground text-center">
+                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded
+              </p>
             </div>
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={uploading}>Cancel</Button>
-          <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041]" onClick={handleUpload} disabled={uploading || files.length === 0}>
-            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
-            {isFolderMode
-              ? `Upload Folder (${files.length} file${files.length !== 1 ? 's' : ''})`
-              : `Upload ${files.length > 0 ? files.length : ''} File${files.length !== 1 ? 's' : ''}`}
-          </Button>
-        </DialogFooter>
+        {/* ── Fixed footer ── */}
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/20 flex-shrink-0 gap-3">
+          <p className="text-[11px] text-muted-foreground">
+            {files.length > 0
+              ? <><span className="font-semibold text-foreground">{files.length}</span> file{files.length !== 1 ? 's' : ''} ready to upload</>
+              : 'No files selected yet'}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={uploading} className="h-8 text-xs">Cancel</Button>
+            <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5 min-w-[120px]" onClick={handleUpload} disabled={uploading || files.length === 0}>
+              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {isFolderMode
+                ? `Upload Folder (${files.length})`
+                : files.length > 0 ? `Upload ${files.length} File${files.length !== 1 ? 's' : ''}` : 'Upload'}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
