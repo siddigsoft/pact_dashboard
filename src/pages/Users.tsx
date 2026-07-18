@@ -628,6 +628,13 @@ const Users = () => {
   const executeAction = async () => {
     if (!confirmDialog.userId) return;
     if (!checkUsersWrite(confirmDialog.action === 'delete' ? 'delete' : 'write')) return;
+    // Belt-and-suspenders: block self-deactivation in code before hitting the DB.
+    // The DB trigger (prevent_self_deactivation) also enforces this server-side.
+    if (confirmDialog.action === 'deactivate' && confirmDialog.userId === currentUser?.id) {
+      toast({ title: "Action not allowed", description: "You cannot deactivate your own account.", variant: "destructive" });
+      setConfirmDialog({ open: false });
+      return;
+    }
     const session = await ensureValidSession();
     if (!session.success) return;
     setDeletingUserId(confirmDialog.userId);
