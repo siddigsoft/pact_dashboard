@@ -632,11 +632,18 @@ const Users = () => {
     setDeletingUserId(confirmDialog.userId);
     try {
       if (confirmDialog.action === 'delete') {
-        // Delete related records first to avoid foreign key constraint violations
-        // Delete notifications where user is the recipient
+        // Belt-and-suspenders: null out the triggered_by column on notifications
+        // this user authored. Deleting those rows is blocked by RLS; updating
+        // triggered_by to NULL is not. The DB migration adds ON DELETE SET NULL
+        // on the FK so the profile delete itself will succeed regardless, but
+        // this update preserves compatibility with databases not yet migrated.
+        await supabase
+          .from('notifications')
+          .update({ triggered_by: null })
+          .eq('triggered_by', confirmDialog.userId);
+        // Notifications where user is the recipient can be deleted (they are
+        // the subject of those rows and have no value after account removal).
         await supabase.from('notifications').delete().eq('recipient_id', confirmDialog.userId);
-        // Delete notifications triggered by the user
-        await supabase.from('notifications').delete().eq('triggered_by', confirmDialog.userId);
         
         // Now delete the profile
         const { error } = await supabase.from('profiles').delete().eq('id', confirmDialog.userId);
