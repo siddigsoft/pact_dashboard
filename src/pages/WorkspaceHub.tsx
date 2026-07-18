@@ -1363,6 +1363,14 @@ export default function WorkspaceHub() {
     return m;
   }, [folders]);
 
+  // Sub-folders visible in the main content area for the current folder
+  const VIRTUAL_VIEWS = new Set(['__recent__', '__pinned__', '__mine__', '__all__', '__task_docs__', '__trash__']);
+  const currentSubFolders = useMemo<WFolder[]>(() => {
+    if (selectedFolderId && VIRTUAL_VIEWS.has(selectedFolderId)) return [];
+    if (selectedFolderId === null) return rootFolders; // root — show top-level folders
+    return childMap[selectedFolderId] ?? [];
+  }, [selectedFolderId, childMap, rootFolders]);
+
   const fileCounts = useMemo(() => {
     const m: Record<string, number> = {};
     allFiles.forEach(f => { if (f.folder_id) m[f.folder_id] = (m[f.folder_id] ?? 0) + 1; });
@@ -2665,7 +2673,7 @@ export default function WorkspaceHub() {
                   <LockOpen className="h-3.5 w-3.5" />Unlock Folder
                 </Button>
               </div>
-            ) : displayedFiles.length === 0 ? (
+            ) : displayedFiles.length === 0 && currentSubFolders.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-5 text-muted-foreground px-8">
                 {(searchQuery || typeFilter !== 'all' || secFilter !== 'all') ? (
                   <>
@@ -2701,17 +2709,92 @@ export default function WorkspaceHub() {
                 
                 )}
               </div>
-            ) : viewMode === 'list' ? (
-              <div className="bg-card border-b">
-                {/* List header */}
-                <div className="grid grid-cols-[1fr_100px_120px_80px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b px-4 py-2 gap-2 hidden sm:grid">
-                  <span>File</span><span>Security</span><span>Modified</span><span className="text-right">Size</span>
-                </div>
-                {displayedFiles.map(f => <FileRow key={f.id} file={f} />)}
-              </div>
             ) : (
-              <div className="p-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                {displayedFiles.map(f => <FileCard key={f.id} file={f} />)}
+              <div>
+                {/* ── Sub-folders ──────────────────────────────────────────── */}
+                {currentSubFolders.length > 0 && (
+                  <div className="px-5 pt-4 pb-2">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                      <Folder className="h-3 w-3" />
+                      Folders <span className="font-normal">({currentSubFolders.length})</span>
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                      {currentSubFolders.map(sub => {
+                        const subFileCount = fileCounts[sub.id] ?? 0;
+                        const subChildCount = (childMap[sub.id] ?? []).length;
+                        const secCfg = SEC_CFG[sub.security_level];
+                        const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
+                        return (
+                          <button
+                            key={sub.id}
+                            onClick={() => setSelectedFolderId(sub.id)}
+                            onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
+                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
+                            onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
+                            className={cn(
+                              'group flex flex-col items-start gap-1.5 p-3 rounded-xl border bg-card hover:bg-[#1D3461]/5 hover:border-[#1D3461]/30 transition-all text-left',
+                              dragOverFolderId === sub.id && 'ring-2 ring-[#1D3461] bg-[#1D3461]/5'
+                            )}
+                            data-testid={`subfolder-btn-${sub.id}`}
+                          >
+                            <div className="flex items-center gap-2 w-full">
+                              <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                style={{ backgroundColor: sub.color ? sub.color + '22' : '#1D346122' }}>
+                                {isLocked
+                                  ? <Lock className="h-4 w-4 text-amber-500" />
+                                  : sub.icon
+                                    ? <span className="text-base leading-none">{sub.icon}</span>
+                                    : <Folder className="h-4 w-4" style={{ color: sub.color || '#1D3461' }} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-foreground truncate group-hover:text-[#1D3461]">{sub.name}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {subFileCount} file{subFileCount !== 1 ? 's' : ''}
+                                  {subChildCount > 0 && ` · ${subChildCount} folder${subChildCount !== 1 ? 's' : ''}`}
+                                </p>
+                              </div>
+                            </div>
+                            <div className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', secCfg.bg, secCfg.text)}>
+                              {secCfg.label}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {displayedFiles.length > 0 && (
+                      <div className="mt-4 mb-1 border-t pt-3">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <File className="h-3 w-3" />
+                          Files <span className="font-normal">({displayedFiles.length})</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Files ────────────────────────────────────────────────── */}
+                {displayedFiles.length > 0 && (viewMode === 'list' ? (
+                  <div className="bg-card border-b">
+                    <div className="grid grid-cols-[1fr_100px_120px_80px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b px-4 py-2 gap-2 hidden sm:grid">
+                      <span>File</span><span>Security</span><span>Modified</span><span className="text-right">Size</span>
+                    </div>
+                    {displayedFiles.map(f => <FileRow key={f.id} file={f} />)}
+                  </div>
+                ) : (
+                  <div className="p-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                    {displayedFiles.map(f => <FileCard key={f.id} file={f} />)}
+                  </div>
+                ))}
+
+                {/* Empty files state when sub-folders exist */}
+                {displayedFiles.length === 0 && currentSubFolders.length > 0 && (
+                  <div className="flex flex-col items-center py-8 gap-2 text-muted-foreground">
+                    <p className="text-xs">No files directly in this folder</p>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mt-1" onClick={() => setUploadOpen(true)}>
+                      <Upload className="h-3 w-3" />Add files here
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
