@@ -79,6 +79,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -711,6 +712,7 @@ const Users = () => {
     const activeStatus = getActiveStatus(user);
     const isOnline = activeStatus === 'Online';
     const isDupe = highlightDuplicate || duplicateIds.has(user.id);
+    const isSelf = user.id === currentUser?.id;
 
     return (
       <TableRow
@@ -856,18 +858,49 @@ const Users = () => {
                       {(!usersPerms.hasOverride || usersPerms.canDelete) && (
                         <>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleDeactivate(user.id)} disabled={deletingUserId === user.id}>
-                            <UserX className="h-4 w-4 mr-2" />
-                            Deactivate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDelete(user.id)} 
-                            disabled={deletingUserId === user.id}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete User
-                          </DropdownMenuItem>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <DropdownMenuItem
+                                    onClick={() => !isSelf && handleDeactivate(user.id)}
+                                    disabled={deletingUserId === user.id || isSelf}
+                                    data-testid={`button-deactivate-${user.id}`}
+                                  >
+                                    <UserX className="h-4 w-4 mr-2" />
+                                    Deactivate
+                                  </DropdownMenuItem>
+                                </span>
+                              </TooltipTrigger>
+                              {isSelf && (
+                                <TooltipContent side="left">
+                                  You cannot deactivate your own account
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <DropdownMenuItem
+                                    onClick={() => !isSelf && handleDelete(user.id)}
+                                    disabled={deletingUserId === user.id || isSelf}
+                                    className="text-destructive focus:text-destructive"
+                                    data-testid={`button-delete-${user.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete User
+                                  </DropdownMenuItem>
+                                </span>
+                              </TooltipTrigger>
+                              {isSelf && (
+                                <TooltipContent side="left">
+                                  You cannot delete your own account
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
                         </>
                       )}
                     </>
