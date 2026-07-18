@@ -53,6 +53,7 @@ import { useBudget } from '@/context/budget/BudgetContext';
 import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
 import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
 import { CreateProjectBudgetDialog } from '@/components/budget/CreateProjectBudgetDialog';
+import { ProjectBudgetTab } from '@/components/budget/ProjectBudgetTab';
 import { CurrencySwitcher } from '@/components/currency/CurrencySwitcher';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -1639,24 +1640,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <ProjectFieldOpsTab project={project} />
         </TabsContent>
 
-        <TabsContent value="budget" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">Project Budget</h2>
-            <div className="flex items-center gap-2">
-              {projectBudget && (
-                <Button size="sm" variant="outline" onClick={() => setEditBudgetOpen(true)} data-testid="button-edit-budget">
-                  <Edit className="h-4 w-4 mr-1.5" /> Edit Budget
-                </Button>
-              )}
-              {!projectBudget && (
-                <Button size="sm" onClick={() => setCreateBudgetOpen(true)} data-testid="button-create-budget-inline">
-                  <Plus className="h-4 w-4 mr-1.5" /> Set Up Budget Tracking
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Project funding reference banner — always visible */}
+        <TabsContent value="budget" className="mt-4 space-y-4">
+          {/* Project funding reference banner — always visible when set */}
           {budgetSummary && budgetSummary.total != null && budgetSummary.total > 0 && (
             <div className="flex items-center gap-3 rounded-lg border bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 px-4 py-3">
               <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -1665,39 +1650,36 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   Project Funding (set at creation): {budgetSummary.currency} {budgetSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 {budgetSummary.expenseCurrency && budgetSummary.expenseCurrency !== budgetSummary.currency && (
-                  <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 mt-0.5">
-                    Expenses tracked in: {budgetSummary.expenseCurrency}
-                  </p>
+                  <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 mt-0.5">Expenses tracked in: {budgetSummary.expenseCurrency}</p>
                 )}
-                {!projectBudget && (
-                  <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
-                    Click "Set Up Budget Tracking" to initialise operational expense tracking — pre-filled with this amount.
-                  </p>
-                )}
-                {projectBudget && (
-                  (() => {
-                    const trackedTotal = projectBudget.totalBudgetCents / 100;
-                    const isMatch = Math.abs(trackedTotal - budgetSummary.total) < 1;
-                    return !isMatch ? (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                        ⚠ Tracked budget ({(projectBudget.totalBudgetCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}) differs from project funding — update via Edit Budget to sync.
-                      </p>
-                    ) : null;
-                  })()
-                )}
+                {projectBudget && (() => {
+                  const diff = Math.abs(projectBudget.totalBudgetCents / 100 - budgetSummary.total);
+                  return diff >= 1 ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                      ⚠ Tracked budget ({(projectBudget.totalBudgetCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}) differs — click "Sync from project" in Edit Budget to align.
+                    </p>
+                  ) : null;
+                })()}
               </div>
             </div>
           )}
 
           {budgetLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
             </div>
           ) : projectBudget ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ProjectBudgetCard budget={projectBudget} projectName={project.name} />
-              </div>
+              <ProjectBudgetTab
+                project={project}
+                projectBudget={projectBudget}
+                budgetSummary={budgetSummary}
+                onRefresh={() => refreshProjectBudgets()}
+                onEditBudget={() => setEditBudgetOpen(true)}
+                currentUserId={currentUser?.id}
+                isAdmin={isAdminUser}
+                projectManagerId={project.team?.projectManager}
+              />
               <EditProjectBudgetDialog
                 budget={projectBudget}
                 projectName={project.name}
@@ -1706,6 +1688,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 open={editBudgetOpen}
                 onOpenChange={setEditBudgetOpen}
                 onSuccess={() => refreshProjectBudgets()}
+                projectManagerId={project.team?.projectManager}
+                currentUserId={currentUser?.id}
+                currentUserName={currentUser?.fullName}
               />
             </>
           ) : (
@@ -1719,14 +1704,14 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   ? `Your project has ${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} in funding. Set up budget tracking to monitor spending and receive alerts.`
                   : 'Create a budget for this project to track spending and allocations.'}
               </p>
-              <Button className="mt-4" onClick={() => setCreateBudgetOpen(true)}>
+              <Button className="mt-4" onClick={() => setCreateBudgetOpen(true)} data-testid="button-init-budget">
                 <Plus className="h-4 w-4 mr-2" />
                 {budgetSummary?.total ? 'Initialise Budget Tracking' : 'Create Project Budget'}
               </Button>
             </div>
           )}
 
-          {/* Inline create budget dialog — pre-filled from project.budget */}
+          {/* Inline create dialog — pre-filled from project.budget */}
           <CreateProjectBudgetDialog
             projectId={project.id}
             projectName={project.name}

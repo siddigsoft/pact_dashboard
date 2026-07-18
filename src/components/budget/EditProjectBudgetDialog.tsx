@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useBudget } from '@/context/budget/BudgetContext';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { dispatchNotification } from '@/lib/notify';
+import { Loader2, Plus, Trash2, RefreshCw } from 'lucide-react';
 import type { ProjectBudget } from '@/types/budget';
 
 interface BudgetLineItem {
@@ -25,6 +26,11 @@ interface EditProjectBudgetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** ID of the project manager — used to dispatch edit notification */
+  projectManagerId?: string;
+  /** Current user info for notification dispatch */
+  currentUserId?: string;
+  currentUserName?: string;
 }
 
 const CATEGORY_OPTIONS = [
@@ -48,6 +54,9 @@ export function EditProjectBudgetDialog({
   open,
   onOpenChange,
   onSuccess,
+  projectManagerId,
+  currentUserId,
+  currentUserName,
 }: EditProjectBudgetDialogProps) {
   const { updateProjectBudget } = useBudget();
   const [loading, setLoading] = useState(false);
@@ -87,6 +96,12 @@ export function EditProjectBudgetDialog({
   const updateLineItem = (id: string, field: 'category' | 'amount', value: string) =>
     setLineItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
 
+  const syncFromProjectFunding = () => {
+    if (projectTotalAmount != null && projectTotalAmount > 0) {
+      setTotalBudget(projectTotalAmount.toString());
+    }
+  };
+
   const handleSubmit = async () => {
     if (!totalBudget || parseFloat(totalBudget) <= 0) return;
     setLoading(true);
@@ -109,6 +124,20 @@ export function EditProjectBudgetDialog({
         budgetNotes: notes,
         categoryAllocations: categoryAllocations as any,
       });
+      // Notify project manager of budget edit
+      if (projectManagerId && currentUserId) {
+        dispatchNotification({
+          event: 'budget_updated',
+          recipientIds: [projectManagerId],
+          titleEn: 'Project Budget Updated',
+          titleAr: 'تم تحديث ميزانية المشروع',
+          messageEn: `The budget for project "${projectName}" was updated by ${currentUserName || 'an admin'}. New total: ${displayCurrency} ${(totalBudgetCents / 100).toLocaleString()}.`,
+          messageAr: `تم تحديث ميزانية مشروع "${projectName}".`,
+          entityType: 'project_budget',
+          entityId: budget.id,
+          sendEmail: false,
+        }).catch(() => {});
+      }
       onOpenChange(false);
       onSuccess?.();
     } finally {
@@ -139,9 +168,24 @@ export function EditProjectBudgetDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-total-budget" className="text-cyan-200">
-                Total Budget ({displayCurrency})
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-total-budget" className="text-cyan-200">
+                  Total Budget ({displayCurrency})
+                </Label>
+                {projectTotalAmount != null && projectTotalAmount > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={syncFromProjectFunding}
+                    className="h-6 px-2 text-[11px] text-cyan-300 hover:text-cyan-100 hover:bg-cyan-900/30"
+                    data-testid="button-sync-project-funding"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    Sync from project ({displayCurrency} {projectTotalAmount.toLocaleString()})
+                  </Button>
+                )}
+              </div>
               <Input
                 id="edit-total-budget"
                 type="number"

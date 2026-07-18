@@ -22,6 +22,8 @@ export interface BudgetNotificationOptions {
   spentAmount: number;
   remainingAmount: number;
   triggeredBy?: string;
+  /** Currency code for the budget (e.g. 'USD', 'SDG'). Defaults to 'SDG'. */
+  currency?: string;
 }
 
 export interface EscalationRequest {
@@ -97,7 +99,7 @@ async function getProjectManagers(projectId: string): Promise<string[]> {
 
 export const BudgetNotificationService = {
   async send80PercentThresholdAlert(options: BudgetNotificationOptions): Promise<number> {
-    const { projectId, projectName, mmpName, utilizationPercentage, budgetAmount, spentAmount, remainingAmount } = options;
+    const { projectId, projectName, mmpName, utilizationPercentage, budgetAmount, spentAmount, remainingAmount, currency = 'SDG' } = options;
 
     const recipients = new Set<string>();
     
@@ -121,8 +123,8 @@ export const BudgetNotificationService = {
 
     const contextName = mmpName ? `MMP "${mmpName}"` : `Project "${projectName}"`;
     const message = `${contextName} has reached ${utilizationPercentage.toFixed(1)}% budget utilization. ` +
-      `Spent: ${spentAmount.toLocaleString()} SDG / Budget: ${budgetAmount.toLocaleString()} SDG. ` +
-      `Remaining: ${remainingAmount.toLocaleString()} SDG. Review and plan accordingly.`;
+      `Spent: ${spentAmount.toLocaleString()} ${currency} / Budget: ${budgetAmount.toLocaleString()} ${currency}. ` +
+      `Remaining: ${remainingAmount.toLocaleString()} ${currency}. Review and plan accordingly.`;
 
     return await NotificationTriggerService.sendBulk(recipientArray, {
       title: 'Budget 80% Threshold Alert',
@@ -135,7 +137,7 @@ export const BudgetNotificationService = {
   },
 
   async sendBudgetExceededAlert(options: BudgetNotificationOptions): Promise<number> {
-    const { projectId, projectName, mmpName, utilizationPercentage, budgetAmount, spentAmount } = options;
+    const { projectId, projectName, mmpName, utilizationPercentage, budgetAmount, spentAmount, currency = 'SDG' } = options;
 
     const recipients = new Set<string>();
     
@@ -161,7 +163,7 @@ export const BudgetNotificationService = {
 
     return await NotificationTriggerService.sendBulk(recipientArray, {
       title: 'CRITICAL: Budget Exceeded',
-      message: `${contextName} has exceeded its budget by ${overspend.toLocaleString()} SDG (${utilizationPercentage.toFixed(1)}% utilization). Immediate action required.`,
+      message: `${contextName} has exceeded its budget by ${overspend.toLocaleString()} ${currency} (${utilizationPercentage.toFixed(1)}% utilization). Immediate action required.`,
       type: 'error',
       category: 'financial',
       priority: 'urgent',
@@ -295,7 +297,7 @@ export const BudgetNotificationService = {
         severity,
         threshold_percentage: thresholdPercentage,
         title: titleMap[alertType],
-        message: `Budget at ${utilization.toFixed(1)}% utilization. Remaining: ${(remaining / 100).toLocaleString()} SDG`,
+        message: `Budget at ${utilization.toFixed(1)}% utilization. Remaining: ${(remaining / 100).toLocaleString()} ${(budget.currency as string) || 'SDG'}`,
         status: 'active',
       });
 
@@ -327,6 +329,7 @@ export const BudgetNotificationService = {
       budgetAmount: allocated / 100,
       spentAmount: spent / 100,
       remainingAmount: remaining / 100,
+      currency: (budget.currency as string) || 'SDG',
     };
 
     if (alertType === 'budget_exceeded') {
