@@ -41,6 +41,7 @@ import {
   ShieldAlert,
   History,
   ChevronDown,
+  Percent,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -91,6 +92,8 @@ import {
 import ActivityTimeline from './ActivityTimeline';
 import TeamMemberCard from './TeamMemberCard';
 import ProjectCostTab from './ProjectCostTab';
+import ProjectProfessionalFeesTab from './ProjectProfessionalFeesTab';
+import ProjectFieldOpsTab from './ProjectFieldOpsTab';
 import { useProjectFlow } from '@/hooks/useProjectFlow';
 import { FlowStrip } from './flow/FlowStrip';
 import { FlowTab } from './flow/FlowTab';
@@ -1009,6 +1012,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'activities', label: typeConfig.tabLabels.planning ?? 'Activities', icon: Activity },
             { value: 'team',       label: 'Team',                                         icon: Users },
             { value: 'costs',      label: 'Costs',                                        icon: DollarSign },
+            { value: 'fees',       label: 'Prof. Fees',                                   icon: Percent },
+            { value: 'field_ops',  label: 'Field Ops',                                    icon: MapPin },
             { value: 'budget',     label: 'Budget',                                       icon: Wallet },
             { value: 'flow',       label: typeConfig.tabLabels.monitoring ?? 'Stages',    icon: GitBranch },
             { value: 'field_tasks',label: 'Tasks',                                        icon: CheckSquare },
@@ -1615,6 +1620,21 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             })()}
             currency={getBudgetSummary(projectBudget)?.currency || budgetSummary?.currency || 'SDG'}
           />
+        </TabsContent>
+
+        <TabsContent value="fees">
+          <ProjectProfessionalFeesTab
+            projectId={project.id}
+            projectName={project.name}
+            teamComposition={project.team?.teamComposition || []}
+            projectBudget={budgetSummary?.total || project.budget?.total}
+            currency={budgetSummary?.currency || project.budget?.currency || 'SDG'}
+            onManageTeam={() => navigate(`/projects/${project.id}/team`)}
+          />
+        </TabsContent>
+
+        <TabsContent value="field_ops">
+          <ProjectFieldOpsTab project={project} />
         </TabsContent>
 
         <TabsContent value="budget" className="space-y-4 mt-4">

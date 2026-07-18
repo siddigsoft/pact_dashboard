@@ -18,12 +18,20 @@ export type ProjectType =
   | 'training';
 
 export type ProjectStatus = 'draft' | 'active' | 'onHold' | 'completed' | 'cancelled';
-
 export type ActivityStatus = 'pending' | 'inProgress' | 'completed' | 'cancelled';
-
-export type ProjectRole = 'projectManager' | 'fieldAssistant' | 'dataCollector' | 'supervisor' | 'coordinator' | 'analyst' | 'reviewer' | 'other';
-
+export type ProjectRole =
+  | 'projectManager'
+  | 'fieldAssistant'
+  | 'dataCollector'
+  | 'supervisor'
+  | 'coordinator'
+  | 'analyst'
+  | 'reviewer'
+  | 'consultant'
+  | 'other';
 export type ActivityPriority = 'low' | 'medium' | 'high';
+export type TeamFeeType = 'per_hour' | 'fixed_fee' | 'percent_budget';
+export type TeamMemberType = 'internal' | 'external';
 
 export interface ProjectActivity {
   id: string;
@@ -60,6 +68,15 @@ export interface ProjectTeamMember {
   joinedAt: string;
   assignedActivities?: string[];
   workload?: number;
+  // Fee / cost tracking
+  memberType?: TeamMemberType;
+  feeType?: TeamFeeType;
+  rate?: number;
+  plannedHours?: number;
+  currency?: string;
+  paymentDueDate?: string;
+  paymentStatus?: 'unpaid' | 'partially_paid' | 'paid';
+  amountPaid?: number;
 }
 
 export interface Project {
@@ -72,7 +89,17 @@ export interface Project {
   startDate: string;
   endDate: string;
   currentFlowStage?: string;
-  customFlowStages?: Array<{ id: string; skipped?: boolean; customLabel?: string; customDescription?: string; customOutputs?: string[]; parallelGroup?: number | null; plannedStart?: string | null; plannedEnd?: string | null; dueDate?: string | null }> | null;
+  customFlowStages?: Array<{
+    id: string;
+    skipped?: boolean;
+    customLabel?: string;
+    customDescription?: string;
+    customOutputs?: string[];
+    parallelGroup?: number | null;
+    plannedStart?: string | null;
+    plannedEnd?: string | null;
+    dueDate?: string | null;
+  }> | null;
   budget?: {
     total: number;
     currency: string;
@@ -85,10 +112,7 @@ export interface Project {
     state: string;
     selectedStates?: string[];
     locality?: string;
-    coordinates?: {
-      latitude: number;
-      longitude: number;
-    }
+    coordinates?: { latitude: number; longitude: number };
   };
   team?: {
     projectManager?: string;
@@ -118,4 +142,19 @@ export function normaliseProjectType(raw: string | undefined | null): ProjectTyp
   };
   if (!raw) return 'other';
   return (legacyMap[raw] ?? raw) as ProjectType;
+}
+
+/** Calculate total cost for a team member based on their fee structure */
+export function calcMemberTotalCost(member: ProjectTeamMember, projectBudget?: number): number {
+  if (!member.feeType || member.rate === undefined) return 0;
+  switch (member.feeType) {
+    case 'per_hour':
+      return (member.rate || 0) * (member.plannedHours || 0);
+    case 'fixed_fee':
+      return member.rate || 0;
+    case 'percent_budget':
+      return projectBudget ? projectBudget * ((member.rate || 0) / 100) : 0;
+    default:
+      return 0;
+  }
 }

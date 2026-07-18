@@ -159,5 +159,7 @@ export function mapProjectToDbProject(project: Project): Record<string, unknown>
     client_name: project.clientName,
     partner_id: project.partnerId || null,
     ...(project.crmOpportunityId ? { crm_opportunity_id: project.crmOpportunityId } : {}),
+    related_mmps: project.relatedMMPs ?? [],
+    related_site_visits: project.relatedSiteVisits ?? [],
   };
 }

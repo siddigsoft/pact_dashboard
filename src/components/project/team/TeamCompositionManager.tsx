@@ -1,10 +1,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, UserPlus, UserMinus, X, Briefcase, Users } from 'lucide-react';
-import { 
-  Project, 
-  ProjectRole, 
-  ProjectTeamMember 
+import { Plus, UserPlus, UserMinus, Clock, DollarSign, Percent, Users } from 'lucide-react';
+import {
+  Project,
+  ProjectRole,
+  ProjectTeamMember,
+  TeamFeeType,
+  TeamMemberType,
+  calcMemberTotalCost,
 } from '@/types/project';
 import { User } from '@/types';
 import { useUser } from '@/context/user/UserContext';
@@ -36,6 +39,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Card,
   CardContent,
@@ -47,6 +51,16 @@ import {
 interface TeamCompositionManagerProps {
   project: Project;
   onTeamChange: (teamMembers: ProjectTeamMember[]) => void;
+}
+
+const FEE_LABELS: Record<TeamFeeType, string> = {
+  per_hour: 'Per Hour',
+  fixed_fee: 'Fixed Fee',
+  percent_budget: '% of Budget',
+};
+
+function fmtMoney(amount: number, cur = 'SDG') {
+  return `${cur} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
@@ -63,91 +77,79 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   );
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
 
-  // Active statuses for workload calculation (non-terminal statuses)
+  // Fee fields for the add-member dialog
+  const [memberType, setMemberType] = useState<TeamMemberType>('internal');
+  const [feeType, setFeeType] = useState<TeamFeeType | ''>('');
+  const [rate, setRate] = useState('');
+  const [plannedHours, setPlannedHours] = useState('');
+  const [feeCurrency, setFeeCurrency] = useState('SDG');
+  const [paymentDueDate, setPaymentDueDate] = useState('');
+
   const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
   const ACTIVE_MMP_ENTRY_STATUSES = ['Pending', 'pending', 'in_progress', 'In Progress', 'dispatched', 'Dispatched', 'accepted', 'Accepted'];
 
-  // Derive stable ID lists for dependency tracking
   const teamMemberIds = teamMembers.map(m => m.userId).sort().join(',');
   const userIdList = users.map(u => u.id).sort().join(',');
 
-  // Fetch actual workload data for users based on their assigned site visits and MMP entries
   const fetchUserWorkloads = useCallback(async () => {
     try {
-      // Get all user IDs we need workloads for
       const userIds = [...teamMembers.map(m => m.userId), ...users.map(u => u.id)];
       const uniqueUserIds = [...new Set(userIds)];
-      
       if (uniqueUserIds.length === 0) return;
 
-      // Fetch active site visits for these users
       const [{ data: siteVisits, error: svError }, { data: mmpEntries, error: mmpError }] = await Promise.all([
-        supabase
-          .from('site_visits')
-          .select('assigned_to, status')
-          .in('assigned_to', uniqueUserIds)
-          .in('status', ACTIVE_SITE_VISIT_STATUSES),
-        supabase
-          .from('mmp_site_entries')
-          .select('forwarded_to_user_id, status')
-          .in('forwarded_to_user_id', uniqueUserIds)
-          .in('status', ACTIVE_MMP_ENTRY_STATUSES)
+        supabase.from('site_visits').select('assigned_to, status').in('assigned_to', uniqueUserIds).in('status', ACTIVE_SITE_VISIT_STATUSES),
+        supabase.from('mmp_site_entries').select('forwarded_to_user_id, status').in('forwarded_to_user_id', uniqueUserIds).in('status', ACTIVE_MMP_ENTRY_STATUSES),
       ]);
 
       if (svError) console.warn('Error fetching site visits for workload:', svError);
       if (mmpError) console.warn('Error fetching MMP entries for workload:', mmpError);
 
-      // Calculate workload per user
-      // Workload = (active tasks / max capacity) * 100
-      // Max capacity = 10 tasks for 100% workload
       const MAX_CAPACITY = 10;
       const workloads: Record<string, number> = {};
-
       uniqueUserIds.forEach(userId => {
         const svCount = (siteVisits || []).filter(sv => sv.assigned_to === userId).length;
         const mmpCount = (mmpEntries || []).filter(e => e.forwarded_to_user_id === userId).length;
-        const totalTasks = svCount + mmpCount;
-        const workloadPercent = Math.min(100, Math.round((totalTasks / MAX_CAPACITY) * 100));
-        workloads[userId] = workloadPercent;
+        workloads[userId] = Math.min(100, Math.round(((svCount + mmpCount) / MAX_CAPACITY) * 100));
       });
-
       setUserWorkloads(workloads);
 
-      // Also update team members with the new workload values
       if (Object.keys(workloads).length > 0) {
         setTeamMembers(prev => {
-          const updatedMembers = prev.map(member => ({
-            ...member,
-            workload: workloads[member.userId] ?? member.workload ?? 0
-          }));
-          // Only update if workloads actually changed
-          const hasChanges = updatedMembers.some((m, i) => m.workload !== prev[i]?.workload);
-          return hasChanges ? updatedMembers : prev;
+          const updated = prev.map(member => ({ ...member, workload: workloads[member.userId] ?? member.workload ?? 0 }));
+          const hasChanges = updated.some((m, i) => m.workload !== prev[i]?.workload);
+          return hasChanges ? updated : prev;
         });
       }
     } catch (error) {
       console.error('Error calculating workloads:', error);
     }
-  }, [teamMemberIds, userIdList]); // Re-run when team or user composition changes
+  }, [teamMemberIds, userIdList]);
 
   useEffect(() => {
     fetchUserWorkloads();
   }, [fetchUserWorkloads]);
 
-  // Get workload for a user (from fetched data or default to 0)
-  const getWorkload = (userId: string): number => {
-    return userWorkloads[userId] ?? 0;
-  };
+  const getWorkload = (userId: string): number => userWorkloads[userId] ?? 0;
 
   const filteredUsers = users.filter(user => {
     const isAlreadyTeamMember = teamMembers.some(member => member.userId === user.id);
-    const matchesSearch = 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch =
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase()));
-    
     return !isAlreadyTeamMember && matchesSearch;
   });
+
+  const resetFeeFields = () => {
+    setMemberType('internal');
+    setFeeType('');
+    setRate('');
+    setPlannedHours('');
+    setFeeCurrency('SDG');
+    setPaymentDueDate('');
+    setSelectedRole('dataCollector');
+  };
 
   const handleAddTeamMember = (user: User) => {
     const newMember: ProjectTeamMember = {
@@ -156,16 +158,28 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
       role: selectedRole,
       joinedAt: new Date().toISOString(),
       workload: user.performance?.currentWorkload || getWorkload(user.id),
+      memberType,
+      feeType: feeType || undefined,
+      rate: feeType && rate ? parseFloat(rate) : undefined,
+      plannedHours: feeType === 'per_hour' && plannedHours ? parseFloat(plannedHours) : undefined,
+      currency: feeType ? feeCurrency : undefined,
+      paymentDueDate: feeType && paymentDueDate ? paymentDueDate : undefined,
+      paymentStatus: feeType ? 'unpaid' : undefined,
+      amountPaid: feeType ? 0 : undefined,
     };
 
     const updatedTeam = [...teamMembers, newMember];
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
     setDialogOpen(false);
-    
+    resetFeeFields();
+
+    const totalCost = calcMemberTotalCost(newMember, project.budget?.total);
     toast({
       title: 'Team member added',
-      description: `${user.name} has been added to the project as ${selectedRole}.`,
+      description: feeType
+        ? `${user.name} added as ${selectedRole}. Fee: ${fmtMoney(totalCost, feeCurrency)}`
+        : `${user.name} has been added as ${selectedRole}.`,
       variant: 'success',
     });
   };
@@ -175,53 +189,66 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     const updatedTeam = teamMembers.filter(member => member.userId !== userId);
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
-    
     toast({
       title: 'Team member removed',
-      description: removedMember ? `${removedMember.name} has been removed from the project.` : 'Team member removed successfully.',
+      description: removedMember ? `${removedMember.name} has been removed.` : 'Team member removed.',
       variant: 'default',
     });
   };
 
   const handleRoleChange = (userId: string, role: ProjectRole) => {
     const member = teamMembers.find(m => m.userId === userId);
-    const updatedTeam = teamMembers.map(m => 
-      m.userId === userId ? { ...m, role } : m
-    );
+    const updatedTeam = teamMembers.map(m => m.userId === userId ? { ...m, role } : m);
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
-    
     if (member) {
-      toast({
-        title: 'Role updated',
-        description: `${member.name}'s role changed to ${role}.`,
-        variant: 'success',
-      });
+      toast({ title: 'Role updated', description: `${member.name}'s role changed to ${role}.`, variant: 'success' });
     }
   };
 
-  const getWorkloadColor = (workload?: number): string => {
-    if (!workload) return "bg-gray-200";
-    if (workload < 30) return "bg-green-500";
-    if (workload < 70) return "bg-yellow-500";
-    return "bg-red-500";
+  const handlePaymentStatusChange = (userId: string, paymentStatus: 'unpaid' | 'partially_paid' | 'paid') => {
+    const updatedTeam = teamMembers.map(m => m.userId === userId ? { ...m, paymentStatus } : m);
+    setTeamMembers(updatedTeam);
+    onTeamChange(updatedTeam);
   };
+
+  const getWorkloadColor = (workload?: number): string => {
+    if (!workload) return 'bg-gray-200';
+    if (workload < 30) return 'bg-green-500';
+    if (workload < 70) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const membersWithFees = teamMembers.filter(m => m.feeType);
+  const totalProfessionalFees = membersWithFees.reduce(
+    (s, m) => s + calcMemberTotalCost(m, project.budget?.total), 0,
+  );
 
   return (
     <Card className="mt-8">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Team Composition</CardTitle>
-          <CardDescription>
-            Assign team members and roles for this project
-          </CardDescription>
+          <CardDescription>Assign team members and roles for this project</CardDescription>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
           <UserPlus className="h-4 w-4 mr-2" /> Add Team Member
         </Button>
       </CardHeader>
-      
+
       <CardContent>
+        {/* Professional fees summary banner */}
+        {membersWithFees.length > 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 flex items-center gap-3">
+            <DollarSign className="h-4 w-4 text-violet-600 shrink-0" />
+            <div className="flex-1 text-sm">
+              <span className="font-medium text-violet-700 dark:text-violet-300">Professional Fees: </span>
+              <span className="text-violet-600">{fmtMoney(totalProfessionalFees, membersWithFees[0]?.currency || 'SDG')}</span>
+              <span className="text-violet-500 ml-2 text-xs">across {membersWithFees.length} member{membersWithFees.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        )}
+
         {teamMembers.length > 0 ? (
           <div className="overflow-x-auto">
             <Table>
@@ -229,66 +256,97 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                 <TableRow>
                   <TableHead>Team Member</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Fee</TableHead>
                   <TableHead className="w-[100px] text-right">Workload</TableHead>
                   <TableHead className="w-[100px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {teamMembers.map((member) => (
-                  <TableRow key={member.userId}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`} alt={member.name} />
-                          <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{member.name}</p>
+                {teamMembers.map((member) => {
+                  const totalCost = calcMemberTotalCost(member, project.budget?.total);
+                  return (
+                    <TableRow key={member.userId}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`} alt={member.name} />
+                            <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-sm">{member.name}</p>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 ${member.memberType === 'external' ? 'border-violet-200 text-violet-700 bg-violet-50' : 'border-blue-200 text-blue-700 bg-blue-50'}`}
+                            >
+                              {member.memberType === 'external' ? 'External' : 'Internal'}
+                            </Badge>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select 
-                        value={member.role} 
-                        onValueChange={(value) => handleRoleChange(member.userId, value as ProjectRole)}
-                      >
-                        <SelectTrigger className="w-[160px]">
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="projectManager">Project Manager</SelectItem>
-                          <SelectItem value="fieldAssistant">Field Assistant</SelectItem>
-                          <SelectItem value="dataCollector">Data Collector</SelectItem>
-                          <SelectItem value="supervisor">Supervisor</SelectItem>
-                          <SelectItem value="coordinator">Coordinator</SelectItem>
-                          <SelectItem value="analyst">Analyst</SelectItem>
-                          <SelectItem value="reviewer">Reviewer</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end">
-                        <div className="w-full max-w-[100px] h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full ${getWorkloadColor(member.workload)}`} 
-                            style={{ width: `${member.workload || 0}%` }}
-                          ></div>
+                      </TableCell>
+                      <TableCell>
+                        <Select value={member.role} onValueChange={(value) => handleRoleChange(member.userId, value as ProjectRole)}>
+                          <SelectTrigger className="w-[150px]">
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="projectManager">Project Manager</SelectItem>
+                            <SelectItem value="fieldAssistant">Field Assistant</SelectItem>
+                            <SelectItem value="dataCollector">Data Collector</SelectItem>
+                            <SelectItem value="supervisor">Supervisor</SelectItem>
+                            <SelectItem value="coordinator">Coordinator</SelectItem>
+                            <SelectItem value="analyst">Analyst</SelectItem>
+                            <SelectItem value="reviewer">Reviewer</SelectItem>
+                            <SelectItem value="consultant">Consultant</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        {member.feeType ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1 text-xs font-medium">
+                              {member.feeType === 'per_hour' && <Clock className="h-3 w-3 text-blue-500" />}
+                              {member.feeType === 'fixed_fee' && <DollarSign className="h-3 w-3 text-green-500" />}
+                              {member.feeType === 'percent_budget' && <Percent className="h-3 w-3 text-violet-500" />}
+                              <span className="font-semibold">{fmtMoney(totalCost, member.currency)}</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">{FEE_LABELS[member.feeType]}</p>
+                            {member.feeType && (
+                              <Select
+                                value={member.paymentStatus || 'unpaid'}
+                                onValueChange={v => handlePaymentStatusChange(member.userId, v as any)}
+                              >
+                                <SelectTrigger className="h-6 text-[11px] w-[110px] px-2">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                                  <SelectItem value="partially_paid">Partial</SelectItem>
+                                  <SelectItem value="paid">Paid</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No fee</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end">
+                          <div className="w-full max-w-[100px] h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className={`h-full ${getWorkloadColor(member.workload)}`} style={{ width: `${member.workload || 0}%` }} />
+                          </div>
+                          <span className="ml-2 text-xs">{member.workload || 0}%</span>
                         </div>
-                        <span className="ml-2 text-xs">{member.workload || 0}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleRemoveTeamMember(member.userId)}
-                      >
-                        <UserMinus className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => handleRemoveTeamMember(member.userId)}>
+                          <UserMinus className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -296,20 +354,22 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
           <div className="flex flex-col items-center justify-center py-8 border border-dashed rounded-lg">
             <Users className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground text-sm">No team members assigned yet</p>
-            <Button className="mt-4" onClick={() => setDialogOpen(true)}>
+            <Button className="mt-4" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
               <UserPlus className="h-4 w-4 mr-2" /> Add Team Member
             </Button>
           </div>
         )}
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-2xl">
+        {/* Add Member Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) resetFeeFields(); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Team Member</DialogTitle>
             </DialogHeader>
-            
+
             <div className="space-y-4">
-              <div className="flex gap-4">
+              {/* Search + role */}
+              <div className="flex gap-3">
                 <div className="flex-1">
                   <Input
                     placeholder="Search by name, email or role..."
@@ -318,8 +378,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                   />
                 </div>
                 <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as ProjectRole)}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select role" />
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Role" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="projectManager">Project Manager</SelectItem>
@@ -329,57 +389,158 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                     <SelectItem value="coordinator">Coordinator</SelectItem>
                     <SelectItem value="analyst">Analyst</SelectItem>
                     <SelectItem value="reviewer">Reviewer</SelectItem>
+                    <SelectItem value="consultant">Consultant</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="border rounded-md overflow-hidden max-h-[300px] overflow-y-auto">
+              {/* Fee configuration */}
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-violet-500" />
+                  Professional Fee (optional)
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Member Type</Label>
+                    <Select value={memberType} onValueChange={v => setMemberType(v as TeamMemberType)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="internal">Internal (Staff)</SelectItem>
+                        <SelectItem value="external">External / Consultant</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Fee Type</Label>
+                    <Select value={feeType} onValueChange={v => setFeeType(v as TeamFeeType | '')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None (no fee)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="per_hour">Per Hour</SelectItem>
+                        <SelectItem value="fixed_fee">Fixed Fee (lump sum)</SelectItem>
+                        <SelectItem value="percent_budget">% of Project Budget</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {feeType && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        {feeType === 'per_hour' ? 'Hourly Rate' : feeType === 'percent_budget' ? '% of Budget' : 'Fixed Amount'}
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder={feeType === 'percent_budget' ? 'e.g. 5' : '0.00'}
+                        value={rate}
+                        onChange={e => setRate(e.target.value)}
+                      />
+                    </div>
+
+                    {feeType === 'per_hour' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Planned Hours</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 40"
+                          value={plannedHours}
+                          onChange={e => setPlannedHours(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    {feeType !== 'percent_budget' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Currency</Label>
+                        <Select value={feeCurrency} onValueChange={setFeeCurrency}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="SDG">SDG</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                            <SelectItem value="GBP">GBP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Payment Due Date</Label>
+                      <Input type="date" value={paymentDueDate} onChange={e => setPaymentDueDate(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Live total preview */}
+                {feeType && rate && (
+                  <div className="flex items-center gap-2 p-2.5 rounded-md bg-background border text-sm">
+                    <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <span className="text-muted-foreground">Estimated total:</span>
+                    <span className="font-bold text-emerald-600">
+                      {fmtMoney(
+                        feeType === 'per_hour'
+                          ? parseFloat(rate || '0') * parseFloat(plannedHours || '0')
+                          : feeType === 'fixed_fee'
+                          ? parseFloat(rate || '0')
+                          : (project.budget?.total || 0) * (parseFloat(rate || '0') / 100),
+                        feeType === 'percent_budget' ? (project.budget?.currency || 'SDG') : feeCurrency,
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* User list */}
+              <div className="border rounded-md overflow-hidden max-h-[260px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead>System Role</TableHead>
                       <TableHead className="w-[100px] text-right">Workload</TableHead>
-                      <TableHead className="w-[100px] text-right">Actions</TableHead>
+                      <TableHead className="w-[80px] text-right">Add</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.length > 0 ? (
                       filteredUsers.map((user) => {
                         const workload = user.performance?.currentWorkload || getWorkload(user.id);
-                        const isOverloaded = workload > 80;
-                        
                         return (
                           <TableRow key={user.id}>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <Avatar className="h-8 w-8">
+                                <Avatar className="h-7 w-7">
                                   <AvatarImage src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`} alt={user.name} />
                                   <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                 </Avatar>
                                 <div>
-                                  <p className="font-medium">{user.name}</p>
+                                  <p className="font-medium text-sm">{user.name}</p>
                                   <p className="text-xs text-muted-foreground">{user.email}</p>
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell>{user.role}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{user.role}</TableCell>
                             <TableCell className="text-right">
-                              <div className="flex items-center justify-end">
-                                <div className="w-full max-w-[100px] h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full ${getWorkloadColor(workload)}`} 
-                                    style={{ width: `${workload}%` }}
-                                  ></div>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                  <div className={`h-full ${getWorkloadColor(workload)}`} style={{ width: `${workload}%` }} />
                                 </div>
-                                <span className="ml-2 text-xs">{workload}%</span>
+                                <span className="text-xs text-muted-foreground">{workload}%</span>
                               </div>
-                              {isOverloaded && (
-                                <Badge variant="outline" className="ml-2 text-xs bg-red-50 text-red-700 border-red-200">
-                                  Overloaded
-                                </Badge>
-                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <Button size="sm" onClick={() => handleAddTeamMember(user)}>
@@ -391,8 +552,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-4">
-                          No users found matching your search criteria
+                        <TableCell colSpan={4} className="text-center py-4 text-muted-foreground text-sm">
+                          No users found matching your search
                         </TableCell>
                       </TableRow>
                     )}
@@ -400,9 +561,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                 </Table>
               </div>
             </div>
-            
+
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button variant="outline" onClick={() => { setDialogOpen(false); resetFeeFields(); }}>
                 Cancel
               </Button>
             </DialogFooter>
