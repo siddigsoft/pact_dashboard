@@ -478,15 +478,14 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
     if (files.length === 0) return;
     setUploading(true); setProgress(0);
     const pendingOrphanPaths: string[] = [];
+    let completed = 0;
 
     try {
       // ── Folder-upload: reconstruct subfolder hierarchy in workspace_folders ──
       const isFolderUpload = files.some(item => item.relativePath.includes('/'));
-      // path-segment → workspace_folders DB id
       const folderIdMap: Record<string, string> = {};
 
       if (isFolderUpload) {
-        // Collect every unique parent-folder path (not the file itself)
         const folderPaths = new Set<string>();
         for (const item of files) {
           const parts = item.relativePath.split('/');
@@ -494,10 +493,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
             folderPaths.add(parts.slice(0, depth).join('/'));
           }
         }
-        // Create shallowest folders first so parent IDs exist when children need them
-        const sorted = Array.from(folderPaths).sort(
-          (a, b) => a.split('/').length - b.split('/').length
-        );
+        const sorted = Array.from(folderPaths).sort((a, b) => a.split('/').length - b.split('/').length);
         for (const folderPath of sorted) {
           const parts      = folderPath.split('/');
           const name       = parts[parts.length - 1];
@@ -505,36 +501,29 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           const parentId   = parentPath ? (folderIdMap[parentPath] ?? null) : folderId;
           const { data: created, error: folderErr } = await (supabase as any)
             .from('workspace_folders')
-            .insert({
-              name, parent_folder_id: parentId,
-              security_level: secLevel, created_by: currentUserId,
-              is_system_folder: false, archived: false,
-            })
-            .select('id')
-            .single();
+            .insert({ name, parent_folder_id: parentId, security_level: secLevel, created_by: currentUserId, is_system_folder: false, archived: false })
+            .select('id').single();
           if (folderErr) throw folderErr;
           folderIdMap[folderPath] = created.id;
         }
       }
 
-      // ── Upload each file into the correct folder ──────────────────────────────
-      for (let i = 0; i < files.length; i++) {
-        const { file: f, relativePath } = files[i];
+      // ── Upload files in parallel (up to 4 concurrent) ──────────────────────
+      const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 
-        // Determine target folder: for folder uploads, resolve from path map
+      async function uploadOne(item: { file: File; relativePath: string }) {
+        const { file: f, relativePath } = item;
         let targetFolderId: string | null = folderId;
         if (isFolderUpload) {
-          const parts      = relativePath.split('/');
+          const parts = relativePath.split('/');
           const parentPath = parts.slice(0, -1).join('/');
-          targetFolderId   = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
+          targetFolderId = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
         }
-
-        const path = `${currentUserId}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const { error: uploadErr } = await supabase.storage
-          .from('workspace-files').upload(path, f, { upsert: false });
+        // Unique path: userId/timestamp_random_filename
+        const path = `${currentUserId}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const { error: uploadErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
         if (uploadErr) throw uploadErr;
         pendingOrphanPaths.push(path);
-
         const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
         const { error: dbErr } = await supabase.from('workspace_files').insert({
@@ -542,12 +531,20 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           storage_path: path, public_url: urlData?.publicUrl ?? null,
           file_size: f.size, mime_type: f.type, extension: ext,
           security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
-          tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+          tags: tagList,
         });
         if (dbErr) throw dbErr;
         const idx = pendingOrphanPaths.indexOf(path);
         if (idx >= 0) pendingOrphanPaths.splice(idx, 1);
-        setProgress(Math.round(((i + 1) / files.length) * 100));
+        completed++;
+        setProgress(Math.round((completed / files.length) * 100));
+      }
+
+      // Chunk into batches of 4 for parallel upload
+      const CONCURRENCY = 4;
+      for (let i = 0; i < files.length; i += CONCURRENCY) {
+        const batch = files.slice(i, i + CONCURRENCY);
+        await Promise.all(batch.map(uploadOne));
       }
 
       toast({
@@ -607,7 +604,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
                 Choose Folder
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-2">PDF, Word, Excel, PowerPoint, Images, ZIP — up to 50 MB each</p>
+            <p className="text-[11px] text-muted-foreground mt-2">All file types supported · No size limit per file</p>
             {/* Files input */}
             <input
               ref={fileRef} type="file" multiple className="hidden"
@@ -832,6 +829,18 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Image preview */}
+      {file.mime_type?.startsWith('image/') && file.public_url && (
+        <div className="border-b bg-muted/10 flex items-center justify-center p-3" style={{ maxHeight: 180 }}>
+          <img
+            src={file.public_url}
+            alt={file.name}
+            className="max-h-40 max-w-full rounded-lg object-contain shadow-sm border"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/20">
@@ -1109,12 +1118,22 @@ export default function WorkspaceHub() {
     }
   }, [location.search, isSuperAdmin]);
 
+  // ESC key closes the file detail panel
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSelectedFile(null);
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<WFile | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [secFilter, setSecFilter] = useState<SecurityLevel | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'pdf' | 'excel' | 'word' | 'zip' | 'other'>('all');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -1257,13 +1276,26 @@ export default function WorkspaceHub() {
     // Hide files that belong to locked folders (uploader/admin bypass)
     files = files.filter(f => isOwnerOrAdmin(f) || !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
     if (secFilter !== 'all') files = files.filter(f => f.security_level === secFilter);
-    if (searchQuery.trim()) { const q = searchQuery.toLowerCase(); files = files.filter(f => f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q) || f.tags.some(t => t.toLowerCase().includes(q))); }
+    if (typeFilter !== 'all') {
+      files = files.filter(f => {
+        const mime = f.mime_type ?? '';
+        const ext  = (f.extension ?? '').toLowerCase();
+        if (typeFilter === 'image') return mime.startsWith('image/');
+        if (typeFilter === 'pdf')   return mime === 'application/pdf' || ext === 'pdf';
+        if (typeFilter === 'excel') return mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(ext);
+        if (typeFilter === 'word')  return mime.includes('word') || mime.includes('document') || ['docx','doc'].includes(ext);
+        if (typeFilter === 'zip')   return mime.includes('zip') || mime.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(ext);
+        // 'other' = anything not in the above
+        return !mime.startsWith('image/') && mime !== 'application/pdf' && !mime.includes('spreadsheet') && !mime.includes('excel') && !mime.includes('word') && !mime.includes('document') && !mime.includes('zip') && !['pdf','xlsx','xls','csv','docx','doc','zip','rar','7z','tar','gz'].includes(ext);
+      });
+    }
+    if (searchQuery.trim()) { const q = searchQuery.toLowerCase(); files = files.filter(f => f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q) || f.tags.some(t => t.toLowerCase().includes(q)) || (f._uploaderName ?? '').toLowerCase().includes(q)); }
     return [...files].sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       if (sortBy === 'size') return b.file_size - a.file_size;
       return b.updated_at.localeCompare(a.updated_at);
     });
-  }, [allFiles, selectedFolderId, secFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance]);
+  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance]);
 
   // ── Folder actions ────────────────────────────────────────────────────────
 
@@ -1362,13 +1394,13 @@ export default function WorkspaceHub() {
   }
 
   async function deleteFile(file: WFile) {
-    await supabase.storage.from('workspace-files').remove([file.storage_path]);
+    // Archive only — do NOT remove from storage; permanent deletion happens in the Recycle Bin
     const { error } = await supabase.from('workspace_files').update({ archived: true }).eq('id', file.id);
     if (error) { toast({ title: 'Failed to remove file', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: {} });
     if (selectedFile?.id === file.id) setSelectedFile(null);
     refetchFiles();
-    toast({ title: 'File removed' });
+    toast({ title: 'File moved to Recycle Bin', description: 'You can restore it from the Trash tab.' });
   }
 
   async function changeFileSecurity(file: WFile, level: SecurityLevel) {
@@ -2135,6 +2167,19 @@ export default function WorkspaceHub() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…" className="pl-8 h-8 text-xs" />
             </div>
+
+            <Select value={typeFilter} onValueChange={v => setTypeFilter(v as any)}>
+              <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All Types</SelectItem>
+                <SelectItem value="image" className="text-xs">🖼 Images</SelectItem>
+                <SelectItem value="pdf" className="text-xs">📄 PDF</SelectItem>
+                <SelectItem value="excel" className="text-xs">📊 Excel / CSV</SelectItem>
+                <SelectItem value="word" className="text-xs">📝 Word</SelectItem>
+                <SelectItem value="zip" className="text-xs">📦 Archives</SelectItem>
+                <SelectItem value="other" className="text-xs">Other</SelectItem>
+              </SelectContent>
+            </Select>
 
             <Select value={secFilter} onValueChange={v => setSecFilter(v as any)}>
               <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="All Levels" /></SelectTrigger>
