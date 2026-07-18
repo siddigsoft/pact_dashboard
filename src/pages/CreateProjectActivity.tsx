@@ -6,7 +6,7 @@ import ActivityForm from '@/components/project/activity/ActivityForm';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useInvalidateProjectsQueries } from '@/context/project/projectQueries';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/context/AuthContext';
+import { useUser } from '@/context/user/UserContext';
 import { ProjectActivity, Project } from '@/types/project';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -17,7 +17,7 @@ const CreateProjectActivity = () => {
   const navigate = useNavigate();
   const { getProjectById, fetchProjects, projects, loading } = useProjectContext();
   const invalidate = useInvalidateProjectsQueries();
-  const { user } = useAuth();
+  const { currentUser } = useUser();
   const { toast } = useToast();
   const [project, setProject] = useState<Project | undefined>(undefined);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
@@ -74,7 +74,7 @@ const CreateProjectActivity = () => {
           priority:         activity.priority ?? 'medium',
           progress:         activity.progress ?? 0,
           is_active:        activity.isActive,
-          created_by:       user?.id ?? null,
+          created_by:       currentUser?.id ?? null,
         })
         .select('id')
         .single();
