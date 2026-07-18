@@ -1916,65 +1916,74 @@ export default function WorkspaceHub() {
     const isBulkSelected = selectedFileIds.has(file.id);
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
     const isImage = file.mime_type?.startsWith('image/') && file.public_url;
+    const ext = (file.extension ?? file.name.split('.').pop() ?? '').toUpperCase().slice(0, 6);
     return (
       <div onClick={() => openFile(file)}
         draggable
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
-        className={cn('flex items-center gap-3 px-4 py-3 border-b last:border-b-0 cursor-grab active:cursor-grabbing hover:bg-muted/30 transition-colors group',
+        className={cn('flex items-center gap-2 px-3 py-2 border-b last:border-b-0 cursor-default hover:bg-muted/30 transition-colors group select-none',
           isSelected && 'bg-[#1D3461]/5',
           isBulkSelected && 'bg-[#1D3461]/8 ring-1 ring-inset ring-[#1D3461]/20',
-          dragFileId === file.id && 'opacity-50')}>
-        <button onClick={e => toggleFileSelection(file.id, e)} className="flex-shrink-0 text-muted-foreground hover:text-[#1D3461] transition-colors">
+          dragFileId === file.id && 'opacity-40')}>
+        {/* Checkbox */}
+        <button onClick={e => toggleFileSelection(file.id, e)} className="w-4 flex-shrink-0 text-muted-foreground hover:text-[#1D3461] transition-colors">
           {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461]" /> : <Square className="h-4 w-4 opacity-0 group-hover:opacity-100" />}
         </button>
-        <div className="relative h-9 w-9 rounded-xl overflow-hidden flex-shrink-0">
+        {/* Thumbnail / icon */}
+        <div className="relative h-8 w-8 rounded-lg overflow-hidden flex-shrink-0">
           {isImage ? (
-            <img src={file.public_url!} alt={file.name} className="h-9 w-9 object-cover rounded-xl" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img src={file.public_url!} alt={file.name} className="h-8 w-8 object-cover rounded-lg" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           ) : (
-            <div className="h-9 w-9 rounded-xl bg-[#1D3461]/10 flex items-center justify-center">
-              <Icon className="h-5 w-5 text-[#1D3461]" />
+            <div className="h-8 w-8 rounded-lg bg-[#1D3461]/10 flex items-center justify-center">
+              <Icon className="h-4 w-4 text-[#1D3461]" />
             </div>
           )}
-          {isLocked && <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-2.5 w-2.5 text-white" /></span>}
+          {isLocked && <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-2 w-2 text-white" /></span>}
         </div>
+        {/* Name */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium truncate">{file.name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium truncate leading-tight" title={file.name}>{file.name}</p>
             {file.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
             {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <SecBadge level={file.security_level} size="xs" />
-            <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
             {!file.allow_download && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium cursor-help">
-                    <Ban className="h-2.5 w-2.5" />No DL
+                  <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1 py-0 rounded-full font-medium cursor-help flex-shrink-0">
+                    <Ban className="h-2 w-2" />DL off
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[230px] text-xs leading-relaxed">
-                  <p className="font-semibold mb-1">Downloads are disabled</p>
-                  <p>Users can view and share this file, but cannot save it to their device.</p>
-                  <p className="mt-1 text-muted-foreground">Admins can re-enable via ⋮ → Allow Downloads.</p>
-                </TooltipContent>
+                <TooltipContent side="top" className="max-w-[200px] text-xs">Downloads are disabled for this file</TooltipContent>
               </Tooltip>
             )}
-            {file.tags.slice(0, 2).map(t => <span key={t} className="text-[9px] bg-muted px-1.5 py-0 rounded-full">{t}</span>)}
           </div>
+          {file.tags.length > 0 && (
+            <div className="flex items-center gap-1 mt-0.5">
+              {file.tags.slice(0, 3).map(t => <span key={t} className="text-[9px] bg-muted px-1.5 py-0 rounded-full text-muted-foreground">{t}</span>)}
+            </div>
+          )}
         </div>
-        <div className="hidden sm:flex flex-col items-end text-right">
-          <span className="text-xs text-muted-foreground">{fmtRelative(file.updated_at)}</span>
-          <span className="text-[10px] text-muted-foreground">{file._uploaderName}</span>
+        {/* Type */}
+        <span className="hidden md:block w-[58px] text-[10px] text-muted-foreground font-mono flex-shrink-0">{ext || '—'}</span>
+        {/* Security */}
+        <div className="hidden sm:block w-[88px] flex-shrink-0">
+          <SecBadge level={file.security_level} size="xs" />
         </div>
+        {/* Modified */}
+        <div className="hidden md:flex w-[130px] flex-col flex-shrink-0">
+          <span className="text-xs text-muted-foreground leading-tight">{fmtRelative(file.updated_at)}</span>
+          <span className="text-[10px] text-muted-foreground/70 truncate leading-tight">{file._uploaderName}</span>
+        </div>
+        {/* Size */}
+        <span className="hidden sm:block w-16 text-xs text-muted-foreground text-right flex-shrink-0">{fmtSize(file.file_size)}</span>
         {/* Quick hover actions */}
-        <div className="hidden sm:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="hidden sm:flex items-center gap-0.5 w-[88px] justify-end flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           {(file.allow_download || canManageFile(file)) && !file.password_hash && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-green-600 hover:bg-green-50 transition-colors">
+                  className="p-1 rounded text-muted-foreground hover:text-green-600 hover:bg-green-50 transition-colors">
                   <Download className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
@@ -1985,7 +1994,7 @@ export default function WorkspaceHub() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.public_url!).then(() => toast({ title: 'Link copied', description: file.name })); }}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5 transition-colors">
+                  className="p-1 rounded text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5 transition-colors">
                   <Copy className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
@@ -1995,50 +2004,50 @@ export default function WorkspaceHub() {
           <Tooltip>
             <TooltipTrigger asChild>
               <button onClick={e => { e.stopPropagation(); togglePinFile(file); }}
-                className={cn('p-1.5 rounded-lg transition-colors', file.is_pinned ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50' : 'text-muted-foreground hover:text-amber-500 hover:bg-amber-50')}>
+                className={cn('p-1 rounded transition-colors', file.is_pinned ? 'text-amber-500 hover:bg-amber-50' : 'text-muted-foreground hover:text-amber-500 hover:bg-amber-50')}>
                 <Star className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">{file.is_pinned ? 'Unpin' : 'Pin'}</TooltipContent>
           </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+              <button className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+                <MoreVertical className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="text-xs">
+              <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
+              {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
+              {canManageFile(file) && <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                  <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
+              </>}
+              {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
+                <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
+                  <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
+                </DropdownMenuItem>
+              )}
+              {canManageFile(file) && <>
+                <DropdownMenuSeparator />
+                <SecuritySubMenu current={file.security_level} onSelect={l => changeFileSecurity(file, l)} />
+                <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
+                  {file.allow_download
+                    ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
+                    : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+              </>}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-            <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all">
-              <MoreVertical className="h-3.5 w-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="text-xs">
-            <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
-            {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
-            {canManageFile(file) && <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
-            </>}
-            {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
-              <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
-                <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
-              </DropdownMenuItem>
-            )}
-            {canManageFile(file) && <>
-              <DropdownMenuSeparator />
-              <SecuritySubMenu current={file.security_level} onSelect={l => changeFileSecurity(file, l)} />
-              <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
-                {file.allow_download
-                  ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
-                  : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
-            </>}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     );
   }
@@ -2049,39 +2058,49 @@ export default function WorkspaceHub() {
     const isBulkSelected = selectedFileIds.has(file.id);
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
     const isImage = file.mime_type?.startsWith('image/') && file.public_url;
+    const ext = (file.extension ?? file.name.split('.').pop() ?? '').toUpperCase().slice(0, 6);
+    const secCfg = SEC_CFG[file.security_level];
     return (
       <div onClick={() => openFile(file)}
         draggable
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
-        className={cn('flex flex-col rounded-2xl border cursor-grab active:cursor-grabbing hover:shadow-md transition-all group relative overflow-hidden',
-          isSelected ? 'border-[#1D3461] ring-2 ring-[#1D3461]/20' : 'hover:border-[#1D3461]/40',
+        className={cn('flex flex-col rounded-xl border bg-card cursor-default hover:shadow-md hover:border-[#1D3461]/30 transition-all group relative overflow-hidden select-none',
+          isSelected ? 'border-[#1D3461] ring-2 ring-[#1D3461]/20' : '',
           isBulkSelected && 'ring-2 ring-[#1D3461] border-[#1D3461]',
-          dragFileId === file.id && 'opacity-50')}>
-        {/* Thumbnail area */}
-        {isImage ? (
-          <div className="relative h-28 w-full overflow-hidden bg-muted/20">
-            <img src={file.public_url!} alt={file.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }} />
-            {isLocked && <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-3 w-3 text-white" /></span>}
-            <button onClick={e => toggleFileSelection(file.id, e)} className="absolute top-1.5 left-1.5 z-10">
-              {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461] bg-white rounded" /> : <Square className="h-4 w-4 text-white opacity-0 group-hover:opacity-80 drop-shadow" />}
-            </button>
-          </div>
-        ) : null}
-        <div className={cn('flex flex-col p-3', isImage ? '' : 'flex-1')}>
-        <div className="flex items-start justify-between mb-3">
-          {!isImage && (
-          <div className="relative h-12 w-12 rounded-xl bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
-            <Icon className="h-6 w-6 text-[#1D3461]" />
-            {isLocked && <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-3 w-3 text-white" /></span>}
-          </div>
+          dragFileId === file.id && 'opacity-40')}>
+
+        {/* Thumbnail / icon area */}
+        <div className="relative overflow-hidden flex-shrink-0">
+          {isImage ? (
+            <div className="h-28 bg-muted/20">
+              <img src={file.public_url!} alt={file.name} className="w-full h-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).parentElement!.className = 'h-28 bg-muted/20 flex items-center justify-center'; (e.target as HTMLImageElement).replaceWith((() => { const d = document.createElement('div'); d.innerHTML = ''; return d; })()); }} />
+            </div>
+          ) : (
+            <div className="h-20 bg-gradient-to-br from-[#1D3461]/5 to-[#1D3461]/10 flex items-center justify-center">
+              <Icon className="h-9 w-9 text-[#1D3461]/60" />
+            </div>
           )}
-          <div className="flex items-center gap-1">
-            {file.is_pinned && <Star className="h-3.5 w-3.5 text-amber-500" />}
-            {file.password_hash && !isLocked && <LockOpen className="h-3.5 w-3.5 text-green-500" />}
+          {/* Checkbox overlay */}
+          <button onClick={e => toggleFileSelection(file.id, e)} className="absolute top-1.5 left-1.5 z-10">
+            {isBulkSelected
+              ? <SquareCheck className="h-4 w-4 text-[#1D3461] bg-white rounded drop-shadow" />
+              : <Square className="h-4 w-4 text-white opacity-0 group-hover:opacity-80 drop-shadow" />}
+          </button>
+          {/* Lock badge */}
+          {isLocked && <span className="absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-3 w-3 text-white" /></span>}
+          {/* Extension pill for non-images */}
+          {!isImage && ext && (
+            <span className="absolute bottom-1.5 left-1.5 text-[9px] font-bold bg-white/80 dark:bg-black/50 text-muted-foreground px-1.5 py-0.5 rounded backdrop-blur-sm">
+              {ext}
+            </span>
+          )}
+          {/* Quick actions on hover */}
+          <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                <button className="p-1 rounded text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all">
+                <button className="h-6 w-6 rounded bg-white/80 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shadow-sm">
                   <MoreVertical className="h-3.5 w-3.5" />
                 </button>
               </DropdownMenuTrigger>
@@ -2118,27 +2137,27 @@ export default function WorkspaceHub() {
             </DropdownMenu>
           </div>
         </div>
-        <p className="text-xs font-semibold line-clamp-2 mb-1.5">{file.name}</p>
-        <div className="flex items-center gap-1 flex-wrap mt-auto">
-          <SecBadge level={file.security_level} size="xs" />
-          <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
-          {!file.allow_download && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium cursor-help">
-                  <Ban className="h-2.5 w-2.5" />No DL
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[230px] text-xs leading-relaxed">
-                <p className="font-semibold mb-1">Downloads are disabled</p>
-                <p>Users can view and share this file, but cannot save it to their device.</p>
-                <p className="mt-1 text-muted-foreground">Admins can re-enable via ⋮ → Allow Downloads.</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
+
+        {/* Info area */}
+        <div className="flex flex-col px-2.5 py-2 gap-1 flex-1">
+          {/* File name */}
+          <p className="text-xs font-semibold line-clamp-2 leading-tight text-foreground group-hover:text-[#1D3461] transition-colors" title={file.name}>
+            {file.name}
+          </p>
+          {/* Meta row */}
+          <div className="flex items-center gap-1.5 mt-auto">
+            <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0', secCfg.bg, secCfg.text)}>
+              {secCfg.label}
+            </span>
+            {file.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+            {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
+            {!file.allow_download && <Ban className="h-3 w-3 text-orange-500 flex-shrink-0" />}
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-muted-foreground">{fmtRelative(file.updated_at)}</span>
+            <span className="text-[10px] text-muted-foreground font-medium">{fmtSize(file.file_size)}</span>
+          </div>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5">{fmtRelative(file.updated_at)}</p>
-        </div>{/* end inner p-3 wrapper */}
       </div>
     );
   }
@@ -2711,83 +2730,93 @@ export default function WorkspaceHub() {
               </div>
             ) : (
               <div>
-                {/* ── Sub-folders ──────────────────────────────────────────── */}
+                {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
                 {currentSubFolders.length > 0 && (
-                  <div className="px-5 pt-4 pb-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                      <Folder className="h-3 w-3" />
-                      Folders <span className="font-normal">({currentSubFolders.length})</span>
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                      {currentSubFolders.map(sub => {
-                        const subFileCount = fileCounts[sub.id] ?? 0;
-                        const subChildCount = (childMap[sub.id] ?? []).length;
-                        const secCfg = SEC_CFG[sub.security_level];
-                        const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
-                        const folderColor = sub.color || '#1D3461';
-                        return (
-                          <button
-                            key={sub.id}
-                            onClick={() => setSelectedFolderId(sub.id)}
-                            onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
-                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
-                            onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
-                            className={cn(
-                              'group flex flex-col items-center gap-2 p-3 rounded-xl border bg-card hover:bg-[#1D3461]/5 hover:border-[#1D3461]/30 hover:shadow-sm transition-all text-center',
-                              dragOverFolderId === sub.id && 'ring-2 ring-[#1D3461] bg-[#1D3461]/5'
-                            )}
-                            data-testid={`subfolder-btn-${sub.id}`}
-                          >
-                            {/* Folder icon */}
-                            <div className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                              style={{ backgroundColor: folderColor + '20' }}>
-                              {isLocked
-                                ? <Lock className="h-5 w-5 text-amber-500" />
-                                : sub.icon
-                                  ? <span className="text-xl leading-none">{sub.icon}</span>
-                                  : <Folder className="h-5 w-5" style={{ color: folderColor }} />}
-                            </div>
-                            {/* Folder name — wraps up to 2 lines */}
-                            <p className="text-xs font-semibold text-foreground group-hover:text-[#1D3461] leading-tight w-full line-clamp-2 text-center break-words">
+                  <div className="border-b">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
+                      <Folder className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Folders</span>
+                      <span className="text-[10px] text-muted-foreground ml-0.5">({currentSubFolders.length})</span>
+                    </div>
+                    {currentSubFolders.map(sub => {
+                      const subFileCount = fileCounts[sub.id] ?? 0;
+                      const subChildCount = (childMap[sub.id] ?? []).length;
+                      const secCfg = SEC_CFG[sub.security_level];
+                      const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
+                      const folderColor = sub.color || '#1D3461';
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => setSelectedFolderId(sub.id)}
+                          onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
+                          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
+                          onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
+                          className={cn(
+                            'group w-full flex items-center gap-3 px-4 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors text-left',
+                            dragOverFolderId === sub.id && 'bg-[#1D3461]/5 border-l-2 border-l-[#1D3461]'
+                          )}
+                          data-testid={`subfolder-btn-${sub.id}`}
+                        >
+                          <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: folderColor + '20' }}>
+                            {isLocked
+                              ? <Lock className="h-4 w-4 text-amber-500" />
+                              : sub.icon
+                                ? <span className="text-base leading-none">{sub.icon}</span>
+                                : <Folder className="h-4 w-4" style={{ color: folderColor }} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate group-hover:text-[#1D3461] transition-colors" title={sub.name}>
                               {sub.name}
                             </p>
-                            {/* Stats */}
-                            <p className="text-[10px] text-muted-foreground leading-tight">
-                              {subFileCount} file{subFileCount !== 1 ? 's' : ''}
-                              {subChildCount > 0 && <><br />{subChildCount} folder{subChildCount !== 1 ? 's' : ''}</>}
+                            <p className="text-[10px] text-muted-foreground">
+                              {subFileCount} {subFileCount === 1 ? 'file' : 'files'}
+                              {subChildCount > 0 && ` · ${subChildCount} ${subChildCount === 1 ? 'folder' : 'folders'}`}
+                              {sub.description && ` · ${sub.description}`}
                             </p>
-                            {/* Security badge */}
-                            <div className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-auto', secCfg.bg, secCfg.text)}>
-                              {secCfg.label}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {displayedFiles.length > 0 && (
-                      <div className="mt-4 mb-1 border-t pt-3">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                          <File className="h-3 w-3" />
-                          Files <span className="font-normal">({displayedFiles.length})</span>
-                        </p>
-                      </div>
-                    )}
+                          </div>
+                          <div className={cn('hidden sm:flex text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0', secCfg.bg, secCfg.text)}>
+                            {secCfg.label}
+                          </div>
+                          {dragOverFolderId === sub.id && (
+                            <span className="text-[10px] text-[#1D3461] font-semibold flex-shrink-0">Drop here</span>
+                          )}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-[#1D3461] flex-shrink-0 transition-colors" />
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
                 {/* ── Files ────────────────────────────────────────────────── */}
-                {displayedFiles.length > 0 && (viewMode === 'list' ? (
-                  <div className="bg-card border-b">
-                    <div className="grid grid-cols-[1fr_100px_120px_80px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b px-4 py-2 gap-2 hidden sm:grid">
-                      <span>File</span><span>Security</span><span>Modified</span><span className="text-right">Size</span>
+                {displayedFiles.length > 0 && (<>
+                  {currentSubFolders.length > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
+                      <File className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Files</span>
+                      <span className="text-[10px] text-muted-foreground ml-0.5">({displayedFiles.length})</span>
                     </div>
-                    {displayedFiles.map(f => <FileRow key={f.id} file={f} />)}
-                  </div>
-                ) : (
-                  <div className="p-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                    {displayedFiles.map(f => <FileCard key={f.id} file={f} />)}
-                  </div>
-                ))}
+                  )}
+                  {viewMode === 'list' ? (
+                    <div>
+                      <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 border-b bg-muted/30 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
+                        <span className="w-4 flex-shrink-0" />
+                        <span className="w-8 flex-shrink-0" />
+                        <span className="flex-1">Name</span>
+                        <span className="w-[58px] hidden md:block">Type</span>
+                        <span className="w-[88px]">Security</span>
+                        <span className="w-[130px] hidden md:block">Modified</span>
+                        <span className="w-16 text-right">Size</span>
+                        <span className="w-[88px] flex-shrink-0" />
+                      </div>
+                      {displayedFiles.map(f => <FileRow key={f.id} file={f} />)}
+                    </div>
+                  ) : (
+                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {displayedFiles.map(f => <FileCard key={f.id} file={f} />)}
+                    </div>
+                  )}
+                </>)}
 
                 {/* Empty files state when sub-folders exist */}
                 {displayedFiles.length === 0 && currentSubFolders.length > 0 && (
