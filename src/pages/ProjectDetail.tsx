@@ -20,14 +20,14 @@ const ProjectDetailPage = () => {
   const { toast } = useToast();
   const [deleting, setDeleting] = useState(false);
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const { currentUser } = useUser();
+  const { currentUser, authReady } = useUser();
 
-  // Effect to fetch projects if not loaded
+  // Effect to fetch projects once auth + context are ready
   useEffect(() => {
-    if (projects.length === 0 && !loading) {
+    if (authReady && projects.length === 0 && !loading) {
       fetchProjects();
     }
-  }, []);
+  }, [authReady, loading, projects.length]);
 
   // Effect to find the project when projects or id changes
   useEffect(() => {
@@ -35,19 +35,17 @@ const ProjectDetailPage = () => {
       setProject(undefined);
       return;
     }
-    
     const foundProject = getProjectById(id);
     setProject(foundProject);
-    
-    // Show toast if project not found after loading is complete
-    if (!foundProject && !loading && projects.length > 0) {
+    // Only toast "not found" when we are certain the data is loaded
+    if (!foundProject && authReady && !loading && projects.length > 0) {
       toast({
         title: "Project Not Found",
         description: "The requested project could not be found.",
         variant: "destructive",
       });
     }
-  }, [id, projects, loading]);
+  }, [id, projects, loading, authReady]);
 
   const handleEdit = () => {
     navigate(`/projects/${id}/edit`);
@@ -84,7 +82,7 @@ const ProjectDetailPage = () => {
     }
   };
 
-  if (loading && !project) {
+  if ((!authReady || loading) && !project) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
@@ -117,7 +115,7 @@ const ProjectDetailPage = () => {
     );
   }
 
-  if (!project && !loading) {
+  if (!project && authReady && !loading) {
     return (
       <div className="max-w-2xl mx-auto my-12">
         <Alert>

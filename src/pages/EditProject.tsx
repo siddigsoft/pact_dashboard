@@ -9,6 +9,7 @@ import { useProjectContext } from '@/context/project/ProjectContext';
 import { Project } from '@/types/project';
 import { useToast } from '@/hooks/toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useUser } from '@/context/user/UserContext';
 
 const EditProject = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,13 +17,14 @@ const EditProject = () => {
   const { getProjectById, updateProject, fetchProjects, loading, projects } = useProjectContext();
   const [project, setProject] = useState<Project | undefined>(undefined);
   const { toast } = useToast();
+  const { authReady } = useUser();
 
-  // Effect to fetch projects if not loaded
+  // Effect to fetch projects once auth is ready
   useEffect(() => {
-    if (projects.length === 0 && !loading) {
+    if (authReady && projects.length === 0 && !loading) {
       fetchProjects();
     }
-  }, []);
+  }, [authReady, loading, projects.length]);
 
   // Effect to find the project when projects or id changes
   useEffect(() => {
@@ -30,24 +32,20 @@ const EditProject = () => {
       setProject(undefined);
       return;
     }
-    
     const foundProject = getProjectById(id);
     setProject(foundProject);
-    
-    // Show toast and redirect if project not found after loading is complete
-    if (!foundProject && !loading && projects.length > 0) {
+    // Only redirect when we are certain the data is loaded
+    if (!foundProject && authReady && !loading && projects.length > 0) {
       toast({
         title: "Project Not Found",
         description: "The project could not be found. You will be redirected to the projects page.",
         variant: "destructive",
       });
-      
-      // Delay navigation slightly to give the user time to read the toast
       setTimeout(() => {
         navigate('/projects');
       }, 2000);
     }
-  }, [id, projects, loading]);
+  }, [id, projects, loading, authReady]);
 
   const handleSubmit = async (updatedProject: Project) => {
     try {
@@ -68,7 +66,7 @@ const EditProject = () => {
     }
   };
 
-  if (loading && !project) {
+  if ((!authReady || loading) && !project) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
@@ -82,7 +80,7 @@ const EditProject = () => {
     );
   }
 
-  if (!project && !loading) {
+  if (!project && authReady && !loading) {
     return (
       <Alert>
         <AlertTitle>Project Not Found</AlertTitle>

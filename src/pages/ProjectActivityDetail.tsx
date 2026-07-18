@@ -4,6 +4,7 @@ import { AlertTriangle, Calendar, Users, ChevronLeft, Flag, TrendingUp, CheckCir
 import { format, isValid, parseISO } from 'date-fns';
 
 import { useProjectContext } from '@/context/project/ProjectContext';
+import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useInvalidateProjectsQueries } from '@/context/project/projectQueries';
 import { useToast } from '@/hooks/use-toast';
@@ -33,20 +34,16 @@ const ProjectActivityDetail: FC = () => {
   const { id, activityId } = useParams<{ id: string; activityId: string }>();
   const navigate = useNavigate();
   const { projects, loading, fetchProjects, getProjectById } = useProjectContext();
+  const { authReady } = useUser();
   const invalidate = useInvalidateProjectsQueries();
   const { toast } = useToast();
-  const [projectLoaded, setProjectLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localStatus, setLocalStatus] = useState<string>('');
   const [localProgress, setLocalProgress] = useState<number>(0);
 
   useEffect(() => {
-    const ensureProjects = async () => {
-      if (projects.length === 0 && !loading) await fetchProjects();
-      setProjectLoaded(true);
-    };
-    ensureProjects();
-  }, []);
+    if (authReady && projects.length === 0 && !loading) fetchProjects();
+  }, [authReady, loading, projects.length]);
 
   const project = useMemo(() => (id ? getProjectById(id) : undefined), [id, projects]);
   const activity: ProjectActivity | undefined = useMemo(
@@ -87,7 +84,7 @@ const ProjectActivityDetail: FC = () => {
 
   const isDirty = activity && (localStatus !== activity.status || localProgress !== (activity.progress ?? 0));
 
-  if ((loading || !projectLoaded) && !project) {
+  if ((!authReady || loading) && !project) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -95,7 +92,7 @@ const ProjectActivityDetail: FC = () => {
     );
   }
 
-  if (!project) {
+  if (!project && authReady && !loading) {
     return (
       <div className="max-w-2xl mx-auto my-12">
         <Alert>

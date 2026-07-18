@@ -8,38 +8,35 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { TeamCompositionManager } from '@/components/project/team/TeamCompositionManager';
 import { ProjectTeamMember, Project } from '@/types/project';
 import { useToast } from '@/hooks/toast';
+import { useUser } from '@/context/user/UserContext';
 
 const ProjectTeamManagement = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getProjectById, updateProjectTeam, fetchProjects, loading, projects } = useProjectContext();
   const { toast } = useToast();
+  const { authReady } = useUser();
   const [project, setProject] = useState<Project | undefined>(undefined);
-  const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Fetch on mount if needed
+  // Fetch on mount once auth is ready
   useEffect(() => {
-    if (projects.length === 0 && !loading) {
+    if (authReady && projects.length === 0 && !loading) {
       fetchProjects();
     }
-  }, []);
+  }, [authReady, loading, projects.length]);
 
   // Resolve project when deps change
   useEffect(() => {
     if (!id) {
       setProject(undefined);
-      setIsLoadingProject(false);
       return;
     }
     const foundProject = getProjectById(id);
     setProject(foundProject);
-    if (projects.length > 0 || !loading) {
-      setIsLoadingProject(false);
-    }
   }, [id, projects, loading]);
   
-  if (isLoadingProject || (loading && !project)) {
+  if ((!authReady || loading) && !project) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
@@ -53,7 +50,7 @@ const ProjectTeamManagement = () => {
     );
   }
   
-  if (!project && !loading) {
+  if (!project && authReady && !loading) {
     return (
       <Alert>
         <AlertTitle>Project Not Found</AlertTitle>

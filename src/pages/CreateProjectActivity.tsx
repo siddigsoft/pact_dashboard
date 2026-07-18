@@ -17,24 +17,22 @@ const CreateProjectActivity = () => {
   const navigate = useNavigate();
   const { getProjectById, fetchProjects, projects, loading } = useProjectContext();
   const invalidate = useInvalidateProjectsQueries();
-  const { currentUser } = useUser();
+  const { currentUser, authReady } = useUser();
   const { toast } = useToast();
   const [project, setProject] = useState<Project | undefined>(undefined);
-  const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (projects.length === 0 && !loading) fetchProjects();
-  }, []);
+    if (authReady && projects.length === 0 && !loading) fetchProjects();
+  }, [authReady, loading, projects.length]);
 
   useEffect(() => {
-    if (!id) { setProject(undefined); setIsLoadingProject(false); return; }
+    if (!id) { setProject(undefined); return; }
     const found = getProjectById(id);
     setProject(found);
-    if (projects.length > 0 || !loading) setIsLoadingProject(false);
   }, [id, projects, loading]);
 
-  if (isLoadingProject || (loading && !project)) {
+  if ((!authReady || loading) && !project) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -42,7 +40,7 @@ const CreateProjectActivity = () => {
     );
   }
 
-  if (!project && !isLoadingProject) {
+  if (!project && authReady && !loading) {
     return (
       <Alert>
         <AlertTriangle className="h-4 w-4" />
