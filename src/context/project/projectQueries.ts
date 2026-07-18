@@ -54,7 +54,7 @@ async function fetchProjects(): Promise<Project[]> {
   // Fetch activities separately
   const { data: activitiesData } = await supabase
     .from('project_activities')
-    .select('id, project_id, name, description, start_date, end_date, status, is_active, assigned_to')
+    .select('id, project_id, name, description, start_date, end_date, due_date, status, is_active, assigned_to, priority, progress, activity_type_id')
     .in('project_id', projectIds);
 
   const activityIds = (activitiesData || []).map((a: any) => a.id);
@@ -64,6 +64,14 @@ async function fetchProjects(): Promise<Project[]> {
     ? await supabase
         .from('sub_activities')
         .select('id, activity_id, name, description, status, is_active, due_date, assigned_to')
+        .in('activity_id', activityIds)
+    : { data: [] };
+
+  // Fetch multi-assignees from project_activity_assignments
+  const { data: assignmentsData } = activityIds.length > 0
+    ? await supabase
+        .from('project_activity_assignments')
+        .select('activity_id, user_id, profiles!user_id(full_name)')
         .in('activity_id', activityIds)
     : { data: [] };
 
@@ -82,6 +90,14 @@ async function fetchProjects(): Promise<Project[]> {
     });
   }
 
+  // Group assignees by activity_id
+  const assigneesByActivity: Record<string, string[]> = {};
+  for (const a of (assignmentsData || [])) {
+    if (!assigneesByActivity[a.activity_id]) assigneesByActivity[a.activity_id] = [];
+    const name = (a as any).profiles?.full_name ?? a.user_id;
+    assigneesByActivity[a.activity_id].push(name);
+  }
+
   // Group activities by project_id
   const activitiesByProject: Record<string, ProjectActivity[]> = {};
   for (const dbActivity of (activitiesData || [])) {
@@ -92,9 +108,14 @@ async function fetchProjects(): Promise<Project[]> {
       description: dbActivity.description,
       startDate: dbActivity.start_date,
       endDate: dbActivity.end_date,
+      dueDate: dbActivity.due_date ?? undefined,
       status: dbActivity.status,
+      priority: dbActivity.priority ?? 'medium',
+      progress: dbActivity.progress ?? 0,
       isActive: dbActivity.is_active,
       assignedTo: dbActivity.assigned_to,
+      assignees: assigneesByActivity[dbActivity.id] ?? [],
+      activityTypeId: dbActivity.activity_type_id ?? undefined,
       subActivities: subByActivity[dbActivity.id] ?? [],
     });
   }

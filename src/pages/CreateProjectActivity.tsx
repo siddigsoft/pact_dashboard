@@ -1,70 +1,56 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ActivityForm from '@/components/project/activity/ActivityForm';
 import { useProjectContext } from '@/context/project/ProjectContext';
+import { useInvalidateProjectsQueries } from '@/context/project/projectQueries';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
 import { ProjectActivity, Project } from '@/types/project';
-import { useToast } from '@/hooks/toast';
+import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 const CreateProjectActivity = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProjectById, updateProject, fetchProjects, projects, loading } = useProjectContext();
+  const { getProjectById, fetchProjects, projects, loading } = useProjectContext();
+  const invalidate = useInvalidateProjectsQueries();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [project, setProject] = useState<Project | undefined>(undefined);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
-  
-  // Effect to fetch projects if not loaded
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
-    if (projects.length === 0 && !loading) {
-      fetchProjects();
-    }
+    if (projects.length === 0 && !loading) fetchProjects();
   }, []);
-  
-  // Effect to find the project when projects or projectId changes
+
   useEffect(() => {
-    if (!id) {
-      setProject(undefined);
-      setIsLoadingProject(false);
-      return;
-    }
-    
-    const foundProject = getProjectById(id);
-    setProject(foundProject);
-    
-    // Only set loading to false if we have projects loaded or loading is done
-    if (projects.length > 0 || !loading) {
-      setIsLoadingProject(false);
-    }
+    if (!id) { setProject(undefined); setIsLoadingProject(false); return; }
+    const found = getProjectById(id);
+    setProject(found);
+    if (projects.length > 0 || !loading) setIsLoadingProject(false);
   }, [id, projects, loading]);
-  
+
   if (isLoadingProject || (loading && !project)) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 rounded-full border-4 border-primary/20 animate-[spin_3s_linear_infinite]"></div>
-            <div className="absolute inset-[6px] rounded-full border-4 border-t-primary animate-[spin_2s_linear_infinite]"></div>
-          </div>
-          <p className="text-muted-foreground animate-pulse">Loading project...</p>
-        </div>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
-  
+
   if (!project && !isLoadingProject) {
     return (
       <Alert>
+        <AlertTriangle className="h-4 w-4" />
         <AlertTitle>Project Not Found</AlertTitle>
         <AlertDescription>
           The project you are trying to add an activity to does not exist or has been removed.
           <div className="mt-4">
-            <Button variant="outline" onClick={() => navigate('/projects')}>
-              Back to Projects
-            </Button>
+            <Button variant="outline" onClick={() => navigate('/projects')}>Back to Projects</Button>
           </div>
         </AlertDescription>
       </Alert>
@@ -72,46 +58,76 @@ const CreateProjectActivity = () => {
   }
 
   const handleSubmit = async (activity: ProjectActivity) => {
-    if (!project) return;
-    
-    // Update the project with the new activity
-    const updatedProject = {
-      ...project,
-      activities: [...project.activities, activity]
-    };
-    
-    await updateProject(updatedProject);
-    toast({
-      title: "Activity Created",
-      description: "The activity has been added to the project successfully.",
-      variant: "success",
-    });
-    navigate(`/projects/${id}`);
+    if (!project || !id) return;
+    setSubmitting(true);
+    try {
+      const { data: inserted, error } = await supabase
+        .from('project_activities')
+        .insert({
+          project_id:       id,
+          name:             activity.name,
+          description:      activity.description ?? null,
+          start_date:       activity.startDate,
+          end_date:         activity.endDate,
+          due_date:         activity.dueDate ?? null,
+          status:           activity.status,
+          priority:         activity.priority ?? 'medium',
+          progress:         activity.progress ?? 0,
+          is_active:        activity.isActive,
+          created_by:       user?.id ?? null,
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      // Insert sub-activities if any
+      if (activity.subActivities.length > 0 && inserted?.id) {
+        await supabase.from('sub_activities').insert(
+          activity.subActivities.map(sub => ({
+            activity_id:  inserted.id,
+            name:         sub.name,
+            description:  sub.description ?? null,
+            status:       sub.status,
+            is_active:    sub.isActive,
+            due_date:     sub.dueDate ?? null,
+          }))
+        );
+      }
+
+      invalidate();
+      toast({ title: 'Activity created', description: `"${activity.name}" added to ${project.name}.` });
+      navigate(`/projects/${id}?tab=activities`);
+    } catch (e: any) {
+      toast({ title: 'Failed to create activity', description: e.message, variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(`/projects/${id}`)}
-          className="hover:bg-muted"
-        >
+    <div className="max-w-2xl mx-auto space-y-6 p-4 sm:p-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate(`/projects/${id}`)}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Create New Activity</h1>
-          <p className="text-muted-foreground">
-            Add a new activity to the project: {project?.name}
-          </p>
+          <h1 className="text-xl font-bold">Create Activity</h1>
+          <p className="text-sm text-muted-foreground">{project?.name}</p>
         </div>
       </div>
 
-      <ActivityForm 
-        projectId={id} 
-        onSubmit={handleSubmit} 
-      />
+      {submitting ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <ActivityForm
+          projectId={id}
+          onSubmit={handleSubmit}
+          onCancel={() => navigate(`/projects/${id}`)}
+        />
+      )}
     </div>
   );
 };

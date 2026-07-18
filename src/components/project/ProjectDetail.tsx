@@ -1281,66 +1281,95 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="activities" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">Activities</h2>
-            <Button size="sm" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="text-base font-semibold">Activities</h2>
+              {project.activities.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {project.activities.filter(a => a.status === 'completed').length}/{project.activities.length} completed
+                  {project.activities.some(a => a.progress !== undefined && (a.progress ?? 0) > 0) && (
+                    <span className="ml-2">· Avg progress {Math.round(project.activities.reduce((s, a) => s + (a.progress ?? 0), 0) / project.activities.length)}%</span>
+                  )}
+                </p>
+              )}
+            </div>
+            <Button size="sm" className="bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
               <Plus className="h-4 w-4 mr-1.5" /> Add Activity
             </Button>
           </div>
-          
+
           {project.activities.length > 0 ? (
-            <div className="space-y-4">
-              {project.activities.map(activity => (
-                <Card key={activity.id} className="overflow-hidden">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-md">{activity.name}</CardTitle>
-                      <Badge variant={activity.status === 'completed' ? 'default' : activity.status === 'inProgress' ? 'secondary' : 'outline'}>
-                        {activity.status}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="py-2">
-                    {activity.description && <p className="text-sm text-muted-foreground mb-2">{activity.description}</p>}
-                    <div className="flex flex-wrap gap-4 text-sm">
-                      <div className="flex items-center">
-                        <Calendar className="h-4 w-4 mr-1 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          {formatDate(activity.startDate)} - {formatDate(activity.endDate)}
-                        </span>
-                      </div>
-                      
-                      {activity.assignedTo && (
-                        <div className="flex items-center">
-                          <Users className="h-4 w-4 mr-1 text-muted-foreground" />
-                          <span className="text-muted-foreground">{activity.assignedTo}</span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {activity.subActivities.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-xs text-muted-foreground font-medium">SUB-ACTIVITIES</p>
-                        <div className="grid gap-2">
-                          {activity.subActivities.map(sub => (
-                            <div key={sub.id} className="flex items-center justify-between py-1 px-3 rounded-md bg-muted/50">
-                              <span className="text-sm">{sub.name}</span>
-                              <Badge variant={sub.status === 'completed' ? 'default' : sub.status === 'inProgress' ? 'secondary' : 'outline'} className="text-xs">
-                                {sub.status}
-                              </Badge>
+            <div className="space-y-3">
+              {project.activities.map(activity => {
+                const priorityMeta = {
+                  high:   { label: 'High',   cls: 'bg-red-100 text-red-700 border-red-200' },
+                  medium: { label: 'Medium', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+                  low:    { label: 'Low',    cls: 'bg-green-100 text-green-700 border-green-200' },
+                }[activity.priority ?? 'medium'];
+                const statusMeta = {
+                  completed: { label: 'Completed', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+                  inProgress:{ label: 'In Progress',cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+                  pending:   { label: 'Pending',   cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+                  cancelled: { label: 'Cancelled', cls: 'bg-orange-100 text-orange-600 border-orange-200' },
+                }[activity.status] ?? { label: activity.status, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                const isOverdue = activity.dueDate && activity.status !== 'completed' && new Date(activity.dueDate) < new Date();
+                const progress = activity.progress ?? 0;
+                const assignees = activity.assignees ?? [];
+                return (
+                  <Card key={activity.id} className="shadow-none border-border/60 hover:border-border transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-sm">{activity.name}</p>
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${statusMeta.cls}`}>{statusMeta.label}</Badge>
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${priorityMeta.cls}`}>{priorityMeta.label}</Badge>
+                            {isOverdue && <Badge variant="outline" className="text-[10px] px-1.5 py-0 border bg-red-50 text-red-600 border-red-200">Overdue</Badge>}
+                          </div>
+                          {activity.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{activity.description}</p>}
+                          {progress > 0 && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }} />
+                              </div>
+                              <span className="text-[10px] font-medium text-muted-foreground shrink-0">{progress}%</span>
                             </div>
-                          ))}
+                          )}
+                          <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                            {activity.dueDate && (
+                              <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-500 font-medium' : ''}`}>
+                                <Calendar className="h-3 w-3" />Due {format(parseISO(activity.dueDate), 'd MMM yyyy')}
+                              </span>
+                            )}
+                            {!activity.dueDate && activity.endDate && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />{format(parseISO(activity.startDate), 'd MMM')} – {format(parseISO(activity.endDate), 'd MMM yyyy')}
+                              </span>
+                            )}
+                            {assignees.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3 w-3" />{assignees.slice(0, 2).join(', ')}{assignees.length > 2 ? ` +${assignees.length - 2}` : ''}
+                              </span>
+                            )}
+                            {assignees.length === 0 && activity.assignedTo && (
+                              <span className="flex items-center gap-1"><Users className="h-3 w-3" />{activity.assignedTo}</span>
+                            )}
+                            {activity.subActivities.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <CheckSquare className="h-3 w-3" />
+                                {activity.subActivities.filter(s => s.status === 'completed').length}/{activity.subActivities.length} sub-tasks
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5 shrink-0" onClick={() => navigate(`/projects/${project.id}/activities/${activity.id}`)}>
+                          View
+                        </Button>
                       </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="border-t pt-2 flex justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${project.id}/activities/${activity.id}`)}>
-                      View Details
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12 border border-dashed rounded-lg border-border">
@@ -1351,7 +1380,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <p className="text-muted-foreground mt-1 max-w-md mx-auto">
                 Activities help you break down your project into manageable tasks
               </p>
-              <Button className="mt-4" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
+              <Button className="mt-4 bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
                 <Plus className="h-4 w-4 mr-2" /> Add First Activity
               </Button>
             </div>

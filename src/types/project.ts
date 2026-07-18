@@ -23,15 +23,23 @@ export type ActivityStatus = 'pending' | 'inProgress' | 'completed' | 'cancelled
 
 export type ProjectRole = 'projectManager' | 'fieldAssistant' | 'dataCollector' | 'supervisor' | 'coordinator' | 'analyst' | 'reviewer' | 'other';
 
+export type ActivityPriority = 'low' | 'medium' | 'high';
+
 export interface ProjectActivity {
   id: string;
   name: string;
   description?: string;
   startDate: string;
   endDate: string;
+  dueDate?: string;
   status: ActivityStatus;
+  priority?: ActivityPriority;
+  progress?: number;
   isActive: boolean;
   assignedTo?: string;
+  assignees?: string[];
+  activityTypeId?: string;
+  activityTypeName?: string;
   subActivities: SubActivity[];
 }
 
