@@ -246,11 +246,9 @@ export default function PreFundingOverview() {
 
       // ── Step 2: rows scoped to the loaded fund IDs — much faster than global fetches ──
       const fundIds = loadedFunds.map((f: any) => f.id as string);
-      const [allocsData, rawTxns, profData] = await Promise.all([
+      const [allocsData, rawTxns] = await Promise.all([
         fetchAllIn(chunk => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').in('pre_fund_request_id', chunk).order('allocated_amount', { ascending: false }), fundIds),
         fetchAllIn(chunk => (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').in('pre_fund_request_id', chunk).order('transaction_date', { ascending: false }), fundIds),
-        // Profiles: small table — one global fetch is fine
-        fetchAll(() => supabase.from('profiles').select('id,full_name,email')),
       ]);
 
       setAllocs(allocsData as any);
@@ -260,13 +258,18 @@ export default function PreFundingOverview() {
         const ocsIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id).map((t: any) => t.source_id as string))];
         // For old txns with NULL source_table, the DP stores back-link via pre_fund_transaction_id
         const rawTxnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
-        // Fetch validation data — batched .in() so large ID lists don't truncate
-        // Also grab created_by from DPs so we can attribute spend to the right staff member
-        // even when pre_fund_transactions.user_id is null.
-        const [validDpData, validOcsData, backLinkedDpData] = await Promise.all([
-          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,created_by').in('id', chunk), dpIds),
+        // Collect all user IDs from allocations for targeted profile lookup
+        const allocUserIds = [...new Set((allocsData as any[]).map((a: any) => a.user_id as string).filter(Boolean))];
+        // Fetch validation data + profiles in parallel
+        // requested_by = actual allocation holder on DP; submitted_by = fallback (same as Reconciliation page uses)
+        const [validDpData, validOcsData, backLinkedDpData, profData] = await Promise.all([
+          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by,submitted_by').in('id', chunk), dpIds),
           fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
+          // Targeted profiles fetch for allocation holders — avoids RLS blind-spots from global scan
+          allocUserIds.length > 0
+            ? supabase.from('profiles').select('id,full_name,email').in('id', allocUserIds)
+            : Promise.resolve({ data: [] }),
         ]);
         // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
         const validDpSet  = new Set(validDpData.filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
@@ -314,16 +317,19 @@ export default function PreFundingOverview() {
         });
         setTxns(validTxns);
         // Build dpId → userId map so txnsByFundUser can credit the right staff member
-        // when a payment transaction has user_id = null (admin stored in created_by instead).
+        // when pre_fund_transactions.user_id is null (admin stored in created_by instead).
+        // requested_by = the allocation holder (who the DP was raised for).
+        // submitted_by = fallback (the person who filled in the form — same approach as Reconciliation page).
         const dpMap = new Map<string, string>();
         for (const dp of validDpData) {
-          if (dp.created_by) dpMap.set(dp.id as string, dp.created_by as string);
+          const uid = (dp as any).requested_by ?? (dp as any).submitted_by;
+          if (uid) dpMap.set(dp.id as string, uid as string);
         }
         setDpUserMap(dpMap);
-      }
-      {
+        // Build profiles map — targeted fetch for allocation holders is already in profData
+        const profRows = (profData as any).data ?? (profData as any) ?? [];
         const m = new Map<string, string>();
-        profData.forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+        (Array.isArray(profRows) ? profRows : []).forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
         setProfiles(m);
       }
     } catch (e: any) {
