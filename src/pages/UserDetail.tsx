@@ -2488,21 +2488,38 @@ ALTER TABLE public.profiles
                                   </select>
                                 </div>
                                 <div className="space-y-1.5">
-                                  <label className="text-xs font-medium">Hub Scope <span className="text-muted-foreground font-normal">(optional)</span></label>
+                                  <label className="text-xs font-medium">
+                                    Hub Scope
+                                    {['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && (
+                                      <span className="text-red-500 ml-1">*</span>
+                                    )}
+                                  </label>
                                   <select
                                     className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
                                     value={newRoleHub}
                                     onChange={e => setNewRoleHub(e.target.value)}
                                   >
-                                    <option value="">System-wide (no hub restriction)</option>
+                                    <option value="">— Select hub —</option>
                                     {hubs.map(h => (
                                       <option key={h.id} value={h.id}>{h.name}</option>
                                     ))}
                                   </select>
+                                  {['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && !newRoleHub && (
+                                    <p className="text-[10px] text-red-500">Hub is required for Supervisor role</p>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex gap-2">
-                                <Button size="sm" onClick={handleAddRole} disabled={!newRolePick || addRoleSaving} className="gap-1.5">
+                                <Button
+                                  size="sm"
+                                  onClick={handleAddRole}
+                                  disabled={
+                                    !newRolePick ||
+                                    addRoleSaving ||
+                                    (['supervisor','hubSupervisor','hub_supervisor'].some(s => normalizeRole(newRolePick) === normalizeRole(s)) && !newRoleHub)
+                                  }
+                                  className="gap-1.5"
+                                >
                                   {addRoleSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                                   {addRoleSaving ? 'Saving…' : 'Add Role'}
                                 </Button>

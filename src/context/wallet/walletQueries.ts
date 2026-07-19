@@ -18,6 +18,20 @@ export interface UserForWallet {
   secondaryHubId?: string | null;
   stateId?: string | null;
   role?: string | null;
+  /** Additional/secondary roles from profiles.additional_roles JSONB */
+  additionalRoles?: Array<{ role: string; hub_id?: string | null }> | null;
+}
+
+/** Extract supervisor hub IDs from additionalRoles entries */
+function getAdditionalSupervisorHubs(user: UserForWallet): string[] {
+  if (!Array.isArray(user.additionalRoles)) return [];
+  return user.additionalRoles
+    .filter(r => {
+      const norm = (r?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      return norm === 'supervisor' || norm === 'hubsupervisor' || norm === 'hub_supervisor';
+    })
+    .map(r => r.hub_id)
+    .filter((h): h is string => !!h);
 }
 
 export const walletQueryKeys = {
@@ -190,13 +204,21 @@ async function fetchSupervisedWithdrawalRequests(user: UserForWallet): Promise<S
   const supervisorHubId = user.hubId;
   const supervisorSecondaryHubId = user.secondaryHubId;
   const supervisorStateId = user.stateId;
+  const additionalSupervisorHubs = getAdditionalSupervisorHubs(user);
 
-  if (!supervisorHubId && !supervisorStateId) return [];
+  // Collect every hub this user can supervise (primary + secondary + additional-role hubs)
+  const allSupervisedHubIds = [
+    supervisorHubId,
+    supervisorSecondaryHubId,
+    ...additionalSupervisorHubs,
+  ].filter((h): h is string => !!h);
 
-  let hubFilter = `hub_id.eq.${supervisorHubId || 'none'},state_id.eq.${supervisorStateId || 'none'}`;
-  if (supervisorSecondaryHubId) {
-    hubFilter += `,hub_id.eq.${supervisorSecondaryHubId}`;
-  }
+  if (allSupervisedHubIds.length === 0 && !supervisorStateId) return [];
+
+  // Build OR filter: one clause per hub + state fallback
+  const hubClauses = allSupervisedHubIds.map(h => `hub_id.eq.${h}`);
+  if (supervisorStateId) hubClauses.push(`state_id.eq.${supervisorStateId}`);
+  const hubFilter = hubClauses.join(',');
 
   const { data: teamMembers, error: teamError } = await supabase
     .from('profiles')
@@ -279,7 +301,9 @@ export function useSupervisedWithdrawalRequestsQuery(user: UserForWallet | null)
   const userRole = user?.role?.toLowerCase();
   const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
-  const enabled = !!user?.id && (isSupervisorRole || isAdmin);
+  // Also enable if this user has Supervisor assigned as an additional role
+  const hasAdditionalSupervisor = getAdditionalSupervisorHubs(user ?? { id: '' }).length > 0;
+  const enabled = !!user?.id && (isSupervisorRole || isAdmin || hasAdditionalSupervisor);
 
   return useQuery({
     queryKey: walletQueryKeys.supervisedWithdrawalRequests(user?.id ?? ''),

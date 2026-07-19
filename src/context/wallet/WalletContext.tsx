@@ -171,7 +171,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const userId = currentUser?.id;
   const userForSupervised: UserForWallet | null = currentUser
-    ? { id: currentUser.id, hubId: currentUser.hubId, secondaryHubId: currentUser.secondaryHubId, stateId: currentUser.stateId, role: currentUser.role }
+    ? {
+        id: currentUser.id,
+        hubId: currentUser.hubId,
+        secondaryHubId: currentUser.secondaryHubId,
+        stateId: currentUser.stateId,
+        role: currentUser.role,
+        additionalRoles: (currentUser as any).additionalRoles ?? [],
+      }
     : null;
 
   const walletQuery = useWalletQuery(userId);
@@ -1580,19 +1587,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const supervisorSecondaryHubId = currentUser.secondaryHubId;
       const supervisorStateId = currentUser.stateId;
 
-      if (!supervisorHubId && !supervisorStateId) {
-        console.warn('[Wallet] Hub Supervisor has no hub_id assigned. Assign hub_id in User Management to see team members across all states in the hub.');
+      // Extract any supervisor hub_ids granted via Additional Roles
+      const additionalSupervisorHubs: string[] = Array.isArray((currentUser as any).additionalRoles)
+        ? (currentUser as any).additionalRoles
+            .filter((r: any) => {
+              const norm = (r?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+              return norm === 'supervisor' || norm === 'hubsupervisor';
+            })
+            .map((r: any) => r.hub_id)
+            .filter(Boolean)
+        : [];
+
+      // All hubs this user can supervise (primary + secondary profile hubs + additional-role hubs)
+      const allSupervisedHubIds = [
+        supervisorHubId,
+        supervisorSecondaryHubId,
+        ...additionalSupervisorHubs,
+      ].filter((h): h is string => !!h);
+
+      if (allSupervisedHubIds.length === 0 && !supervisorStateId) {
+        console.warn('[Wallet] Supervisor has no hub_id assigned (primary, secondary, or additional roles). Assign hub in User Management.');
         return [];
       }
 
-      // Query team members by hub_id (primary), secondary_hub_id, or state_id (fallback for legacy support)
-      // Hub supervisors should have hub_id set - they see ALL team members in ALL states of their hub(s)
-      // SECONDARY HUB: Supervisors with secondary_hub_id also see team members from that hub
-      let hubFilter = `hub_id.eq.${supervisorHubId || 'none'},state_id.eq.${supervisorStateId || 'none'}`;
-      if (supervisorSecondaryHubId) {
-        hubFilter += `,hub_id.eq.${supervisorSecondaryHubId}`;
-        console.log('[Wallet] Supervisor has secondary hub:', supervisorSecondaryHubId);
-      }
+      // Build OR filter: one clause per hub + state fallback
+      const hubClauses = allSupervisedHubIds.map(h => `hub_id.eq.${h}`);
+      if (supervisorStateId) hubClauses.push(`state_id.eq.${supervisorStateId}`);
+      const hubFilter = hubClauses.join(',');
       const { data: teamMembers, error: teamError } = await supabase
         .from('profiles')
         .select('id, full_name, email, hub_id, state_id, role')
