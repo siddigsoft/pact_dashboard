@@ -192,6 +192,7 @@ interface OperationalCostSubmission {
   payment_proof_uploaded_at?: string | null;
   request_group_id?: string | null;
   request_title?: string | null;
+  amount_paid_cents?: number | null;
 }
 
 const CostSubmission = () => {
@@ -270,10 +271,10 @@ const CostSubmission = () => {
       setPendingMode(null);
     }
   };
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">(() => {
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "partially_paid" | "paid" | "reconciled">(() => {
     const t = searchParams.get('tab');
-    const valid = ["all", "pending", "under_review", "approved", "rejected", "paid", "reconciled"] as const;
-    return (valid as readonly string[]).includes(t ?? '') ? (t as "all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled") : "all";
+    const valid = ["all", "pending", "under_review", "approved", "rejected", "partially_paid", "paid", "reconciled"] as const;
+    return (valid as readonly string[]).includes(t ?? '') ? (t as "all" | "pending" | "under_review" | "approved" | "rejected" | "partially_paid" | "paid" | "reconciled") : "all";
   });
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
@@ -416,7 +417,8 @@ const CostSubmission = () => {
     uploading: boolean;
     preFundId: string | null;
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
-  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
+    payAmountStr: string;
+  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
 
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
@@ -926,6 +928,7 @@ const CostSubmission = () => {
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
+    if (oc.status === 'partially_paid') return 'partially_paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.tier4_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (oc.status === 'approved') return 'approved';
 
@@ -1937,7 +1940,7 @@ const CostSubmission = () => {
 
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
-    if (derivedStatus !== 'approved') return false;
+    if (derivedStatus !== 'approved' && derivedStatus !== 'partially_paid') return false;
     return isSuperAdmin || isAdmin || isFinanceAdmin || hasMarkPaidOverride;
   };
 
@@ -2006,7 +2009,10 @@ const CostSubmission = () => {
         id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
       }));
     } catch (_) {}
-    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds });
+    const alreadyPaidCents = oc.amount_paid_cents ?? 0;
+    const remainingCents = oc.amount_cents - alreadyPaidCents;
+    const remainingAmount = (remainingCents / 100).toFixed(2);
+    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds, payAmountStr: remainingAmount });
   };
 
   const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2025,12 +2031,27 @@ const CostSubmission = () => {
   };
 
   const handleConfirmMarkAsPaid = async () => {
-    const { submission: oc, proofFiles, notes } = markAsPaidDialog;
+    const { submission: oc, proofFiles, notes, payAmountStr } = markAsPaidDialog;
     if (!oc || !currentUser?.id) return;
     if (!proofFiles.length) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach at least one payment receipt before confirming. / يرجى إرفاق إيصال دفع واحد على الأقل قبل التأكيد.", variant: "destructive" });
       return;
     }
+    const payAmountVal = parseFloat(payAmountStr);
+    if (isNaN(payAmountVal) || payAmountVal <= 0) {
+      toast({ title: "Invalid Amount / مبلغ غير صالح", description: "Please enter a valid payment amount greater than zero.", variant: "destructive" });
+      return;
+    }
+    const alreadyPaidCents = oc.amount_paid_cents ?? 0;
+    const remainingCents = oc.amount_cents - alreadyPaidCents;
+    const payAmountCents = Math.round(payAmountVal * 100);
+    if (payAmountCents > remainingCents) {
+      toast({ title: "Amount Exceeds Remaining / المبلغ يتجاوز الباقي", description: `Payment amount cannot exceed the remaining balance of ${oc.currency} ${(remainingCents / 100).toLocaleString()}.`, variant: "destructive" });
+      return;
+    }
+    const isFullPayment = payAmountCents >= remainingCents;
+    const newAmountPaidCents = alreadyPaidCents + payAmountCents;
+
     setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setActionProcessing(true);
     try {
@@ -2052,9 +2073,10 @@ const CostSubmission = () => {
 
       const now = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
-        status: 'paid',
-        paid_at: now,
-        paid_by: currentUser.id,
+        status: isFullPayment ? 'paid' : 'partially_paid',
+        amount_paid_cents: newAmountPaidCents,
+        paid_at: isFullPayment ? now : (oc.paid_at ?? null),
+        paid_by: isFullPayment ? currentUser.id : (oc.paid_by ?? null),
         updated_at: now,
         ...(proofUrl ? { payment_proof_url: proofUrl, payment_proof_uploaded_at: now } : {}),
         ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
@@ -2128,21 +2150,26 @@ const CostSubmission = () => {
           console.warn('[Pre-Fund] Linkage error (payment still marked paid):', pfErr?.message);
         }
         // Notify the submitter
-        const amount = (oc.amount_cents / 100).toLocaleString();
+        const paidNowAmount = (payAmountCents / 100).toLocaleString();
+        const totalAmount = (oc.amount_cents / 100).toLocaleString();
         dispatchNotification({
           event: 'payment_processed',
           recipientIds: [oc.submitted_by],
-          titleEn: 'Cost Submission Paid ✅',
-          titleAr: 'تم صرف المطالبة ✅',
-          messageEn: `Your cost submission "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${amount}) has been paid. Please confirm receipt in your Cost Submissions tab.`,
-          messageAr: `تم صرف طلبك "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${amount}). يرجى تأكيد الاستلام في تبويب المطالبات.`,
+          titleEn: isFullPayment ? 'Cost Submission Paid ✅' : 'Partial Payment Received 💰',
+          titleAr: isFullPayment ? 'تم صرف المطالبة ✅' : 'تم استلام دفعة جزئية 💰',
+          messageEn: isFullPayment
+            ? `Your cost submission "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${totalAmount}) has been fully paid. Please confirm receipt in your Cost Submissions tab.`
+            : `A partial payment of ${oc.currency} ${paidNowAmount} has been made on your submission "${oc.reference_number || oc.id.slice(0, 8)}" (total: ${oc.currency} ${totalAmount}). Remaining: ${oc.currency} ${((oc.amount_cents - newAmountPaidCents) / 100).toLocaleString()}.`,
+          messageAr: isFullPayment
+            ? `تم صرف طلبك "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${totalAmount}). يرجى تأكيد الاستلام في تبويب المطالبات.`
+            : `تم دفع ${oc.currency} ${paidNowAmount} جزئياً على طلبك "${oc.reference_number || oc.id.slice(0, 8)}". المبلغ المتبقي: ${oc.currency} ${((oc.amount_cents - newAmountPaidCents) / 100).toLocaleString()}.`,
           priority: 'high',
           entityType: 'costSubmission',
           entityId: oc.id,
           actionUrl: '/cost-submission',
           sendEmail: true,
           sendWhatsApp: true,
-          metadata: { ref_number: oc.reference_number || oc.id.slice(0, 8), amount: `${oc.currency} ${amount}` },
+          metadata: { ref_number: oc.reference_number || oc.id.slice(0, 8), amount: `${oc.currency} ${paidNowAmount}` },
         }).catch(console.error);
         // Notify management that a payment was disbursed
         const paidRef = oc.reference_number || oc.id.slice(0, 8).toUpperCase();
@@ -2150,13 +2177,13 @@ const CostSubmission = () => {
           || (users || []).find((u: any) => u.id === oc.submitted_by)?.fullName
           || 'Staff';
         void notifyMgmtOfCostEvent(
-          `Cost Submission Paid — ${paidRef}`,
-          `Cost submission "${paidRef}" (${oc.currency} ${amount}) by ${submitterName} has been disbursed by ${(currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance'}.`,
+          isFullPayment ? `Cost Submission Paid — ${paidRef}` : `Partial Payment — ${paidRef}`,
+          `${isFullPayment ? 'Cost submission' : 'Partial payment of ' + oc.currency + ' ' + paidNowAmount + ' on submission'} "${paidRef}" by ${submitterName} has been disbursed by ${(currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance'}.${isFullPayment ? '' : ` Remaining: ${oc.currency} ${((oc.amount_cents - newAmountPaidCents) / 100).toLocaleString()}.`}`,
           oc.id,
           currentUser?.id
         );
         markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
         fetchOperationalCosts();
       }
     } catch (err: any) {
@@ -4187,6 +4214,7 @@ const CostSubmission = () => {
               { key: 'under_review', label: 'In Review', labelAr: 'قيد المراجعة', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
               { key: 'approved', label: 'Approved', labelAr: 'موافق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length, color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
               { key: 'rejected', label: 'Rejected', labelAr: 'مرفوض', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'rejected').length, color: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
+              { key: 'partially_paid', label: 'Partial', labelAr: 'جزئي', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'partially_paid').length, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300' },
               { key: 'paid', label: 'Paid', labelAr: 'مدفوع', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length, color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
               { key: 'reconciled', label: 'Reconciled', labelAr: 'مسوّى', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'reconciled').length, color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
             ] as const).map(f => (
@@ -5056,6 +5084,7 @@ const CostSubmission = () => {
                       under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
                       approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
                       rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                      partially_paid: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
                       paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
                       reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
                     };
@@ -5066,6 +5095,7 @@ const CostSubmission = () => {
                       under_review: `In Review (Tier ${pendingTierLabel}) / قيد المراجعة (المرحلة ${pendingTierLabel})`,
                       approved: 'Approved / تمت الموافقة',
                       rejected: 'Rejected / مرفوض',
+                      partially_paid: 'Partial Payment / دفع جزئي',
                       paid: 'Paid / تم الدفع',
                       reconciled: 'Reconciled / مسوّى',
                     };
@@ -6965,6 +6995,7 @@ const CostSubmission = () => {
               under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
               approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
               rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+              partially_paid: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
               paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
               reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
             };
@@ -6973,6 +7004,7 @@ const CostSubmission = () => {
               under_review: `In Review (Tier ${pendingTierLabel}) / قيد المراجعة (المرحلة ${pendingTierLabel})`,
               approved: 'Approved / تمت الموافقة',
               rejected: 'Rejected / مرفوض',
+              partially_paid: 'Partial Payment / دفع جزئي',
               paid: 'Paid / تم الدفع',
               reconciled: 'Reconciled / مسوّى',
             };
@@ -9135,7 +9167,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !markAsPaidDialog.uploading) {
             markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
+            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
           }
         }}
       >
@@ -9166,6 +9198,17 @@ const CostSubmission = () => {
                   <p className="text-xl font-bold tabular-nums text-green-700 dark:text-green-300 leading-tight">
                     {markAsPaidDialog.submission.currency} {(markAsPaidDialog.submission.amount_cents / 100).toLocaleString()}
                   </p>
+                  {(markAsPaidDialog.submission.amount_paid_cents ?? 0) > 0 && (
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex justify-between text-[11px] text-muted-foreground">
+                        <span>Paid: <span className="font-semibold text-orange-600">{markAsPaidDialog.submission.currency} {((markAsPaidDialog.submission.amount_paid_cents ?? 0) / 100).toLocaleString()}</span></span>
+                        <span>Remaining: <span className="font-semibold text-green-700">{markAsPaidDialog.submission.currency} {((markAsPaidDialog.submission.amount_cents - (markAsPaidDialog.submission.amount_paid_cents ?? 0)) / 100).toLocaleString()}</span></span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full bg-orange-400" style={{ width: `${Math.min(100, ((markAsPaidDialog.submission.amount_paid_cents ?? 0) / markAsPaidDialog.submission.amount_cents) * 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
                     {markAsPaidDialog.submission.reference_number && (
                       <span className="text-[11px] text-muted-foreground font-mono">#{markAsPaidDialog.submission.reference_number}</span>
@@ -9175,6 +9218,57 @@ const CostSubmission = () => {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Amount to Pay */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Amount to Pay / المبلغ المدفوع <span className="text-red-500">*</span>
+                </Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-muted-foreground w-12 shrink-0">{markAsPaidDialog.submission?.currency}</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={((markAsPaidDialog.submission!.amount_cents - (markAsPaidDialog.submission!.amount_paid_cents ?? 0)) / 100).toFixed(2)}
+                    value={markAsPaidDialog.payAmountStr}
+                    onChange={e => setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: e.target.value }))}
+                    disabled={markAsPaidDialog.uploading}
+                    placeholder="0.00"
+                    className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    data-testid="input-pay-amount"
+                  />
+                  <button
+                    type="button"
+                    className="text-xs text-blue-600 hover:underline shrink-0"
+                    onClick={() => {
+                      const sub = markAsPaidDialog.submission!;
+                      const rem = (sub.amount_cents - (sub.amount_paid_cents ?? 0)) / 100;
+                      setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: rem.toFixed(2) }));
+                    }}
+                    disabled={markAsPaidDialog.uploading}
+                  >
+                    Full / الكل
+                  </button>
+                </div>
+                {(() => {
+                  const sub = markAsPaidDialog.submission!;
+                  const payVal = parseFloat(markAsPaidDialog.payAmountStr) || 0;
+                  const remCents = sub.amount_cents - (sub.amount_paid_cents ?? 0);
+                  const payCents = Math.round(payVal * 100);
+                  const afterCents = remCents - payCents;
+                  if (payVal <= 0 || payCents > remCents) return null;
+                  return afterCents > 0 ? (
+                    <p className="text-xs text-orange-600 dark:text-orange-400">
+                      Partial payment — {sub.currency} {(afterCents / 100).toLocaleString()} will remain outstanding / دفع جزئي — يتبقى {sub.currency} {(afterCents / 100).toLocaleString()}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      This will fully settle the submission / سيتم تسوية الطلب بالكامل
+                    </p>
+                  );
+                })()}
               </div>
 
               {/* Receipt upload zone */}
@@ -9317,7 +9411,7 @@ const CostSubmission = () => {
               variant="outline"
               onClick={() => {
                 markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [] });
+                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
               }}
               disabled={markAsPaidDialog.uploading}
               data-testid="button-cancel-mark-paid"
@@ -9333,9 +9427,16 @@ const CostSubmission = () => {
             >
               {markAsPaidDialog.uploading ? (
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Uploading {markAsPaidDialog.proofFiles.length} receipt{markAsPaidDialog.proofFiles.length > 1 ? 's' : ''}...</>
-              ) : (
-                <><CheckCircle className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
-              )}
+              ) : (() => {
+                const sub = markAsPaidDialog.submission;
+                if (!sub) return <><CheckCircle className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>;
+                const payVal = parseFloat(markAsPaidDialog.payAmountStr) || 0;
+                const remCents = sub.amount_cents - (sub.amount_paid_cents ?? 0);
+                const isFullPay = Math.round(payVal * 100) >= remCents;
+                return isFullPay
+                  ? <><CheckCircle className="h-4 w-4 mr-1.5" /> Mark as Fully Paid / تأكيد الدفع الكامل</>
+                  : <><DollarSign className="h-4 w-4 mr-1.5" /> Record Partial Payment / تسجيل دفعة جزئية</>;
+              })()}
             </Button>
           </DialogFooter>
         </DialogContent>
