@@ -219,7 +219,7 @@ const CostSubmission = () => {
    }, [mmpFiles]);
   
   // Role checks — canonical camelCase codes via useAuthorization hook
-  const { hasAnyRole, isSuperAdmin: isSuperAdminFn } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin: isSuperAdminFn, checkPermission } = useAuthorization();
   const isAdmin           = hasAnyRole(['admin']);
   const isSupervisor      = hasAnyRole(['supervisor']);
   const isFOM             = hasAnyRole(['fom']);
@@ -1718,6 +1718,8 @@ const CostSubmission = () => {
   const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
     if (isSuperAdmin) return true;
     const derivedStatus = getOperationalDerivedStatus(oc);
+    // Per-user override: can delete any non-reconciled submission
+    if (hasDeleteOverride && derivedStatus !== 'reconciled') return true;
     if (derivedStatus !== 'pending') return false;
     if (isAdmin) return true;
     return oc.submitted_by === currentUser?.id;
@@ -1931,10 +1933,14 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
-  // Revert Paid → back to Approved (SuperAdmin or Admin; not once reconciled)
+  // Per-user override checks (stored in user_permission_overrides with resource='cost_submissions')
+  const hasRevertPaidOverride = checkPermission('cost_submissions' as any, 'revert_paid' as any);
+  const hasDeleteOverride     = checkPermission('cost_submissions' as any, 'delete' as any);
+
+  // Revert Paid → back to Approved (SuperAdmin, Admin, or per-user override; not once reconciled)
   const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
-    return derivedStatus === 'paid' && (isSuperAdmin || isAdmin);
+    return derivedStatus === 'paid' && (isSuperAdmin || isAdmin || hasRevertPaidOverride);
   };
 
   const handleRevertPaid = async () => {

@@ -13,6 +13,7 @@ import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
 import { PermissionTester } from '@/components/role-management/PermissionTester';
 import { UserPermissionOverrides } from '@/components/role-management/UserPermissionOverrides';
+import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -289,6 +290,15 @@ const RoleManagement = () => {
               </Badge>
             </TabsTrigger>
           )}
+          {isSuperAdmin && (
+            <TabsTrigger value="cost-submissions" className="gap-2" data-testid="tab-cost-submission-perms">
+              <Lock className="h-4 w-4" />
+              Cost Submission Access
+              <Badge variant="secondary" className="ml-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] px-1.5">
+                Super Admin
+              </Badge>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Tab 1: Roles ── */}
@@ -356,6 +366,13 @@ const RoleManagement = () => {
         {isSuperAdmin && (
           <TabsContent value="overrides">
             <UserPermissionOverrides />
+          </TabsContent>
+        )}
+
+        {/* ── Tab 3: Cost Submission Access Control (Super Admin only) ── */}
+        {isSuperAdmin && (
+          <TabsContent value="cost-submissions">
+            <CostSubmissionPermissions />
           </TabsContent>
         )}
       </Tabs>
