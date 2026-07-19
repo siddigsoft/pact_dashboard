@@ -219,38 +219,46 @@ const UserDetail: FC = () => {
     if (!user || !newRolePick) return;
     setAddRoleSaving(true);
     try {
-      // Try with hub_id first; if column missing (migration pending) retry without it
-      let result = await supabase.from('user_roles').insert({
-        user_id: user.id,
-        role: newRolePick,
-        hub_id: newRoleHub || null,
-        assigned_by: currentUser?.id ?? null,
-        assigned_at: new Date().toISOString(),
-      });
-      if (result.error && result.error.message?.includes('hub_id')) {
-        result = await supabase.from('user_roles').insert({
-          user_id: user.id,
-          role: newRolePick,
-          assigned_by: currentUser?.id ?? null,
-          assigned_at: new Date().toISOString(),
-        });
+      // Build payload — try with hub_id, fall back if column not yet in schema cache
+      const payloadFull = { user_id: user.id, role: newRolePick, hub_id: newRoleHub || null, assigned_by: currentUser?.id ?? null, assigned_at: new Date().toISOString() };
+      const payloadSlim = { user_id: user.id, role: newRolePick, assigned_by: currentUser?.id ?? null, assigned_at: new Date().toISOString() };
+
+      let result = await supabase.from('user_roles').insert(payloadFull).select('id').single();
+
+      // hub_id column not in schema cache yet — retry without it
+      if (result.error?.message?.includes('hub_id')) {
+        result = await supabase.from('user_roles').insert(payloadSlim).select('id').single();
       }
-      const { error } = result;
-      if (error) {
-        if (error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
-          setRolesNeedsMigration(true);
-          setAddRoleMode(false);
-          return;
-        }
-        throw error;
+
+      // Per-user unique constraint (ux_user_roles_user_id) — migration not yet applied
+      if (result.error?.message?.includes('ux_user_roles_user_id') ||
+          result.error?.message?.includes('user_roles_user_id_key')) {
+        setRolesNeedsMigration(true);
+        setAddRoleMode(false);
+        return;
       }
+
+      // Per-user+role unique constraint — this exact role is already assigned
+      if (result.error?.message?.includes('uq_user_roles_user_role') ||
+          result.error?.message?.includes('duplicate key')) {
+        toast({ title: 'Role already assigned', description: `${toRoleLabel(newRolePick)} is already listed as a role for this user.`, variant: 'destructive' });
+        setAddRoleMode(false);
+        setNewRolePick('');
+        setNewRoleHub('');
+        // Refresh list so the existing entry shows up
+        await fetchAdditionalRoles(user.id, user.role || '');
+        return;
+      }
+
+      if (result.error) throw result.error;
+
       toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
       setAddRoleMode(false);
       setNewRolePick('');
       setNewRoleHub('');
       fetchAdditionalRoles(user.id, user.role || '');
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      toast({ title: 'Error adding role', description: e.message, variant: 'destructive' });
     } finally {
       setAddRoleSaving(false);
     }
@@ -2435,7 +2443,11 @@ ALTER TABLE public.user_roles
                             </a>
                             <span className="text-muted-foreground text-[10px]">—</span>
                             <button
-                              onClick={() => { setRolesNeedsMigration(false); setAddRoleMode(true); }}
+                              onClick={async () => {
+                                setRolesNeedsMigration(false);
+                                await fetchAdditionalRoles(user.id, user.role || '');
+                                setAddRoleMode(true);
+                              }}
                               className="text-[11px] text-muted-foreground hover:text-foreground underline"
                             >
                               I've run it, try again
