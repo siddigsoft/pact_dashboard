@@ -37,7 +37,7 @@ function isCountryOfficeHub(hubId: string | null | undefined): boolean {
 }
 
 /** Hub IDs assigned to a user via their additional/secondary supervisor roles. */
-function getAdditionalSupervisorHubIds(user: User): string[] {
+export function getAdditionalSupervisorHubIds(user: User): string[] {
   const additionalRoles = Array.isArray((user as any).additionalRoles)
     ? (user as any).additionalRoles
     : [];

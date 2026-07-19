@@ -66,7 +66,7 @@ import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmis
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { dispatchNotification } from '@/lib/notify';
 import { getStatesInHub, normalizeHubId, hubs } from '@/data/sudanStates';
-import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
+import { getHubAccessInfo, isStateInAnyHub, getAdditionalSupervisorHubIds } from '@/utils/hubAccessControl';
 
 const MGMT_ROLES = [
   'fom', 'field_operation_manager', 'Field Operation Manager (FOM)',
@@ -796,6 +796,11 @@ const CostSubmission = () => {
     // Country Directors see everything (they approve FOM T1 and Supervisor T2)
     if (!isAdminOrSuperUser && !isSuperAdmin && !isCountryDirector) {
       if (isFOM) {
+        // If this FOM is hub-scoped via additional supervisor roles, restrict to those hubs only.
+        // An unrestricted FOM (no additional supervisor roles) sees all supervisor/coordinator submissions.
+        const fomAdditionalHubIds = getAdditionalSupervisorHubIds(currentUser as any);
+        const isScopedFOM = fomAdditionalHubIds.length > 0;
+
         // FOM sees only submissions in their approval chain:
         //   • Their own submissions (any status)
         //   • Supervisor submissions (FOM is T1 approver in the 3-tier flow)
@@ -804,11 +809,17 @@ const CostSubmission = () => {
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
           const submitterRole = (o.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
-          if (submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor')) return true;
-          // Coordinator-level roles (FOM is T2 approver for all of these)
-          if (submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
+          const isSupervisorSub = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
+          const isCoordSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
             || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
-            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent')) return true;
+            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
+          if (isSupervisorSub || isCoordSub) {
+            // Hub-scoped FOM: only show submissions from their assigned supervisor hub(s)
+            if (isScopedFOM) {
+              return o.hub_id ? fomAdditionalHubIds.includes(o.hub_id) : false;
+            }
+            return true;
+          }
           if (o.tier1_approved_by === currentUser?.id) return true;
           if (o.tier2_approved_by === currentUser?.id) return true;
           return false;
@@ -940,8 +951,16 @@ const CostSubmission = () => {
       if (!oc.hub_id || !myHubId) return true;
       return oc.hub_id === myHubId;
     }
-    // Supervisor: T1 = FOM
-    if (hasThreeTiers(oc)) return isFOM;
+    // Supervisor: T1 = FOM (hub-scoped if FOM has additional supervisor roles)
+    if (hasThreeTiers(oc)) {
+      if (!isFOM) return false;
+      const fomAdditionalHubIds = getAdditionalSupervisorHubIds(currentUser as any);
+      if (fomAdditionalHubIds.length > 0) {
+        // Hub-scoped FOM: only approve submissions from their assigned supervisor hub(s)
+        return oc.hub_id ? fomAdditionalHubIds.includes(oc.hub_id) : false;
+      }
+      return true; // Unrestricted FOM approves all supervisor submissions
+    }
     // FOM submission: T1 = Country Director
     if (isFomSubmission(oc)) return isCountryDirector;
     // Country Director submission: T1 = Admin/SuperAdmin (handled above)
