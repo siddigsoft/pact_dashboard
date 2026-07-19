@@ -112,6 +112,7 @@ interface MmpOption {
   hub: string | null;
   status: string | null;
   project_id: string | null;
+  uploaded_at: string | null;
 }
 
 interface ActivityOption {
@@ -241,12 +242,12 @@ export default function UnifiedCostRequestForm({
     // mmp_file_id isn't cleared immediately on mount.
     const firstRenderRef = useRef(true);
 
-    // Load all MMPs once — always show full list; project_id tells us which are linked to a project.
+    // Load all MMPs once — filter by role in UI.
     useEffect(() => {
      setMmpsLoading(true);
      supabase
        .from('mmp_files')
-       .select('id, name, month, hub, status, project_id')
+       .select('id, name, month, hub, status, project_id, uploaded_at')
        .order('uploaded_at', { ascending: false })
        .limit(200)
        .then(({ data }) => {
@@ -914,11 +915,34 @@ export default function UnifiedCostRequestForm({
 
           {/* MMP — required only when the selected project has MMPs linked to it via project_id */}
           {(() => {
+            const isSuperAdmin = currentUser?.role === 'super_admin';
+
+            // Determine the "latest" MMP month so we can restrict non-super-admins to current month only.
+            // mmps is already sorted by uploaded_at DESC, so mmps[0] is the most recent.
+            const latestMonth = mmps.length > 0 ? mmps[0].month : null;
+
+            // Helper: is this MMP from a past/closed month?
+            const isPastMmp = (m: MmpOption) =>
+              latestMonth !== null && m.month !== null && m.month < latestMonth;
+
             const projectMmps = projectId ? mmps.filter(m => m.project_id === projectId) : [];
             const isMmpRequired = projectMmps.length > 0;
             // Disabled when a project is selected but has no linked MMPs — unrelated MMPs must not appear
             const isMmpDisabled = mmpsLoading || (!!projectId && !isMmpRequired);
-            const visibleMmps = isMmpRequired ? projectMmps : mmps;
+
+            // Base pool: project-linked or all
+            const poolMmps = isMmpRequired ? projectMmps : mmps;
+
+            // For non-super-admins: only show the most-recent-month MMPs.
+            // Exception: always include the currently-selected MMP (e.g. when editing an old submission).
+            const visibleMmps = isSuperAdmin
+              ? poolMmps
+              : poolMmps.filter(m =>
+                  m.month === latestMonth ||   // current month
+                  m.month === null ||           // month unknown — keep
+                  m.id === mmpId               // pre-selected (edit mode)
+                );
+
             const mmpMissing = isMmpRequired && !mmpId;
             return (
               <div className={cn("border-l-[3px] pl-3 rounded-r-xl", mmpMissing ? "border-destructive/60" : "border-muted-foreground/30")}>
@@ -932,6 +956,13 @@ export default function UnifiedCostRequestForm({
                       </span>
                   }
                 </Label>
+                {/* Super-admin hint when browsing past months */}
+                {isSuperAdmin && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                    Super Admin — all months visible, including closed ones
+                  </p>
+                )}
                 <Select
                   onValueChange={(v) => setMmpId(v === '__NONE__' ? '' : v)}
                   value={mmpId || '__NONE__'}
@@ -960,7 +991,14 @@ export default function UnifiedCostRequestForm({
                         )}
                         {visibleMmps.map((mmp) => (
                           <SelectItem key={mmp.id} value={mmp.id}>
-                            {mmp.name}
+                            <span className="flex items-center gap-1.5">
+                              {mmp.name}
+                              {isSuperAdmin && isPastMmp(mmp) && (
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-500 bg-orange-50 dark:bg-orange-950/40 px-1 py-0.5 rounded">
+                                  Closed
+                                </span>
+                              )}
+                            </span>
                           </SelectItem>
                         ))}
                       </>
