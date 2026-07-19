@@ -608,12 +608,14 @@ export default function PreFundingReconciliation() {
     [selectedFund, effectivePaidAmount]
   );
 
-  // True when paid_amount DB column is stale (no txn rows back it up)
+  // True when paid_amount DB column is stale (no txn rows back it up).
+  // Suppressed while txnLoading=true so we don't flash a false warning
+  // during the window between fund switch (transactions cleared) and load completing.
   const isStaleBalance = useMemo(() => {
-    if (!selectedFund) return false;
+    if (!selectedFund || txnLoading) return false;
     const paymentTxns = transactions.filter(t => t.transaction_type === 'payment');
     return paymentTxns.length === 0 && Number(selectedFund.paid_amount) > 0;
-  }, [selectedFund, transactions]);
+  }, [selectedFund, transactions, txnLoading]);
 
   const handleResetBalance = async () => {
     if (!selectedFund) return;
@@ -833,6 +835,11 @@ export default function PreFundingReconciliation() {
   }, [funds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (selectedFund) {
+      // Clear stale data immediately so effectivePaidAmount doesn't compute
+      // from the PREVIOUS fund's transactions while the new ones are loading
+      setTxns([]);
+      setRecons([]);
+      setSelectedTxnIds(new Set());
       setTxnForm(p => ({ ...p, currency: selectedFund.currency }));
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);

@@ -130,8 +130,7 @@ export default function PreFundingAllocations() {
 
       const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
       const fundMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, f]));
-      // Fund-level paid_amount: source of truth for "how much left the fund"
-      const paidMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, Number(f.paid_amount ?? 0)]));
+      // NOTE: paidMap is computed AFTER validTxns is built (see below)
 
       // Validate DP-sourced transactions — exclude any whose source DP is deleted/cancelled
       const rawTxns: any[] = txnRes.data ?? [];
@@ -174,6 +173,25 @@ export default function PreFundingAllocations() {
           return !t.source_id || validOcsIds.has(t.source_id);
         return true;
       });
+
+      // Compute fund-level paid from actual payment transactions (avoids stale paid_amount column).
+      // Falls back to the DB paid_amount only when no payment txn rows exist for that fund.
+      const txnPaidMap = new Map<string, number>();
+      for (const t of validTxns) {
+        if (!t.pre_fund_request_id) continue;
+        const amt = Number(t.amount) || 0;
+        if (t.transaction_type === 'payment') {
+          txnPaidMap.set(t.pre_fund_request_id, (txnPaidMap.get(t.pre_fund_request_id) ?? 0) + amt);
+        } else if (['reversal', 'return'].includes(t.transaction_type)) {
+          txnPaidMap.set(t.pre_fund_request_id, Math.max(0, (txnPaidMap.get(t.pre_fund_request_id) ?? 0) - amt));
+        }
+      }
+      const paidMap = new Map<string, number>();
+      for (const f of (fundsRes.data ?? []) as any[]) {
+        const txnPaid = txnPaidMap.get(f.id as string) ?? 0;
+        // If no payment transactions exist yet, fall back to the DB column (updated by directLinkPayment)
+        paidMap.set(f.id as string, txnPaid > 0 ? txnPaid : Number(f.paid_amount ?? 0));
+      }
 
       // Some transactions (esp. manually added via Reconciliation, or auto-linked
       // where the staff member has no allocation yet) are saved with user_id = NULL

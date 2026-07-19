@@ -541,7 +541,11 @@ export default function PreFundingOverview() {
       {/* Expiry Alerts Banner */}
       {!loading && (() => {
         const expiring = activeFunds.filter(f => {
-          if (!f.end_date || f.available_balance <= 0) return false;
+          if (!f.end_date) return false;
+          // Use transaction-computed available balance (same source as the fund cards)
+          const effPaid = effectivePaidByFund.get(f.id) ?? 0;
+          const effAvail = Math.max(0, f.amount - effPaid);
+          if (effAvail <= 0) return false;
           const d = differenceInDays(parseISO(f.end_date), new Date());
           return d >= 0 && d <= 30;
         });
@@ -556,10 +560,12 @@ export default function PreFundingOverview() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {expiring.map(f => {
                   const d = differenceInDays(parseISO(f.end_date!), new Date());
+                  const effPaid = effectivePaidByFund.get(f.id) ?? 0;
+                  const effAvail = Math.max(0, f.amount - effPaid);
                   const cls = d <= 7 ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
                   return (
                     <span key={f.id} className={cn('text-xs px-2 py-0.5 rounded-full font-medium', cls)}>
-                      {f.name} — {f.currency} {formatNumber(f.available_balance, 0)} left · {d}d remaining
+                      {f.name} — {f.currency} {formatNumber(effAvail, 0)} left · {d}d remaining
                     </span>
                   );
                 })}
