@@ -1710,6 +1710,8 @@ const CostSubmission = () => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     // SuperAdmin can edit at any tier (T1→T4) — only block once paid or reconciled
     if (isSuperAdmin) return derivedStatus !== 'paid' && derivedStatus !== 'reconciled';
+    // Per-user override: edit any non-paid/reconciled submission
+    if (hasEditOverride && derivedStatus !== 'paid' && derivedStatus !== 'reconciled') return true;
     if (derivedStatus !== 'pending') return false;
     if (isAdmin) return true;
     return oc.submitted_by === currentUser?.id;
@@ -1873,7 +1875,7 @@ const CostSubmission = () => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus === 'paid' || derivedStatus === 'reconciled') return false;
     if (derivedStatus !== 'under_review' && derivedStatus !== 'approved') return false;
-    return isSuperAdmin || isAdmin;
+    return isSuperAdmin || isAdmin || hasRecallOverride;
   };
 
   /** Returns the tier label (T1/T2/T3/T4) that would be reverted, or null if no revert is possible */
@@ -1888,7 +1890,7 @@ const CostSubmission = () => {
   };
 
   const canRevertSubmission = (oc: OperationalCostSubmission): boolean => {
-    if (!isSuperAdmin && !isAdmin) return false;
+    if (!isSuperAdmin && !isAdmin && !hasRevertTierOverride) return false;
     return getRevertTierLabel(oc) !== null;
   };
 
@@ -1930,12 +1932,27 @@ const CostSubmission = () => {
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved') return false;
-    return isSuperAdmin || isAdmin || isFinanceAdmin;
+    return isSuperAdmin || isAdmin || isFinanceAdmin || hasMarkPaidOverride;
+  };
+
+  const canReconcile = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus !== 'paid') return false;
+    // If nobody has been granted the override, reconcile is open to any viewer (legacy)
+    // Once at least one override exists the button requires explicit grant
+    return isSuperAdmin || isAdmin || isFinanceAdmin || hasReconcileOverride;
   };
 
   // Per-user override checks (stored in user_permission_overrides with resource='cost_submissions')
-  const hasRevertPaidOverride = checkPermission('cost_submissions' as any, 'revert_paid' as any);
-  const hasDeleteOverride     = checkPermission('cost_submissions' as any, 'delete' as any);
+  const cs = (a: string) => checkPermission('cost_submissions' as any, a as any);
+  const hasMarkPaidOverride     = cs('mark_paid');
+  const hasRevertPaidOverride   = cs('revert_paid');
+  const hasSendToFinanceOverride = cs('send_to_finance');
+  const hasReconcileOverride    = cs('reconcile');
+  const hasRecallOverride       = cs('recall');
+  const hasRevertTierOverride   = cs('revert_tier');
+  const hasEditOverride         = cs('edit');
+  const hasDeleteOverride       = cs('delete');
 
   // Revert Paid → back to Approved (SuperAdmin, Admin, or per-user override; not once reconciled)
   const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
@@ -2288,7 +2305,7 @@ const CostSubmission = () => {
   const canRequestPayment = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved') return false;
-    return isSuperAdmin || isAdmin;
+    return isSuperAdmin || isAdmin || hasSendToFinanceOverride;
   };
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
@@ -5663,7 +5680,7 @@ const CostSubmission = () => {
                                 Mark Paid
                               </Button>
                             )}
-                            {derivedStatus === 'paid' && (
+                            {canReconcile(oc) && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -6582,7 +6599,7 @@ const CostSubmission = () => {
                                 <Wallet className="h-3.5 w-3.5" />Mark Paid
                               </button>
                             )}
-                            {derivedStatus === 'paid' && (
+                            {canReconcile(oc) && (
                               <button className={btnGhost} onClick={() => { setActiveReconciliation(oc); setActiveTab("reconciliation"); }} data-testid={`button-reconcile-${oc.id}`}>
                                 <Receipt className="h-3.5 w-3.5" />Reconcile
                               </button>
