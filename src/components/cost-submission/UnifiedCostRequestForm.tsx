@@ -957,7 +957,7 @@ export default function UnifiedCostRequestForm({
                   }
                 </Label>
                 {/* Super-admin hint when browsing past months */}
-                {isSuperAdmin && (
+                {isSuperAdmin && !isMmpDisabled && (
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
                     Super Admin — all months visible, including closed ones

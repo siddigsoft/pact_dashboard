@@ -2103,7 +2103,7 @@ const CostSubmission = () => {
             const pfResult = await linkPaymentToKnownFund({
               fundId: selectedPreFundId,
               fundName: selectedFundInfo?.name ?? selectedPreFundId,
-              amount: oc.amount_cents / 100,
+              amount: payAmountCents / 100,
               currency: oc.currency,
               sourceTable: 'operational_cost_submissions',
               sourceId: oc.id,
@@ -2115,13 +2115,13 @@ const CostSubmission = () => {
               receiptUrl: proofUrl,
             });
             if (pfResult.linked) {
-              toast({ title: 'Charged to Pre-Fund', description: `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()} deducted from "${selectedFundInfo?.name ?? selectedPreFundId}".` });
+              toast({ title: 'Charged to Pre-Fund', description: `${oc.currency} ${(payAmountCents / 100).toLocaleString()} deducted from "${selectedFundInfo?.name ?? selectedPreFundId}".` });
             } else {
               toast({ title: 'Pre-Fund link failed', description: pfResult.message, variant: 'destructive' });
             }
           } else {
             const pfResult = await linkPaymentToPreFund({
-              amount: oc.amount_cents / 100,
+              amount: payAmountCents / 100,
               currency: oc.currency,
               countryId: (oc as any).country_id ?? null,
               projectId: (oc as any).project_id ?? null,
@@ -2240,6 +2240,7 @@ const CostSubmission = () => {
       for (const sub of subs) {
         const { error } = await supabase.from('operational_cost_submissions').update({
           status: 'paid',
+          amount_paid_cents: sub.amount_cents,
           paid_at: now,
           paid_by: currentUser.id,
           updated_at: now,
