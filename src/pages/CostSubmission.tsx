@@ -804,8 +804,10 @@ const CostSubmission = () => {
 
         // FOM sees only submissions in their approval chain:
         //   • Their own submissions (any status)
-        //   • Supervisor submissions (FOM is T1 approver in the 3-tier flow)
-        //   • Coordinator submissions (FOM is T2 approver in the 4-tier flow)
+        //   • Supervisor submissions (FOM is T1 approver in 3-tier flow)
+        //     → hub-scoped to assigned supervisor hub(s) if FOM has additional roles
+        //   • Coordinator/DataCollector submissions (FOM is T2 approver in 4-tier flow)
+        //     → ALWAYS visible regardless of hub (FOM-level responsibility, not supervisor-level)
         //   • Any submission FOM has already actioned (T1 or T2 approved_by)
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
@@ -814,11 +816,15 @@ const CostSubmission = () => {
           const isCoordSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
             || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
             || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
-          if (isSupervisorSub || isCoordSub) {
-            // Hub-scoped FOM: only show submissions from their assigned supervisor hub(s)
+          if (isSupervisorSub) {
+            // Supervisor submissions: hub-scope if FOM has additional supervisor roles
             if (isScopedFOM) {
               return o.hub_id ? fomAdditionalHubIds.includes(o.hub_id) : false;
             }
+            return true;
+          }
+          if (isCoordSub) {
+            // Coordinator/DataCollector submissions: FOM is T2 approver — no hub restriction
             return true;
           }
           if (o.tier1_approved_by === currentUser?.id) return true;
