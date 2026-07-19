@@ -1931,10 +1931,10 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
-  // Revert Paid → back to Approved (SuperAdmin only; not once reconciled)
+  // Revert Paid → back to Approved (SuperAdmin or Admin; not once reconciled)
   const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
-    return derivedStatus === 'paid' && isSuperAdmin;
+    return derivedStatus === 'paid' && (isSuperAdmin || isAdmin);
   };
 
   const handleRevertPaid = async () => {
