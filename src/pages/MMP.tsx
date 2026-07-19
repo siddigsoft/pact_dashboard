@@ -4790,10 +4790,10 @@ const MMP = () => {
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="forwarded" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
+                  <TabsTrigger value="forwarded" className={`flex items-center gap-1.5 min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all ${isFOM ? 'data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-md' : 'data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md'}`}>
                     <Send className="h-3.5 w-3.5" />
-                    {isFOM ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
-                    <Badge className="bg-amber-400/30 text-white border-0 text-[10px] px-1.5 py-0">{categorizedMMPs.forwarded.length}</Badge>
+                    {t('mmpPage.tabs.forwardedMMPs')}
+                    <Badge className={`border-0 text-[10px] px-1.5 py-0 ${isFOM ? 'bg-red-500/40 text-white' : 'bg-amber-400/30 text-white'}`}>{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
