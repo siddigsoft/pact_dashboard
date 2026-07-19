@@ -200,7 +200,7 @@ export default function PreFundingOverview() {
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
         (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false }),
-        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false }),
+        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false }).range(0, 9999),
         supabase.from('profiles').select('id,full_name,email'),
       ]);
 
