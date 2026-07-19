@@ -190,13 +190,27 @@ const UserDetail: FC = () => {
   const [addRoleSaving, setAddRoleSaving]       = useState(false);
 
   const fetchAdditionalRoles = async (userId: string, primaryRole: string) => {
-    const { data } = await supabase
+    // Try with hub_id first; fall back if column doesn't exist yet (migration pending)
+    let data: any[] | null = null;
+    const full = await supabase
       .from('user_roles')
       .select('id, role, hub_id, assigned_at')
       .eq('user_id', userId)
       .neq('role', primaryRole)
       .not('role', 'is', null)
       .order('assigned_at', { ascending: false });
+    if (full.error && full.error.message?.includes('hub_id')) {
+      const fallback = await supabase
+        .from('user_roles')
+        .select('id, role, assigned_at')
+        .eq('user_id', userId)
+        .neq('role', primaryRole)
+        .not('role', 'is', null)
+        .order('assigned_at', { ascending: false });
+      data = (fallback.data ?? []).map(r => ({ ...r, hub_id: null }));
+    } else {
+      data = full.data ?? [];
+    }
     setAdditionalRoles((data as AdditionalRole[] | null) ?? []);
   };
 
@@ -204,13 +218,23 @@ const UserDetail: FC = () => {
     if (!user || !newRolePick) return;
     setAddRoleSaving(true);
     try {
-      const { error } = await supabase.from('user_roles').insert({
+      // Try with hub_id first; if column missing (migration pending) retry without it
+      let result = await supabase.from('user_roles').insert({
         user_id: user.id,
         role: newRolePick,
         hub_id: newRoleHub || null,
         assigned_by: currentUser?.id ?? null,
         assigned_at: new Date().toISOString(),
       });
+      if (result.error && result.error.message?.includes('hub_id')) {
+        result = await supabase.from('user_roles').insert({
+          user_id: user.id,
+          role: newRolePick,
+          assigned_by: currentUser?.id ?? null,
+          assigned_at: new Date().toISOString(),
+        });
+      }
+      const { error } = result;
       if (error) throw error;
       toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
       setAddRoleMode(false);
