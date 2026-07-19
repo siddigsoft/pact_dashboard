@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format, parseISO, isValid, isPast } from 'date-fns';
 import {
   DollarSign, Users, Clock, Percent, CheckCircle2,
@@ -70,8 +70,8 @@ export default function ProjectProfessionalFeesTab({
 
   // ── Local state: mutable copy of teamComposition for fee edits ────────────
   const [localComposition, setLocalComposition] = useState<ProjectTeamMember[]>(teamComposition);
-  // Sync from parent when prop changes (project reload)
-  useMemo(() => setLocalComposition(teamComposition), [teamComposition]);
+  // Sync from parent when prop changes (project reload / after save+refetch)
+  useEffect(() => { setLocalComposition(teamComposition); }, [teamComposition]);
 
   // ── Fee edit dialog state ─────────────────────────────────────────────────
   const [feeDialogOpen, setFeeDialogOpen] = useState(false);
