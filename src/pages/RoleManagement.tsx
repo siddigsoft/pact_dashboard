@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock } from 'lucide-react';
+import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -14,6 +14,7 @@ import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignm
 import { PermissionTester } from '@/components/role-management/PermissionTester';
 import { UserPermissionOverrides } from '@/components/role-management/UserPermissionOverrides';
 import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
+import { RoleAccessMap } from '@/components/role-management/RoleAccessMap';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -299,6 +300,10 @@ const RoleManagement = () => {
               </Badge>
             </TabsTrigger>
           )}
+          <TabsTrigger value="access-map" className="gap-2" data-testid="tab-access-map">
+            <Grid3X3 className="h-4 w-4" />
+            Access Map
+          </TabsTrigger>
         </TabsList>
 
         {/* ── Tab 1: Roles ── */}
@@ -375,6 +380,11 @@ const RoleManagement = () => {
             <CostSubmissionPermissions />
           </TabsContent>
         )}
+
+        {/* ── Tab 4: Access Map (all admins) ── */}
+        <TabsContent value="access-map">
+          <RoleAccessMap />
+        </TabsContent>
       </Tabs>
 
       {/* Dialogs */}
