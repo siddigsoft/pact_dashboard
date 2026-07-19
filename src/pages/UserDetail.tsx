@@ -182,7 +182,11 @@ const UserDetail: FC = () => {
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
 
   // ── Additional / secondary roles ─────────────────────────────────────────
-  interface AdditionalRole { id: number; role: string; hub_id: string | null; assigned_at: string | null }
+  // ── Additional roles stored as JSONB on profiles.additional_roles ──────────
+  // Schema: [{role, hub_id, assigned_at, assigned_by}]
+  // Migration (run once in Supabase SQL Editor):
+  //   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS additional_roles jsonb DEFAULT '[]'::jsonb;
+  interface AdditionalRole { role: string; hub_id: string | null; assigned_at: string | null; assigned_by?: string | null }
   const [additionalRoles, setAdditionalRoles] = useState<AdditionalRole[]>([]);
   const [addRoleMode, setAddRoleMode]           = useState(false);
   const [newRolePick, setNewRolePick]           = useState('');
@@ -190,73 +194,58 @@ const UserDetail: FC = () => {
   const [addRoleSaving, setAddRoleSaving]       = useState(false);
   const [rolesNeedsMigration, setRolesNeedsMigration] = useState(false);
 
-  const fetchAdditionalRoles = async (userId: string, primaryRole: string) => {
-    // Try with hub_id first; fall back if column doesn't exist yet (migration pending)
-    let data: any[] | null = null;
-    const full = await supabase
-      .from('user_roles')
-      .select('id, role, hub_id, assigned_at')
-      .eq('user_id', userId)
-      .neq('role', primaryRole)
-      .not('role', 'is', null)
-      .order('assigned_at', { ascending: false });
-    if (full.error && full.error.message?.includes('hub_id')) {
-      const fallback = await supabase
-        .from('user_roles')
-        .select('id, role, assigned_at')
-        .eq('user_id', userId)
-        .neq('role', primaryRole)
-        .not('role', 'is', null)
-        .order('assigned_at', { ascending: false });
-      data = (fallback.data ?? []).map(r => ({ ...r, hub_id: null }));
+  const fetchAdditionalRoles = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('additional_roles')
+      .eq('id', userId)
+      .single();
+    if (error?.message?.includes('additional_roles')) {
+      // Column not yet added — migration not applied
+      setRolesNeedsMigration(true);
+      setAdditionalRoles([]);
+    } else if (error) {
+      setAdditionalRoles([]);
     } else {
-      data = full.data ?? [];
+      const arr = Array.isArray(data?.additional_roles) ? data.additional_roles : [];
+      setAdditionalRoles(arr as AdditionalRole[]);
+      setRolesNeedsMigration(false);
     }
-    setAdditionalRoles((data as AdditionalRole[] | null) ?? []);
+  };
+
+  const saveAdditionalRoles = async (updated: AdditionalRole[]) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ additional_roles: updated })
+      .eq('id', user!.id);
+    if (error?.message?.includes('additional_roles')) {
+      setRolesNeedsMigration(true);
+      throw new Error('Migration needed — see panel for instructions.');
+    }
+    if (error) throw error;
+    setAdditionalRoles(updated);
   };
 
   const handleAddRole = async () => {
     if (!user || !newRolePick) return;
     setAddRoleSaving(true);
     try {
-      // Build payload — try with hub_id, fall back if column not yet in schema cache
-      const payloadFull = { user_id: user.id, role: newRolePick, hub_id: newRoleHub || null, assigned_by: currentUser?.id ?? null, assigned_at: new Date().toISOString() };
-      const payloadSlim = { user_id: user.id, role: newRolePick, assigned_by: currentUser?.id ?? null, assigned_at: new Date().toISOString() };
-
-      let result = await supabase.from('user_roles').insert(payloadFull).select('id').single();
-
-      // hub_id column not in schema cache yet — retry without it
-      if (result.error?.message?.includes('hub_id')) {
-        result = await supabase.from('user_roles').insert(payloadSlim).select('id').single();
-      }
-
-      // Per-user unique constraint (ux_user_roles_user_id) — migration not yet applied
-      if (result.error?.message?.includes('ux_user_roles_user_id') ||
-          result.error?.message?.includes('user_roles_user_id_key')) {
-        setRolesNeedsMigration(true);
-        setAddRoleMode(false);
+      const alreadyExists = additionalRoles.some(r => r.role === newRolePick);
+      if (alreadyExists) {
+        toast({ title: 'Role already assigned', description: `${toRoleLabel(newRolePick)} is already an additional role for this user.`, variant: 'destructive' });
         return;
       }
-
-      // Per-user+role unique constraint — this exact role is already assigned
-      if (result.error?.message?.includes('uq_user_roles_user_role') ||
-          result.error?.message?.includes('duplicate key')) {
-        toast({ title: 'Role already assigned', description: `${toRoleLabel(newRolePick)} is already listed as a role for this user.`, variant: 'destructive' });
-        setAddRoleMode(false);
-        setNewRolePick('');
-        setNewRoleHub('');
-        // Refresh list so the existing entry shows up
-        await fetchAdditionalRoles(user.id, user.role || '');
-        return;
-      }
-
-      if (result.error) throw result.error;
-
+      const newEntry: AdditionalRole = {
+        role: newRolePick,
+        hub_id: newRoleHub || null,
+        assigned_at: new Date().toISOString(),
+        assigned_by: currentUser?.id ?? null,
+      };
+      await saveAdditionalRoles([...additionalRoles, newEntry]);
       toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
       setAddRoleMode(false);
       setNewRolePick('');
       setNewRoleHub('');
-      fetchAdditionalRoles(user.id, user.role || '');
     } catch (e: any) {
       toast({ title: 'Error adding role', description: e.message, variant: 'destructive' });
     } finally {
@@ -264,12 +253,15 @@ const UserDetail: FC = () => {
     }
   };
 
-  const handleRemoveAdditionalRole = async (roleId: number) => {
+  const handleRemoveAdditionalRole = async (roleToRemove: string) => {
     if (!user) return;
-    const { error } = await supabase.from('user_roles').delete().eq('id', roleId);
-    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Role removed' });
-    fetchAdditionalRoles(user.id, user.role || '');
+    try {
+      const updated = additionalRoles.filter(r => r.role !== roleToRemove);
+      await saveAdditionalRoles(updated);
+      toast({ title: 'Role removed' });
+    } catch (e: any) {
+      toast({ title: 'Error removing role', description: e.message, variant: 'destructive' });
+    }
   };
 
   // ── Location personal data (city/address for non-field staff) ───────────
@@ -703,7 +695,7 @@ const UserDetail: FC = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    if (user?.id && activeSection === 'access') fetchAdditionalRoles(user.id, user.role || '');
+    if (user?.id && activeSection === 'access') fetchAdditionalRoles(user.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, activeSection]);
 
@@ -2373,23 +2365,9 @@ const UserDetail: FC = () => {
 
                 {/* ── Additional / Secondary Roles ────────────────────────── */}
                 {isAdmin && (() => {
-                  const MIGRATION_SQL = `-- Idempotent — safe to run multiple times
-ALTER TABLE public.user_roles
-  DROP CONSTRAINT IF EXISTS ux_user_roles_user_id;
-ALTER TABLE public.user_roles
-  DROP CONSTRAINT IF EXISTS user_roles_user_id_key;
-ALTER TABLE public.user_roles
-  DROP CONSTRAINT IF EXISTS uq_user_roles_user_role;
-ALTER TABLE public.user_roles
-  ADD CONSTRAINT uq_user_roles_user_role
-  UNIQUE (user_id, role);
-ALTER TABLE public.user_roles
-  ADD COLUMN IF NOT EXISTS hub_id text;
-ALTER TABLE public.user_roles
-  ADD COLUMN IF NOT EXISTS assigned_by uuid
-  REFERENCES auth.users(id) ON DELETE SET NULL;
-ALTER TABLE public.user_roles
-  ADD COLUMN IF NOT EXISTS assigned_at timestamptz DEFAULT now();`;
+                  const MIGRATION_SQL = `-- Run once in Supabase SQL Editor (safe to re-run)
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS additional_roles jsonb DEFAULT '[]'::jsonb;`;
 
                   return (
                     <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
@@ -2412,11 +2390,11 @@ ALTER TABLE public.user_roles
                             <div>
                               <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">One-time database setup required</p>
                               <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                                The <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">user_roles</code> table currently allows only one role per user.
-                                Run the SQL below in your <strong>Supabase SQL Editor</strong> to enable multiple roles, then click <em>I've run it, try again</em>.
+                                One quick SQL change is needed on your <strong>profiles</strong> table to store additional roles.
+                                Run the two-line SQL below in your <strong>Supabase SQL Editor</strong>, then click <em>I've run it, try again</em>.
                               </p>
                               <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1 font-medium">
-                                💡 If you see <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">"already exists"</code> when running the SQL — that means it already worked! Click <em>I've run it, try again</em> below.
+                                💡 If you see <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">"column already exists"</code> — that means it's done! Click <em>I've run it, try again</em> below.
                               </p>
                             </div>
                           </div>
@@ -2445,7 +2423,7 @@ ALTER TABLE public.user_roles
                             <button
                               onClick={async () => {
                                 setRolesNeedsMigration(false);
-                                await fetchAdditionalRoles(user.id, user.role || '');
+                                await fetchAdditionalRoles(user.id);
                                 setAddRoleMode(true);
                               }}
                               className="text-[11px] text-muted-foreground hover:text-foreground underline"
@@ -2465,14 +2443,14 @@ ALTER TABLE public.user_roles
                           )}
                           <div className="space-y-2">
                             {additionalRoles.map(ar => (
-                              <div key={ar.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
+                              <div key={ar.role} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge variant="secondary" className="text-xs font-medium">
                                     {toRoleLabel(ar.role) || ar.role}
                                   </Badge>
                                   {ar.hub_id && (
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      <MapPin className="h-3 w-3" /> {ar.hub_id}
+                                      <MapPin className="h-3 w-3" /> {hubs.find(h => h.id === ar.hub_id)?.name || ar.hub_id}
                                     </span>
                                   )}
                                   {ar.assigned_at && (
@@ -2483,7 +2461,7 @@ ALTER TABLE public.user_roles
                                 </div>
                                 <Button size="sm" variant="ghost"
                                   className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
-                                  onClick={() => handleRemoveAdditionalRole(ar.id)}
+                                  onClick={() => handleRemoveAdditionalRole(ar.role)}
                                   title="Remove this role">
                                   <UserX className="h-3.5 w-3.5" />
                                 </Button>
