@@ -111,6 +111,7 @@ interface MmpOption {
   month: string | null;
   hub: string | null;
   status: string | null;
+  project_id: string | null;
 }
 
 interface ActivityOption {
@@ -240,13 +241,12 @@ export default function UnifiedCostRequestForm({
     // mmp_file_id isn't cleared immediately on mount.
     const firstRenderRef = useRef(true);
 
-    // Load all active MMPs — always show full list regardless of project selection.
-    // MMPs are not linked to projects via project_id in mmp_files; the user picks both independently.
+    // Load all MMPs once — always show full list; project_id tells us which are linked to a project.
     useEffect(() => {
      setMmpsLoading(true);
      supabase
        .from('mmp_files')
-       .select('id, name, month, hub, status')
+       .select('id, name, month, hub, status, project_id')
        .order('uploaded_at', { ascending: false })
        .limit(200)
        .then(({ data }) => {
@@ -469,8 +469,9 @@ export default function UnifiedCostRequestForm({
       toast({ title: "Title Required", description: "Please enter a request title (at least 3 characters).", variant: "destructive" });
       return;
     }
-    // MMP is required when a project is selected and MMPs are available
-    if (projectId && mmps.length > 0 && !mmpId) {
+    // MMP is required only when the selected project has MMPs specifically linked to it
+    const projectMmps = projectId ? mmps.filter(m => m.project_id === projectId) : [];
+    if (projectMmps.length > 0 && !mmpId) {
       toast({ title: "MMP Required / مطلوب خطة المراقبة الشهرية", description: "Please select a Monthly Monitoring Plan for this project request. / يرجى اختيار خطة المراقبة الشهرية لهذا الطلب.", variant: "destructive" });
       return;
     }
@@ -913,9 +914,11 @@ export default function UnifiedCostRequestForm({
             </div>
           </div>
 
-          {/* MMP — required when project is selected and MMPs exist; optional otherwise */}
+          {/* MMP — required only when the selected project has MMPs linked to it via project_id */}
           {(() => {
-            const isMmpRequired = !!projectId && mmps.length > 0;
+            const projectMmps = projectId ? mmps.filter(m => m.project_id === projectId) : [];
+            const isMmpRequired = projectMmps.length > 0;
+            const visibleMmps = isMmpRequired ? projectMmps : mmps;
             const mmpMissing = isMmpRequired && !mmpId;
             return (
               <div className={cn("border-l-[3px] pl-3 rounded-r-xl", mmpMissing ? "border-destructive/60" : "border-muted-foreground/30")}>
@@ -936,7 +939,11 @@ export default function UnifiedCostRequestForm({
                     data-testid="select-mmp"
                     className={cn("transition-colors", mmpMissing ? "border-destructive/60 focus:ring-destructive/30" : "border-input")}
                   >
-                    <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : isMmpRequired ? "Select an MMP — required for this project" : "Not related to an MMP (project cost)"} />
+                    <SelectValue placeholder={
+                      mmpsLoading ? "Loading MMPs…"
+                      : isMmpRequired ? "Select an MMP — required for this project"
+                      : "Not related to an MMP (project cost)"
+                    } />
                   </SelectTrigger>
                   <SelectContent>
                     {mmpsLoading ? (
@@ -948,7 +955,7 @@ export default function UnifiedCostRequestForm({
                             <span className="text-muted-foreground italic">Not related to an MMP (project cost)</span>
                           </SelectItem>
                         )}
-                        {mmps.map((mmp) => (
+                        {visibleMmps.map((mmp) => (
                           <SelectItem key={mmp.id} value={mmp.id}>
                             {mmp.name}
                           </SelectItem>
