@@ -282,6 +282,8 @@ const CostSubmission = () => {
   const [opsGlLogMap, setOpsGlLogMap] = useState<Map<string, string>>(new Map());
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
+  const [userFilter, setUserFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
 
    // Derive distinct MMP options from loaded cost data
    useEffect(() => {
@@ -295,6 +297,34 @@ const CostSubmission = () => {
         setMmpOptions((data || []).map((m: { id: string; name: string }) => ({ id: m.id, name: m.name })));
       });
   }, [operationalCosts]);
+
+  // Derived submitter options (from role-filtered pool, before user/state filter so the list stays full)
+  const userOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { id: string; name: string }[] = [];
+    for (const o of operationalCosts) {
+      if (seen.has(o.submitted_by)) continue;
+      seen.add(o.submitted_by);
+      const u = users.find(u => u.id === o.submitted_by);
+      const name = u?.name || resolvedProfiles[o.submitted_by]?.name || `User ${o.submitted_by.slice(0, 8)}`;
+      opts.push({ id: o.submitted_by, name });
+    }
+    return opts.sort((a, b) => a.name.localeCompare(b.name));
+  }, [operationalCosts, users, resolvedProfiles]);
+
+  // Derived state options from submitters visible in the current pool
+  const stateOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { id: string; label: string }[] = [];
+    for (const o of operationalCosts) {
+      const u = users.find(u => u.id === o.submitted_by);
+      const stateId = u?.stateId || (u as any)?.state;
+      if (!stateId || seen.has(stateId)) continue;
+      seen.add(stateId);
+      opts.push({ id: stateId, label: stateId });
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }, [operationalCosts, users]);
 
   // Fetch GL bridge log for paid/reconciled operational cost submissions
   useEffect(() => {
@@ -876,8 +906,19 @@ const CostSubmission = () => {
      if (mmpFilter !== 'all') {
        filtered = filtered.filter(o => o.mmp_file_id === mmpFilter);
      }
+     // Submitter (user) filter
+     if (userFilter !== 'all') {
+       filtered = filtered.filter(o => o.submitted_by === userFilter);
+     }
+     // State filter — match via the submitter's stateId in the users array
+     if (stateFilter !== 'all') {
+       filtered = filtered.filter(o => {
+         const u = users.find(u => u.id === o.submitted_by);
+         return (u?.stateId || (u as any)?.state) === stateFilter;
+       });
+     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter, userFilter, stateFilter, users]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -4187,25 +4228,82 @@ const CostSubmission = () => {
             </CardHeader>
           </Card>
 
-          {/* Status Filter Tabs + MMP Filter */}
+          {/* Filter row: MMP / Submitter / State */}
           <div className="flex items-center gap-2 flex-wrap mb-1" data-testid="mmp-filter-bar">
+            {/* MMP filter */}
             {mmpOptions.length > 0 && !cycleContextMmpId && (
-              <Select value={mmpFilter} onValueChange={setMmpFilter} data-testid="select-mmp-filter">
-                <SelectTrigger className="h-8 text-xs w-[220px]" data-testid="trigger-mmp-filter">
+              <Select value={mmpFilter} onValueChange={v => { setMmpFilter(v); setUserFilter('all'); setStateFilter('all'); }} data-testid="select-mmp-filter">
+                <SelectTrigger className="h-8 text-xs w-[200px]" data-testid="trigger-mmp-filter">
                   <SelectValue placeholder="All MMPs" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All MMPs</SelectItem>
+                  <SelectItem value="all">📋 All MMPs</SelectItem>
                   {mmpOptions.map(m => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
-            {mmpFilter !== 'all' && (
-              <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setMmpFilter('all')} data-testid="button-clear-mmp-filter">
-                Clear MMP filter
-              </Button>
+
+            {/* Submitter filter */}
+            {(isAdminOrSuperUser || isSuperAdmin || isSupervisor || isFOM || isCountryDirector) && userOptions.length > 1 && (
+              <Select value={userFilter} onValueChange={setUserFilter} data-testid="select-user-filter">
+                <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="trigger-user-filter">
+                  <SelectValue placeholder="All Submitters" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">👤 All Submitters</SelectItem>
+                  {userOptions.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* State filter */}
+            {(isAdminOrSuperUser || isSuperAdmin) && stateOptions.length > 1 && (
+              <Select value={stateFilter} onValueChange={setStateFilter} data-testid="select-state-filter">
+                <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="trigger-state-filter">
+                  <SelectValue placeholder="All States" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🗺 All States</SelectItem>
+                  {stateOptions.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Active filter pills + clear */}
+            {(mmpFilter !== 'all' || userFilter !== 'all' || stateFilter !== 'all') && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {mmpFilter !== 'all' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 py-0.5 font-medium">
+                    MMP: {mmpOptions.find(m => m.id === mmpFilter)?.name ?? mmpFilter.slice(0, 12)}
+                    <button onClick={() => setMmpFilter('all')} className="ml-0.5 hover:text-blue-900" data-testid="button-clear-mmp-filter">✕</button>
+                  </span>
+                )}
+                {userFilter !== 'all' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 rounded-full px-2 py-0.5 font-medium">
+                    User: {userOptions.find(u => u.id === userFilter)?.name ?? userFilter.slice(0, 12)}
+                    <button onClick={() => setUserFilter('all')} className="ml-0.5 hover:text-violet-900" data-testid="button-clear-user-filter">✕</button>
+                  </span>
+                )}
+                {stateFilter !== 'all' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full px-2 py-0.5 font-medium">
+                    State: {stateFilter}
+                    <button onClick={() => setStateFilter('all')} className="ml-0.5 hover:text-emerald-900" data-testid="button-clear-state-filter">✕</button>
+                  </span>
+                )}
+                <button
+                  onClick={() => { setMmpFilter('all'); setUserFilter('all'); setStateFilter('all'); }}
+                  className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
+                  data-testid="button-clear-all-filters"
+                >
+                  Clear all
+                </button>
+              </div>
             )}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
