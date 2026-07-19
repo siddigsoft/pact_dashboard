@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, UserPlus, UserMinus, Clock, DollarSign, Percent, Users } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, Clock, DollarSign, Percent, Users, Briefcase } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Project,
   ProjectRole,
@@ -76,6 +77,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     project.team?.teamComposition || []
   );
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
+  // Cross-project workload: other active projects each member is on
+  const [crossProjectCounts, setCrossProjectCounts] = useState<Record<string, number>>({});
+  const [crossProjectNames, setCrossProjectNames] = useState<Record<string, string[]>>({});
 
   // Fee fields for the add-member dialog
   const [memberType, setMemberType] = useState<TeamMemberType>('internal');
@@ -106,14 +110,22 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
       const uniqueUserIds = [...new Set(userIds)];
       if (uniqueUserIds.length === 0) return;
 
-      const [{ data: siteVisits, error: svError }, { data: mmpEntries, error: mmpError }] = await Promise.all([
+      const [
+        { data: siteVisits, error: svError },
+        { data: mmpEntries, error: mmpError },
+        { data: otherProjects, error: projError },
+      ] = await Promise.all([
         supabase.from('site_visits').select('assigned_to, status').in('assigned_to', uniqueUserIds).in('status', ACTIVE_SITE_VISIT_STATUSES),
         supabase.from('mmp_site_entries').select('forwarded_to_user_id, status').in('forwarded_to_user_id', uniqueUserIds).in('status', ACTIVE_MMP_ENTRY_STATUSES),
+        // Fetch other active projects with their team data to calculate cross-project workload
+        supabase.from('projects').select('id, name, team').neq('id', project.id).not('status', 'in', '("archived","completed","cancelled")'),
       ]);
 
       if (svError) console.warn('Error fetching site visits for workload:', svError);
       if (mmpError) console.warn('Error fetching MMP entries for workload:', mmpError);
+      if (projError) console.warn('Error fetching cross-project workload:', projError);
 
+      // Field-ops workload (site visits + MMP)
       const MAX_CAPACITY = 10;
       const workloads: Record<string, number> = {};
       uniqueUserIds.forEach(userId => {
@@ -122,6 +134,22 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
         workloads[userId] = Math.min(100, Math.round(((svCount + mmpCount) / MAX_CAPACITY) * 100));
       });
       setUserWorkloads(workloads);
+
+      // Cross-project workload: count other active projects each member is on
+      const counts: Record<string, number> = {};
+      const names: Record<string, string[]> = {};
+      uniqueUserIds.forEach(uid => { counts[uid] = 0; names[uid] = []; });
+      (otherProjects || []).forEach((proj: any) => {
+        const composition: Array<{ userId: string }> = proj.team?.teamComposition || [];
+        composition.forEach(m => {
+          if (uniqueUserIds.includes(m.userId)) {
+            counts[m.userId] = (counts[m.userId] || 0) + 1;
+            names[m.userId] = [...(names[m.userId] || []), proj.name];
+          }
+        });
+      });
+      setCrossProjectCounts(counts);
+      setCrossProjectNames(names);
 
       if (Object.keys(workloads).length > 0) {
         setTeamMembers(prev => {
@@ -133,7 +161,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     } catch (error) {
       console.error('Error calculating workloads:', error);
     }
-  }, [teamMemberIds, userIdList]);
+  }, [teamMemberIds, userIdList, project.id]);
 
   useEffect(() => {
     fetchUserWorkloads();
@@ -299,8 +327,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                   <TableHead>Team Member</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Fee</TableHead>
-                  <TableHead className="w-[100px] text-right">Workload</TableHead>
-                  <TableHead className="w-[100px] text-right">Actions</TableHead>
+                  <TableHead className="w-[180px] text-right">Workload</TableHead>
+                  <TableHead className="w-[80px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -386,12 +414,51 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end">
-                          <div className="w-full max-w-[100px] h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full ${getWorkloadColor(member.workload)}`} style={{ width: `${member.workload || 0}%` }} />
+                        <TooltipProvider>
+                          <div className="flex flex-col items-end gap-1">
+                            {/* Field-ops workload bar */}
+                            <div className="flex items-center gap-1.5 w-full justify-end">
+                              <span className="text-[10px] text-muted-foreground shrink-0">Field ops</span>
+                              <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                                <div className={`h-full ${getWorkloadColor(member.workload)}`} style={{ width: `${member.workload || 0}%` }} />
+                              </div>
+                              <span className="text-xs font-medium w-8 text-right tabular-nums">{member.workload || 0}%</span>
+                            </div>
+                            {/* Cross-project badge */}
+                            {(() => {
+                              const count = crossProjectCounts[member.userId] || 0;
+                              const projNames = crossProjectNames[member.userId] || [];
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border cursor-default ${
+                                      count === 0
+                                        ? 'text-muted-foreground border-border bg-muted/40'
+                                        : count <= 2
+                                        ? 'text-amber-700 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700'
+                                        : 'text-red-700 border-red-200 bg-red-50 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700'
+                                    }`}>
+                                      <Briefcase className="h-2.5 w-2.5 shrink-0" />
+                                      <span>{count} other project{count !== 1 ? 's' : ''}</span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  {count > 0 && (
+                                    <TooltipContent side="left" className="max-w-56">
+                                      <p className="font-medium text-xs mb-1">Also assigned to:</p>
+                                      <ul className="space-y-0.5">
+                                        {projNames.map((n, i) => (
+                                          <li key={i} className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <Briefcase className="h-3 w-3 shrink-0" />{n}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              );
+                            })()}
                           </div>
-                          <span className="ml-2 text-xs">{member.workload || 0}%</span>
-                        </div>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" onClick={() => handleRemoveTeamMember(member.userId)}>
@@ -645,7 +712,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                     <TableRow>
                       <TableHead>User</TableHead>
                       <TableHead>System Role</TableHead>
-                      <TableHead className="w-[100px] text-right">Workload</TableHead>
+                      <TableHead className="w-[180px] text-right">Workload</TableHead>
                       <TableHead className="w-[80px] text-right">Add</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -669,12 +736,49 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{user.role}</TableCell>
                             <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div className={`h-full ${getWorkloadColor(workload)}`} style={{ width: `${workload}%` }} />
+                              <TooltipProvider>
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    <span className="text-[10px] text-muted-foreground shrink-0">Field ops</span>
+                                    <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                                      <div className={`h-full ${getWorkloadColor(workload)}`} style={{ width: `${workload}%` }} />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground tabular-nums">{workload}%</span>
+                                  </div>
+                                  {(() => {
+                                    const count = crossProjectCounts[user.id] || 0;
+                                    const projNames = crossProjectNames[user.id] || [];
+                                    return (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border cursor-default ${
+                                            count === 0
+                                              ? 'text-muted-foreground border-border bg-muted/40'
+                                              : count <= 2
+                                              ? 'text-amber-700 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700'
+                                              : 'text-red-700 border-red-200 bg-red-50 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700'
+                                          }`}>
+                                            <Briefcase className="h-2.5 w-2.5 shrink-0" />
+                                            <span>{count} other project{count !== 1 ? 's' : ''}</span>
+                                          </div>
+                                        </TooltipTrigger>
+                                        {count > 0 && (
+                                          <TooltipContent side="left" className="max-w-56">
+                                            <p className="font-medium text-xs mb-1">Also on:</p>
+                                            <ul className="space-y-0.5">
+                                              {projNames.map((n, i) => (
+                                                <li key={i} className="text-xs text-muted-foreground flex items-center gap-1">
+                                                  <Briefcase className="h-3 w-3 shrink-0" />{n}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </TooltipContent>
+                                        )}
+                                      </Tooltip>
+                                    );
+                                  })()}
                                 </div>
-                                <span className="text-xs text-muted-foreground">{workload}%</span>
-                              </div>
+                              </TooltipProvider>
                             </TableCell>
                             <TableCell className="text-right">
                               <Button size="sm" onClick={() => handleAddTeamMember(user)}>
