@@ -2365,11 +2365,13 @@ const UserDetail: FC = () => {
 
                 {/* ── Additional / Secondary Roles ────────────────────────── */}
                 {isAdmin && (() => {
-                  const MIGRATION_SQL = `-- Run once in Supabase SQL Editor → SQL Editor → New query
+                  const MIGRATION_SQL = `-- Idempotent — safe to run multiple times
 ALTER TABLE public.user_roles
   DROP CONSTRAINT IF EXISTS ux_user_roles_user_id;
 ALTER TABLE public.user_roles
   DROP CONSTRAINT IF EXISTS user_roles_user_id_key;
+ALTER TABLE public.user_roles
+  DROP CONSTRAINT IF EXISTS uq_user_roles_user_role;
 ALTER TABLE public.user_roles
   ADD CONSTRAINT uq_user_roles_user_role
   UNIQUE (user_id, role);
@@ -2403,7 +2405,10 @@ ALTER TABLE public.user_roles
                               <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">One-time database setup required</p>
                               <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
                                 The <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">user_roles</code> table currently allows only one role per user.
-                                Run the SQL below in your <strong>Supabase SQL Editor</strong> to enable multiple roles, then try again.
+                                Run the SQL below in your <strong>Supabase SQL Editor</strong> to enable multiple roles, then click <em>I've run it, try again</em>.
+                              </p>
+                              <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1 font-medium">
+                                💡 If you see <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">"already exists"</code> when running the SQL — that means it already worked! Click <em>I've run it, try again</em> below.
                               </p>
                             </div>
                           </div>
