@@ -306,11 +306,11 @@ const CostSubmission = () => {
       if (seen.has(o.submitted_by)) continue;
       seen.add(o.submitted_by);
       const u = users.find(u => u.id === o.submitted_by);
-      const name = u?.name || resolvedProfiles[o.submitted_by]?.name || `User ${o.submitted_by.slice(0, 8)}`;
+      const name = u?.name || u?.email || `User ${o.submitted_by.slice(0, 8)}`;
       opts.push({ id: o.submitted_by, name });
     }
     return opts.sort((a, b) => a.name.localeCompare(b.name));
-  }, [operationalCosts, users, resolvedProfiles]);
+  }, [operationalCosts, users]);
 
   // Derived state options from submitters visible in the current pool
   const stateOptions = useMemo(() => {
