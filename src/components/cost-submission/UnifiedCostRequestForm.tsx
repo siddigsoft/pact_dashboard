@@ -240,23 +240,20 @@ export default function UnifiedCostRequestForm({
     // mmp_file_id isn't cleared immediately on mount.
     const firstRenderRef = useRef(true);
 
-    // Load MMPs when project changes — filter by project_id (include unassigned).
-    // When no project is selected, load all MMPs so the user is never blocked.
+    // Load all active MMPs — always show full list regardless of project selection.
+    // MMPs are not linked to projects via project_id in mmp_files; the user picks both independently.
     useEffect(() => {
      setMmpsLoading(true);
-     let q = supabase
+     supabase
        .from('mmp_files')
        .select('id, name, month, hub, status')
        .order('uploaded_at', { ascending: false })
-       .limit(200);
-     if (projectId) {
-       q = (q as any).or(`project_id.eq.${projectId},project_id.is.null`);
-     }
-     q.then(({ data }) => {
-       setMmps((data || []) as MmpOption[]);
-       setMmpsLoading(false);
-     }).catch(() => setMmpsLoading(false));
-   }, [projectId]);
+       .limit(200)
+       .then(({ data }) => {
+         setMmps((data || []) as MmpOption[]);
+         setMmpsLoading(false);
+       }).catch(() => setMmpsLoading(false));
+   }, []);
 
    // Reset selected MMP when project changes (skip initial mount so edits keep their MMP)
    useEffect(() => {
@@ -472,7 +469,11 @@ export default function UnifiedCostRequestForm({
       toast({ title: "Title Required", description: "Please enter a request title (at least 3 characters).", variant: "destructive" });
       return;
     }
-    // MMP is always optional — costs may be project-related without an MMP.
+    // MMP is required when a project is selected and MMPs are available
+    if (projectId && mmps.length > 0 && !mmpId) {
+      toast({ title: "MMP Required / مطلوب خطة المراقبة الشهرية", description: "Please select a Monthly Monitoring Plan for this project request. / يرجى اختيار خطة المراقبة الشهرية لهذا الطلب.", variant: "destructive" });
+      return;
+    }
     if (fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({ title: "Documents Required", description: "Please upload receipts for reimbursement requests", variant: "destructive" });
       return;
@@ -912,44 +913,66 @@ export default function UnifiedCostRequestForm({
             </div>
           </div>
 
-          {/* MMP — always optional; costs may be purely project-related */}
-          <div className="border-l-[3px] pl-3 rounded-r-xl border-muted-foreground/30">
-            <Label className="text-sm font-semibold mb-1.5 flex items-center gap-1.5 text-foreground">
-              <ClipboardList className="h-4 w-4" />
-              Monthly Monitoring Plan (MMP)
-              <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
-            </Label>
-            <Select
-              onValueChange={(v) => setMmpId(v === '__NONE__' ? '' : v)}
-              value={mmpId || '__NONE__'}
-              disabled={mmpsLoading}
-            >
-              <SelectTrigger data-testid="select-mmp" className="border-input transition-colors">
-                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : "Not related to an MMP (project cost)"} />
-              </SelectTrigger>
-              <SelectContent>
-                {mmpsLoading ? (
-                  <SelectItem value="__LOADING__" disabled>Loading MMPs…</SelectItem>
-                ) : (
-                  <>
-                    <SelectItem value="__NONE__">
-                      <span className="text-muted-foreground italic">Not related to an MMP (project cost)</span>
-                    </SelectItem>
-                    {mmps.map((mmp) => (
-                      <SelectItem key={mmp.id} value={mmp.id}>
-                        {mmp.name}
-                      </SelectItem>
-                    ))}
-                  </>
+          {/* MMP — required when project is selected and MMPs exist; optional otherwise */}
+          {(() => {
+            const isMmpRequired = !!projectId && mmps.length > 0;
+            const mmpMissing = isMmpRequired && !mmpId;
+            return (
+              <div className={cn("border-l-[3px] pl-3 rounded-r-xl", mmpMissing ? "border-destructive/60" : "border-muted-foreground/30")}>
+                <Label className="text-sm font-semibold mb-1.5 flex items-center gap-1.5 text-foreground">
+                  <ClipboardList className="h-4 w-4" />
+                  Monthly Monitoring Plan (MMP)
+                  {isMmpRequired
+                    ? <span className="text-destructive ml-1">*</span>
+                    : <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
+                  }
+                </Label>
+                <Select
+                  onValueChange={(v) => setMmpId(v === '__NONE__' ? '' : v)}
+                  value={mmpId || '__NONE__'}
+                  disabled={mmpsLoading}
+                >
+                  <SelectTrigger
+                    data-testid="select-mmp"
+                    className={cn("transition-colors", mmpMissing ? "border-destructive/60 focus:ring-destructive/30" : "border-input")}
+                  >
+                    <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : isMmpRequired ? "Select an MMP — required for this project" : "Not related to an MMP (project cost)"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mmpsLoading ? (
+                      <SelectItem value="__LOADING__" disabled>Loading MMPs…</SelectItem>
+                    ) : (
+                      <>
+                        {!isMmpRequired && (
+                          <SelectItem value="__NONE__">
+                            <span className="text-muted-foreground italic">Not related to an MMP (project cost)</span>
+                          </SelectItem>
+                        )}
+                        {mmps.map((mmp) => (
+                          <SelectItem key={mmp.id} value={mmp.id}>
+                            {mmp.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                {mmpMissing && (
+                  <p className="text-xs text-destructive mt-1 font-medium">
+                    MMP is required — please select a monitoring plan for this project request.
+                    <span dir="rtl" className="block">يرجى اختيار خطة المراقبة الشهرية.</span>
+                  </p>
                 )}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              {mmpId
-                ? "Cost will be linked to the selected MMP."
-                : "No MMP selected — this cost will be recorded as a project expense only."}
-            </p>
-          </div>
+                {!mmpMissing && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {mmpId
+                      ? "Cost will be linked to the selected MMP."
+                      : "No MMP selected — this cost will be recorded as a project expense only."}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Activity — optional; links cost to a specific project activity */}
           {projectId && activities.length > 0 && (
