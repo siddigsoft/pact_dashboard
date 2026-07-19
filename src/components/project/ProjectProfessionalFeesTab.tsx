@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import { format, parseISO, isValid } from 'date-fns';
+import React, { useMemo, useState } from 'react';
+import { format, parseISO, isValid, isPast } from 'date-fns';
 import {
   DollarSign, Users, Clock, Percent, CheckCircle2,
   AlertCircle, Clock3, Download, TrendingUp, Pencil, Plus,
+  ChevronDown, ChevronUp, Link2, Globe,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +18,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ProjectTeamMember, calcMemberTotalCost, TeamFeeType } from '@/types/project';
+import {
+  ProjectTeamMember, calcMemberTotalCost, TeamFeeType, PaymentInstallment,
+  derivePaymentStatus, totalPaidFromInstallments,
+} from '@/types/project';
 import { exportToExcel } from '@/utils/report-export';
 import { useToast } from '@/hooks/use-toast';
 
@@ -61,6 +65,7 @@ export default function ProjectProfessionalFeesTab({
 }: Props) {
   const { toast } = useToast();
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'partially_paid' | 'paid'>('all');
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
   // ── Local state: mutable copy of teamComposition for fee edits ────────────
   const [localComposition, setLocalComposition] = useState<ProjectTeamMember[]>(teamComposition);
@@ -109,6 +114,31 @@ export default function ProjectProfessionalFeesTab({
     onFeeUpdate?.(updated);
     setFeeDialogOpen(false);
     toast({ title: 'Fee saved', description: 'Professional fee updated successfully.', variant: 'success' });
+  };
+
+  const handleMarkInstallmentPaid = (memberId: string, installmentId: string, paid: boolean) => {
+    const updated = localComposition.map(m => {
+      if (m.userId !== memberId || !m.installments) return m;
+      const newInstallments: PaymentInstallment[] = m.installments.map(inst =>
+        inst.id === installmentId
+          ? { ...inst, status: paid ? 'paid' : 'pending', paidDate: paid ? new Date().toISOString().split('T')[0] : undefined }
+          : inst
+      );
+      return {
+        ...m,
+        installments:  newInstallments,
+        amountPaid:    totalPaidFromInstallments(newInstallments),
+        paymentStatus: derivePaymentStatus(newInstallments),
+      };
+    });
+    setLocalComposition(updated);
+    onFeeUpdate?.(updated);
+    const inst = updated.find(m => m.userId === memberId)?.installments?.find(i => i.id === installmentId);
+    toast({
+      title: paid ? 'Installment marked paid' : 'Installment marked unpaid',
+      description: inst?.label || 'Payment status updated.',
+      variant: 'success',
+    });
   };
 
   // ── Derived sets ──────────────────────────────────────────────────────────
@@ -425,7 +455,8 @@ export default function ProjectProfessionalFeesTab({
                     const cfg         = PAY_STATUS[status] || PAY_STATUS.unpaid;
                     const StatusIcon  = cfg.icon;
                     return (
-                      <TableRow key={m.userId} className="hover:bg-muted/30">
+                      <React.Fragment key={m.userId}>
+                      <TableRow className="hover:bg-muted/30">
                         <TableCell className="pl-4">
                           <div>
                             <p className="font-medium text-sm">{m.name}</p>
@@ -474,18 +505,114 @@ export default function ProjectProfessionalFeesTab({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => openFeeDialog(m)}
-                            title="Edit fee"
-                            data-testid={`button-edit-fee-row-${m.userId}`}
-                          >
-                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
+                          <div className="flex items-center gap-0.5 justify-end">
+                            {/* Expand installment schedule */}
+                            {m.installments && m.installments.length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => setExpandedMemberId(expandedMemberId === m.userId ? null : m.userId)}
+                                title="View payment schedule"
+                                data-testid={`button-expand-installments-${m.userId}`}
+                              >
+                                {expandedMemberId === m.userId
+                                  ? <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => openFeeDialog(m)}
+                              title="Edit fee"
+                              data-testid={`button-edit-fee-row-${m.userId}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
+
+                      {/* ── Expandable Installment Schedule Panel ───────── */}
+                      {expandedMemberId === m.userId && m.installments && m.installments.length > 0 && (
+                        <TableRow className="bg-muted/20 border-b">
+                          <TableCell colSpan={9} className="px-6 py-3">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                                  <Clock className="h-3.5 w-3.5" />
+                                  Payment Schedule — {m.paymentScheduleType === 'monthly' ? 'Monthly' : m.paymentScheduleType === 'quarterly' ? 'Quarterly' : m.paymentScheduleType === 'bi_weekly' ? 'Bi-weekly' : m.paymentScheduleType === 'milestone' ? 'Milestone-based' : 'Custom'}
+                                </p>
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  <span>
+                                    <strong className="text-emerald-600">{m.installments.filter(i => i.status === 'paid').length}</strong> / {m.installments.length} paid
+                                  </span>
+                                  <span>
+                                    Remaining: <strong className="text-red-600">{fmtMoney(m.installments.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0), m.currency || currency)}</strong>
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {m.installments.map(inst => {
+                                  const overdue = inst.status !== 'paid' && inst.dueDate && isPast(parseISO(inst.dueDate));
+                                  return (
+                                    <div
+                                      key={inst.id}
+                                      className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs transition-all ${
+                                        inst.status === 'paid'
+                                          ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800'
+                                          : overdue
+                                          ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+                                          : 'bg-background border-border hover:bg-muted/30'
+                                      }`}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="shrink-0"
+                                        onClick={() => handleMarkInstallmentPaid(m.userId, inst.id, inst.status !== 'paid')}
+                                        data-testid={`button-installment-paid-${m.userId}-${inst.id}`}
+                                        title={inst.status === 'paid' ? 'Mark as unpaid' : 'Mark as paid'}
+                                      >
+                                        {inst.status === 'paid'
+                                          ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                          : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground hover:border-primary transition-colors" />}
+                                      </button>
+                                      <div className="flex-1 min-w-0">
+                                        <p className={`font-medium ${inst.status === 'paid' ? 'text-emerald-700 dark:text-emerald-400' : overdue ? 'text-red-700 dark:text-red-400' : ''}`}>
+                                          {inst.label}
+                                        </p>
+                                        <p className={`text-[10px] mt-0.5 ${overdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                          {inst.dueDate ? fmtDate(inst.dueDate) : '—'}
+                                          {overdue && ' • Overdue'}
+                                          {inst.paidDate && ` • Paid ${fmtDate(inst.paidDate)}`}
+                                        </p>
+                                      </div>
+                                      <span className="font-bold shrink-0 tabular-nums">
+                                        {fmtMoney(inst.amount, m.currency || currency)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {/* Progress bar */}
+                              <div className="flex items-center gap-2 mt-1">
+                                <Progress
+                                  value={m.installments.length > 0 ? (m.installments.filter(i => i.status === 'paid').length / m.installments.length) * 100 : 0}
+                                  className="h-1.5 flex-1"
+                                />
+                                <span className="text-[10px] text-muted-foreground shrink-0">
+                                  {m.installments.length > 0
+                                    ? Math.round((m.installments.filter(i => i.status === 'paid').length / m.installments.length) * 100)
+                                    : 0}% paid
+                                </span>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                   {filtered.length === 0 && (

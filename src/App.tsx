@@ -130,6 +130,7 @@ const ReconciliationDashboard = lazy(() => import('./pages/ReconciliationDashboa
 const QuestionnaireAnalytics = lazy(() => import('./pages/QuestionnaireAnalytics'));
 const DCTPDMDashboard = lazy(() => import('./pages/DCTPDMDashboard'));
 const DCTPDMPublicPage = lazy(() => import('./pages/DCTPDMPublicPage'));
+const ExternalContributorPage = lazy(() => import('./pages/ExternalContributorPage'));
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
@@ -424,6 +425,7 @@ const AppRoutes = () => {
       <Route path="/view/:fileId" element={<FileViewer />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
       <Route path="/s/:id" element={<SurveyFill />} />
+      <Route path="/ext/:token" element={<ExternalContributorPage />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
