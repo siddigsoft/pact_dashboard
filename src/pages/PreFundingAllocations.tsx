@@ -19,6 +19,33 @@ import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 import { format } from 'date-fns';
 
+/** Auto-paginates through all rows 1000 at a time — bypasses Supabase default cap. */
+async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryFn().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+/** Batched .in() — splits large ID lists into 500-ID chunks to avoid URL limits. */
+async function fetchAllIn<T = any>(queryFn: (chunk: string[]) => any, ids: string[]): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const CHUNK = 500;
+  const batches: Promise<T[]>[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    batches.push(fetchAll<T>(() => queryFn(ids.slice(i, i + CHUNK))));
+  }
+  return (await Promise.all(batches)).flat();
+}
+
 interface AllocRow {
   id: string;
   user_id: string;
@@ -97,74 +124,52 @@ export default function PreFundingAllocations() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      let query = (supabase as any)
-        .from('pre_fund_allocations')
-        .select('id,user_id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,created_at')
-        .order('created_at', { ascending: false });
-
-      // Non-finance users only see their own allocations
-      if (!isFinanceAdmin && currentUser?.id) {
-        query = query.eq('user_id', currentUser.id);
-      }
-
-      const { data: allocData, error } = await query;
-      if (error && !error.message.includes('does not exist')) throw error;
-      const allocs: any[] = allocData ?? [];
+      // Fetch allocations — unlimited, scoped to this user if non-finance
+      const allocs: any[] = await fetchAll(() => {
+        let q = (supabase as any)
+          .from('pre_fund_allocations')
+          .select('id,user_id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,created_at')
+          .order('created_at', { ascending: false });
+        if (!isFinanceAdmin && currentUser?.id) q = q.eq('user_id', currentUser.id);
+        return q;
+      });
 
       if (allocs.length === 0) { setAll([]); setFunds([]); setLoading(false); return; }
 
-      const userIds  = [...new Set(allocs.map((a: any) => a.user_id).filter(Boolean))];
-      const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id).filter(Boolean))];
+      const userIds  = [...new Set(allocs.map((a: any) => a.user_id as string).filter(Boolean))];
+      const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id as string).filter(Boolean))];
 
-      // Fetch profiles, fund metadata (with paid_amount), AND transactions
-      const [profilesRes, fundsRes, txnRes] = await Promise.all([
-        supabase.from('profiles').select('id,full_name,email,role').in('id', userIds),
-        // paid_amount = fund's authoritative total spend (always correct regardless of user attribution)
-        (supabase as any).from('pre_fund_requests').select('id,name,status,currency,paid_amount').in('id', fundIds),
-        (supabase as any)
-          .from('pre_fund_transactions')
-          .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
-          .in('pre_fund_request_id', fundIds)
-          .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
+      // Fetch profiles, fund metadata, AND transactions — all unlimited
+      const [profilesData, fundsData, rawTxns] = await Promise.all([
+        fetchAllIn(chunk => supabase.from('profiles').select('id,full_name,email,role').in('id', chunk), userIds),
+        fetchAllIn(chunk => (supabase as any).from('pre_fund_requests').select('id,name,status,currency,paid_amount').in('id', chunk), fundIds),
+        // Transactions: unlimited fetch, scoped to visible fund IDs
+        fetchAllIn(
+          chunk => (supabase as any)
+            .from('pre_fund_transactions')
+            .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
+            .in('pre_fund_request_id', chunk)
+            .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
+          fundIds,
+        ),
       ]);
 
-      const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
-      const fundMap    = new Map((fundsRes.data ?? []).map((f: any) => [f.id, f]));
-      // NOTE: paidMap is computed AFTER validTxns is built (see below)
+      const profileMap = new Map(profilesData.map((p: any) => [p.id as string, p]));
+      const fundMap    = new Map(fundsData.map((f: any) => [f.id as string, f]));
 
-      // Validate DP-sourced transactions — exclude any whose source DP is deleted/cancelled
-      const rawTxns: any[] = txnRes.data ?? [];
+      // Validate DP/OCS-sourced transactions — exclude any whose source is deleted/cancelled
       const dpSourceIds = [...new Set(
-        rawTxns
-          .filter(t => t.source_table === 'down_payment_requests' && t.source_id)
-          .map(t => t.source_id as string)
+        rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string)
       )];
-      let validDpIds = new Set<string>(dpSourceIds);
-      if (dpSourceIds.length > 0) {
-        const { data: validDps } = await (supabase as any)
-          .from('down_payment_requests')
-          .select('id,status,metadata')
-          .in('id', dpSourceIds);
-        validDpIds = new Set(
-          (validDps ?? [])
-            .filter((dp: any) => dp.status !== 'cancelled' && dp.metadata?.deleted !== true)
-            .map((dp: any) => dp.id as string)
-        );
-      }
-
       const ocsSourceIds = [...new Set(
-        rawTxns
-          .filter(t => t.source_table === 'operational_cost_submissions' && t.source_id)
-          .map(t => t.source_id as string)
+        rawTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id).map((t: any) => t.source_id as string)
       )];
-      let validOcsIds = new Set<string>(ocsSourceIds);
-      if (ocsSourceIds.length > 0) {
-        const { data: validOcs } = await (supabase as any)
-          .from('operational_cost_submissions')
-          .select('id')
-          .in('id', ocsSourceIds);
-        validOcsIds = new Set((validOcs ?? []).map((o: any) => o.id as string));
-      }
+      const [validDpData, validOcsData] = await Promise.all([
+        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpSourceIds),
+        fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsSourceIds),
+      ]);
+      const validDpIds  = new Set(validDpData.filter((dp: any) => dp.status !== 'cancelled' && dp.metadata?.deleted !== true).map((dp: any) => dp.id as string));
+      const validOcsIds = new Set(validOcsData.map((o: any) => o.id as string));
 
       const validTxns = rawTxns.filter(t => {
         if (t.source_table === 'down_payment_requests')
@@ -187,7 +192,7 @@ export default function PreFundingAllocations() {
         }
       }
       const paidMap = new Map<string, number>();
-      for (const f of (fundsRes.data ?? []) as any[]) {
+      for (const f of fundsData as any[]) {
         const txnPaid = txnPaidMap.get(f.id as string) ?? 0;
         // If no payment transactions exist yet, fall back to the DB column (updated by directLinkPayment)
         paidMap.set(f.id as string, txnPaid > 0 ? txnPaid : Number(f.paid_amount ?? 0));
@@ -207,16 +212,12 @@ export default function PreFundingAllocations() {
         validTxns.filter(t => !t.user_id && t.source_table === 'operational_cost_submissions' && t.source_id)
           .map(t => t.source_id as string)
       )];
-      const [dpOwnersRes, ocsOwnersRes] = await Promise.all([
-        untaggedDpIds.length > 0
-          ? (supabase as any).from('down_payment_requests').select('id,requested_by').in('id', untaggedDpIds)
-          : Promise.resolve({ data: [] }),
-        untaggedOcsIds.length > 0
-          ? (supabase as any).from('operational_cost_submissions').select('id,submitted_by').in('id', untaggedOcsIds)
-          : Promise.resolve({ data: [] }),
+      const [dpOwnerRows, ocsOwnerRows] = await Promise.all([
+        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,requested_by').in('id', chunk), untaggedDpIds),
+        fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id,submitted_by').in('id', chunk), untaggedOcsIds),
       ]);
-      const dpOwnerMap  = new Map<string, string>((dpOwnersRes.data ?? []).map((r: any) => [r.id as string, r.requested_by as string]));
-      const ocsOwnerMap = new Map<string, string>((ocsOwnersRes.data ?? []).map((r: any) => [r.id as string, r.submitted_by as string]));
+      const dpOwnerMap  = new Map<string, string>(dpOwnerRows.map((r: any) => [r.id as string, r.requested_by as string]));
+      const ocsOwnerMap = new Map<string, string>(ocsOwnerRows.map((r: any) => [r.id as string, r.submitted_by as string]));
       const resolveOwner = (t: any): string | null => {
         if (t.user_id) return t.user_id;
         if (t.source_table === 'down_payment_requests' && t.source_id) return dpOwnerMap.get(t.source_id as string) ?? null;
@@ -287,7 +288,7 @@ export default function PreFundingAllocations() {
 
       setAll(enriched);
       setFundPaidMap(paidMap as Map<string, number>);
-      setFunds((fundsRes.data ?? []).map((f: any) => ({ id: f.id as string, name: f.name as string })));
+      setFunds(fundsData.map((f: any) => ({ id: f.id as string, name: f.name as string })));
     } catch (e: any) {
       console.error('Allocations load error', e);
     } finally {
