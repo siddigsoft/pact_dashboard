@@ -426,10 +426,10 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Fee Type</Label>
-                  <Select value={editFeeType} onValueChange={v => setEditFeeType(v as TeamFeeType | '')}>
+                  <Select value={editFeeType || '__none__'} onValueChange={v => setEditFeeType(v === '__none__' ? '' : v as TeamFeeType)}>
                     <SelectTrigger><SelectValue placeholder="None (no fee)" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="__none__">None (no fee)</SelectItem>
                       <SelectItem value="per_hour">Per Hour</SelectItem>
                       <SelectItem value="fixed_fee">Fixed Fee (lump sum)</SelectItem>
                       <SelectItem value="percent_budget">% of Project Budget</SelectItem>
@@ -552,12 +552,12 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
                   <div className="space-y-1.5">
                     <Label className="text-xs">Fee Type</Label>
-                    <Select value={feeType} onValueChange={v => setFeeType(v as TeamFeeType | '')}>
+                    <Select value={feeType || '__none__'} onValueChange={v => setFeeType(v === '__none__' ? '' : v as TeamFeeType)}>
                       <SelectTrigger>
                         <SelectValue placeholder="None (no fee)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None (no fee)</SelectItem>
                         <SelectItem value="per_hour">Per Hour</SelectItem>
                         <SelectItem value="fixed_fee">Fixed Fee (lump sum)</SelectItem>
                         <SelectItem value="percent_budget">% of Project Budget</SelectItem>

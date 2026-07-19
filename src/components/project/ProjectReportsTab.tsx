@@ -128,12 +128,22 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
   };
 
   // ── Computed metrics ────────────────────────────────────────────────────────
-  const approvedOps = opsCosts.filter(c =>
+  // Only count costs whose currency matches the project budget currency to avoid
+  // mixing SDG and USD amounts into a single misleading total.
+  const budgetCurrency = currency;
+  const sameCurrencyOps = opsCosts.filter(c => (c.currency || 'SDG') === budgetCurrency);
+  const approvedOps     = sameCurrencyOps.filter(c =>
     c.status === 'approved' || c.tier1_status === 'approved' || c.tier2_status === 'approved'
   );
   const opsTotalCents = approvedOps.reduce((s, c) => s + c.amount_cents, 0);
+
+  // Multi-currency flag — shown when costs use more than one currency
+  const costCurrencies = [...new Set(opsCosts.map(c => c.currency || 'SDG'))];
+  const isMultiCurrency = costCurrencies.length > 1;
+
   const advTotal = advances.reduce((s, a) => s + (a.total_paid_amount || 0), 0);
-  const pfPaid = preFunds.reduce((s, p) => s + (p.paid_amount || 0), 0);
+  const pfPaid   = preFunds.reduce((s, p) => s + (p.paid_amount || 0), 0);
+  // totalSpent only meaningful when all components are in the same currency
   const totalSpent = opsTotalCents / 100 + advTotal + pfPaid;
   const utilPct = totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0;
 
@@ -141,16 +151,27 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
   const membersWithFees = teamMembers.filter(m => m.feeType);
   const totalFees = membersWithFees.reduce((s, m) => s + calcMemberTotalCost(m, project.budget?.total), 0);
 
-  const stagesTotal = flow?.activeStages.length || 0;
+  const stagesTotal     = flow?.activeStages.length || 0;
   const stagesCompleted = flow?.activeStages.filter(s => s.status === 'completed').length || 0;
-  const stagePct = stagesTotal > 0 ? Math.round((stagesCompleted / stagesTotal) * 100) : 0;
+  const stagePct        = stagesTotal > 0 ? Math.round((stagesCompleted / stagesTotal) * 100) : 0;
 
-  // ── Cost by category ────────────────────────────────────────────────────────
-  const costByCategory = opsCosts.reduce<Record<string, number>>((acc, c) => {
-    const k = c.expense_category || 'Other';
-    acc[k] = (acc[k] || 0) + c.amount_cents / 100;
+  // ── Cost by category — grouped by category AND currency ──────────────────
+  // Each entry: { [category]: { [currency]: totalAmount } }
+  type CatCurrencyMap = Record<string, Record<string, number>>;
+  const costByCategory = opsCosts.reduce<CatCurrencyMap>((acc, c) => {
+    const cat = c.expense_category || 'Other';
+    const cur = c.currency || 'SDG';
+    if (!acc[cat]) acc[cat] = {};
+    acc[cat][cur] = (acc[cat][cur] || 0) + c.amount_cents / 100;
     return acc;
   }, {});
+
+  // All-costs total by currency (for share % calculations)
+  const allTotalByCurrency: Record<string, number> = {};
+  opsCosts.forEach(c => {
+    const cur = c.currency || 'SDG';
+    allTotalByCurrency[cur] = (allTotalByCurrency[cur] || 0) + c.amount_cents / 100;
+  });
 
   // ── Excel export ────────────────────────────────────────────────────────────
   const handleExportExcel = async () => {
@@ -208,13 +229,16 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
           {
             title: `${project.name} — Cost by Category`,
             sheetName: 'By Category',
-            headers: ['Category', `Amount (${currency})`, '% of Total Costs'],
-            rows: Object.entries(costByCategory).map(([cat, amt]) => [
-              cat,
-              amt,
-              opsTotalCents > 0 ? `${((amt / (opsTotalCents / 100)) * 100).toFixed(1)}%` : '0%',
-            ]),
-            colWidths: [28, 20, 18],
+            headers: ['Category', 'Currency', 'Amount', '% of Currency Total'],
+            rows: Object.entries(costByCategory).flatMap(([cat, byCur]) =>
+              Object.entries(byCur).map(([cur, amt]) => [
+                cat,
+                cur,
+                amt,
+                allTotalByCurrency[cur] > 0 ? `${((amt / allTotalByCurrency[cur]) * 100).toFixed(1)}%` : '0%',
+              ])
+            ),
+            colWidths: [28, 14, 20, 22],
           },
           ...(teamMembers.length > 0 ? [{
             title: `${project.name} — Team Composition`,
@@ -356,12 +380,15 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
       y += 3;
       autoTable(doc, {
         startY: y,
-        head: [['Category', `Amount (${currency})`, '% of Total']],
-        body: Object.entries(costByCategory).map(([cat, amt]) => [
-          cat,
-          fmt(amt, currency),
-          opsTotalCents > 0 ? `${((amt / (opsTotalCents / 100)) * 100).toFixed(1)}%` : '0%',
-        ]),
+        head: [['Category', 'Currency', 'Amount', '% of Currency Total']],
+        body: Object.entries(costByCategory).flatMap(([cat, byCur]) =>
+          Object.entries(byCur).map(([cur, amt]) => [
+            cat,
+            cur,
+            fmt(amt, cur),
+            allTotalByCurrency[cur] > 0 ? `${((amt / allTotalByCurrency[cur]) * 100).toFixed(1)}%` : '0%',
+          ])
+        ),
         headStyles: { fillColor: teal, textColor: [255, 255, 255], fontSize: 7 },
         bodyStyles: { fontSize: 7 },
         alternateRowStyles: { fillColor: [240, 249, 255] },
@@ -615,38 +642,62 @@ export function ProjectReportsTab({ project, projectBudget, budgetSummary, flow 
             </CardHeader>
             <CardContent className="p-0">
               {Object.keys(costByCategory).length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Share</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Object.entries(costByCategory)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([cat, amt]) => (
-                        <TableRow key={cat}>
-                          <TableCell className="text-sm">{cat}</TableCell>
-                          <TableCell className="text-right text-sm font-medium">{fmt(amt, currency)}</TableCell>
-                          <TableCell className="w-40">
-                            <div className="flex items-center gap-2">
-                              <Progress value={opsTotalCents > 0 ? (amt / (opsTotalCents / 100)) * 100 : 0} className="h-1.5 flex-1" />
-                              <span className="text-[11px] text-muted-foreground w-10 text-right">
-                                {opsTotalCents > 0 ? `${((amt / (opsTotalCents / 100)) * 100).toFixed(0)}%` : '0%'}
-                              </span>
-                            </div>
-                          </TableCell>
+                <>
+                  {isMultiCurrency && (
+                    <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                      <span className="font-medium">⚠ Multi-currency costs detected.</span>
+                      Amounts are shown in their original currency — not converted.
+                    </div>
+                  )}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Currency</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Share of Currency Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(costByCategory)
+                        .flatMap(([cat, byCur]) =>
+                          Object.entries(byCur).map(([cur, amt]) => ({ cat, cur, amt }))
+                        )
+                        .sort((a, b) => b.amt - a.amt)
+                        .map(({ cat, cur, amt }) => {
+                          const sharePct = allTotalByCurrency[cur] > 0
+                            ? (amt / allTotalByCurrency[cur]) * 100
+                            : 0;
+                          return (
+                            <TableRow key={`${cat}-${cur}`}>
+                              <TableCell className="text-sm">{cat}</TableCell>
+                              <TableCell>
+                                <span className="text-[11px] font-mono bg-muted px-1.5 py-0.5 rounded">{cur}</span>
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium">{fmt(amt, cur)}</TableCell>
+                              <TableCell className="w-44">
+                                <div className="flex items-center gap-2">
+                                  <Progress value={sharePct} className="h-1.5 flex-1" />
+                                  <span className="text-[11px] text-muted-foreground w-10 text-right">
+                                    {sharePct.toFixed(0)}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      {/* Totals per currency */}
+                      {Object.entries(allTotalByCurrency).map(([cur, total]) => (
+                        <TableRow key={`total-${cur}`} className="font-semibold bg-muted/30">
+                          <TableCell>Total ({cur})</TableCell>
+                          <TableCell><span className="text-[11px] font-mono bg-muted px-1.5 py-0.5 rounded">{cur}</span></TableCell>
+                          <TableCell className="text-right">{fmt(total, cur)}</TableCell>
+                          <TableCell />
                         </TableRow>
                       ))}
-                    <TableRow className="font-semibold bg-muted/30">
-                      <TableCell>Total</TableCell>
-                      <TableCell className="text-right">{fmt(opsTotalCents / 100, currency)}</TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableBody>
-                </Table>
+                    </TableBody>
+                  </Table>
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">No operational costs recorded yet.</p>
               )}

@@ -1636,6 +1636,16 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             projectBudget={budgetSummary?.total || project.budget?.total}
             currency={budgetSummary?.currency || project.budget?.currency || 'SDG'}
             onManageTeam={() => navigate(`/projects/${project.id}/team`)}
+            onFeeUpdate={async (updatedComposition) => {
+              try {
+                const newTeam = { ...project.team, teamComposition: updatedComposition };
+                await supabase.from('projects').update({ team: newTeam }).eq('id', project.id);
+                queryClient.invalidateQueries({ queryKey: ['projects'] });
+                queryClient.invalidateQueries({ queryKey: ['project', project.id] });
+              } catch {
+                toast({ title: 'Save failed', description: 'Could not save fee changes. Please try again.', variant: 'destructive' });
+              }
+            }}
           />
         </TabsContent>
 
