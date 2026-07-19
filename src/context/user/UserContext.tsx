@@ -1477,19 +1477,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Enforce single-role: remove any roles that DIFFER from the new primary role,
       // then ensure exactly one matching entry exists.  We do this in a safe order:
-      // 1. Insert/upsert the correct role first (so the user is never left with zero roles)
-      // 2. Delete all OTHER roles (conflicting secondary entries)
+      // Ensure the primary role exists in user_roles.
+      // NOTE: we do NOT delete other user_roles entries here — those are
+      // intentional secondary/additional role assignments (e.g. a FOM who is
+      // also a Hub Supervisor for a specific hub). Managing those is done
+      // through the Additional Roles panel in the Access & Security tab.
       if (updatedUser.role) {
-        // Step 1 – ensure correct role exists (ignore conflict if already there)
         await supabase
           .from('user_roles')
           .upsert({ user_id: updatedUser.id, role: updatedUser.role }, { onConflict: 'user_id,role', ignoreDuplicates: true });
-        // Step 2 – remove any roles that no longer apply
-        await supabase
-          .from('user_roles')
-          .delete()
-          .eq('user_id', updatedUser.id)
-          .neq('role', updatedUser.role);
       }
 
       // Update local caches only after confirmed DB success

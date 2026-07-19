@@ -154,6 +154,57 @@ const UserDetail: FC = () => {
   const savedDepartmentIdRef = useRef<string | null>(null);
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
 
+  // ── Additional / secondary roles ─────────────────────────────────────────
+  interface AdditionalRole { id: number; role: string; hub_id: string | null; assigned_at: string | null }
+  const [additionalRoles, setAdditionalRoles] = useState<AdditionalRole[]>([]);
+  const [addRoleMode, setAddRoleMode]           = useState(false);
+  const [newRolePick, setNewRolePick]           = useState('');
+  const [newRoleHub, setNewRoleHub]             = useState('');
+  const [addRoleSaving, setAddRoleSaving]       = useState(false);
+
+  const fetchAdditionalRoles = async (userId: string, primaryRole: string) => {
+    const { data } = await supabase
+      .from('user_roles')
+      .select('id, role, hub_id, assigned_at')
+      .eq('user_id', userId)
+      .neq('role', primaryRole)
+      .not('role', 'is', null)
+      .order('assigned_at', { ascending: false });
+    setAdditionalRoles((data as AdditionalRole[] | null) ?? []);
+  };
+
+  const handleAddRole = async () => {
+    if (!user || !newRolePick) return;
+    setAddRoleSaving(true);
+    try {
+      const { error } = await supabase.from('user_roles').insert({
+        user_id: user.id,
+        role: newRolePick,
+        hub_id: newRoleHub || null,
+        assigned_by: currentUser?.id ?? null,
+        assigned_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
+      setAddRoleMode(false);
+      setNewRolePick('');
+      setNewRoleHub('');
+      fetchAdditionalRoles(user.id, user.role || '');
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setAddRoleSaving(false);
+    }
+  };
+
+  const handleRemoveAdditionalRole = async (roleId: number) => {
+    if (!user) return;
+    const { error } = await supabase.from('user_roles').delete().eq('id', roleId);
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Role removed' });
+    fetchAdditionalRoles(user.id, user.role || '');
+  };
+
   // ── Location personal data (city/address for non-field staff) ───────────
   const [locPersonal, setLocPersonal] = useState({ address_line1: '', address_line2: '', city: '', country: '' });
   const [locPersonalId, setLocPersonalId] = useState<string | null>(null);
@@ -583,6 +634,11 @@ const UserDetail: FC = () => {
     if (user?.id) fetchContracts(user.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id && activeSection === 'access') fetchAdditionalRoles(user.id, user.role || '');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, activeSection]);
 
   useEffect(() => {
     const fetchClassificationHistory = async () => {
@@ -2247,6 +2303,103 @@ const UserDetail: FC = () => {
                     )}
                   </div>
                 )}
+
+                {/* ── Additional / Secondary Roles ────────────────────────── */}
+                {isAdmin && (
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Additional Roles
+                      </h4>
+                      {!addRoleMode && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setAddRoleMode(true)}>
+                          <Plus className="h-3 w-3" /> Add Role
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Secondary roles this user holds in addition to their primary role — optionally scoped to a specific hub.
+                    </p>
+
+                    {/* Existing additional roles list */}
+                    {additionalRoles.length === 0 && !addRoleMode && (
+                      <p className="text-xs text-muted-foreground italic">No additional roles assigned.</p>
+                    )}
+                    <div className="space-y-2">
+                      {additionalRoles.map(ar => (
+                        <div key={ar.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="secondary" className="text-xs font-medium">
+                              {toRoleLabel(ar.role) || ar.role}
+                            </Badge>
+                            {ar.hub_id && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3" /> {ar.hub_id}
+                              </span>
+                            )}
+                            {ar.assigned_at && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Since {new Date(ar.assigned_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          <Button size="sm" variant="ghost"
+                            className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
+                            onClick={() => handleRemoveAdditionalRole(ar.id)}
+                            title="Remove this role">
+                            <UserX className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add role form */}
+                    {addRoleMode && (
+                      <div className="rounded-lg border bg-background p-3 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium">Role</label>
+                            <select
+                              className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
+                              value={newRolePick}
+                              onChange={e => setNewRolePick(e.target.value)}
+                            >
+                              <option value="">Select role…</option>
+                              {(VISIBLE_ROLE_CODES as readonly string[])
+                                .filter(r => normalizeRole(r) !== normalizeRole(user.role || ''))
+                                .map(r => (
+                                  <option key={r} value={r}>{toRoleLabel(r) || r}</option>
+                                ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium">Hub Scope <span className="text-muted-foreground font-normal">(optional)</span></label>
+                            <select
+                              className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
+                              value={newRoleHub}
+                              onChange={e => setNewRoleHub(e.target.value)}
+                            >
+                              <option value="">System-wide (no hub restriction)</option>
+                              {hubs.map(h => (
+                                <option key={h.id} value={h.id}>{h.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleAddRole} disabled={!newRolePick || addRoleSaving} className="gap-1.5">
+                            {addRoleSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                            {addRoleSaving ? 'Saving…' : 'Add Role'}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setAddRoleMode(false); setNewRolePick(''); setNewRoleHub(''); }}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
                     <UserCheck className="h-3.5 w-3.5" /> Account Status
