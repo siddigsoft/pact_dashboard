@@ -668,25 +668,37 @@ const Users = () => {
         const accessToken = currentSession?.access_token;
         if (!accessToken) throw new Error('Session expired. Please refresh and try again.');
 
-        const { data: authDeleteResult, error: fnError } = await supabase.functions.invoke(
-          'admin-delete-user',
-          {
-            body: { userId: confirmDialog.userId },
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
-        );
+        let authDeleteOk = false;
+        try {
+          const { data: authDeleteResult, error: fnError } = await supabase.functions.invoke(
+            'admin-delete-user',
+            {
+              body: { userId: confirmDialog.userId },
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }
+          );
 
-        if (fnError) throw new Error(fnError.message);
-        if (authDeleteResult && !authDeleteResult.success) {
-          // Auth deletion failed — surface the error clearly but profile is
-          // already gone, so treat as a partial-success warning rather than
-          // a hard failure.
+          if (fnError || (authDeleteResult && !authDeleteResult.success)) {
+            // Edge function unreachable or reported failure — profile is already
+            // removed so this is a partial-success. Show a warning, not an error.
+            toast({
+              title: "Profile deleted — login access not revoked",
+              description: "The user profile was removed but the auth account could not be deleted (Edge Function unavailable). The user may still be able to attempt login. Contact a Super Admin to manually remove the auth record from Supabase.",
+              variant: "default",
+            });
+          } else {
+            authDeleteOk = true;
+          }
+        } catch {
+          // Edge function completely unreachable — treat as warning (profile already gone)
           toast({
-            title: "Profile deleted — auth account not removed",
-            description: authDeleteResult.error ?? "Auth record could not be deleted. The user profile has been removed but they may still be able to log in.",
-            variant: "destructive",
+            title: "Profile deleted — login access not revoked",
+            description: "Profile was removed but the auth account could not be deleted (Edge Function unavailable). Contact a Super Admin to remove it from the Supabase Auth dashboard.",
+            variant: "default",
           });
-        } else {
+        }
+
+        if (authDeleteOk) {
           toast({ title: "User deleted", description: "User account has been permanently deleted" });
         }
       } else {
