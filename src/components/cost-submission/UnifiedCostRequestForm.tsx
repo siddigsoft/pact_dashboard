@@ -918,22 +918,26 @@ export default function UnifiedCostRequestForm({
           {(() => {
             const projectMmps = projectId ? mmps.filter(m => m.project_id === projectId) : [];
             const isMmpRequired = projectMmps.length > 0;
+            // Disabled when a project is selected but has no linked MMPs — unrelated MMPs must not appear
+            const isMmpDisabled = mmpsLoading || (!!projectId && !isMmpRequired);
             const visibleMmps = isMmpRequired ? projectMmps : mmps;
             const mmpMissing = isMmpRequired && !mmpId;
             return (
               <div className={cn("border-l-[3px] pl-3 rounded-r-xl", mmpMissing ? "border-destructive/60" : "border-muted-foreground/30")}>
-                <Label className="text-sm font-semibold mb-1.5 flex items-center gap-1.5 text-foreground">
+                <Label className={cn("text-sm font-semibold mb-1.5 flex items-center gap-1.5", isMmpDisabled ? "text-muted-foreground" : "text-foreground")}>
                   <ClipboardList className="h-4 w-4" />
                   Monthly Monitoring Plan (MMP)
                   {isMmpRequired
                     ? <span className="text-destructive ml-1">*</span>
-                    : <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
+                    : <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">
+                        {isMmpDisabled ? "N/A" : "Optional"}
+                      </span>
                   }
                 </Label>
                 <Select
                   onValueChange={(v) => setMmpId(v === '__NONE__' ? '' : v)}
                   value={mmpId || '__NONE__'}
-                  disabled={mmpsLoading}
+                  disabled={isMmpDisabled}
                 >
                   <SelectTrigger
                     data-testid="select-mmp"
@@ -941,6 +945,7 @@ export default function UnifiedCostRequestForm({
                   >
                     <SelectValue placeholder={
                       mmpsLoading ? "Loading MMPs…"
+                      : isMmpDisabled ? "Not applicable for this project"
                       : isMmpRequired ? "Select an MMP — required for this project"
                       : "Not related to an MMP (project cost)"
                     } />
@@ -972,9 +977,11 @@ export default function UnifiedCostRequestForm({
                 )}
                 {!mmpMissing && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    {mmpId
-                      ? "Cost will be linked to the selected MMP."
-                      : "No MMP selected — this cost will be recorded as a project expense only."}
+                    {isMmpDisabled
+                      ? "This project has no linked MMP cycles."
+                      : mmpId
+                        ? "Cost will be linked to the selected MMP."
+                        : "No MMP selected — this cost will be recorded as a project expense only."}
                   </p>
                 )}
               </div>
