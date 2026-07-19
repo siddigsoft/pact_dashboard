@@ -129,6 +129,10 @@ interface UnifiedCostRequestFormProps {
   onCancelEdit?: () => void;
   /** Pre-select MMP when opened from cycle-close readiness checklist */
   defaultMmpId?: string | null;
+  /** Pre-set group ID when adding a new item to an existing group */
+  initialGroupId?: string | null;
+  /** Display title for the pre-set group (shown in a banner) */
+  initialGroupTitle?: string | null;
 }
 
 type ItemErrors = Record<string, Record<string, string>>;
@@ -157,6 +161,8 @@ export default function UnifiedCostRequestForm({
   editData,
   onCancelEdit,
   defaultMmpId,
+  initialGroupId,
+  initialGroupTitle,
 }: UnifiedCostRequestFormProps) {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
@@ -576,8 +582,8 @@ export default function UnifiedCostRequestForm({
           });
         }
       } else {
-        const groupId = uuidv4();
-        const cleanRequestTitle = requestTitle.trim();
+        const groupId = initialGroupId || uuidv4();
+        const cleanRequestTitle = requestTitle.trim() || initialGroupTitle || '';
         const resolvedMmpId = mmpId || null;
         console.log('[UnifiedCostRequestForm] Submitting:', { projectId, mmpId, resolvedMmpId, hubId, lineItemsCount: lineItems.length });
         const insertRows = lineItems.map(item => ({

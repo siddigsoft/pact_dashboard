@@ -139,6 +139,7 @@ const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   meetings: { label: 'Meetings', icon: Coffee },
   office_admin: { label: 'Office Admin', icon: Building2 },
   other: { label: 'Other', icon: MoreHorizontal },
+  __multi__: { label: 'Multi-Category', icon: Layers },
 };
 
 interface OperationalCostSubmission {
@@ -284,6 +285,7 @@ const CostSubmission = () => {
   const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
+  const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
 
    // Derive distinct MMP options from loaded cost data
    useEffect(() => {
@@ -3600,11 +3602,23 @@ const CostSubmission = () => {
                 </AlertDescription>
               </Alert>
             )}
+            {addToGroupContext && !editingSubmission && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/30 px-4 py-2.5">
+                <Layers className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-none" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Adding to group</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 truncate">{addToGroupContext.title} · <span className="font-mono">GRP-{addToGroupContext.id.slice(-8).toUpperCase()}</span></p>
+                </div>
+                <button onClick={() => setAddToGroupContext(null)} className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200" data-testid="button-clear-group-context">✕</button>
+              </div>
+            )}
             <UnifiedCostRequestForm
-              key={editingSubmission?.id || 'new'}
+              key={editingSubmission?.id || addToGroupContext?.id || 'new'}
               projects={projectsForForm}
               hubs={hubs}
               defaultMmpId={cycleContextMmpId}
+              initialGroupId={addToGroupContext?.id}
+              initialGroupTitle={addToGroupContext?.title}
               editData={editingSubmission ? {
                 id: editingSubmission.id,
                 expense_category: editingSubmission.expense_category,
@@ -3626,6 +3640,7 @@ const CostSubmission = () => {
               }}
               onSuccess={() => {
                 setEditingSubmission(null);
+                setAddToGroupContext(null);
                 fetchOperationalCosts();
                 setActiveTab("history");
               }}
@@ -4589,14 +4604,19 @@ const CostSubmission = () => {
             }
 
             // Build category groups from ocGroups
+            // Multi-category groups (items from >1 distinct categories) go into __multi__
             const catOrderKeys = Object.keys(EXPENSE_CATEGORY_MAP);
             const catGroupMap = new Map<string, typeof ocGroups>();
             for (const g of ocGroups) {
-              const cat = g.items[0]?.expense_category || 'other';
+              const distinctCats = [...new Set(g.items.map(i => i.expense_category || 'other'))];
+              const cat = g.groupId && distinctCats.length > 1 ? '__multi__' : (distinctCats[0] || 'other');
               if (!catGroupMap.has(cat)) catGroupMap.set(cat, []);
               catGroupMap.get(cat)!.push(g);
             }
             const sortedCatKeys = Array.from(catGroupMap.keys()).sort((a, b) => {
+              // __multi__ sorts first so it appears at the top
+              if (a === '__multi__') return -1;
+              if (b === '__multi__') return 1;
               const ai = catOrderKeys.indexOf(a);
               const bi = catOrderKeys.indexOf(b);
               return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -4980,18 +5000,43 @@ const CostSubmission = () => {
                     const isMultiItem = groupItems.length > 1;
 
                     // Outer-scope group stats (reused by GroupHeader, item rows, and footer)
+                    // Bug fix: use request_title with proper fallback; strip <<title>> markers for display
                     const groupTitle = groupItems[0].request_title
-                      || groupItems[0].description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
-                      || 'Grouped Request';
-                    const grpApprovedCnt = groupItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'approved' || ds === 'paid' || ds === 'reconciled'; }).length;
+                      || (() => {
+                          const raw = groupItems[0].description || '';
+                          const titleMatch = raw.match(/<<([^>>]+)>>/);
+                          return titleMatch ? titleMatch[1].trim() : raw.split('\n')[0]?.replace(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/, '').trim() || 'Grouped Request';
+                        })();
+                    // Bug fix: distinct status counts — partially_paid is its own bucket, not "pending"
+                    const grpApprovedCnt = groupItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'approved'; }).length;
+                    const grpPaidCnt = groupItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'paid' || ds === 'reconciled'; }).length;
+                    const grpPartialCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'partially_paid').length;
                     const grpRejectedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
-                    const grpPendingCnt = groupItems.length - grpApprovedCnt - grpRejectedCnt;
+                    const grpDoneCnt = grpApprovedCnt + grpPaidCnt; // for progress bar "done" segment
+                    const grpPendingCnt = groupItems.length - grpDoneCnt - grpPartialCnt - grpRejectedCnt;
+                    // Bug fix: only compute approvable tier; also compute the items that are actually waiting
+                    const grpTier1Approvable = isMultiItem ? groupItems.filter(o => canTier1Approve(o)) : [];
+                    const grpTier2Approvable = isMultiItem ? groupItems.filter(o => canTier2Approve(o)) : [];
+                    const grpTier3Approvable = isMultiItem ? groupItems.filter(o => canTier3Approve(o)) : [];
+                    const grpTier4Approvable = isMultiItem ? groupItems.filter(o => canTier4Approve(o)) : [];
                     const grpApprovableTier: 1 | 2 | 3 | 4 | null = isMultiItem ? (
-                      groupItems.some(o => canTier1Approve(o)) ? 1 :
-                      groupItems.some(o => canTier2Approve(o)) ? 2 :
-                      groupItems.some(o => canTier3Approve(o)) ? 3 :
-                      groupItems.some(o => canTier4Approve(o)) ? 4 : null
+                      grpTier1Approvable.length > 0 ? 1 :
+                      grpTier2Approvable.length > 0 ? 2 :
+                      grpTier3Approvable.length > 0 ? 3 :
+                      grpTier4Approvable.length > 0 ? 4 : null
                     ) : null;
+                    const grpApprovableItems = grpApprovableTier === 1 ? grpTier1Approvable
+                      : grpApprovableTier === 2 ? grpTier2Approvable
+                      : grpApprovableTier === 3 ? grpTier3Approvable
+                      : grpTier4Approvable;
+                    // Mixed-state: group has BOTH approved and rejected items
+                    const grpIsMixed = grpRejectedCnt > 0 && grpDoneCnt > 0;
+                    // Category composition for this group
+                    const grpCatComposition = (() => {
+                      const map = new Map<string, number>();
+                      groupItems.forEach(o => { const c = o.expense_category || 'other'; map.set(c, (map.get(c) || 0) + 1); });
+                      return [...map.entries()].sort((a, b) => b[1] - a[1]);
+                    })();
 
                      // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
                      const GroupHeader = isMultiItem ? (() => {
@@ -5001,11 +5046,12 @@ const CostSubmission = () => {
                        const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
                        const linkedMmpName = groupItems[0].mmp_file_id ? mmpNameMap.get(groupItems[0].mmp_file_id) || null : null;
                        const projPalette = getProjectPalette(groupItems[0].project_id);
-                      const approvedCnt = grpApprovedCnt;
-                      const rejectedCnt = grpRejectedCnt;
-                      const pendingCnt = grpPendingCnt;
                       const groupApprovableTier = grpApprovableTier;
                       const isExpanded = expandedGroups.has(groupId!);
+                      // GRP reference: last 8 chars of the UUID, uppercase
+                      const grpRef = groupId ? `GRP-${groupId.slice(-8).toUpperCase()}` : '';
+                      // Mixed-state border colour: orange stripe if partially rejected, default project colour otherwise
+                      const headerBorderColor = grpIsMixed ? '#f97316' : projPalette.border;
 
                       // Group-level batch selection
                       const groupPayableItems = groupItems.filter(o => canMarkAsPaid(o));
@@ -5024,13 +5070,12 @@ const CostSubmission = () => {
 
                       return (
                         <div>
-                          {/* Clickable navy header */}
-                          {/* Navy header row: checkbox + collapse button side-by-side */}
+                          {/* Navy header row: checkbox + collapse button */}
                           <div
                             className="flex items-stretch bg-gradient-to-r from-[#0F2041] to-[#1D3461]"
-                            style={{ borderLeft: `4px solid ${projPalette.border}` }}
+                            style={{ borderLeft: `4px solid ${headerBorderColor}` }}
                           >
-                            {/* ── Group-level checkbox (outside the toggle button) ── */}
+                            {/* Group-level checkbox */}
                             {groupPayableItems.length > 0 && (
                               <div
                                 className="flex-none flex flex-col items-center justify-center px-3 cursor-pointer hover:bg-white/10 border-r border-white/10 gap-1"
@@ -5039,11 +5084,9 @@ const CostSubmission = () => {
                                 title="Select all payable items in this group for batch payment"
                               >
                                 <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                  groupAllSelected
-                                    ? 'bg-green-500 border-green-400'
-                                    : groupSomeSelected
-                                      ? 'bg-green-500/50 border-green-400'
-                                      : 'bg-white/15 border-white/50 hover:border-white'
+                                  groupAllSelected ? 'bg-green-500 border-green-400'
+                                  : groupSomeSelected ? 'bg-green-500/50 border-green-400'
+                                  : 'bg-white/15 border-white/50 hover:border-white'
                                 }`}>
                                   {groupAllSelected && <Check className="h-3 w-3 text-white" />}
                                   {groupSomeSelected && !groupAllSelected && <div className="h-2 w-2 rounded-sm bg-white" />}
@@ -5052,7 +5095,7 @@ const CostSubmission = () => {
                               </div>
                             )}
 
-                            {/* ── Collapse / expand toggle button ── */}
+                            {/* Collapse / expand toggle */}
                             <button
                               className="flex-1 text-left focus:outline-none px-4 py-3"
                               onClick={() => toggleGroup(groupId!)}
@@ -5063,13 +5106,21 @@ const CostSubmission = () => {
                                   <Layers className="h-4 w-4 text-white/70" />
                                 </div>
                                 <div className="flex-1 min-w-0 space-y-1.5">
-                                  <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{groupTitle}</p>
+                                  {/* Title row with GRP ref and mixed-state badge */}
+                                  <div className="flex items-start gap-2 flex-wrap">
+                                    <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2 flex-1">{groupTitle}</p>
+                                    {grpIsMixed && (
+                                      <span className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-orange-500/30 border border-orange-400/40 px-1.5 py-0.5 text-[9px] font-bold text-orange-300 uppercase tracking-wide">
+                                        ⚠ Mixed
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* GRP reference + meta */}
                                   <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                    <span className="text-white/40 font-mono text-[10px]">{grpRef}</span>
                                     {linkedProjectName && (
-                                      <span
-                                        className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
-                                        style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}
-                                      >
+                                      <span className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                                        style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}>
                                         <Briefcase className="h-3 w-3" />{linkedProjectName}
                                       </span>
                                     )}
@@ -5081,25 +5132,44 @@ const CostSubmission = () => {
                                     {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
                                     <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy h:mm a')}</span>
                                   </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
+                                  {/* Status pills */}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white">
-                                      <Layers className="h-2.5 w-2.5" /> {groupItems.length} expense items
+                                      <Layers className="h-2.5 w-2.5" /> {groupItems.length} items
                                     </span>
-                                    {approvedCnt > 0 && (
+                                    {grpDoneCnt > 0 && (
                                       <span className="inline-flex items-center gap-1 rounded-full bg-green-500/25 px-2 py-0.5 text-[10px] font-semibold text-green-300">
-                                        <CheckCircle2 className="h-2.5 w-2.5" /> {approvedCnt} approved
+                                        <CheckCircle2 className="h-2.5 w-2.5" /> {grpDoneCnt} approved
                                       </span>
                                     )}
-                                    {pendingCnt > 0 && (
+                                    {grpPartialCnt > 0 && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/25 px-2 py-0.5 text-[10px] font-semibold text-orange-300">
+                                        <Wallet className="h-2.5 w-2.5" /> {grpPartialCnt} partial
+                                      </span>
+                                    )}
+                                    {grpPendingCnt > 0 && (
                                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                                        <Clock className="h-2.5 w-2.5" /> {pendingCnt} pending
+                                        <Clock className="h-2.5 w-2.5" /> {grpPendingCnt} pending
                                       </span>
                                     )}
-                                    {rejectedCnt > 0 && (
+                                    {grpRejectedCnt > 0 && (
                                       <span className="inline-flex items-center gap-1 rounded-full bg-red-500/25 px-2 py-0.5 text-[10px] font-semibold text-red-300">
-                                        <AlertCircle className="h-2.5 w-2.5" /> {rejectedCnt} rejected
+                                        <AlertCircle className="h-2.5 w-2.5" /> {grpRejectedCnt} rejected
                                       </span>
                                     )}
+                                  </div>
+                                  {/* Category composition badges */}
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {grpCatComposition.map(([cat, cnt]) => {
+                                      const cm = EXPENSE_CATEGORY_MAP[cat];
+                                      const CIcon = cm?.icon;
+                                      return (
+                                        <span key={cat} className="inline-flex items-center gap-0.5 rounded-full bg-white/10 border border-white/15 px-1.5 py-0.5 text-[9px] text-white/70">
+                                          {CIcon && <CIcon className="h-2.5 w-2.5" />}
+                                          {cm?.label || cat}{cnt > 1 && ` ×${cnt}`}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                                 <div className="flex-none text-right space-y-1">
@@ -5115,60 +5185,104 @@ const CostSubmission = () => {
                               </div>
                             </button>
                           </div>
-                          {/* Progress bar */}
-                          <div className="h-1 bg-[#0F2041] flex">
-                            <div className="bg-green-400 transition-all duration-300" style={{ width: `${(approvedCnt / groupItems.length) * 100}%` }} />
-                            <div className="bg-amber-400 transition-all duration-300" style={{ width: `${(pendingCnt / groupItems.length) * 100}%` }} />
-                            <div className="bg-red-400 transition-all duration-300" style={{ width: `${(rejectedCnt / groupItems.length) * 100}%` }} />
+
+                          {/* Progress bar — 5 segments: done / partial / pending / rejected */}
+                          <div className="h-1.5 bg-[#0F2041] flex" title={`${grpDoneCnt} approved · ${grpPartialCnt} partial · ${grpPendingCnt} pending · ${grpRejectedCnt} rejected`}>
+                            <div className="bg-green-400 transition-all duration-300" style={{ width: `${(grpDoneCnt / groupItems.length) * 100}%` }} />
+                            <div className="bg-orange-400 transition-all duration-300" style={{ width: `${(grpPartialCnt / groupItems.length) * 100}%` }} />
+                            <div className="bg-amber-400 transition-all duration-300" style={{ width: `${(grpPendingCnt / groupItems.length) * 100}%` }} />
+                            <div className="bg-red-400 transition-all duration-300" style={{ width: `${(grpRejectedCnt / groupItems.length) * 100}%` }} />
                           </div>
 
-                          {/* Send to Finance / Mark Paid All — visible when approved items exist in this group */}
-                          {approvedCnt > 0 && (
+                          {/* Per-category subtotals (collapsible, shown when expanded) */}
+                          {isExpanded && grpCatComposition.length > 1 && (
+                            <div className="px-4 py-2 bg-[#0a1628]/40 border-b border-blue-900/20">
+                              <p className="text-[10px] text-white/40 mb-1.5 uppercase tracking-wider font-semibold">Category breakdown</p>
+                              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                {grpCatComposition.map(([cat, cnt]) => {
+                                  const cm = EXPENSE_CATEGORY_MAP[cat];
+                                  const CIcon = cm?.icon;
+                                  const subtotal = groupItems.filter(o => (o.expense_category || 'other') === cat).reduce((s, o) => s + o.amount_cents, 0);
+                                  return (
+                                    <div key={cat} className="flex items-center gap-1.5 text-[11px] text-white/70">
+                                      {CIcon && <CIcon className="h-3 w-3 text-white/50" />}
+                                      <span>{cm?.label || cat}</span>
+                                      <span className="text-white/40">×{cnt}</span>
+                                      <span className="font-semibold text-white/90 tabular-nums">{currency} {(subtotal / 100).toLocaleString()}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Send to Finance / Mark Paid All — visible when approved items exist */}
+                          {(grpDoneCnt > 0 || grpPartialCnt > 0) && (
                             <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628]/60 border-b border-blue-900/30 flex-wrap">
                               <Mail className="h-3.5 w-3.5 text-blue-400 flex-none" />
                               <span className="text-[11px] text-blue-300 flex-1">
-                                {approvedCnt} approved item{approvedCnt !== 1 ? 's' : ''} ready to send to Finance
+                                {grpDoneCnt + grpPartialCnt} item{grpDoneCnt + grpPartialCnt !== 1 ? 's' : ''} approved or partially paid
                               </span>
                               {groupPayableItems.length > 0 && (
-                                <Button
-                                  size="sm"
+                                <Button size="sm"
                                   className="h-7 px-3 text-xs bg-green-700 hover:bg-green-600 text-white border border-green-600/50"
                                   onClick={(e) => { e.stopPropagation(); groupPayableItems.forEach(o => handleMarkAsPaid(o)); }}
                                   disabled={actionProcessing}
-                                  data-testid={`button-group-mark-paid-all-${groupId}`}
-                                >
-                                  <Wallet className="h-3 w-3 mr-1" />
-                                  Mark Paid ({groupPayableItems.length})
+                                  data-testid={`button-group-mark-paid-all-${groupId}`}>
+                                  <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
                                 </Button>
                               )}
                               {(isSuperAdmin || isAdmin) && !isFOM && (
-                                <Button
-                                  size="sm"
+                                <Button size="sm"
                                   className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
                                   onClick={(e) => { e.stopPropagation(); openBulkCostEmailDialog(undefined, groupItems); }}
-                                  data-testid={`button-group-send-finance-${groupId}`}
-                                >
-                                  <Mail className="h-3 w-3 mr-1" />
-                                  Send to Finance
+                                  data-testid={`button-group-send-finance-${groupId}`}>
+                                  <Mail className="h-3 w-3 mr-1" />Send to Finance
                                 </Button>
                               )}
                             </div>
                           )}
 
-                          {/* Approve All / Reject All — shown when expanded */}
-                          {isExpanded && groupApprovableTier !== null && groupId && (
+                          {/* Approve Remaining / Reject All — shown when expanded, only if there are actually pending items */}
+                          {isExpanded && groupApprovableTier !== null && groupId && grpApprovableItems.length > 0 && (
                             <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-b border-[#1D3461]/10 flex-wrap">
-                              <span className="text-[11px] text-muted-foreground italic flex-1">Review items individually below, or:</span>
+                              <span className="text-[11px] text-muted-foreground italic flex-1">
+                                {grpApprovableItems.length < groupItems.length
+                                  ? `${grpApprovableItems.length} of ${groupItems.length} items await Tier ${groupApprovableTier} — review individually or:`
+                                  : 'Review items individually below, or:'}
+                              </span>
                               <Button size="sm" className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, groupItems, 'approve', groupApprovableTier)}
+                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, grpApprovableItems, 'approve', groupApprovableTier)}
                                 data-testid={`button-group-approve-all-${groupId}`}>
-                                <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve All T{groupApprovableTier}
+                                <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                                {grpApprovableItems.length < groupItems.length
+                                  ? `Approve Remaining (${grpApprovableItems.length}) T${groupApprovableTier}`
+                                  : `Approve All T${groupApprovableTier}`}
                               </Button>
                               <Button size="sm" variant="destructive" className="h-7 px-3 text-xs"
-                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, groupItems, 'reject', groupApprovableTier)}
+                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, grpApprovableItems, 'reject', groupApprovableTier)}
                                 data-testid={`button-group-reject-all-${groupId}`}>
-                                <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Reject All
+                                <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                                {grpApprovableItems.length < groupItems.length ? `Reject Remaining (${grpApprovableItems.length})` : 'Reject All'}
                               </Button>
+                            </div>
+                          )}
+
+                          {/* Add item to group — submitters can append a new line item */}
+                          {isExpanded && groupId && grpDoneCnt === 0 && grpRejectedCnt < groupItems.length && (
+                            <div className="flex items-center gap-2 px-4 py-1.5 bg-[#0F2041]/3 border-b border-[#1D3461]/10">
+                              <button
+                                className="flex items-center gap-1 text-[11px] text-white/40 hover:text-white/80 transition-colors"
+                                onClick={() => {
+                                  setAddToGroupContext({ id: groupId, title: groupTitle });
+                                  setActiveTab('submit');
+                                  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+                                }}
+                                data-testid={`button-add-to-group-${groupId}`}
+                              >
+                                <Plus className="h-3 w-3" /> Add item to this group
+                              </button>
+                              <span className="text-[10px] text-white/25 ml-auto font-mono">{grpRef}</span>
                             </div>
                           )}
                         </div>
