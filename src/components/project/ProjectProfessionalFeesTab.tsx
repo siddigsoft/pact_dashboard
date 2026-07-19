@@ -3,7 +3,7 @@ import { format, parseISO, isValid, isPast } from 'date-fns';
 import {
   DollarSign, Users, Clock, Percent, CheckCircle2,
   AlertCircle, Clock3, Download, TrendingUp, Pencil, Plus,
-  ChevronDown, ChevronUp, Link2, Globe,
+  ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import {
   ProjectTeamMember, calcMemberTotalCost, TeamFeeType, PaymentInstallment,
+  PaymentScheduleType, generateInstallmentSchedule,
   derivePaymentStatus, totalPaidFromInstallments,
 } from '@/types/project';
 import { exportToExcel } from '@/utils/report-export';
@@ -82,6 +83,12 @@ export default function ProjectProfessionalFeesTab({
   const [dlgDueDate, setDlgDueDate] = useState('');
   const [dlgAmountPaid, setDlgAmountPaid] = useState('');
   const [dlgPayStatus, setDlgPayStatus] = useState<'unpaid' | 'partially_paid' | 'paid'>('unpaid');
+  // Installment schedule fields
+  const [dlgScheduleType, setDlgScheduleType] = useState<PaymentScheduleType>('lump_sum');
+  const [dlgInstallmentCount, setDlgInstallmentCount] = useState('3');
+  const [dlgStartDate, setDlgStartDate] = useState('');
+  const [dlgInstallments, setDlgInstallments] = useState<PaymentInstallment[]>([]);
+  const [dlgShowInstallments, setDlgShowInstallments] = useState(false);
 
   const openFeeDialog = (member: ProjectTeamMember) => {
     setEditingUserId(member.userId);
@@ -92,28 +99,61 @@ export default function ProjectProfessionalFeesTab({
     setDlgDueDate(member.paymentDueDate || '');
     setDlgAmountPaid(member.amountPaid?.toString() || '');
     setDlgPayStatus(member.paymentStatus || 'unpaid');
+    setDlgScheduleType(member.paymentScheduleType || 'lump_sum');
+    setDlgInstallmentCount(member.installmentCount?.toString() || '3');
+    setDlgStartDate(member.paymentStartDate || '');
+    setDlgInstallments(member.installments || []);
+    setDlgShowInstallments((member.installments?.length || 0) > 0);
     setFeeDialogOpen(true);
+  };
+
+  const handleAutoGenerateInstallments = () => {
+    const rateVal  = parseFloat(dlgRate || '0');
+    const hoursVal = parseFloat(dlgHours || '0');
+    const total    = dlgFeeType === 'per_hour' ? rateVal * hoursVal
+                   : dlgFeeType === 'fixed_fee' ? rateVal
+                   : (projectBudget || 0) * (rateVal / 100);
+    const count = parseInt(dlgInstallmentCount || '1', 10);
+    if (!total || !count || !dlgStartDate) return;
+    const generated = generateInstallmentSchedule(total, count, dlgScheduleType, dlgStartDate);
+    setDlgInstallments(generated);
+    setDlgShowInstallments(true);
+  };
+
+  const handleDlgInstallmentToggle = (id: string) => {
+    setDlgInstallments(prev => prev.map(inst =>
+      inst.id === id
+        ? { ...inst, status: inst.status === 'paid' ? 'pending' : 'paid', paidDate: inst.status !== 'paid' ? new Date().toISOString().split('T')[0] : undefined }
+        : inst
+    ));
   };
 
   const handleSaveFee = () => {
     if (!editingUserId) return;
+    const hasInstallments = dlgInstallments.length > 0 && dlgScheduleType !== 'lump_sum';
+    const derivedStatus   = hasInstallments ? derivePaymentStatus(dlgInstallments) : dlgPayStatus;
+    const derivedPaid     = hasInstallments ? totalPaidFromInstallments(dlgInstallments) : parseFloat(dlgAmountPaid || '0');
     const updated = localComposition.map(m => {
       if (m.userId !== editingUserId) return m;
       return {
         ...m,
-        feeType:        dlgFeeType || undefined,
-        rate:           dlgFeeType && dlgRate ? parseFloat(dlgRate) : undefined,
-        plannedHours:   dlgFeeType === 'per_hour' && dlgHours ? parseFloat(dlgHours) : undefined,
-        currency:       dlgFeeType ? dlgCurrency : undefined,
-        paymentDueDate: dlgFeeType && dlgDueDate ? dlgDueDate : undefined,
-        amountPaid:     dlgFeeType ? parseFloat(dlgAmountPaid || '0') : undefined,
-        paymentStatus:  dlgFeeType ? dlgPayStatus : undefined,
+        feeType:             dlgFeeType || undefined,
+        rate:                dlgFeeType && dlgRate ? parseFloat(dlgRate) : undefined,
+        plannedHours:        dlgFeeType === 'per_hour' && dlgHours ? parseFloat(dlgHours) : undefined,
+        currency:            dlgFeeType ? dlgCurrency : undefined,
+        paymentDueDate:      dlgFeeType && dlgDueDate ? dlgDueDate : undefined,
+        paymentScheduleType: dlgFeeType && dlgScheduleType !== 'lump_sum' ? dlgScheduleType : undefined,
+        paymentStartDate:    dlgFeeType && dlgStartDate ? dlgStartDate : undefined,
+        installmentCount:    dlgFeeType && dlgScheduleType !== 'lump_sum' ? parseInt(dlgInstallmentCount || '1', 10) : undefined,
+        installments:        dlgFeeType && hasInstallments ? dlgInstallments : undefined,
+        amountPaid:          dlgFeeType ? derivedPaid : undefined,
+        paymentStatus:       dlgFeeType ? derivedStatus : undefined,
       };
     });
     setLocalComposition(updated);
     onFeeUpdate?.(updated);
     setFeeDialogOpen(false);
-    toast({ title: 'Fee saved', description: 'Professional fee updated successfully.', variant: 'success' });
+    toast({ title: 'Fee saved', description: 'Professional fee and schedule saved.', variant: 'success' });
   };
 
   const handleMarkInstallmentPaid = (memberId: string, installmentId: string, paid: boolean) => {
@@ -217,22 +257,50 @@ export default function ProjectProfessionalFeesTab({
   return (
     <div className="space-y-4 mt-4">
 
-      {/* ── Fee Edit Dialog ──────────────────────────────────────────────── */}
+      {/* ── Fee Edit Dialog (Enhanced) ───────────────────────────────────── */}
       <Dialog open={feeDialogOpen} onOpenChange={v => setFeeDialogOpen(v)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {dlgFeeType ? 'Edit' : 'Set'} Professional Fee —{' '}
-              {localComposition.find(m => m.userId === editingUserId)?.name}
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-violet-500" />
+              {dlgFeeType ? 'Edit' : 'Set'} Professional Fee
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-1">
-            {/* Fee type + currency */}
+
+          {/* Member info banner */}
+          {(() => {
+            const m = localComposition.find(x => x.userId === editingUserId);
+            if (!m) return null;
+            return (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 font-bold text-primary text-sm">
+                  {m.name.substring(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">{m.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${
+                      m.memberType === 'internal'
+                        ? 'border-blue-200 text-blue-700 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-violet-200 text-violet-700 bg-violet-50 dark:bg-violet-900/20'
+                    }`}>
+                      {m.memberType === 'internal' ? '● Internal Staff' : '◆ External / Consultant'}
+                    </span>
+                    {m.organization && <span className="text-xs text-muted-foreground">{m.organization}</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="space-y-5 py-1">
+            {/* ── Row 1: Fee basis + currency ──────────────────────────── */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Fee Type</Label>
+                <Label className="text-xs font-medium">Fee Basis</Label>
                 <Select value={dlgFeeType || '__none__'} onValueChange={v => setDlgFeeType(v === '__none__' ? '' : v as TeamFeeType)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="None (no fee)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None (no fee)</SelectItem>
                     <SelectItem value="per_hour">Per Hour</SelectItem>
@@ -243,25 +311,27 @@ export default function ProjectProfessionalFeesTab({
               </div>
               {dlgFeeType && dlgFeeType !== 'percent_budget' && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Currency</Label>
+                  <Label className="text-xs font-medium">Currency</Label>
                   <Select value={dlgCurrency} onValueChange={setDlgCurrency}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="SDG">SDG</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="GBP">GBP</SelectItem>
+                      <SelectItem value="SDG">SDG — Sudanese Pound</SelectItem>
+                      <SelectItem value="USD">USD — US Dollar</SelectItem>
+                      <SelectItem value="EUR">EUR — Euro</SelectItem>
+                      <SelectItem value="GBP">GBP — British Pound</SelectItem>
+                      <SelectItem value="SAR">SAR — Saudi Riyal</SelectItem>
+                      <SelectItem value="AED">AED — UAE Dirham</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
             </div>
 
-            {/* Rate / hours / due date */}
+            {/* ── Row 2: Rate / hours ───────────────────────────────────── */}
             {dlgFeeType && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">
+                  <Label className="text-xs font-medium">
                     {dlgFeeType === 'per_hour' ? 'Hourly Rate' : dlgFeeType === 'percent_budget' ? '% of Budget' : 'Fixed Amount'}
                   </Label>
                   <Input type="number" min="0" step="0.01" value={dlgRate}
@@ -270,62 +340,180 @@ export default function ProjectProfessionalFeesTab({
                 </div>
                 {dlgFeeType === 'per_hour' && (
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Planned Hours</Label>
+                    <Label className="text-xs font-medium">Planned Hours</Label>
                     <Input type="number" min="0" value={dlgHours}
                       onChange={e => setDlgHours(e.target.value)} placeholder="e.g. 40" />
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Payment Due Date</Label>
+                  <Label className="text-xs font-medium">Single Payment Due Date</Label>
                   <Input type="date" value={dlgDueDate} onChange={e => setDlgDueDate(e.target.value)} />
                 </div>
               </div>
             )}
 
-            {/* Amount paid + status */}
-            {dlgFeeType && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Amount Already Paid</Label>
-                  <Input type="number" min="0" step="0.01" value={dlgAmountPaid}
-                    onChange={e => setDlgAmountPaid(e.target.value)} placeholder="0.00" />
+            {/* ── Estimated total banner ────────────────────────────────── */}
+            {dlgFeeType && dlgRate && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                <DollarSign className="h-4 w-4 text-emerald-600 shrink-0" />
+                <div className="flex-1">
+                  <span className="text-xs text-muted-foreground">Estimated total fee: </span>
+                  <span className="font-bold text-emerald-700 text-sm">
+                    {fmtMoney(dlgEstTotal, dlgFeeType === 'percent_budget' ? currency : dlgCurrency)}
+                  </span>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Payment Status</Label>
-                  <Select value={dlgPayStatus} onValueChange={v => setDlgPayStatus(v as typeof dlgPayStatus)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unpaid">Unpaid</SelectItem>
-                      <SelectItem value="partially_paid">Partially Paid</SelectItem>
-                      <SelectItem value="paid">Fully Paid</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {dlgScheduleType === 'lump_sum' && dlgAmountPaid && parseFloat(dlgAmountPaid) > 0 && (
+                  <div className="text-right">
+                    <span className="text-xs text-muted-foreground">Outstanding: </span>
+                    <span className="font-semibold text-red-600 text-sm">
+                      {fmtMoney(Math.max(0, dlgEstTotal - parseFloat(dlgAmountPaid || '0')), dlgFeeType === 'percent_budget' ? currency : dlgCurrency)}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Live total preview */}
-            {dlgFeeType && dlgRate && (
-              <div className="flex items-center gap-2 p-2.5 rounded-md bg-muted text-sm">
-                <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span className="text-muted-foreground text-xs">Estimated total:</span>
-                <span className="font-bold text-emerald-600">
-                  {fmtMoney(dlgEstTotal, dlgFeeType === 'percent_budget' ? currency : dlgCurrency)}
-                </span>
-                {dlgAmountPaid && parseFloat(dlgAmountPaid) > 0 && (
-                  <>
-                    <span className="text-muted-foreground text-xs ml-2">Outstanding:</span>
-                    <span className="font-semibold text-red-600">
-                      {fmtMoney(Math.max(0, dlgEstTotal - parseFloat(dlgAmountPaid || '0')), dlgFeeType === 'percent_budget' ? currency : dlgCurrency)}
-                    </span>
-                  </>
+            {/* ── Payment Schedule section ──────────────────────────────── */}
+            {dlgFeeType && (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                  <Clock3 className="h-3.5 w-3.5" /> Payment Schedule
+                </p>
+
+                {/* Schedule type selector */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Schedule Type</Label>
+                    <Select value={dlgScheduleType} onValueChange={v => setDlgScheduleType(v as PaymentScheduleType)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lump_sum">Lump Sum — one payment</SelectItem>
+                        <SelectItem value="monthly">Monthly installments</SelectItem>
+                        <SelectItem value="quarterly">Quarterly (every 3 months)</SelectItem>
+                        <SelectItem value="bi_weekly">Bi-weekly (every 2 weeks)</SelectItem>
+                        <SelectItem value="fixed_dates">Custom fixed dates</SelectItem>
+                        <SelectItem value="milestone">Milestone-based</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {dlgScheduleType !== 'lump_sum' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Number of Installments</Label>
+                      <Input type="number" min="2" max="36" value={dlgInstallmentCount}
+                        onChange={e => setDlgInstallmentCount(e.target.value)} placeholder="e.g. 3" />
+                    </div>
+                  )}
+                </div>
+
+                {/* First payment date + auto-generate */}
+                {dlgScheduleType !== 'lump_sum' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">First Payment Date</Label>
+                      <Input type="date" value={dlgStartDate} onChange={e => setDlgStartDate(e.target.value)} />
+                    </div>
+                    <div className="flex items-end">
+                      <Button type="button" variant="outline" size="sm" className="w-full gap-1.5"
+                        onClick={handleAutoGenerateInstallments}
+                        disabled={!dlgRate || !dlgStartDate}>
+                        <RefreshCw className="h-3.5 w-3.5" /> Auto-generate Schedule
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lump sum: manual paid / status */}
+                {dlgScheduleType === 'lump_sum' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Amount Already Paid</Label>
+                      <Input type="number" min="0" step="0.01" value={dlgAmountPaid}
+                        onChange={e => setDlgAmountPaid(e.target.value)} placeholder="0.00" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Payment Status</Label>
+                      <Select value={dlgPayStatus} onValueChange={v => setDlgPayStatus(v as typeof dlgPayStatus)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unpaid">Unpaid</SelectItem>
+                          <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                          <SelectItem value="paid">Fully Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Installment list */}
+                {dlgInstallments.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <button type="button"
+                        className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        onClick={() => setDlgShowInstallments(!dlgShowInstallments)}>
+                        {dlgShowInstallments ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        {dlgInstallments.length} installments ({dlgInstallments.filter(i => i.status === 'paid').length} paid)
+                      </button>
+                      <span className="text-xs text-muted-foreground">
+                        Paid: <strong className="text-emerald-600">{fmtMoney(totalPaidFromInstallments(dlgInstallments), dlgCurrency)}</strong>
+                        {' · '}
+                        Remaining: <strong className="text-red-600">{fmtMoney(dlgInstallments.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0), dlgCurrency)}</strong>
+                      </span>
+                    </div>
+                    {dlgShowInstallments && (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {dlgInstallments.map(inst => {
+                          const overdue = inst.status !== 'paid' && inst.dueDate && isPast(parseISO(inst.dueDate));
+                          return (
+                            <div key={inst.id} className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${
+                              inst.status === 'paid'
+                                ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20'
+                                : overdue ? 'bg-red-50 border-red-200 dark:bg-red-900/20'
+                                : 'bg-background border-border hover:bg-muted/30'
+                            }`}>
+                              <button type="button" onClick={() => handleDlgInstallmentToggle(inst.id)} className="shrink-0"
+                                title={inst.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}>
+                                {inst.status === 'paid'
+                                  ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                  : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground hover:border-primary transition-colors" />}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-medium ${inst.status === 'paid' ? 'text-emerald-700 dark:text-emerald-400' : overdue ? 'text-red-700 dark:text-red-400' : ''}`}>
+                                  {inst.label}
+                                </p>
+                                <p className={`text-[10px] mt-0.5 ${overdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                  {inst.dueDate ? fmtDate(inst.dueDate) : 'No date set'}
+                                  {overdue && ' · Overdue'}
+                                  {inst.paidDate && ` · Paid ${fmtDate(inst.paidDate)}`}
+                                </p>
+                              </div>
+                              <span className="font-bold shrink-0 tabular-nums">
+                                {fmtMoney(inst.amount, dlgCurrency)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        <Button type="button" variant="ghost" size="sm"
+                          className="w-full text-xs h-7 border-dashed border mt-1"
+                          onClick={() => setDlgInstallments(prev => [...prev, {
+                            id: crypto.randomUUID(), label: `Installment ${prev.length + 1}`,
+                            dueDate: '', amount: 0, status: 'pending',
+                          }])}>
+                          <Plus className="h-3 w-3 mr-1" /> Add Installment
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="mt-2">
             <Button variant="outline" onClick={() => setFeeDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveFee}>Save Fee</Button>
+            <Button onClick={handleSaveFee}>
+              <DollarSign className="h-4 w-4 mr-1.5" /> Save Fee & Schedule
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
