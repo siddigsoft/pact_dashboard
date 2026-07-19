@@ -235,7 +235,17 @@ const UserDetail: FC = () => {
         });
       }
       const { error } = result;
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+          toast({
+            title: 'Role already exists or constraint error',
+            description: 'This user already has that role, OR the database needs a migration to allow multiple roles. Run supabase/migrations/user_roles_multi_role_constraint.sql in your Supabase SQL editor.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw error;
+      }
       toast({ title: 'Role added', description: `${toRoleLabel(newRolePick)} added as an additional role.` });
       setAddRoleMode(false);
       setNewRolePick('');
