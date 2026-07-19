@@ -211,6 +211,9 @@ export default function PreFundingOverview() {
   const [allocs, setAllocs]       = useState<AllocRow[]>([]);
   const [txns, setTxns]           = useState<TxnRow[]>([]);
   const [profiles, setProfiles]   = useState<Map<string, string>>(new Map());
+  // dpId → userId: built from validDpData.created_by so txnsByFundUser can attribute
+  // spend correctly when pre_fund_transactions.user_id is null (officer stored in created_by).
+  const [dpUserMap, setDpUserMap] = useState<Map<string, string>>(new Map());
   const [rates, setRates]         = useState<ExchangeRate[]>([]);
   const [settings, setSettings]   = useState<Settings | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -222,37 +225,46 @@ export default function PreFundingOverview() {
 
   const load = useCallback(async () => {
     try {
-      // Fetch simple tables (small row counts) in parallel
-      const [fundsRes, ratesRes, settingsRes, allocsData, rawTxns, profData] = await Promise.all([
+      // ── Step 1: lightweight headers (small tables, no pagination needed) ──────────
+      const [fundsRes, ratesRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
-        // Unlimited fetches — auto-paginate through every row
-        fetchAll(() => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false })),
-        fetchAll(() => (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false })),
-        fetchAll(() => supabase.from('profiles').select('id,full_name,email')),
       ]);
 
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
-      setFunds((fundsRes.data as any) ?? []);
+      const loadedFunds = (fundsRes.data as any) ?? [];
+      setFunds(loadedFunds);
       if (!ratesRes.error) setRates((ratesRes.data as ExchangeRate[]) ?? []);
       if (settingsRes.data) {
         const s = settingsRes.data as any;
         setSettings({ base_currency: s.base_currency ?? 'USD' });
         setBase(s.base_currency ?? 'USD');
       }
+
+      // ── Step 2: rows scoped to the loaded fund IDs — much faster than global fetches ──
+      const fundIds = loadedFunds.map((f: any) => f.id as string);
+      const [allocsData, rawTxns, profData] = await Promise.all([
+        fetchAllIn(chunk => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').in('pre_fund_request_id', chunk).order('allocated_amount', { ascending: false }), fundIds),
+        fetchAllIn(chunk => (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').in('pre_fund_request_id', chunk).order('transaction_date', { ascending: false }), fundIds),
+        // Profiles: small table — one global fetch is fine
+        fetchAll(() => supabase.from('profiles').select('id,full_name,email')),
+      ]);
+
       setAllocs(allocsData as any);
       {
         // Filter out transactions whose source DP/OCS has been deleted or cancelled
-        const dpIds = [...new Set(rawTxns.filter(t => t.source_table === 'down_payment_requests' && t.source_id).map(t => t.source_id as string))];
-        const ocsIds = [...new Set(rawTxns.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id).map(t => t.source_id as string))];
+        const dpIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
+        const ocsIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id).map((t: any) => t.source_id as string))];
         // For old txns with NULL source_table, the DP stores back-link via pre_fund_transaction_id
-        const rawTxnIds = rawTxns.map(t => t.id).filter(Boolean);
+        const rawTxnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
         // Fetch validation data — batched .in() so large ID lists don't truncate
+        // Also grab created_by from DPs so we can attribute spend to the right staff member
+        // even when pre_fund_transactions.user_id is null.
         const [validDpData, validOcsData, backLinkedDpData] = await Promise.all([
-          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpIds),
+          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,created_by').in('id', chunk), dpIds),
           fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
         ]);
@@ -301,6 +313,13 @@ export default function PreFundingOverview() {
           return true;
         });
         setTxns(validTxns);
+        // Build dpId → userId map so txnsByFundUser can credit the right staff member
+        // when a payment transaction has user_id = null (admin stored in created_by instead).
+        const dpMap = new Map<string, string>();
+        for (const dp of validDpData) {
+          if (dp.created_by) dpMap.set(dp.id as string, dp.created_by as string);
+        }
+        setDpUserMap(dpMap);
       }
       {
         const m = new Map<string, string>();
@@ -380,12 +399,20 @@ export default function PreFundingOverview() {
     return m;
   }, [allocs]);
 
-  // Build per-fund, per-user, per-type spending from transactions
+  // Build per-fund, per-user, per-type spending from transactions.
+  // Priority for user attribution:
+  //   1. t.user_id (set on the txn when the allocation holder is known)
+  //   2. dpUserMap.get(t.source_id) — DP's created_by is the staff member who submitted,
+  //      which matches the allocation holder when user_id is null on the txn row
+  //   3. t.created_by (the disbursing officer — last resort, may not match an allocation)
   const txnsByFundUser = useMemo(() => {
-    // Map: fundId → userId → txnType → total amount
     const m = new Map<string, Map<string, Map<string, number>>>();
     for (const t of txns) {
-      const uid = t.user_id ?? t.created_by ?? '__unknown__';
+      let uid = t.user_id as string | null;
+      if (!uid && t.source_table === 'down_payment_requests' && t.source_id) {
+        uid = dpUserMap.get(t.source_id) ?? null;
+      }
+      uid = uid ?? t.created_by ?? '__unknown__';
       const byUser = m.get(t.pre_fund_request_id) ?? new Map<string, Map<string, number>>();
       const byType = byUser.get(uid) ?? new Map<string, number>();
       byType.set(t.transaction_type, (byType.get(t.transaction_type) ?? 0) + (t.amount ?? 0));
@@ -393,7 +420,7 @@ export default function PreFundingOverview() {
       m.set(t.pre_fund_request_id, byUser);
     }
     return m;
-  }, [txns]);
+  }, [txns, dpUserMap]);
 
   // Effective paid amount per fund:
   //   Priority 1 — sum of 'payment' transactions from pre_fund_transactions (most accurate;
