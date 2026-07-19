@@ -104,7 +104,15 @@ export interface User {
   };
   availability: string;  // Changed from optional to required
   roles?: AppRole[];
-  
+
+  /**
+   * Additional / secondary roles assigned via the Admin user panel.
+   * Stored as a JSONB array on profiles.additional_roles.
+   * Each entry: { role: string, hub_id?: string|null, assigned_at?: string, assigned_by?: string|null }
+   * These are merged with the primary role for all permission checks.
+   */
+  additionalRoles?: Array<{ role: string; hub_id?: string | null; assigned_at?: string | null; assigned_by?: string | null }>;
+
   // Classification information (for coordinators, data collectors, supervisors)
   classification?: {
     level: ClassificationLevel;

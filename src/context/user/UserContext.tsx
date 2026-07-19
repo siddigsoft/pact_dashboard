@@ -140,7 +140,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account');
+        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles');
       
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -416,7 +416,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account';
+      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles';
 
       let { data: profileData } = await supabase
         .from('profiles')
@@ -523,6 +523,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: authUser.email || '',
         role: (userProfile as any).role || userRole,
         roles: userRolesList.length > 0 ? userRolesList : undefined,
+        additionalRoles: Array.isArray((userProfile as any).additional_roles) ? (userProfile as any).additional_roles : [],
         stateId: (userProfile as any).state_id,
         hubId: (userProfile as any).hub_id,
         secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
@@ -868,6 +869,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: authData.user.email || '',
           role: userProfile.role || userRole,
           roles: userRolesList.length > 0 ? userRolesList : undefined,
+          additionalRoles: Array.isArray((userProfile as any).additional_roles) ? (userProfile as any).additional_roles : [],
           stateId: userProfile.state_id,
           hubId: userProfile.hub_id,
           secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,

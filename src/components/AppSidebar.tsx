@@ -801,7 +801,11 @@
       financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
     };
 
-    const rawMenuGroups = currentUser ? getWorkflowMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess) : [];
+    // Merge user_roles table entries + additional JSONB roles from profiles into one list
+    const extraRoles: AppRole[] = Array.isArray(currentUser?.additionalRoles)
+      ? currentUser!.additionalRoles.map((r: any) => r?.role as AppRole).filter(Boolean)
+      : [];
+    const rawMenuGroups = currentUser ? getWorkflowMenuGroups([...(roles || []), ...extraRoles], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess) : [];
 
     // Apply page_access_overrides: granted overrides add items even if the role
     // check denied them; blocked overrides remove items even if the role check

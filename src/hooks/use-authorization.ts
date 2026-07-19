@@ -46,7 +46,15 @@ export const useAuthorization = () => {
    */
   const hasAnyRole = (roles: string[]): boolean => {
     if (!currentUser) return false;
-    const userRoles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
+    // Include primary role + user_roles table entries + additional JSONB roles from profiles
+    const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
+      ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
+      : [];
+    const userRoles = [
+      currentUser.role,
+      ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
+      ...additionalRoleStrings,
+    ];
     const normalizedUserRoles = userRoles.map(r => normalizeRole(r)).filter(Boolean);
     const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
     return normalizedCheckRoles.some(checkRole => normalizedUserRoles.includes(checkRole));
@@ -58,7 +66,14 @@ export const useAuthorization = () => {
    */
   const hasAllRoles = (roles: string[]): boolean => {
     if (!currentUser) return false;
-    const userRoles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
+    const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
+      ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
+      : [];
+    const userRoles = [
+      currentUser.role,
+      ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
+      ...additionalRoleStrings,
+    ];
     const normalizedUserRoles = userRoles.map(r => normalizeRole(r)).filter(Boolean);
     const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
     return normalizedCheckRoles.every(checkRole => normalizedUserRoles.includes(checkRole));
