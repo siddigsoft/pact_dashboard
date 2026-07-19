@@ -261,9 +261,10 @@ export default function PreFundingOverview() {
         // Collect all user IDs from allocations for targeted profile lookup
         const allocUserIds = [...new Set((allocsData as any[]).map((a: any) => a.user_id as string).filter(Boolean))];
         // Fetch validation data + profiles in parallel
-        // requested_by = actual allocation holder on DP; submitted_by = fallback (same as Reconciliation page uses)
+        // requested_by = who the DP was raised FOR (allocation holder); created_by = disbursing officer fallback
+        // NOTE: down_payment_requests has NO submitted_by column — that field only exists on operational_cost_submissions
         const [validDpData, validOcsData, backLinkedDpData, profData] = await Promise.all([
-          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by,submitted_by').in('id', chunk), dpIds),
+          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by,created_by').in('id', chunk), dpIds),
           fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
           // Targeted profiles fetch for allocation holders — avoids RLS blind-spots from global scan
@@ -319,10 +320,10 @@ export default function PreFundingOverview() {
         // Build dpId → userId map so txnsByFundUser can credit the right staff member
         // when pre_fund_transactions.user_id is null (admin stored in created_by instead).
         // requested_by = the allocation holder (who the DP was raised for).
-        // submitted_by = fallback (the person who filled in the form — same approach as Reconciliation page).
+        // created_by = disbursing officer fallback (submitted_by does NOT exist on down_payment_requests).
         const dpMap = new Map<string, string>();
         for (const dp of validDpData) {
-          const uid = (dp as any).requested_by ?? (dp as any).submitted_by;
+          const uid = (dp as any).requested_by ?? (dp as any).created_by;
           if (uid) dpMap.set(dp.id as string, uid as string);
         }
         setDpUserMap(dpMap);

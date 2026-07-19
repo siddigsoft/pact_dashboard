@@ -1071,12 +1071,16 @@ export default function PreFundingReconciliation() {
 
       // 4. Restore allocation spent_amount if there is an allocation for the source
       if (txn.source_table && txn.source_id) {
+        // down_payment_requests has requested_by/created_by; operational_cost_submissions has submitted_by
+        const dpCols = 'requested_by,created_by';
+        const ocsCols = 'submitted_by';
+        const selectCols = txn.source_table === 'down_payment_requests' ? dpCols : ocsCols;
         const { data: srcRow } = await (supabase as any)
           .from(txn.source_table)
-          .select('requested_by,submitted_by')
+          .select(selectCols)
           .eq('id', txn.source_id)
           .maybeSingle();
-        const userId = srcRow?.requested_by ?? srcRow?.submitted_by ?? null;
+        const userId = srcRow?.requested_by ?? srcRow?.created_by ?? srcRow?.submitted_by ?? null;
         if (userId) {
           const { data: alloc } = await supabase
             .from('pre_fund_allocations')
@@ -1137,12 +1141,16 @@ export default function PreFundingReconciliation() {
       // ── 3. Restore allocations — batch fetch source rows, compute deltas ─
       const userDelta = new Map<string, number>();
       await Promise.all([...byTable.entries()].map(async ([table, { srcIds, txns: tableTxns }]) => {
+        // down_payment_requests has no submitted_by; operational_cost_submissions has no requested_by
+        const selectCols = table === 'down_payment_requests'
+          ? 'id,requested_by,created_by'
+          : 'id,submitted_by';
         const { data: srcRows } = await (supabase as any)
-          .from(table).select('id,requested_by,submitted_by').in('id', srcIds);
+          .from(table).select(selectCols).in('id', srcIds);
         const rowMap = new Map((srcRows ?? []).map((r: any) => [r.id, r]));
         for (const txn of tableTxns) {
           const row = rowMap.get(txn.source_id);
-          const uid = row?.requested_by ?? row?.submitted_by ?? null;
+          const uid = row?.requested_by ?? row?.created_by ?? row?.submitted_by ?? null;
           if (uid) userDelta.set(uid, (userDelta.get(uid) ?? 0) + txn.amount);
         }
       }));
