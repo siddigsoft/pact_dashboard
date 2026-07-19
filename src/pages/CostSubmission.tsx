@@ -223,6 +223,11 @@ const CostSubmission = () => {
   const isAdmin           = hasAnyRole(['admin']);
   const isSupervisor      = hasAnyRole(['supervisor']);
   const isFOM             = hasAnyRole(['fom']);
+  // Primary-role-only supervisor check — excludes additional_roles so a FOM with an
+  // additional Supervisor role for hub-scoping is NOT treated as a T1 approver for
+  // coordinator submissions.
+  const primaryRole = (currentUser?.role || '').toLowerCase().replace(/[\s_()-]/g, '');
+  const isPrimaryRoleSupervisor = primaryRole.includes('supervisor') || primaryRole === 'hubsupervisor';
   const isCoordinator     = hasAnyRole(['coordinator']);
   const isCountryDirector = hasAnyRole(['countryDirector']);
   const isDataCollector   = hasAnyRole(['dataCollector']);
@@ -951,9 +956,9 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin || isAdmin) return true;
-    // Coordinator: T1 = Hub Supervisor (same hub only)
+    // Coordinator: T1 = Hub Supervisor (primary role only — additional_roles must not qualify)
     if (hasFourTiers(oc)) {
-      if (!isSupervisor) return false;
+      if (!isPrimaryRoleSupervisor) return false;
       const myHubId = (currentUser as any)?.hubId;
       if (!oc.hub_id || !myHubId) return true;
       return oc.hub_id === myHubId;
