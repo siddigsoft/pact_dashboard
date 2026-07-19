@@ -36,6 +36,20 @@ function isCountryOfficeHub(hubId: string | null | undefined): boolean {
   return normalized === 'country-office';
 }
 
+/** Hub IDs assigned to a user via their additional/secondary supervisor roles. */
+function getAdditionalSupervisorHubIds(user: User): string[] {
+  const additionalRoles = Array.isArray((user as any).additionalRoles)
+    ? (user as any).additionalRoles
+    : [];
+  return additionalRoles
+    .filter((r: any) => {
+      const norm = (r?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      return norm === 'supervisor' || norm === 'hubsupervisor' || norm === 'hub_supervisor';
+    })
+    .map((r: any) => r?.hub_id)
+    .filter(Boolean) as string[];
+}
+
 export function getHubAccessInfo(user: User | null): HubAccessInfo {
   const empty: HubAccessInfo = {
     isHubSupervisor: false,
@@ -51,19 +65,34 @@ export function getHubAccessInfo(user: User | null): HubAccessInfo {
   if (!user) return empty;
 
   const userRole = (user.role || '').toLowerCase();
-  const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
+  const isSupervisorByPrimary = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
   const isCoordinator = userRole === 'coordinator';
 
-  // Both supervisors and coordinators are scoped to their assigned hub(s).
-  if (!(isSupervisor || isCoordinator) || !user.hubId) return empty;
+  // Hubs coming from additional/secondary supervisor role assignments
+  const additionalSupervisorHubIds = getAdditionalSupervisorHubIds(user);
+  const isSupervisor = isSupervisorByPrimary || additionalSupervisorHubIds.length > 0;
 
-  const primaryHubId = user.hubId;
+  // Both supervisors and coordinators are scoped to their assigned hub(s).
+  if (!(isSupervisor || isCoordinator)) return empty;
+
+  // Primary hub comes from the profile; secondary hub from profile or location
+  const primaryHubId = user.hubId || null;
   const secondaryHubId = (user as any).secondaryHubId || null;
 
-  const rawIds = [primaryHubId, secondaryHubId].filter(Boolean) as string[];
-  const normalizedHubIds = rawIds
-    .map(h => normalizeHubId(h))
-    .filter(Boolean) as string[];
+  // For primary-role supervisors/coordinators we require a hubId on the profile.
+  // For users who are supervisor only via additionalRoles, we use the role-scoped hub_ids.
+  const profileHubIds = [primaryHubId, secondaryHubId].filter(Boolean) as string[];
+
+  // Merge: profile hubs (for primary-role supervisors) + additional role hubs
+  const rawIds = isSupervisorByPrimary || isCoordinator
+    ? [...profileHubIds, ...additionalSupervisorHubIds]
+    : additionalSupervisorHubIds;
+
+  if (rawIds.length === 0) return empty;
+
+  const normalizedHubIds = Array.from(
+    new Set(rawIds.map(h => normalizeHubId(h)).filter(Boolean) as string[])
+  );
 
   if (normalizedHubIds.length === 0) return empty;
 
@@ -205,20 +234,27 @@ export function shouldApplyHubFilter(user: User | null, roles?: AppRole[]): bool
   if (!user) return false;
   
   const userRole = (user.role || '').toLowerCase();
-  const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
+  const isSupervisorByPrimary = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
   const isCoordinator = userRole === 'coordinator';
-  
+  const additionalSupervisorHubIds = getAdditionalSupervisorHubIds(user);
+  const isSupervisor = isSupervisorByPrimary || additionalSupervisorHubIds.length > 0;
+
   const isAdmin = userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin';
   const isFOM = userRole === 'fom' || userRole === 'field operation manager (fom)' || userRole === 'field operation manager';
   const isICT = userRole === 'ict' || userRole === 'ict admin';
   const isCountryDirector = userRole === 'countrydirector' || userRole === 'country_director' || userRole === 'country director';
   
+  // Privileged primary roles always see everything — hub filter never applies to them globally.
+  // Their supervisor view is scoped via getHubAccessInfo instead.
   if (isAdmin || isFOM || isICT || isCountryDirector) {
     return false;
   }
   
-  // Both supervisors and coordinators are scoped to their assigned hub(s).
-  return (isSupervisor || isCoordinator) && !!user.hubId;
+  // Supervisors (primary or via additionalRoles) and coordinators are hub-scoped.
+  if (isSupervisorByPrimary || isCoordinator) return !!user.hubId;
+  // User is supervisor only via additionalRoles — hub scope comes from those entries.
+  if (isSupervisor) return additionalSupervisorHubIds.length > 0;
+  return false;
 }
 
 export function getHubFilterQuery(hubId: string | null): { states: string[] } | null {

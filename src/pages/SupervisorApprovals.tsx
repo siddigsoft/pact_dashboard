@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { normalizeHubId } from '@/data/sudanStates';
+import { getHubAccessInfo } from '@/utils/hubAccessControl';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -80,16 +81,20 @@ export default function SupervisorApprovals() {
   });
 
   const userRole = currentUser?.role?.toLowerCase();
-  const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'ict' || userRole === 'superadmin' || isSuperAdmin;
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
 
-  const supervisorHubId = currentUser?.hubId;
-  const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
-  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId]
-    .filter(Boolean)
-    .map(h => normalizeHubId(h!) || h!)
-    .filter((v, i, a) => a.indexOf(v) === i);
+  // getHubAccessInfo respects both primary-role hub AND additionalRoles supervisor hub_ids,
+  // so a FOM with Supervisor as additional role only sees their assigned supervisor hub.
+  const hubAccessInfo = getHubAccessInfo(currentUser as any);
+  const isSupervisor = hubAccessInfo.isHubSupervisor ||
+    (userRole === 'supervisor' || userRole === 'hubsupervisor');
+  const supervisorHubIds = hubAccessInfo.isHubSupervisor
+    ? hubAccessInfo.hubIds
+    : [currentUser?.hubId, (currentUser as any)?.secondaryHubId]
+        .filter(Boolean)
+        .map(h => normalizeHubId(h!) || h!)
+        .filter((v, i, a) => a.indexOf(v) === i);
 
   useEffect(() => {
     if (supervisorHubIds.length === 0) {
