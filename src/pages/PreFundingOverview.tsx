@@ -221,11 +221,11 @@ export default function PreFundingOverview() {
         // For old txns with NULL source_table, the DP stores back-link via pre_fund_transaction_id
         const rawTxnIds = rawTxns.map(t => t.id).filter(Boolean);
         const [validDpRes, validOcsRes, backLinkedDpsRes] = await Promise.all([
-          dpIds.length > 0 ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds) : Promise.resolve({ data: [] }),
-          ocsIds.length > 0 ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds) : Promise.resolve({ data: [] }),
+          dpIds.length > 0 ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds).range(0, 9999) : Promise.resolve({ data: [] }),
+          ocsIds.length > 0 ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds).range(0, 9999) : Promise.resolve({ data: [] }),
           // Fetch DPs whose pre_fund_transaction_id points to one of these txn rows
           rawTxnIds.length > 0
-            ? (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', rawTxnIds)
+            ? (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', rawTxnIds).range(0, 9999)
             : Promise.resolve({ data: [] }),
         ]);
         // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
@@ -857,13 +857,15 @@ export default function PreFundingOverview() {
                             <tbody className="divide-y">
                               {fundAllocs.map(a => {
                                 const userName = profiles.get(a.user_id) ?? a.user_id.slice(0, 8);
-                                const remaining = a.allocated_amount - (a.spent_amount ?? 0);
-                                const pctUsed = a.allocated_amount > 0
-                                  ? Math.min(100, Math.round(((a.spent_amount ?? 0) / a.allocated_amount) * 100))
-                                  : 0;
-
                                 // Get transaction breakdown for this user for this fund
                                 const userTxns = fundTxnsByUser.get(a.user_id) ?? new Map<string, number>();
+                                // Derive spent from payment txns (spent_amount DB column is not updated by the payment system)
+                                const txnSpent = userTxns.get('payment') ?? 0;
+                                const displaySpent = txnSpent > 0 ? txnSpent : (a.spent_amount ?? 0);
+                                const remaining = a.allocated_amount - displaySpent;
+                                const pctUsed = a.allocated_amount > 0
+                                  ? Math.min(100, Math.round((displaySpent / a.allocated_amount) * 100))
+                                  : 0;
 
                                 return (
                                   <tr key={a.id} className="hover:bg-muted/30 transition-colors">
@@ -887,8 +889,8 @@ export default function PreFundingOverview() {
 
                                     {/* Spent */}
                                     <td className="px-4 py-3 text-right">
-                                      <span className={cn('font-mono font-medium', (a.spent_amount ?? 0) > 0 ? 'text-rose-600' : 'text-muted-foreground')}>
-                                        {a.currency} {formatNumber(a.spent_amount ?? 0, 0)}
+                                      <span className={cn('font-mono font-medium', displaySpent > 0 ? 'text-rose-600' : 'text-muted-foreground')}>
+                                        {a.currency} {formatNumber(displaySpent, 0)}
                                       </span>
                                     </td>
 
@@ -947,7 +949,12 @@ export default function PreFundingOverview() {
                             {/* Footer totals */}
                             {fundAllocs.length > 1 && (() => {
                               const totAlloc = fundAllocs.reduce((s, a) => s + a.allocated_amount, 0);
-                              const totSpent = fundAllocs.reduce((s, a) => s + (a.spent_amount ?? 0), 0);
+                              // Use txn-derived spent per user (same logic as per-row above)
+                              const totSpent = fundAllocs.reduce((s, a) => {
+                                const uTxns = fundTxnsByUser.get(a.user_id) ?? new Map<string, number>();
+                                const txnPaid = uTxns.get('payment') ?? 0;
+                                return s + (txnPaid > 0 ? txnPaid : (a.spent_amount ?? 0));
+                              }, 0);
                               const totRem   = totAlloc - totSpent;
                               const totPct   = totAlloc > 0 ? Math.min(100, Math.round((totSpent / totAlloc) * 100)) : 0;
                               const cur      = fundAllocs[0]?.currency ?? f.currency;
