@@ -460,7 +460,8 @@ export default function PreFundingOverview() {
     const effPaid = effectivePaidByFund.get(f.id) ?? 0;
     return s + toBase(Math.max(0, f.amount - effPaid), f.currency);
   }, 0);
-  const totalCommit = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
+  const totalCommit  = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
+  const totalPaidOut = activeFunds.reduce((s, f) => s + toBase(effectivePaidByFund.get(f.id) ?? 0, f.currency), 0);
   const endingSoon  = activeFunds.filter(f => {
     if (!f.end_date) return false;
     return differenceInDays(parseISO(f.end_date), new Date()) >= 0 && differenceInDays(parseISO(f.end_date), new Date()) <= (f.warning_days ?? 14);
@@ -638,14 +639,15 @@ export default function PreFundingOverview() {
 
       {/* KPI Row */}
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-lg" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-24 rounded-lg" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {[
             { label: 'Total Funded', labelAr: 'إجمالي التمويل', value: formatNumber(totalFunded, 0), sub: `${activeFunds.length} active fund${activeFunds.length !== 1 ? 's' : ''}`, icon: DollarSign, accent: 'bg-sky-600' },
             { label: 'Available Balance', labelAr: 'الرصيد المتاح', value: formatNumber(totalAvail, 0), sub: `${baseCurrency} across all active funds`, icon: Banknote, accent: totalAvail < totalFunded * 0.2 ? 'bg-rose-600' : 'bg-emerald-600' },
+            { label: 'Paid Out', labelAr: 'المدفوع', value: formatNumber(totalPaidOut, 0), sub: `${baseCurrency} disbursed from active funds`, icon: TrendingDown, accent: 'bg-rose-600' },
             { label: 'Committed', labelAr: 'المرتبط', value: formatNumber(totalCommit, 0), sub: 'Reserved from active pre-funds', icon: Lock, accent: 'bg-violet-600' },
             { label: 'Needs Attention', labelAr: 'تحتاج انتباه', value: String(nearExhaustion + endingSoon), sub: `${nearExhaustion} low balance · ${endingSoon} ending soon`, icon: AlertTriangle, accent: (nearExhaustion + endingSoon) > 0 ? 'bg-amber-500' : 'bg-slate-500' },
           ].map(kpi => (
