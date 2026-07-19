@@ -1702,8 +1702,10 @@ const CostSubmission = () => {
 
   const canEditSubmission = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
+    // SuperAdmin can edit at any tier (T1→T4) — only block once paid or reconciled
+    if (isSuperAdmin) return derivedStatus !== 'paid' && derivedStatus !== 'reconciled';
     if (derivedStatus !== 'pending') return false;
-    if (isSuperAdmin || isAdmin) return true;
+    if (isAdmin) return true;
     return oc.submitted_by === currentUser?.id;
   };
 
