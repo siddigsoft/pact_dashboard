@@ -188,6 +188,7 @@ const UserDetail: FC = () => {
   const [newRolePick, setNewRolePick]           = useState('');
   const [newRoleHub, setNewRoleHub]             = useState('');
   const [addRoleSaving, setAddRoleSaving]       = useState(false);
+  const [rolesNeedsMigration, setRolesNeedsMigration] = useState(false);
 
   const fetchAdditionalRoles = async (userId: string, primaryRole: string) => {
     // Try with hub_id first; fall back if column doesn't exist yet (migration pending)
@@ -237,11 +238,8 @@ const UserDetail: FC = () => {
       const { error } = result;
       if (error) {
         if (error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
-          toast({
-            title: 'Role already exists or constraint error',
-            description: 'This user already has that role, OR the database needs a migration to allow multiple roles. Run supabase/migrations/user_roles_multi_role_constraint.sql in your Supabase SQL editor.',
-            variant: 'destructive',
-          });
+          setRolesNeedsMigration(true);
+          setAddRoleMode(false);
           return;
         }
         throw error;
@@ -2366,100 +2364,164 @@ const UserDetail: FC = () => {
                 )}
 
                 {/* ── Additional / Secondary Roles ────────────────────────── */}
-                {isAdmin && (
-                  <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                        <Plus className="h-3.5 w-3.5" /> Additional Roles
-                      </h4>
-                      {!addRoleMode && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setAddRoleMode(true)}>
-                          <Plus className="h-3 w-3" /> Add Role
-                        </Button>
+                {isAdmin && (() => {
+                  const MIGRATION_SQL = `-- Run once in Supabase SQL Editor → SQL Editor → New query
+ALTER TABLE public.user_roles
+  DROP CONSTRAINT IF EXISTS ux_user_roles_user_id;
+ALTER TABLE public.user_roles
+  DROP CONSTRAINT IF EXISTS user_roles_user_id_key;
+ALTER TABLE public.user_roles
+  ADD CONSTRAINT uq_user_roles_user_role
+  UNIQUE (user_id, role);
+ALTER TABLE public.user_roles
+  ADD COLUMN IF NOT EXISTS hub_id text;
+ALTER TABLE public.user_roles
+  ADD COLUMN IF NOT EXISTS assigned_by uuid
+  REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.user_roles
+  ADD COLUMN IF NOT EXISTS assigned_at timestamptz DEFAULT now();`;
+
+                  return (
+                    <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                          <Plus className="h-3.5 w-3.5" /> Additional Roles
+                        </h4>
+                        {!addRoleMode && !rolesNeedsMigration && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setAddRoleMode(true)}>
+                            <Plus className="h-3 w-3" /> Add Role
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* ── Migration required banner ── */}
+                      {rolesNeedsMigration ? (
+                        <div className="rounded-lg border border-amber-400/40 bg-amber-50/60 dark:bg-amber-900/20 p-3 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">One-time database setup required</p>
+                              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                                The <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">user_roles</code> table currently allows only one role per user.
+                                Run the SQL below in your <strong>Supabase SQL Editor</strong> to enable multiple roles, then try again.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <pre className="text-[10px] leading-relaxed font-mono bg-[#0d1117] text-green-300 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{MIGRATION_SQL}</pre>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(MIGRATION_SQL);
+                                toast({ title: 'SQL copied!', description: 'Paste it into Supabase SQL Editor and click Run.' });
+                              }}
+                              className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-semibold bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded transition-colors"
+                            >
+                              <Upload className="h-3 w-3" /> Copy SQL
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href="https://supabase.com/dashboard/project/_/sql/new"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                            >
+                              <Globe className="h-3 w-3" /> Open Supabase SQL Editor ↗
+                            </a>
+                            <span className="text-muted-foreground text-[10px]">—</span>
+                            <button
+                              onClick={() => { setRolesNeedsMigration(false); setAddRoleMode(true); }}
+                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                            >
+                              I've run it, try again
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-[11px] text-muted-foreground">
+                            Secondary roles this user holds in addition to their primary role — optionally scoped to a specific hub.
+                          </p>
+
+                          {additionalRoles.length === 0 && !addRoleMode && (
+                            <p className="text-xs text-muted-foreground italic">No additional roles assigned.</p>
+                          )}
+                          <div className="space-y-2">
+                            {additionalRoles.map(ar => (
+                              <div key={ar.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge variant="secondary" className="text-xs font-medium">
+                                    {toRoleLabel(ar.role) || ar.role}
+                                  </Badge>
+                                  {ar.hub_id && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <MapPin className="h-3 w-3" /> {ar.hub_id}
+                                    </span>
+                                  )}
+                                  {ar.assigned_at && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Since {new Date(ar.assigned_at).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                                <Button size="sm" variant="ghost"
+                                  className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
+                                  onClick={() => handleRemoveAdditionalRole(ar.id)}
+                                  title="Remove this role">
+                                  <UserX className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+
+                          {addRoleMode && (
+                            <div className="rounded-lg border bg-background p-3 space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-medium">Role</label>
+                                  <select
+                                    className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
+                                    value={newRolePick}
+                                    onChange={e => setNewRolePick(e.target.value)}
+                                  >
+                                    <option value="">Select role…</option>
+                                    {(VISIBLE_ROLE_CODES as readonly string[])
+                                      .filter(r => normalizeRole(r) !== normalizeRole(user.role || ''))
+                                      .map(r => (
+                                        <option key={r} value={r}>{toRoleLabel(r) || r}</option>
+                                      ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-medium">Hub Scope <span className="text-muted-foreground font-normal">(optional)</span></label>
+                                  <select
+                                    className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
+                                    value={newRoleHub}
+                                    onChange={e => setNewRoleHub(e.target.value)}
+                                  >
+                                    <option value="">System-wide (no hub restriction)</option>
+                                    {hubs.map(h => (
+                                      <option key={h.id} value={h.id}>{h.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={handleAddRole} disabled={!newRolePick || addRoleSaving} className="gap-1.5">
+                                  {addRoleSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                  {addRoleSaving ? 'Saving…' : 'Add Role'}
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => { setAddRoleMode(false); setNewRolePick(''); setNewRoleHub(''); }}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Secondary roles this user holds in addition to their primary role — optionally scoped to a specific hub.
-                    </p>
-
-                    {/* Existing additional roles list */}
-                    {additionalRoles.length === 0 && !addRoleMode && (
-                      <p className="text-xs text-muted-foreground italic">No additional roles assigned.</p>
-                    )}
-                    <div className="space-y-2">
-                      {additionalRoles.map(ar => (
-                        <div key={ar.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="secondary" className="text-xs font-medium">
-                              {toRoleLabel(ar.role) || ar.role}
-                            </Badge>
-                            {ar.hub_id && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <MapPin className="h-3 w-3" /> {ar.hub_id}
-                              </span>
-                            )}
-                            {ar.assigned_at && (
-                              <span className="text-[10px] text-muted-foreground">
-                                Since {new Date(ar.assigned_at).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                          <Button size="sm" variant="ghost"
-                            className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 shrink-0"
-                            onClick={() => handleRemoveAdditionalRole(ar.id)}
-                            title="Remove this role">
-                            <UserX className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add role form */}
-                    {addRoleMode && (
-                      <div className="rounded-lg border bg-background p-3 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium">Role</label>
-                            <select
-                              className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
-                              value={newRolePick}
-                              onChange={e => setNewRolePick(e.target.value)}
-                            >
-                              <option value="">Select role…</option>
-                              {(VISIBLE_ROLE_CODES as readonly string[])
-                                .filter(r => normalizeRole(r) !== normalizeRole(user.role || ''))
-                                .map(r => (
-                                  <option key={r} value={r}>{toRoleLabel(r) || r}</option>
-                                ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium">Hub Scope <span className="text-muted-foreground font-normal">(optional)</span></label>
-                            <select
-                              className="border rounded-lg px-3 py-2 w-full h-9 text-xs bg-background"
-                              value={newRoleHub}
-                              onChange={e => setNewRoleHub(e.target.value)}
-                            >
-                              <option value="">System-wide (no hub restriction)</option>
-                              {hubs.map(h => (
-                                <option key={h.id} value={h.id}>{h.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={handleAddRole} disabled={!newRolePick || addRoleSaving} className="gap-1.5">
-                            {addRoleSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                            {addRoleSaving ? 'Saving…' : 'Add Role'}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => { setAddRoleMode(false); setNewRolePick(''); setNewRoleHub(''); }}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  );
+                })()}
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-3 border border-border/40">
                   <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
