@@ -399,6 +399,7 @@ const CostSubmission = () => {
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
   const [actionProcessing, setActionProcessing] = useState(false);
   const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
     open: boolean;
@@ -1857,6 +1858,57 @@ const CostSubmission = () => {
     if (derivedStatus === 'paid' || derivedStatus === 'reconciled') return false;
     if (derivedStatus !== 'under_review' && derivedStatus !== 'approved') return false;
     return isSuperAdmin || isAdmin;
+  };
+
+  /** Returns the tier label (T1/T2/T3/T4) that would be reverted, or null if no revert is possible */
+  const getRevertTierLabel = (oc: OperationalCostSubmission): string | null => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus === 'paid' || derivedStatus === 'reconciled' || derivedStatus === 'rejected' || derivedStatus === 'pending') return null;
+    if (hasFourTiers(oc) && oc.tier4_status === 'approved') return 'T4';
+    if ((hasThreeTiers(oc) || hasFourTiers(oc)) && oc.tier3_status === 'approved') return 'T3';
+    if (oc.tier2_status === 'approved') return 'T2';
+    if (oc.tier1_status === 'approved') return 'T1';
+    return null;
+  };
+
+  const canRevertSubmission = (oc: OperationalCostSubmission): boolean => {
+    if (!isSuperAdmin && !isAdmin) return false;
+    return getRevertTierLabel(oc) !== null;
+  };
+
+  /** Compute the minimal DB update needed to step back one approval tier */
+  const computeRevertUpdates = (oc: OperationalCostSubmission): Record<string, unknown> => {
+    const tier = getRevertTierLabel(oc);
+    const base = { updated_at: new Date().toISOString() };
+    if (tier === 'T4') return { ...base, tier4_status: 'pending', tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
+    if (tier === 'T3') return { ...base, tier3_status: 'pending', tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
+    if (tier === 'T2') return { ...base, tier2_status: 'pending', tier2_approved_by: null, tier2_approved_at: null, tier2_notes: null, tier3_status: null, tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
+    // T1 — full reset to pending
+    return { ...base, tier1_status: 'pending', tier1_approved_by: null, tier1_approved_at: null, tier1_notes: null, tier2_status: 'pending', tier2_approved_by: null, tier2_approved_at: null, tier2_notes: null, tier3_status: null, tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'pending' };
+  };
+
+  const handleRevertSubmission = async () => {
+    if (!revertConfirm) return;
+    setActionProcessing(true);
+    try {
+      const updates = computeRevertUpdates(revertConfirm);
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update(updates)
+        .eq('id', revertConfirm.id);
+      if (error) {
+        toast({ title: 'Revert Failed / فشل الإرجاع', description: error.message, variant: 'destructive' });
+      } else {
+        const tier = getRevertTierLabel(revertConfirm);
+        toast({ title: 'Reverted / تم الإرجاع', description: `Submission reverted one step (${tier} undone). / تم إرجاع الطلب خطوة واحدة للخلف.` });
+        fetchOperationalCosts();
+      }
+    } catch (err) {
+      toast({ title: 'Error / خطأ', description: 'Failed to revert submission.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setRevertConfirm(null);
+    }
   };
 
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
@@ -5678,6 +5730,18 @@ const CostSubmission = () => {
                                 Recall
                               </Button>
                             )}
+                            {canRevertSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-amber-400 text-amber-700 hover:bg-amber-50"
+                                onClick={() => setRevertConfirm(oc)}
+                                data-testid={`button-revert-submission-${oc.id}`}
+                              >
+                                <RotateCcw className="h-3 w-3 mr-1" />
+                                Revert {getRevertTierLabel(oc)}
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -6479,6 +6543,15 @@ const CostSubmission = () => {
                             {canRecallSubmission(oc) && (
                               <button className={btnGhost} onClick={() => setRecallConfirm(oc)} data-testid={`button-recall-submission-${oc.id}`}>
                                 <RotateCcw className="h-3.5 w-3.5" />Recall
+                              </button>
+                            )}
+                            {canRevertSubmission(oc) && (
+                              <button
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-amber-400 text-amber-700 hover:bg-amber-50 transition-colors"
+                                onClick={() => setRevertConfirm(oc)}
+                                data-testid={`button-revert-submission-${oc.id}`}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />Revert {getRevertTierLabel(oc)}
                               </button>
                             )}
                             {canDeleteSubmission(oc) && (
@@ -8051,6 +8124,38 @@ const CostSubmission = () => {
               data-testid="button-recall-confirm"
             >
               {actionProcessing ? 'Recalling... / جارٍ الاسترجاع...' : 'Recall to Pending / استرجاع إلى معلق'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revert one tier — Admin/SuperAdmin only */}
+      <AlertDialog open={!!revertConfirm} onOpenChange={(open) => !open && setRevertConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="dialog-revert-title">
+              Revert {revertConfirm ? getRevertTierLabel(revertConfirm) : ''} Approval
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">إرجاع الموافقة خطوة للخلف</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will undo only the <strong>{revertConfirm ? getRevertTierLabel(revertConfirm) : ''}</strong> approval and return the submission to the previous step. All earlier approvals remain intact.
+              <span dir="rtl" className="block text-xs mt-1">سيتم إلغاء موافقة {revertConfirm ? getRevertTierLabel(revertConfirm) : ''} فقط وإعادة الطلب إلى الخطوة السابقة. جميع الموافقات السابقة تبقى سارية.</span>
+              {revertConfirm && (
+                <span className="block mt-2 font-medium text-amber-700">
+                  {revertConfirm.currency} {(revertConfirm.amount_cents / 100).toLocaleString()} — {revertConfirm.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-revert-cancel">Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={(e) => { e.preventDefault(); handleRevertSubmission(); }}
+              disabled={actionProcessing}
+              data-testid="button-revert-confirm"
+            >
+              {actionProcessing ? 'Reverting... / جارٍ الإرجاع...' : `Revert ${revertConfirm ? getRevertTierLabel(revertConfirm) : ''} / إرجاع`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
