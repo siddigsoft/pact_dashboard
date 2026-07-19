@@ -460,7 +460,11 @@ const CostSubmission = () => {
     proofPreviewUrl: string | null;
     notes: string;
     uploading: boolean;
-  }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    preFundId: string | null;
+    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+    payMode: 'full' | 'percent' | 'custom';
+    payPercent: string;
+  }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
 
   // In-page attachment/receipt viewer
   const [attachViewer, setAttachViewer] = useState<{ open: boolean; url: string; name: string }>({ open: false, url: '', name: '' });
@@ -2247,10 +2251,21 @@ const CostSubmission = () => {
     });
   };
 
-  const handleOpenBatchCostPay = (subs: OperationalCostSubmission[]) => {
+  const handleOpenBatchCostPay = async (subs: OperationalCostSubmission[]) => {
     const eligible = subs.filter(s => canMarkAsPaid(s));
     if (eligible.length === 0) return;
-    setBatchCostPayDialog({ open: true, submissions: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
+    try {
+      const { data: pfData } = await supabase
+        .from('pre_fund_requests' as any)
+        .select('id, name, currency, available_balance')
+        .in('status', ['active', 'low_balance'])
+        .order('name');
+      preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+        id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+      }));
+    } catch (_) {}
+    setBatchCostPayDialog({ open: true, submissions: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds, payMode: 'full', payPercent: '100' });
   };
 
   const handleBatchCostPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2261,12 +2276,21 @@ const CostSubmission = () => {
   };
 
   const handleConfirmBatchCostPay = async () => {
-    const { submissions: subs, proofFile, notes } = batchCostPayDialog;
+    const { submissions: subs, proofFile, notes, preFundId, payMode, payPercent } = batchCostPayDialog;
     if (!currentUser?.id || subs.length === 0) return;
     if (!proofFile) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
       return;
     }
+    // Compute pay fraction
+    const payFraction = payMode === 'full' ? 1
+      : payMode === 'percent' ? Math.min(1, Math.max(0, parseFloat(payPercent || '0') / 100))
+      : Math.min(1, Math.max(0, parseFloat(payPercent || '0') / 100));
+    if (payFraction <= 0) {
+      toast({ title: 'Invalid Amount / مبلغ غير صحيح', description: 'Enter a positive amount or percentage.', variant: 'destructive' });
+      return;
+    }
+
     setBatchCostPayDialog(prev => ({ ...prev, uploading: true }));
     try {
       const timestamp = Date.now();
@@ -2281,9 +2305,13 @@ const CostSubmission = () => {
       let successCount = 0;
       let failCount = 0;
       for (const sub of subs) {
+        const remainingCents = sub.amount_cents - (sub.amount_paid_cents ?? 0);
+        const payNowCents = payMode === 'full' ? remainingCents : Math.round(remainingCents * payFraction);
+        const newPaidCents = (sub.amount_paid_cents ?? 0) + payNowCents;
+        const isFullyPaid = newPaidCents >= sub.amount_cents;
         const { error } = await supabase.from('operational_cost_submissions').update({
-          status: 'paid',
-          amount_paid_cents: sub.amount_cents,
+          status: isFullyPaid ? 'paid' : 'partially_paid',
+          amount_paid_cents: newPaidCents,
           paid_at: now,
           paid_by: currentUser.id,
           updated_at: now,
@@ -2293,11 +2321,11 @@ const CostSubmission = () => {
         }).eq('id', sub.id);
         if (error) { failCount++; } else {
           successCount++;
-          // Auto-link each paid submission to an active pre-fund — awaited
+          // Link to selected pre-fund or auto-link to active fund
           try {
             const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
             const r = await linkPaymentToPreFund({
-              amount: sub.amount_cents / 100,
+              amount: payNowCents / 100,
               currency: sub.currency,
               countryId: (sub as any).country_id ?? null,
               projectId: (sub as any).project_id ?? null,
@@ -2309,6 +2337,7 @@ const CostSubmission = () => {
               paymentDate: now,
               createdBy: currentUser.id,
               userId: sub.submitted_by ?? null,
+              ...(preFundId ? { preFundId } : {}),
             });
             if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message);
           } catch (pfErr: any) {
@@ -2369,7 +2398,7 @@ const CostSubmission = () => {
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
         description: `${successCount} submission${successCount > 1 ? 's' : ''} paid with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
       });
-      setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+      setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
       setSelectedCostIds(new Set());
       fetchOperationalCosts();
     } catch (err: any) {
@@ -5070,15 +5099,17 @@ const CostSubmission = () => {
 
                       return (
                         <div>
-                          {/* Navy header row: checkbox + collapse button */}
+                          {/* Navy header row: checkbox + collapse button — entire row is clickable */}
                           <div
-                            className="flex items-stretch bg-gradient-to-r from-[#0F2041] to-[#1D3461]"
+                            className="flex items-stretch bg-gradient-to-r from-[#0F2041] to-[#1D3461] cursor-pointer select-none hover:from-[#1a2f58] hover:to-[#243d6e] transition-colors"
                             style={{ borderLeft: `4px solid ${headerBorderColor}` }}
+                            onClick={() => toggleGroup(groupId!)}
+                            data-testid={`button-group-toggle-${groupId}`}
                           >
-                            {/* Group-level checkbox */}
+                            {/* Group-level checkbox — stops propagation so it doesn't also toggle expand */}
                             {groupPayableItems.length > 0 && (
                               <div
-                                className="flex-none flex flex-col items-center justify-center px-3 cursor-pointer hover:bg-white/10 border-r border-white/10 gap-1"
+                                className="flex-none flex flex-col items-center justify-center px-3 hover:bg-white/10 border-r border-white/10 gap-1"
                                 onClick={handleGroupCheckbox}
                                 data-testid={`checkbox-group-${groupId}`}
                                 title="Select all payable items in this group for batch payment"
@@ -5095,11 +5126,9 @@ const CostSubmission = () => {
                               </div>
                             )}
 
-                            {/* Collapse / expand toggle */}
-                            <button
-                              className="flex-1 text-left focus:outline-none px-4 py-3"
-                              onClick={() => toggleGroup(groupId!)}
-                              data-testid={`button-group-toggle-${groupId}`}
+                            {/* Collapse / expand toggle content area */}
+                            <div
+                              className="flex-1 text-left px-4 py-3"
                             >
                               <div className="flex items-start gap-3">
                                 <div className="flex-none mt-0.5">
@@ -5183,7 +5212,7 @@ const CostSubmission = () => {
                                   </div>
                                 </div>
                               </div>
-                            </button>
+                            </div>
                           </div>
 
                           {/* Progress bar — 5 segments: done / partial / pending / rejected */}
@@ -5226,7 +5255,7 @@ const CostSubmission = () => {
                               {groupPayableItems.length > 0 && (
                                 <Button size="sm"
                                   className="h-7 px-3 text-xs bg-green-700 hover:bg-green-600 text-white border border-green-600/50"
-                                  onClick={(e) => { e.stopPropagation(); setBatchCostPayDialog({ open: true, submissions: groupPayableItems, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false }); }}
+                                  onClick={(e) => { e.stopPropagation(); handleOpenBatchCostPay(groupPayableItems); }}
                                   disabled={actionProcessing}
                                   data-testid={`button-group-mark-paid-all-${groupId}`}>
                                   <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
@@ -9438,6 +9467,42 @@ const CostSubmission = () => {
                 <Label className="text-sm font-medium">
                   Amount to Pay / المبلغ المدفوع <span className="text-red-500">*</span>
                 </Label>
+                {/* Quick-pick % buttons */}
+                {markAsPaidDialog.submission && (() => {
+                  const sub = markAsPaidDialog.submission!;
+                  const rem = (sub.amount_cents - (sub.amount_paid_cents ?? 0)) / 100;
+                  const setAmt = (pct: number) => setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: (rem * pct / 100).toFixed(2) }));
+                  const curVal = parseFloat(markAsPaidDialog.payAmountStr) || 0;
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: 'Full / الكل', pct: 100 },
+                        { label: '75%', pct: 75 },
+                        { label: '50%', pct: 50 },
+                        { label: '25%', pct: 25 },
+                      ].map(opt => {
+                        const optAmt = parseFloat((rem * opt.pct / 100).toFixed(2));
+                        const isActive = Math.abs(curVal - optAmt) < 0.01;
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            disabled={markAsPaidDialog.uploading}
+                            onClick={() => setAmt(opt.pct)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                              isActive
+                                ? 'bg-green-600 text-white border-green-600'
+                                : 'bg-background border-input text-foreground hover:bg-accent'
+                            }`}
+                            data-testid={`button-pay-quick-${opt.pct}`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-muted-foreground w-12 shrink-0">{markAsPaidDialog.submission?.currency}</span>
                   <input
@@ -9452,18 +9517,6 @@ const CostSubmission = () => {
                     className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     data-testid="input-pay-amount"
                   />
-                  <button
-                    type="button"
-                    className="text-xs text-blue-600 hover:underline shrink-0"
-                    onClick={() => {
-                      const sub = markAsPaidDialog.submission!;
-                      const rem = (sub.amount_cents - (sub.amount_paid_cents ?? 0)) / 100;
-                      setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: rem.toFixed(2) }));
-                    }}
-                    disabled={markAsPaidDialog.uploading}
-                  >
-                    Full / الكل
-                  </button>
                 </div>
                 {(() => {
                   const sub = markAsPaidDialog.submission!;
@@ -9661,7 +9714,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !batchCostPayDialog.uploading) {
             if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
-            setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+            setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
           }
         }}
       >
@@ -9676,7 +9729,14 @@ const CostSubmission = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {batchCostPayDialog.submissions.length > 0 && (
+          {batchCostPayDialog.submissions.length > 0 && (() => {
+            const batchCurrency = batchCostPayDialog.submissions[0]?.currency || '';
+            const totalRemaining = batchCostPayDialog.submissions.reduce((s, sub) => s + (sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
+            const pct = parseFloat(batchCostPayDialog.payPercent || '0');
+            const payNowCents = batchCostPayDialog.payMode === 'full' ? totalRemaining : Math.round(totalRemaining * Math.min(1, Math.max(0, pct / 100)));
+            const isPartial = batchCostPayDialog.payMode !== 'full' && payNowCents < totalRemaining;
+            const selectedFund = batchCostPayDialog.preFunds.find(f => f.id === batchCostPayDialog.preFundId);
+            return (
             <div className="space-y-4">
               {/* Summary */}
               <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-1">
@@ -9685,17 +9745,18 @@ const CostSubmission = () => {
                     {batchCostPayDialog.submissions.length} Submission{batchCostPayDialog.submissions.length > 1 ? 's' : ''}
                   </span>
                   <span className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                    {batchCostPayDialog.submissions[0]?.currency} {batchCostPayDialog.submissions.reduce((s, sub) => s + sub.amount_cents / 100, 0).toLocaleString()}
+                    {batchCurrency} {(totalRemaining / 100).toLocaleString()}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">Total covered by this single receipt</p>
+                <p className="text-xs text-muted-foreground">Total remaining to pay — covered by this single receipt</p>
               </div>
 
               {/* Breakdown */}
-              <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+              <div className="rounded-lg border divide-y max-h-40 overflow-y-auto">
                 {batchCostPayDialog.submissions.map((sub) => {
                   const submitterName = users.find(u => u.id === sub.submitted_by)?.name || 'Unknown';
                   const ref = sub.reference_number || sub.id.slice(0, 8).toUpperCase();
+                  const remaining = (sub.amount_cents - (sub.amount_paid_cents ?? 0)) / 100;
                   return (
                     <div key={sub.id} className="flex items-center justify-between px-3 py-2 text-sm">
                       <div className="min-w-0">
@@ -9703,12 +9764,117 @@ const CostSubmission = () => {
                         <p className="text-xs text-muted-foreground">{submitterName} · Ref {ref}</p>
                       </div>
                       <span className="font-semibold tabular-nums shrink-0 ml-2">
-                        {sub.currency} {(sub.amount_cents / 100).toLocaleString()}
+                        {sub.currency} {remaining.toLocaleString()}
                       </span>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Amount to Pay */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Amount to Pay / المبلغ المدفوع <span className="text-red-500">*</span>
+                </Label>
+                {/* Quick-pick % buttons */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: 'Full / الكل', mode: 'full' as const, pct: '100' },
+                    { label: '75%', mode: 'percent' as const, pct: '75' },
+                    { label: '50%', mode: 'percent' as const, pct: '50' },
+                    { label: '25%', mode: 'percent' as const, pct: '25' },
+                    { label: 'Custom %', mode: 'custom' as const, pct: '' },
+                  ].map(opt => {
+                    const isActive = opt.mode === 'full'
+                      ? batchCostPayDialog.payMode === 'full'
+                      : batchCostPayDialog.payMode === opt.mode && (opt.pct === '' || batchCostPayDialog.payPercent === opt.pct);
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        disabled={batchCostPayDialog.uploading}
+                        onClick={() => setBatchCostPayDialog(prev => ({
+                          ...prev,
+                          payMode: opt.mode === 'custom' ? 'custom' : opt.mode,
+                          payPercent: opt.pct || prev.payPercent,
+                        }))}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                          isActive
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-background border-input text-foreground hover:bg-accent'
+                        }`}
+                        data-testid={`button-batch-pay-mode-${opt.label.replace(/\s/g, '-').toLowerCase()}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Custom % input */}
+                {batchCostPayDialog.payMode !== 'full' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="100"
+                      value={batchCostPayDialog.payPercent}
+                      onChange={e => setBatchCostPayDialog(prev => ({ ...prev, payPercent: e.target.value, payMode: 'percent' }))}
+                      disabled={batchCostPayDialog.uploading}
+                      placeholder="e.g. 60"
+                      className="w-24 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                      data-testid="input-batch-pay-percent"
+                    />
+                    <span className="text-sm text-muted-foreground">%  →  {batchCurrency} {(payNowCents / 100).toLocaleString()}</span>
+                  </div>
+                )}
+                {/* Settlement info */}
+                {isPartial ? (
+                  <p className="text-xs text-orange-600 dark:text-orange-400">
+                    Partial payment — {batchCurrency} {((totalRemaining - payNowCents) / 100).toLocaleString()} will remain outstanding across all submissions
+                  </p>
+                ) : (
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    This will fully settle all {batchCostPayDialog.submissions.length} submissions
+                  </p>
+                )}
+              </div>
+
+              {/* Charge to Pre-Fund */}
+              {batchCostPayDialog.preFunds.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Charge to Pre-Fund / خصم من التمويل المسبق
+                    {batchCostPayDialog.preFundId
+                      ? <span className="ml-1 text-xs font-normal text-emerald-600">✓ Selected</span>
+                      : <span className="ml-1 text-xs font-normal text-muted-foreground">(optional — select to deduct from fund)</span>
+                    }
+                  </Label>
+                  <Select
+                    value={batchCostPayDialog.preFundId ?? 'none'}
+                    onValueChange={v => setBatchCostPayDialog(prev => ({ ...prev, preFundId: v === 'none' ? null : v }))}
+                    disabled={batchCostPayDialog.uploading}
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="select-batch-pay-pre-fund">
+                      <SelectValue placeholder="Select a pre-fund…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No pre-fund —</SelectItem>
+                      {batchCostPayDialog.preFunds.map(f => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedFund && (
+                    <p className={`text-xs ${(selectedFund.available_balance - payNowCents / 100) < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
+                      After payment: {selectedFund.currency} {(selectedFund.available_balance - payNowCents / 100).toLocaleString()} remaining
+                      {(selectedFund.available_balance - payNowCents / 100) < 0 && ' ⚠ Exceeds available balance'}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Receipt upload */}
               <div className="space-y-2">
@@ -9765,7 +9931,8 @@ const CostSubmission = () => {
                 Each submitter receives one consolidated payment notification listing all their paid submissions.
               </p>
             </div>
-          )}
+            );
+          })()}
 
           <DialogFooter className="gap-2">
             <Button
@@ -9773,7 +9940,7 @@ const CostSubmission = () => {
               variant="outline"
               onClick={() => {
                 if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
-                setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+                setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
               }}
               disabled={batchCostPayDialog.uploading}
               data-testid="button-cancel-batch-cost-pay"
@@ -9789,9 +9956,13 @@ const CostSubmission = () => {
             >
               {batchCostPayDialog.uploading ? (
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Processing...</>
-              ) : (
-                <><CheckCircle className="h-4 w-4 mr-1.5" /> Pay {batchCostPayDialog.submissions.length} Submission{batchCostPayDialog.submissions.length > 1 ? 's' : ''}</>
-              )}
+              ) : (() => {
+                const total = batchCostPayDialog.submissions.reduce((s, sub) => s + (sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
+                const pct = parseFloat(batchCostPayDialog.payPercent || '0');
+                const payAmt = batchCostPayDialog.payMode === 'full' ? total : Math.round(total * Math.min(1, pct / 100));
+                const currency = batchCostPayDialog.submissions[0]?.currency || '';
+                return <><CheckCircle className="h-4 w-4 mr-1.5" /> Pay {batchCostPayDialog.submissions.length} — {currency} {(payAmt / 100).toLocaleString()}</>;
+              })()}
             </Button>
           </DialogFooter>
         </DialogContent>
