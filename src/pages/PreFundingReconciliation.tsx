@@ -25,6 +25,33 @@ import {
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+
+/** Fetch ALL rows from a Supabase query — auto-paginates 1000 rows at a time. */
+async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryFn().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+/** Batched .in() fetch — splits large ID lists into 500-ID chunks. */
+async function fetchAllIn<T = any>(queryFn: (chunk: string[]) => any, ids: string[]): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const CHUNK = 500;
+  const batches: Promise<T[]>[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    batches.push(fetchAll<T>(() => queryFn(ids.slice(i, i + CHUNK))));
+  }
+  return (await Promise.all(batches)).flat();
+}
 import { linkPaymentToKnownFund } from '@/utils/preFundLinkage';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -724,53 +751,46 @@ export default function PreFundingReconciliation() {
   const loadTxns = useCallback(async (fundId: string) => {
     setTxnLoading(true);
     try {
-      const [txnRes, reconRes] = await Promise.all([
-        supabase.from('pre_fund_transactions').select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false }),
-        supabase.from('pre_fund_reconciliations').select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false }),
+      const [rawTxns, reconData] = await Promise.all([
+        // Unlimited fetch — paginate through all txns for this fund
+        fetchAll(() => supabase.from('pre_fund_transactions').select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false })),
+        fetchAll(() => supabase.from('pre_fund_reconciliations').select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false })),
       ]);
-      const rawTxns: any[] = (txnRes.data as any) ?? [];
 
       // Filter out transactions whose source DP/OCS has been deleted or cancelled
-      const dpIds = [...new Set(rawTxns.filter(t => t.source_table === 'down_payment_requests' && t.source_id).map(t => t.source_id as string))];
-      const ocsIds = [...new Set(rawTxns.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id).map(t => t.source_id as string))];
+      const dpIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
+      const ocsIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id).map((t: any) => t.source_id as string))];
+      const rawTxnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
 
-      // For old txns with NULL source_table, the DP stores the back-link via pre_fund_transaction_id
-      const rawTxnIds = rawTxns.map(t => t.id).filter(Boolean);
-      const [validDpRes, validOcsRes, backLinkedDpsRes] = await Promise.all([
-        dpIds.length > 0
-          ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds)
-          : Promise.resolve({ data: [] }),
-        ocsIds.length > 0
-          ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds)
-          : Promise.resolve({ data: [] }),
-        // Fetch DPs whose pre_fund_transaction_id points to one of these txn rows
-        rawTxnIds.length > 0
-          ? (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', rawTxnIds)
-          : Promise.resolve({ data: [] }),
+      // Batched .in() fetches — no row cap, no URL-length issues
+      const [validDpData, validOcsData, backLinkedDpData] = await Promise.all([
+        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpIds),
+        fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
+        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
       ]);
 
       // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
-      const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+      const validDpSet  = new Set(validDpData.filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
       // DPs whose money has NOT yet moved (pre-disbursement / reverted / deleted).
       // Payment txns linked to these DPs are excluded from Paid Out totals.
       // 'approved' and all terminal paid states are intentionally NOT in this set.
       const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
       const paidDpSet = new Set(
-        (validDpRes.data ?? [])
+        validDpData
           .filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true)
           .map((d: any) => d.id as string)
       );
-      const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
+      const validOcsSet = new Set(validOcsData.map((o: any) => o.id as string));
 
       // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
       const deletedDpTxnIds = new Set<string>(
-        (backLinkedDpsRes.data ?? [])
+        backLinkedDpData
           .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
           .map((d: any) => d.pre_fund_transaction_id as string)
       );
       // Old-style txns (NULL source_table): IDs back-linked from a DP that has NOT disbursed
       const nonPaidBackLinkedTxnIds = new Set<string>(
-        (backLinkedDpsRes.data ?? [])
+        backLinkedDpData
           .filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true)
           .map((d: any) => d.pre_fund_transaction_id as string)
       );
@@ -797,7 +817,7 @@ export default function PreFundingReconciliation() {
       });
 
       setTxns(txns);
-      setRecons((reconRes.data as any) ?? []);
+      setRecons(reconData as any);
 
       // Load profiles for user_id + created_by in transactions
       const userIds = new Set<string>();

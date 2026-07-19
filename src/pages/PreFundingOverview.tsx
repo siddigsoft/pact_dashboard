@@ -21,6 +21,35 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
 
+/** Fetch ALL rows from a Supabase query — auto-paginates 1000 rows at a time so no rows are ever silently dropped. */
+async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryFn().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+/** Batched .in() fetch — splits large ID lists into 500-ID chunks to avoid URL-length limits. */
+async function fetchAllIn<T = any>(queryFn: (chunk: string[]) => any, ids: string[]): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const CHUNK = 500;
+  const batches: Promise<T[]>[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    batches.push(fetchAll<T>(() => queryFn(slice)));
+  }
+  const results = await Promise.all(batches);
+  return results.flat();
+}
+
 interface PreFundRow {
   id: string; name: string; source: string | null;
   amount: number; currency: string;
@@ -193,15 +222,17 @@ export default function PreFundingOverview() {
 
   const load = useCallback(async () => {
     try {
-      const [fundsRes, ratesRes, settingsRes, allocsRes, txnsRes, profRes] = await Promise.all([
+      // Fetch simple tables (small row counts) in parallel
+      const [fundsRes, ratesRes, settingsRes, allocsData, rawTxns, profData] = await Promise.all([
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
-        (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false }),
-        (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false }).range(0, 9999),
-        supabase.from('profiles').select('id,full_name,email'),
+        // Unlimited fetches — auto-paginate through every row
+        fetchAll(() => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').order('allocated_amount', { ascending: false })),
+        fetchAll(() => (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').order('transaction_date', { ascending: false })),
+        fetchAll(() => supabase.from('profiles').select('id,full_name,email')),
       ]);
 
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
@@ -212,43 +243,40 @@ export default function PreFundingOverview() {
         setSettings({ base_currency: s.base_currency ?? 'USD' });
         setBase(s.base_currency ?? 'USD');
       }
-      if (!allocsRes.error) setAllocs((allocsRes.data as any) ?? []);
-      if (!txnsRes.error) {
-        const rawTxns: any[] = (txnsRes.data as any) ?? [];
+      setAllocs(allocsData as any);
+      {
         // Filter out transactions whose source DP/OCS has been deleted or cancelled
         const dpIds = [...new Set(rawTxns.filter(t => t.source_table === 'down_payment_requests' && t.source_id).map(t => t.source_id as string))];
         const ocsIds = [...new Set(rawTxns.filter(t => t.source_table === 'operational_cost_submissions' && t.source_id).map(t => t.source_id as string))];
         // For old txns with NULL source_table, the DP stores back-link via pre_fund_transaction_id
         const rawTxnIds = rawTxns.map(t => t.id).filter(Boolean);
-        const [validDpRes, validOcsRes, backLinkedDpsRes] = await Promise.all([
-          dpIds.length > 0 ? (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', dpIds).range(0, 9999) : Promise.resolve({ data: [] }),
-          ocsIds.length > 0 ? (supabase as any).from('operational_cost_submissions').select('id').in('id', ocsIds).range(0, 9999) : Promise.resolve({ data: [] }),
-          // Fetch DPs whose pre_fund_transaction_id points to one of these txn rows
-          rawTxnIds.length > 0
-            ? (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', rawTxnIds).range(0, 9999)
-            : Promise.resolve({ data: [] }),
+        // Fetch validation data — batched .in() so large ID lists don't truncate
+        const [validDpData, validOcsData, backLinkedDpData] = await Promise.all([
+          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpIds),
+          fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
+          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
         ]);
         // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
-        const validDpSet  = new Set((validDpRes.data ?? []).filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+        const validDpSet  = new Set(validDpData.filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
         // DPs whose money has NOT yet moved (pre-disbursement / reverted / deleted).
         // Payment txns linked to these DPs are excluded from Paid Out totals.
         // 'approved' and all terminal paid states are intentionally NOT in this set.
         const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
         const paidDpSet = new Set(
-          (validDpRes.data ?? [])
+          validDpData
             .filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true)
             .map((d: any) => d.id as string)
         );
-        const validOcsSet = new Set((validOcsRes.data ?? []).map((o: any) => o.id as string));
+        const validOcsSet = new Set(validOcsData.map((o: any) => o.id as string));
         // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
         const deletedDpTxnIds = new Set<string>(
-          (backLinkedDpsRes.data ?? [])
+          backLinkedDpData
             .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
         // Old-style txns (NULL source_table): IDs back-linked from a DP that has NOT disbursed
         const nonPaidBackLinkedTxnIds = new Set<string>(
-          (backLinkedDpsRes.data ?? [])
+          backLinkedDpData
             .filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
@@ -274,9 +302,9 @@ export default function PreFundingOverview() {
         });
         setTxns(validTxns);
       }
-      if (!profRes.error) {
+      {
         const m = new Map<string, string>();
-        ((profRes.data as any) ?? []).forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+        profData.forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
         setProfiles(m);
       }
     } catch (e: any) {
