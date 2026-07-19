@@ -7,7 +7,7 @@ import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, Info } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, Info, Camera } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -111,8 +111,35 @@ const UserDetail: FC = () => {
 
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
-
   const [isSaving, setIsSaving] = useState(false);
+
+  // ── Avatar upload ─────────────────────────────────────────────────────────
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith('image/')) { toast({ title: 'Invalid file', description: 'Please choose an image file.', variant: 'destructive' }); return; }
+    setAvatarUploading(true);
+    try {
+      const ext  = file.name.split('.').pop() ?? 'jpg';
+      const path = `avatars/${user.id}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const url = `${publicUrl}?t=${Date.now()}`;
+      const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id);
+      if (dbErr) throw dbErr;
+      setUser(prev => prev ? { ...prev, avatar: url } : prev);
+      toast({ title: 'Photo updated', description: 'Profile picture saved successfully.' });
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
   const [activeSection, setActiveSection] = useState('overview');
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -986,123 +1013,108 @@ const UserDetail: FC = () => {
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
 
-      {/* ── Sticky Dark Header ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 shadow-2xl" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}>
+      {/* ── Compact Page Header (scrolls with page — not sticky) ─────────── */}
+      {/* Hidden file input for avatar upload */}
+      <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
 
-        {/* Row 1: Compact breadcrumb nav */}
-        <div className="px-5 pt-3 pb-2 border-b border-white/8 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-[11px] text-white/50">
-            <button
-              onClick={() => navigate("/employees")}
-              className="flex items-center gap-1 hover:text-white/80 transition-colors"
-              data-testid="button-back-users"
-            >
-              <ArrowLeft className="h-3 w-3" />
-              <span>HR / Employees</span>
-            </button>
-            <span className="text-white/20">›</span>
-            <span className="text-white/70 font-medium truncate max-w-[180px]">{user.name}</span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {isAdmin && !editMode && !user.isApproved && (
-              <>
-                <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 h-7 text-[11px] px-2.5 border-0" data-testid="button-approve-user">
-                  <UserCheck className="h-3 w-3" />{isApproving ? 'Approving…' : 'Approve'}
-                </Button>
-                <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1 h-7 text-[11px] px-2.5" data-testid="button-reject-user">
-                  <UserX className="h-3 w-3" />{isRejecting ? 'Rejecting…' : 'Reject'}
-                </Button>
-              </>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-white/60 hover:text-white hover:bg-white/10 gap-1 h-7 text-[11px] px-2.5" data-testid="button-goto-signatures">
-              <FileSignature className="h-3 w-3" /><span className="hidden sm:inline">Signatures</span>
-            </Button>
-            {isAdmin && !editMode && (
-              <Button onClick={handleEdit} size="sm" className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1 h-7 text-[11px] px-2.5 font-semibold shadow" data-testid="button-edit-user">
-                <Edit className="h-3 w-3" />Edit Profile
-              </Button>
-            )}
-            {editMode && (
-              <>
-                <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px] px-2.5 font-semibold shadow border-0">
-                  {isSaving ? 'Saving…' : 'Save Changes'}
-                </Button>
-                <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 h-7 text-[11px] px-2.5">Cancel</Button>
-              </>
-            )}
-          </div>
-        </div>
+      <div className="shadow-lg" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 60%, #0f2240 100%)' }}>
 
-        {/* Row 2: Employee identity strip */}
+        {/* Single identity row — breadcrumb + avatar + name + actions */}
         {(() => {
           const fields = [user.name, user.email, user.phone, user.hubId, user.employeeId, user.bankAccount, empDepartmentId, empContractStart];
           const pct = Math.round((fields.filter(Boolean).length / fields.length) * 100);
           const initials = user.name?.split(' ').map((n: string) => n[0]).slice(0,2).join('').toUpperCase() || '??';
           return (
-            <div className="px-5 py-3 border-b border-white/10 flex items-center gap-4">
-              {/* Avatar with status dot */}
-              <div className="relative shrink-0">
+            <div className="px-4 py-2.5 flex items-center gap-3">
+
+              {/* Back breadcrumb */}
+              <button
+                onClick={() => navigate("/employees")}
+                className="flex items-center gap-1 text-[11px] text-white/50 hover:text-white/80 transition-colors shrink-0"
+                data-testid="button-back-users"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Employees</span>
+              </button>
+              <span className="text-white/20 text-xs shrink-0">›</span>
+
+              {/* Avatar — click to upload */}
+              <div className="relative shrink-0 group cursor-pointer" onClick={() => avatarInputRef.current?.click()} title="Click to change photo">
                 <div
-                  className="h-12 w-12 rounded-xl flex items-center justify-center text-white font-extrabold text-base shadow-lg ring-2 ring-white/15"
+                  className="h-9 w-9 rounded-lg flex items-center justify-center text-white font-extrabold text-sm shadow-md ring-2 ring-white/15 overflow-hidden"
                   style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}
                 >
-                  {user.avatar
-                    ? <img src={user.avatar} alt={user.name} className="h-12 w-12 rounded-xl object-cover" />
-                    : initials}
+                  {avatarUploading
+                    ? <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    : user.avatar
+                      ? <img src={user.avatar} alt={user.name} className="h-9 w-9 object-cover" />
+                      : initials}
                 </div>
-                <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0a1628] ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                {/* Upload overlay on hover */}
+                {!avatarUploading && (
+                  <div className="absolute inset-0 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Camera className="h-3.5 w-3.5 text-white" />
+                  </div>
+                )}
+                <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0a1628] ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
               </div>
+
               {/* Name + badges */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-white font-bold text-[15px] leading-tight">{user.name}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-white font-bold text-[13px] leading-tight truncate max-w-[200px]">{user.name}</span>
                   <RoleBadge role={user.role} size="sm" />
                   <UserClassificationBadge userId={user.id} />
-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-400/20 text-emerald-300' : 'bg-amber-400/20 text-amber-300'}`}>
+                  <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${user.isApproved ? 'bg-emerald-400/20 text-emerald-300' : 'bg-amber-400/20 text-amber-300'}`}>
                     ● {user.isApproved ? 'Active' : 'Pending'}
                   </span>
                 </div>
-                <p className="text-white/45 text-[11px] mt-0.5 truncate capitalize">
-                  {empType || 'Staff Member'}{user.employeeId ? ` · ${user.employeeId}` : ''}{user.email ? ` · ${user.email}` : ''}
-                </p>
-              </div>
-              {/* Profile completeness */}
-              <div className="hidden md:flex items-center gap-2 shrink-0">
-                <span className="text-white/35 text-[10px] uppercase tracking-wide">Profile</span>
-                <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-white/40 text-[10px] truncate capitalize">
+                    {empType || 'Staff Member'}{user.email ? ` · ${user.email}` : ''}
+                  </p>
+                  {/* Inline profile completeness */}
+                  <div className="hidden md:flex items-center gap-1.5 shrink-0">
+                    <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className={`text-[9px] font-bold ${pct >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</span>
+                  </div>
                 </div>
-                <span className={`text-[11px] font-bold ${pct >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</span>
               </div>
-              {/* Quick actions */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button onClick={() => navigate(`/signatures?user=${user.id}`)} className="flex items-center gap-1.5 text-[11px] font-semibold text-white/70 bg-white/8 hover:bg-white/15 border border-white/10 rounded-lg px-3 py-1.5 transition-all">
-                  <Mail className="h-3 w-3" /><span className="hidden sm:inline">Send Email</span>
-                </button>
-                {/* ── CV Export Format Picker ── */}
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 shrink-0">
+                {isAdmin && !editMode && !user.isApproved && (
+                  <>
+                    <Button onClick={handleApprove} disabled={isApproving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 h-7 text-[11px] px-2 border-0" data-testid="button-approve-user">
+                      <UserCheck className="h-3 w-3" /><span className="hidden sm:inline">{isApproving ? 'Approving…' : 'Approve'}</span>
+                    </Button>
+                    <Button onClick={handleReject} disabled={isRejecting} size="sm" variant="destructive" className="gap-1 h-7 text-[11px] px-2" data-testid="button-reject-user">
+                      <UserX className="h-3 w-3" /><span className="hidden sm:inline">{isRejecting ? 'Rejecting…' : 'Reject'}</span>
+                    </Button>
+                  </>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/signatures?user=${user.id}`)} className="text-white/60 hover:text-white hover:bg-white/10 gap-1 h-7 text-[11px] px-2" data-testid="button-goto-signatures">
+                  <FileSignature className="h-3 w-3" /><span className="hidden md:inline">Signatures</span>
+                </Button>
+
+                {/* CV Export dropdown */}
                 <div className="relative" ref={cvMenuRef}>
                   <button
                     disabled={cvExporting}
                     onClick={() => setShowCvMenu(v => !v)}
-                    className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 rounded-lg px-2 h-7 transition-all disabled:opacity-50"
                     data-testid="button-export-cv"
-                    title="Export CV — choose format"
+                    title="Export CV"
                   >
-                    {cvExporting
-                      ? <Loader2 className="h-3 w-3 animate-spin" />
-                      : <Download className="h-3 w-3" />}
-                    <span className="hidden sm:inline">{cvExporting ? 'Exporting…' : 'Export CV'}</span>
+                    {cvExporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                    <span className="hidden md:inline">{cvExporting ? 'Exporting…' : 'CV'}</span>
                     {!cvExporting && <ChevronDown className="h-2.5 w-2.5 opacity-60" />}
                   </button>
-
                   {showCvMenu && !cvExporting && (
                     <>
-                      {/* Backdrop */}
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setShowCvMenu(false)}
-                      />
-                      {/* Dropdown panel */}
+                      <div className="fixed inset-0 z-40" onClick={() => setShowCvMenu(false)} />
                       <div className="absolute right-0 top-full mt-1.5 z-50 w-80 rounded-xl border border-white/10 bg-[#0d1f3c] shadow-2xl overflow-hidden">
                         <div className="px-3 py-2 border-b border-white/8">
                           <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Choose Export Format</p>
@@ -1149,16 +1161,31 @@ const UserDetail: FC = () => {
                           ))}
                         </div>
                         <div className="px-3 py-2 border-t border-white/8 bg-white/3">
-                          <p className="text-[9px] text-white/25 leading-snug">All formats export as PDF using profile data on file. UN P11 is also saved to the workspace dossier.</p>
+                          <p className="text-[9px] text-white/25 leading-snug">All formats export as PDF using profile data on file.</p>
                         </div>
                       </div>
                     </>
                   )}
                 </div>
-                {isAdmin && (
-                  <button onClick={() => navigate('/hr?tab=offboarding')} className="flex items-center gap-1.5 text-[11px] font-semibold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg px-3 py-1.5 transition-all">
-                    <UserX className="h-3 w-3" /><span className="hidden sm:inline">Offboard</span>
+
+                {isAdmin && !editMode && !user.isApproved === false && (
+                  <button onClick={() => navigate('/hr?tab=offboarding')} className="hidden md:flex items-center gap-1 text-[11px] font-semibold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg px-2 h-7 transition-all">
+                    <UserX className="h-3 w-3" />Offboard
                   </button>
+                )}
+
+                {isAdmin && !editMode && (
+                  <Button onClick={handleEdit} size="sm" className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1 h-7 text-[11px] px-2.5 font-semibold shadow" data-testid="button-edit-user">
+                    <Edit className="h-3 w-3" />Edit
+                  </Button>
+                )}
+                {editMode && (
+                  <>
+                    <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px] px-2.5 font-semibold shadow border-0">
+                      {isSaving ? 'Saving…' : 'Save'}
+                    </Button>
+                    <Button onClick={handleEditCancel} size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 h-7 text-[11px] px-2">Cancel</Button>
+                  </>
                 )}
               </div>
             </div>
