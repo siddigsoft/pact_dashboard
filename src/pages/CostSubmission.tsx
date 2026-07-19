@@ -405,6 +405,7 @@ const CostSubmission = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
   const [actionProcessing, setActionProcessing] = useState(false);
   const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
     open: boolean;
@@ -1928,6 +1929,39 @@ const CostSubmission = () => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved') return false;
     return isSuperAdmin || isAdmin || isFinanceAdmin;
+  };
+
+  // Revert Paid → back to Approved (SuperAdmin only; not once reconciled)
+  const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    return derivedStatus === 'paid' && isSuperAdmin;
+  };
+
+  const handleRevertPaid = async () => {
+    if (!revertPaidConfirm) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          status: 'approved',
+          paid_at: null,
+          paid_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', revertPaidConfirm.id);
+      if (error) {
+        toast({ title: 'Revert Failed / فشل الإرجاع', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Payment Reverted / تم إرجاع الدفعة', description: 'Submission moved back to Approved status. / تم إعادة الطلب إلى حالة الموافقة.' });
+        fetchOperationalCosts();
+      }
+    } catch (err: any) {
+      toast({ title: 'Error / خطأ', description: 'Failed to revert payment.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setRevertPaidConfirm(null);
+    }
   };
 
   const openMarkAsPaidDialog = async (oc: OperationalCostSubmission) => {
@@ -5635,6 +5669,19 @@ const CostSubmission = () => {
                                 Reconcile
                               </Button>
                             )}
+                            {canRevertPaid(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-orange-400 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-400"
+                                onClick={() => setRevertPaidConfirm(oc)}
+                                disabled={actionProcessing}
+                                data-testid={`button-revert-paid-${oc.id}`}
+                              >
+                                <RotateCcw className="h-3 w-3 mr-1" />
+                                Revert Paid
+                              </Button>
+                            )}
                             {(isSuperAdmin || isAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
                               <Button
                                 size="sm"
@@ -6532,6 +6579,16 @@ const CostSubmission = () => {
                             {derivedStatus === 'paid' && (
                               <button className={btnGhost} onClick={() => { setActiveReconciliation(oc); setActiveTab("reconciliation"); }} data-testid={`button-reconcile-${oc.id}`}>
                                 <Receipt className="h-3.5 w-3.5" />Reconcile
+                              </button>
+                            )}
+                            {canRevertPaid(oc) && (
+                              <button
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-orange-400 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-400 dark:hover:bg-orange-950/20 transition-colors"
+                                onClick={() => setRevertPaidConfirm(oc)}
+                                disabled={actionProcessing}
+                                data-testid={`button-revert-paid-${oc.id}`}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />Revert Paid
                               </button>
                             )}
                             {(isSuperAdmin || isAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
@@ -8137,6 +8194,38 @@ const CostSubmission = () => {
               data-testid="button-recall-confirm"
             >
               {actionProcessing ? 'Recalling... / جارٍ الاسترجاع...' : 'Recall to Pending / استرجاع إلى معلق'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revert Paid → Approved — SuperAdmin only */}
+      <AlertDialog open={!!revertPaidConfirm} onOpenChange={(open) => !open && setRevertPaidConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="dialog-revert-paid-title">
+              Revert Payment
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">إرجاع الدفعة إلى حالة الموافقة</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark the submission as <strong>Approved</strong> again and clear the payment record. The submission can then be re-paid or sent back to finance.
+              <span dir="rtl" className="block text-xs mt-1">سيتم إعادة الطلب إلى حالة الموافقة ومسح سجل الدفع. يمكن بعد ذلك إعادة صرفه أو إرساله للمالية.</span>
+              {revertPaidConfirm && (
+                <span className="block mt-2 font-medium text-orange-700 dark:text-orange-400">
+                  {revertPaidConfirm.currency} {(revertPaidConfirm.amount_cents / 100).toLocaleString()} — {revertPaidConfirm.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-revert-paid-cancel">Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={(e) => { e.preventDefault(); handleRevertPaid(); }}
+              disabled={actionProcessing}
+              data-testid="button-revert-paid-confirm"
+            >
+              {actionProcessing ? 'Reverting... / جارٍ الإرجاع...' : 'Revert Payment / إرجاع الدفعة'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
