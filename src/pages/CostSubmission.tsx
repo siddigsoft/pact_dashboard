@@ -5226,7 +5226,7 @@ const CostSubmission = () => {
                               {groupPayableItems.length > 0 && (
                                 <Button size="sm"
                                   className="h-7 px-3 text-xs bg-green-700 hover:bg-green-600 text-white border border-green-600/50"
-                                  onClick={(e) => { e.stopPropagation(); groupPayableItems.forEach(o => handleMarkAsPaid(o)); }}
+                                  onClick={(e) => { e.stopPropagation(); setBatchCostPayDialog({ open: true, submissions: groupPayableItems, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false }); }}
                                   disabled={actionProcessing}
                                   data-testid={`button-group-mark-paid-all-${groupId}`}>
                                   <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
