@@ -345,6 +345,99 @@ export const useAuthorization = () => {
            hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
   };
 
+  // ── HR — Benefits, Succession, Pulse Surveys, HR Analytics ─────────────
+  const canManageBenefits = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('benefits', 'update') || checkPermission('benefits', 'approve') ||
+           hasAnyRole(['admin', 'Admin']);
+  };
+
+  const canViewBenefits = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('benefits', 'read') || canManageBenefits();
+  };
+
+  const canEnrollBenefits = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('benefits', 'submit') || checkPermission('benefits', 'read');
+  };
+
+  const canManageSuccession = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('succession', 'update') || checkPermission('succession', 'create') ||
+           hasAnyRole(['admin', 'Admin', 'seniorOperationsLead', 'SeniorOperationsLead']);
+  };
+
+  const canViewSuccession = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('succession', 'read') || canManageSuccession();
+  };
+
+  const canApproveSuccession = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('succession', 'approve') ||
+           hasAnyRole(['admin', 'countryDirector', 'Admin', 'CountryDirector']);
+  };
+
+  const canManagePulseSurveys = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('pulse_surveys', 'create') || checkPermission('pulse_surveys', 'update') ||
+           hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
+  };
+
+  const canViewPulseSurveys = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('pulse_surveys', 'read') || canManagePulseSurveys();
+  };
+
+  const canRespondToPulseSurvey = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('pulse_surveys', 'submit') || checkPermission('pulse_surveys', 'read');
+  };
+
+  const canViewHRAnalytics = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('hr_analytics', 'read') ||
+           hasAnyRole(['admin', 'countryDirector', 'Admin', 'CountryDirector']);
+  };
+
+  // ── Finance — Pre-Funding, Procurement, Fixed Assets ────────────────────
+  const canManagePreFunding = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('pre_funding', 'create') || checkPermission('pre_funding', 'approve') ||
+           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+  };
+
+  const canViewPreFunding = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('pre_funding', 'read') || canManagePreFunding();
+  };
+
+  const canManageProcurement = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('procurement', 'create') || checkPermission('procurement', 'update') ||
+           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+  };
+
+  const canApproveProcurement = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('procurement', 'approve') ||
+           hasAnyRole(['admin', 'financialAdmin', 'countryDirector',
+                       'Admin', 'FinancialAdmin', 'CountryDirector']);
+  };
+
+  const canManageFixedAssets = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('fixed_assets', 'create') || checkPermission('fixed_assets', 'update') ||
+           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+  };
+
+  const canExportFixedAssets = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('fixed_assets', 'export') ||
+           hasAnyRole(['admin', 'financialAdmin', 'auditor', 'Admin', 'FinancialAdmin', 'Auditor']);
+  };
+
   /**
    * Higher-order component for conditional rendering based on permissions
    */
@@ -405,6 +498,12 @@ export const useAuthorization = () => {
     canApproveDownPayment,
     canManageAccounting,
     canWriteAccounting,
+    canManagePreFunding,
+    canViewPreFunding,
+    canManageProcurement,
+    canApproveProcurement,
+    canManageFixedAssets,
+    canExportFixedAssets,
 
     // Field ops
     canViewAllSiteVisits,
@@ -414,6 +513,16 @@ export const useAuthorization = () => {
     canManageHR,
     canManagePayroll,
     canApproveLeave,
+    canManageBenefits,
+    canViewBenefits,
+    canEnrollBenefits,
+    canManageSuccession,
+    canViewSuccession,
+    canApproveSuccession,
+    canManagePulseSurveys,
+    canViewPulseSurveys,
+    canRespondToPulseSurvey,
+    canViewHRAnalytics,
 
     // Tools & communication
     canManageSurveys,

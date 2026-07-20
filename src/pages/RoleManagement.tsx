@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3, FlaskConical, Globe } from 'lucide-react';
+import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3, FlaskConical, Globe, LayoutDashboard } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -16,6 +16,7 @@ import { UserPermissionOverrides } from '@/components/role-management/UserPermis
 import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
 import { RoleAccessMap } from '@/components/role-management/RoleAccessMap';
 import { PageAccessOverview } from '@/components/role-management/PageAccessOverview';
+import { ModuleControlCenter } from '@/components/role-management/ModuleControlCenter';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -320,6 +321,17 @@ const RoleManagement = () => {
             </TabsTrigger>
           )}
 
+          {/* Module Control Center — Admin AND Super Admin */}
+          {isAdminOrAbove && (
+            <TabsTrigger value="module-control" className="gap-2" data-testid="tab-module-control">
+              <LayoutDashboard className="h-4 w-4" />
+              Module Control
+              <Badge variant="secondary" className="ml-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-[10px] px-1.5">
+                {isSuperAdmin ? 'Super Admin' : 'Admin'}
+              </Badge>
+            </TabsTrigger>
+          )}
+
           {/* Access Map — visible to all who can manage roles */}
           <TabsTrigger value="access-map" className="gap-2" data-testid="tab-access-map">
             <Grid3X3 className="h-4 w-4" />
@@ -407,7 +419,25 @@ const RoleManagement = () => {
           </TabsContent>
         )}
 
-        {/* ── Tab 5: Access Map (all admins) ── */}
+        {/* ── Tab 5: Module Control Center (Admin + Super Admin) ── */}
+        {isAdminOrAbove && (
+          <TabsContent value="module-control">
+            <div className="space-y-2 mb-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <LayoutDashboard className="h-5 w-5 text-emerald-600" />
+                Module Control Center
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Every module, page, button, and report in the system — with role coverage indicators.
+                Click any action row to see exactly which roles can perform it. 
+                {isSuperAdmin && ' Use User Permission Overrides to grant/block access for individual users.'}
+              </p>
+            </div>
+            <ModuleControlCenter />
+          </TabsContent>
+        )}
+
+        {/* ── Tab 6: Access Map (all admins) ── */}
         <TabsContent value="access-map">
           <RoleAccessMap />
         </TabsContent>
