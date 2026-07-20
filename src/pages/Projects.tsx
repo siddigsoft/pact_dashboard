@@ -477,6 +477,14 @@ const ProjectsPage = () => {
                     </div>
                   </div>
 
+                  {/* Customisation tip */}
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200/60 bg-emerald-50/50 dark:bg-emerald-900/10 dark:border-emerald-800/40 px-3 py-2">
+                    <svg className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-300 leading-relaxed">
+                      <span className="font-semibold">Fully customisable after creation.</span> In the project's <span className="font-semibold">Flow</span> tab, use the <span className="font-semibold">Edit Flow</span> button to rename, reorder, skip, or add new stages — and set dates, dependencies, and parallel groups per stage.
+                    </p>
+                  </div>
+
                   <Button
                     className="w-full"
                     onClick={() => handleUseTemplate(previewType)}
