@@ -5592,7 +5592,10 @@ const CostSubmission = () => {
                                 if (!u.role) return false;
                                 const roleNorm = nr(u.role);
                                 if (!rolePredicate(roleNorm)) return false;
-                                if (hubMatch && oc.hub_id && (u as any).hub_id && (u as any).hub_id !== oc.hub_id) return false;
+                                if (hubMatch && oc.hub_id) {
+                                  const uHub = u.hubId || (u as any).hub_id;
+                                  if (uHub && uHub !== oc.hub_id) return false;
+                                }
                                 return true;
                               }).slice(0, 5);
 
@@ -6222,7 +6225,7 @@ const CostSubmission = () => {
 
                           {/* ── Collapsible body — hidden when card is collapsed ── */}
                           {expandedCards.has(oc.id) && (
-                          <div className="px-3 pb-3 space-y-3 border-t bg-background/50">
+                          <div className="px-2.5 pb-2 space-y-2 border-t bg-background/50">
                           {derivedStatus === 'rejected' && (
                             <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-2 py-1.5 mt-2" data-testid={`alert-cost-needs-attention-${oc.id}`}>
                               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -6387,7 +6390,10 @@ const CostSubmission = () => {
                                 if (!u.role) return false;
                                 const roleNorm = nr(u.role);
                                 if (!rolePredicate(roleNorm)) return false;
-                                if (hubMatch && oc.hub_id && (u as any).hub_id && (u as any).hub_id !== oc.hub_id) return false;
+                                if (hubMatch && oc.hub_id) {
+                                  const uHub = u.hubId || (u as any).hub_id;
+                                  if (uHub && uHub !== oc.hub_id) return false;
+                                }
                                 return true;
                               }).slice(0, 5);
 
@@ -6662,8 +6668,8 @@ const CostSubmission = () => {
 
                                 {/* ── Vertical timeline (shown only when expanded) ── */}
                                 {expandedFlows.has(oc.id) && (
-                                  <div className="pb-3 relative pl-5 space-y-0">
-                                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border/60" />
+                                  <div className="pb-2 relative pl-4 space-y-0">
+                                    <div className="absolute left-[6px] top-1 bottom-1 w-px bg-border/60" />
 
                                   {steps.map((step, i) => {
                                     const isDone = step.status === 'done';
@@ -6671,9 +6677,9 @@ const CostSubmission = () => {
                                     const isPending = step.status === 'pending';
                                     const isRejected = step.status === 'rejected';
                                     return (
-                                      <div key={i} className="relative flex gap-2.5 pb-2 last:pb-0">
+                                      <div key={i} className="relative flex gap-2 pb-1 last:pb-0">
                                         {/* Status dot */}
-                                        <div className={`absolute left-[-14px] top-[5px] h-3.5 w-3.5 rounded-full shrink-0 z-10 border-2 border-background ${dotCls(step.status)}`} />
+                                        <div className={`absolute left-[-12px] top-[4px] h-3 w-3 rounded-full shrink-0 z-10 border-2 border-background ${dotCls(step.status)}`} />
 
                                         {/* Content card */}
                                         {(() => {
@@ -6682,98 +6688,72 @@ const CostSubmission = () => {
                                             : 0;
                                           const overdue = daysWaiting >= 3;
                                           return (
-                                        <div className={`flex-1 min-w-0 rounded-md px-2.5 py-1.5 transition-colors ${cardCls(step.status, overdue)}`}>
+                                        <div className={`flex-1 min-w-0 rounded px-2 py-1 transition-colors ${cardCls(step.status, overdue)}`}>
                                           {/* Label + badge + timestamp */}
-                                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                                            <span className={`text-[11px] font-semibold leading-tight ${labelCls(step.status)}`}>
+                                          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                            <span className={`text-[10px] font-semibold leading-tight ${labelCls(step.status)}`}>
                                               {step.stepNum} {step.label}
                                             </span>
-                                            <div className="flex items-center gap-1.5 shrink-0">
+                                            <div className="flex items-center gap-1 shrink-0">
                                               {step.timestamp && (
-                                                <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                                                <span className="text-[9px] text-muted-foreground/60 tabular-nums">
                                                   {format(new Date(step.timestamp), 'MMM d · h:mm a')}
                                                 </span>
                                               )}
                                               {isActive && (
-                                                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                                <span className={`text-[9px] font-semibold px-1 py-0.5 rounded-full whitespace-nowrap ${
                                                   overdue
                                                     ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
                                                     : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
                                                 }`}>
-                                                  {overdue ? `⚠ ${daysWaiting}d overdue` : daysWaiting > 0 ? `⏳ ${daysWaiting}d` : '⏳ Awaiting'}
+                                                  {overdue ? `⚠ ${daysWaiting}d` : daysWaiting > 0 ? `⏳ ${daysWaiting}d` : '⏳'}
                                                 </span>
                                               )}
                                               {isRejected && (
-                                                <span className="text-[9px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded-full">
-                                                  ✗ Rejected
-                                                </span>
+                                                <span className="text-[9px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-1 py-0.5 rounded-full">✗</span>
                                               )}
                                             </div>
                                           </div>
 
-                                          {/* Who acted (done / rejected) */}
-                                          {step.person && (
-                                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                                              {step.person}
-                                              <span className="opacity-60"> · {step.role}</span>
+                                          {/* Who acted (done / rejected) + expected (active/pending) — single compact line */}
+                                          {step.person ? (
+                                            <p className="text-[9px] text-muted-foreground leading-tight">
+                                              {step.person}<span className="opacity-50"> · {step.role}</span>
                                             </p>
-                                          )}
-
-                                          {/* Active: who needs to act — inline, no header */}
-                                          {isActive && step.expectedApprovers && step.expectedApprovers.length > 0 && (
-                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
-                                              {step.expectedApprovers.map((a, ai) => (
-                                                <span key={a.id} className="text-[10px] font-medium text-amber-800 dark:text-amber-300">
-                                                  {a.name || a.email}
-                                                  {a.role && <span className="font-normal text-amber-700/60 dark:text-amber-400/60"> · {fmtRole(a.role)}</span>}
-                                                  {ai < step.expectedApprovers!.length - 1 && <span className="text-amber-400 ml-0.5">,</span>}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          )}
-
-                                          {/* Pending future: dim approver names */}
-                                          {isPending && !step.person && step.expectedApprovers && step.expectedApprovers.length > 0 && (
-                                            <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                                          ) : (isActive || isPending) && step.expectedApprovers && step.expectedApprovers.length > 0 ? (
+                                            <p className={`text-[9px] leading-tight ${isActive ? 'text-amber-700 dark:text-amber-300 font-medium' : 'text-muted-foreground/50'}`}>
                                               {step.expectedApprovers.map(a => a.name || a.email).join(', ')}
                                             </p>
-                                          )}
+                                          ) : null}
 
                                           {/* Inline approval notes */}
                                           {step.notes && (
-                                            <p className="mt-1 text-[10px] text-muted-foreground/80 italic pl-2 border-l-2 border-border">
+                                            <p className="text-[9px] text-muted-foreground/70 italic pl-1.5 border-l border-border">
                                               "{step.notes}"
                                             </p>
                                           )}
 
-                                          {/* Email / WhatsApp notification audit line — shown for done & active steps */}
+                                          {/* Notification audit — single compact line */}
                                           {(isDone || isActive) && (
-                                            <p className="mt-0.5 text-[9px] text-muted-foreground/50 flex items-center gap-1 flex-wrap">
+                                            <p className="text-[9px] text-muted-foreground/40 flex items-center gap-0.5 flex-wrap leading-tight">
                                               <span>{step.notifIcon}</span>
-                                              <span>{step.notifText}</span>
-                                              {step.timestamp && isDone && (
-                                                <span className="tabular-nums">· sent {format(new Date(step.timestamp), 'MMM d · h:mm a')}</span>
-                                              )}
-                                              {i === steps.length - 1 && (
-                                                <span>· 💬 WhatsApp (if opted-in)</span>
-                                              )}
+                                              <span className="truncate">{step.notifText}</span>
+                                              {i === steps.length - 1 && <span>· 💬</span>}
                                             </p>
                                           )}
 
                                           {/* Send Reminder (active step only) */}
                                           {isActive && (
-                                            <div className="mt-1.5">
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-6 px-2.5 text-[10px] border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1"
-                                                onClick={() => sendReminder(step)}
-                                                data-testid={`button-send-reminder-${oc.id}`}
-                                              >
-                                                <Mail className="h-3 w-3" />
-                                                Send Reminder
-                                              </Button>
-                                            </div>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="mt-1 h-5 px-2 text-[9px] border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1"
+                                              onClick={() => sendReminder(step)}
+                                              data-testid={`button-send-reminder-${oc.id}`}
+                                            >
+                                              <Mail className="h-2.5 w-2.5" />
+                                              Remind
+                                            </Button>
                                           )}
                                         </div>
                                           );
