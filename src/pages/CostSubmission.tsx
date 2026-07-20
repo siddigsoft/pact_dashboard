@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import { REJECTION_REASONS, APPROVAL_REASONS } from "@/config/rejectionReasons";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
@@ -282,8 +283,7 @@ const CostSubmission = () => {
     return (valid as readonly string[]).includes(t ?? '') ? (t as "all" | "pending" | "under_review" | "approved" | "rejected" | "partially_paid" | "paid" | "reconciled") : "all";
   });
   const [showGuide, setShowGuide] = useState(false);
-  const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
-  const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
+  // operationalCosts and operationalCostsLoading come from the useQuery below
   const [opsGlLogMap, setOpsGlLogMap] = useState<Map<string, string>>(new Map());
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
@@ -722,78 +722,70 @@ const CostSubmission = () => {
     run();
   }, [operationalCosts]);
 
-  const fetchOperationalCosts = useCallback(async () => {
-    if (!currentUser?.id) return;
-    setOperationalCostsLoading(true);
+  // Paginate past Supabase server's 1000-row cap
+  const _fetchAllPages = async (baseQuery: any): Promise<{ data: any[] | null; error: any }> => {
+    const PAGE = 1000;
+    const rows: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await baseQuery.range(from, from + PAGE - 1);
+      if (error) return { data: null, error };
+      if (data && data.length > 0) rows.push(...data);
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    return { data: rows, error: null };
+  };
 
-    // Paginate past Supabase server's 1000-row cap
-    const fetchAllPages = async (baseQuery: any): Promise<{ data: any[] | null; error: any }> => {
-      const PAGE = 1000;
-      const rows: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await baseQuery.range(from, from + PAGE - 1);
-        if (error) return { data: null, error };
-        if (data && data.length > 0) rows.push(...data);
-        if (!data || data.length < PAGE) break;
-        from += PAGE;
-      }
-      return { data: rows, error: null };
-    };
+  const _opsQueryKey = ['operationalCosts', currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser] as const;
 
-    try {
+  const {
+    data: operationalCosts = [],
+    isLoading: operationalCostsLoading,
+    refetch: fetchOperationalCosts,
+  } = useQuery({
+    queryKey: _opsQueryKey,
+    enabled: !!currentUser?.id,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<OperationalCostSubmission[]> => {
+      if (!currentUser?.id) return [];
       const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
       const isSuperAdminDirect = userRole === 'superadmin' || userRole === 'superadministrator';
       const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
       const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
 
-      let data: OperationalCostSubmission[] | null = null;
-      let error: any = null;
-
-      if (shouldFetchAll) {
-        const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
-        if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
-          data = rpcResult.data as OperationalCostSubmission[];
-          console.log(`[CostSubmission] RPC fetched ${(data || []).length} operational costs (role: ${currentUser.role})`);
-        } else {
+      try {
+        if (shouldFetchAll) {
+          const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+          if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
+            console.log(`[CostSubmission] RPC fetched ${(rpcResult.data as any[]).length} records (role: ${currentUser.role})`);
+            return rpcResult.data as OperationalCostSubmission[];
+          }
           if (rpcResult.error) {
-            console.warn('[CostSubmission] RPC error, falling back:', rpcResult.error.message);
+            console.warn('[CostSubmission] RPC error, falling back to direct query:', rpcResult.error.message);
           } else {
             console.warn('[CostSubmission] RPC returned empty, trying direct query (role:', currentUser.role, ')');
           }
-          const directResult = await fetchAllPages(
+          const directResult = await _fetchAllPages(
             supabase.from('operational_cost_submissions').select('*').order('created_at', { ascending: false })
           );
-          data = directResult.data as OperationalCostSubmission[];
-          error = directResult.error;
-          console.log(`[CostSubmission] Direct query fetched ${(data || []).length} records, error:`, error?.message || 'none');
+          console.log(`[CostSubmission] Direct query: ${(directResult.data || []).length} records, error:`, directResult.error?.message || 'none');
+          if (directResult.error) throw directResult.error;
+          return (directResult.data || []) as OperationalCostSubmission[];
+        } else {
+          const result = await _fetchAllPages(
+            supabase.from('operational_cost_submissions').select('*').eq('submitted_by', currentUser.id).order('created_at', { ascending: false })
+          );
+          if (result.error) throw result.error;
+          return (result.data || []) as OperationalCostSubmission[];
         }
-      } else {
-        const result = await fetchAllPages(
-          supabase.from('operational_cost_submissions').select('*').eq('submitted_by', currentUser.id).order('created_at', { ascending: false })
-        );
-        data = result.data as OperationalCostSubmission[];
-        error = result.error;
+      } catch (err) {
+        console.error('[CostSubmission] Error fetching operational costs:', err);
+        return [];
       }
-
-      if (error) {
-        console.error('Error fetching operational costs:', error);
-        setOperationalCosts([]);
-      } else {
-        console.log(`[CostSubmission] Total operational costs loaded: ${(data || []).length} (fetchAll: ${shouldFetchAll}, role: ${currentUser.role})`);
-        setOperationalCosts((data as OperationalCostSubmission[]) || []);
-      }
-    } catch (err) {
-      console.error('Error fetching operational costs:', err);
-      setOperationalCosts([]);
-    } finally {
-      setOperationalCostsLoading(false);
-    }
-  }, [currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser]);
-
-  useEffect(() => {
-    fetchOperationalCosts();
-  }, [fetchOperationalCosts]);
+    },
+  });
 
   // Clear cost search and in-card status chips whenever the global status
   // filter tab changes so stale filters don't hide results in a new bucket
