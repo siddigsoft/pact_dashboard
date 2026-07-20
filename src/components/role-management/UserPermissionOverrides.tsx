@@ -543,43 +543,40 @@ export function UserPermissionOverrides() {
 
           {/* Save bar */}
           {hasPendingChanges && (
-            <Card className="border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 sticky bottom-4 shadow-lg">
-              <CardContent className="pt-4 pb-4 space-y-3">
-                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span className="text-sm font-medium">{pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''} <span className="opacity-60 text-xs">/ تغييرات غير محفوظة</span></span>
+            <div className="sticky bottom-0 z-20 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/80 dark:border-amber-700 shadow-lg backdrop-blur-sm px-4 py-3">
+              {/* Row 1: status + buttons */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-200 text-sm font-semibold whitespace-nowrap">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  {pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}
+                  <span className="opacity-60 font-normal text-xs" dir="rtl">/ تغييرات غير محفوظة</span>
+                </span>
+                {/* Reason — grows to fill space */}
+                <Input
+                  placeholder="Reason / note (optional) / السبب (اختياري)"
+                  value={pendingReason}
+                  onChange={e => setPendingReason(e.target.value)}
+                  className="h-8 text-xs flex-1 min-w-[160px] bg-white dark:bg-amber-950/60 border-amber-300 dark:border-amber-700"
+                  data-testid="input-override-reason"
+                />
+                {/* Expiry */}
+                <div className="relative flex-shrink-0">
+                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    type="datetime-local"
+                    value={pendingExpiry}
+                    onChange={e => setPendingExpiry(e.target.value)}
+                    className="h-8 text-xs pl-8 w-48 bg-white dark:bg-amber-950/60 border-amber-300 dark:border-amber-700"
+                    data-testid="input-override-expiry"
+                    title="Expiry date (optional) / تاريخ الانتهاء (اختياري)"
+                  />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium block mb-1">Reason / Note (optional) <span className="opacity-60">/ السبب / ملاحظة (اختياري)</span></label>
-                    <Textarea
-                      placeholder="Why are these overrides being set? / لماذا يتم تعيين هذه التجاوزات؟"
-                      value={pendingReason}
-                      onChange={e => setPendingReason(e.target.value)}
-                      rows={2}
-                      className="resize-none text-sm"
-                      data-testid="textarea-override-reason"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium block mb-1">Expiry Date (optional) <span className="opacity-60">/ تاريخ الانتهاء (اختياري)</span></label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="datetime-local"
-                        value={pendingExpiry}
-                        onChange={e => setPendingExpiry(e.target.value)}
-                        className="pl-9 text-sm"
-                        data-testid="input-override-expiry"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">Leave blank for no expiry <span className="opacity-60">/ اتركه فارغاً لعدم الانتهاء</span></p>
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end">
+                {/* Action buttons */}
+                <div className="flex gap-2 flex-shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-8 text-xs border-amber-400 dark:border-amber-600"
                     onClick={() => setPendingChanges(new Map())}
                     disabled={saving}
                   >
@@ -587,17 +584,17 @@ export function UserPermissionOverrides() {
                   </Button>
                   <Button
                     size="sm"
+                    className="h-8 text-xs bg-purple-600 hover:bg-purple-700"
                     onClick={saveChanges}
                     disabled={saving}
                     data-testid="button-save-overrides"
-                    className="bg-purple-600 hover:bg-purple-700"
                   >
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-                    Save Overrides <span className="opacity-70 text-[10px]">/ حفظ التجاوزات</span>
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
+                    Save Overrides <span className="opacity-70 text-[10px]">/ حفظ</span>
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
         </div>
       )}
