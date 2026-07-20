@@ -39,7 +39,7 @@ interface PulseSurvey {
 }
 interface PulseResponse {
   id: string; survey_id: string; responses: Record<string, any>;
-  hub_id: string | null; submitted_at: string;
+  hub_id: string | null; department_id: string | null; submitted_at: string;
 }
 interface Hub { id: string; name: string; }
 interface Dept { id: string; name: string; }
@@ -48,7 +48,8 @@ const Q_TYPE_LABELS: Record<QuestionType, string> = {
   rating: 'Rating (1–5)', nps: 'NPS (0–10)', text: 'Open Text', yes_no: 'Yes / No',
 };
 const COLORS = ['#3b82f6', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444', '#22c55e'];
-const STORAGE_KEY = 'pact_pulse_submitted_v2';
+const STORAGE_KEY      = 'pact_pulse_submitted_v2';
+const TOKEN_PREFIX_KEY = 'pact_pulse_token_';
 
 // ── Persistent submission tracking (survives page reloads) ──────────────────
 function getPersistedSubmitted(): Set<string> {
@@ -60,16 +61,20 @@ function persistSubmitted(surveyId: string) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify([...s]));
 }
 
-// ── Anonymous respondent hash (SHA-256, prevents double-submit server-side) ──
-async function makeRespondentHash(surveyId: string, userId: string): Promise<string> {
-  const raw = `${surveyId}:${userId}:pulse_v1`;
-  try {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch {
-    // Fallback for environments without SubtleCrypto
-    return btoa(raw).replace(/[+/=]/g, '').slice(0, 40);
+// ── Anonymous dedup token — random UUID, NOT derived from user identity ──────
+// Stored per-survey in localStorage so the same browser cannot submit twice.
+// The token is never linked to any user attribute — it is cryptographically
+// random and unknowable to any admin without access to the respondent's browser.
+function getOrCreateRespondentToken(surveyId: string): string {
+  const key = TOKEN_PREFIX_KEY + surveyId;
+  let token = localStorage.getItem(key);
+  if (!token) {
+    token = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, token);
   }
+  return token;
 }
 
 // ── Survey templates ────────────────────────────────────────────────────────
@@ -341,7 +346,7 @@ export default function PulseSurveys() {
   function openSurveyForTaking(s: PulseSurvey) { setTakingSurvey(s); setAnswers({}); }
 
   async function submitSurvey() {
-    if (!takingSurvey || !currentUser?.id) return;
+    if (!takingSurvey) return;
     const required = takingSurvey.questions.filter(q => q.required);
     for (const q of required) {
       if (answers[q.id] === undefined || answers[q.id] === '') {
@@ -349,15 +354,17 @@ export default function PulseSurveys() {
       }
     }
 
-    // Generate anonymous but durable respondent hash for dedup
-    const respondentHash = await makeRespondentHash(takingSurvey.id, currentUser.id);
+    // Anonymous dedup token — random UUID from localStorage, NOT derived from user identity.
+    // Cannot be used by anyone (including admins) to link the response back to the respondent.
+    const respondentToken = getOrCreateRespondentToken(takingSurvey.id);
 
     setSubmitting(true);
     const { error } = await supabase.from('hr_pulse_responses' as any).insert({
       survey_id: takingSurvey.id,
       responses: answers,
-      hub_id: userHubId,  // coarse grouping only — no user_id for anonymity
-      respondent_hash: respondentHash,
+      hub_id: userHubId,         // coarse grouping only — no user_id for anonymity
+      department_id: userDeptId, // coarse grouping only — snapshot at submission time
+      respondent_hash: respondentToken,
     });
     setSubmitting(false);
 
@@ -419,14 +426,24 @@ export default function PulseSurveys() {
     });
   }
 
-  // Department breakdown: group responses by hub for a survey
+  // Group responses by hub for geographic breakdown
   function getHubBreakdown(rs: PulseResponse[]) {
-    const hubCounts: Record<string, number> = {};
+    const counts: Record<string, number> = {};
     rs.forEach(r => {
-      const hub = r.hub_id ? (hubMap[r.hub_id] ?? 'Unknown Hub') : 'No Hub';
-      hubCounts[hub] = (hubCounts[hub] ?? 0) + 1;
+      const label = r.hub_id ? (hubMap[r.hub_id] ?? 'Unknown Hub') : 'No Hub';
+      counts[label] = (counts[label] ?? 0) + 1;
     });
-    return Object.entries(hubCounts).sort((a, b) => b[1] - a[1]).map(([hub, count]) => ({ hub, count }));
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+  }
+
+  // Group responses by department for department-level breakdown
+  function getDeptBreakdown(rs: PulseResponse[]) {
+    const counts: Record<string, number> = {};
+    rs.forEach(r => {
+      const label = r.department_id ? (deptMap[r.department_id] ?? 'Unknown Dept') : 'No Department';
+      counts[label] = (counts[label] ?? 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
   }
 
   function audienceLabel(s: PulseSurvey): string {
@@ -516,10 +533,11 @@ export default function PulseSurveys() {
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).length === 0 ? (
               <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No responses yet.</CardContent></Card>
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).map(s => {
-              const rs         = responsesBySurvey[s.id] ?? [];
-              const analytics  = getQuestionAnalytics(s, rs);
+              const rs           = responsesBySurvey[s.id] ?? [];
+              const analytics    = getQuestionAnalytics(s, rs);
               const hubBreakdown = getHubBreakdown(rs);
-              const npsQ       = analytics.find(a => a.q.type === 'nps');
+              const deptBreakdown = getDeptBreakdown(rs);
+              const npsQ         = analytics.find(a => a.q.type === 'nps');
               const isExpanded = expandedResults === s.id;
 
               return (
@@ -550,14 +568,30 @@ export default function PulseSurveys() {
                   </CardHeader>
                   {isExpanded && (
                     <CardContent className="space-y-5 pt-0">
-                      {/* Hub / Department breakdown */}
+                      {/* Department breakdown (primary requirement) */}
+                      {deptBreakdown.length > 1 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Responses by Department</p>
+                          <ResponsiveContainer width="100%" height={Math.max(80, deptBreakdown.length * 28)}>
+                            <BarChart data={deptBreakdown} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
+                              <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                              <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                              <Tooltip contentStyle={{ fontSize: 12 }} />
+                              <Bar dataKey="count" name="Responses" radius={[0, 3, 3, 0]}>
+                                {deptBreakdown.map((_, ci) => <Cell key={ci} fill={COLORS[ci % COLORS.length]} />)}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                      {/* Hub geographic breakdown */}
                       {hubBreakdown.length > 1 && (
                         <div>
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Responses by Hub</p>
                           <ResponsiveContainer width="100%" height={Math.max(80, hubBreakdown.length * 28)}>
                             <BarChart data={hubBreakdown} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
                               <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                              <YAxis type="category" dataKey="hub" width={140} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                              <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                               <Tooltip contentStyle={{ fontSize: 12 }} />
                               <Bar dataKey="count" name="Responses" radius={[0, 3, 3, 0]}>
                                 {hubBreakdown.map((_, ci) => <Cell key={ci} fill={COLORS[ci % COLORS.length]} />)}
