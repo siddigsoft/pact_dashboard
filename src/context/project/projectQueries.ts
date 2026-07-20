@@ -143,6 +143,18 @@ export function useInvalidateProjectsQueries() {
   return () => queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
 }
 
+/** Immediately patches one project in the TanStack Query cache so consumers
+ *  (e.g. getProjectById) see the new data without waiting for a background refetch. */
+export function useUpdateProjectInCache() {
+  const queryClient = useQueryClient();
+  return (updatedProject: Project) => {
+    queryClient.setQueryData<Project[]>(projectQueryKeys.all, (old) => {
+      if (!old) return old;
+      return old.map(p => p.id === updatedProject.id ? { ...p, ...updatedProject } : p);
+    });
+  };
+}
+
 export function mapProjectToDbProject(project: Project): Record<string, unknown> {
   return {
     name: project.name,

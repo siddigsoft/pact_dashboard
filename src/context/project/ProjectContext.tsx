@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
-import { useProjectsQuery, useInvalidateProjectsQueries, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
+import { useProjectsQuery, useInvalidateProjectsQueries, useUpdateProjectInCache, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
 import { getFirstStageId } from '@/config/projectFlows';
 import { useUser } from '@/context/user/UserContext';
 import { normalizeRole } from '@/utils/roleMapping';
@@ -80,6 +80,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const { toast } = useToast();
   const invalidateProjects = useInvalidateProjectsQueries();
+  const updateProjectCache = useUpdateProjectInCache();
   const invalidateRef = useRef(invalidateProjects);
   invalidateRef.current = invalidateProjects;
 
@@ -376,17 +377,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
       
-      await invalidateProjects();
-      
+      // Immediately patch cache so ProjectDetail reads fresh data without waiting for background refetch
+      updateProjectCache(updatedProject);
       if (currentProject?.id === updatedProject.id) {
         setCurrentProject(updatedProject);
       }
-      
-      toast({
-        title: "Success",
-        description: "Project updated successfully!",
-        variant: "success",
-      });
+      // Background refetch to sync any server-side computed fields
+      invalidateProjects();
     } catch (err) {
       console.error("Error updating project:", err);
       setError(err instanceof Error ? err.message : 'Failed to update project');

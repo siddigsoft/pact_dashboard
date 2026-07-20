@@ -271,11 +271,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
 
       await onSubmit(project);
 
-      toast({
-        title: isEditing ? "Project Updated" : "Project Created",
-        description: `${values.name} has been ${isEditing ? 'updated' : 'created'} successfully.`,
-      });
-
     } catch (error) {
       console.error('Error submitting project form:', error);
       toast({
@@ -369,7 +364,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     <FormLabel>Project Type*</FormLabel>
                     <Select 
                       onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -411,7 +406,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     <FormLabel>Status*</FormLabel>
                     <Select 
                       onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -542,7 +537,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     <FormLabel>Country*</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -608,7 +603,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                       <FormLabel>Region</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -638,7 +633,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                       <FormLabel>State</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -668,7 +663,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                       <FormLabel>Locality</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -716,7 +711,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     <FormLabel>Income / Budget Currency</FormLabel>
                     <Select 
                       onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-income-currency-form">
@@ -744,7 +739,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     <FormLabel>Expense Currency</FormLabel>
                     <Select 
                       onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-expense-currency-form">
