@@ -208,16 +208,24 @@ export default function ExcelUploadParser({ onItemsParsed }: ExcelUploadParserPr
       const colMap: Record<string, number> = {};
 
       const fieldMappings: Record<string, string[]> = {
-        category: ["category", "expense category", "expense_category", "type"],
-        title: ["title", "item title", "request title", "name", "item"],
-        quantity: ["quantity", "qty", "count", "units"],
-        unitCost: ["unit cost", "unit_cost", "unitcost", "price", "unit price", "rate", "cost per unit"],
-        currency: ["currency", "cur", "cur."],
-        description: ["description", "details", "desc"],
-        justification: ["justification", "reason", "why", "rationale"],
-        vendor: ["vendor", "supplier", "vendor/supplier", "vendor name"],
-        referenceNumber: ["reference", "reference #", "ref", "ref #", "reference number", "invoice", "receipt", "invoice/receipt"],
-        otherDetail: ["other category detail", "other detail", "other category", "specify", "other"],
+        category: [
+          "category", "expense category", "expense_category", "type",
+          "cat", "expense type", "type of expense", "cost category", "cost type",
+          "item category", "exp category", "الفئة",
+        ],
+        title: [
+          "title", "item title", "request title", "name", "item",
+          "item name", "expense", "expense name", "cost item", "expense item",
+          "item description", "line item", "subject", "العنوان",
+        ],
+        quantity: ["quantity", "qty", "count", "units", "no.", "number", "كمية"],
+        unitCost: ["unit cost", "unit_cost", "unitcost", "price", "unit price", "rate", "cost per unit", "amount", "التكلفة"],
+        currency: ["currency", "cur", "cur.", "العملة"],
+        description: ["description", "details", "desc", "وصف"],
+        justification: ["justification", "reason", "why", "rationale", "مبرر"],
+        vendor: ["vendor", "supplier", "vendor/supplier", "vendor name", "مورد"],
+        referenceNumber: ["reference", "reference #", "ref", "ref #", "reference number", "invoice", "receipt", "invoice/receipt", "مرجع"],
+        otherDetail: ["other category detail", "other detail", "other category", "specify", "other", "أخرى"],
       };
 
       for (const [field, aliases] of Object.entries(fieldMappings)) {
@@ -226,10 +234,11 @@ export default function ExcelUploadParser({ onItemsParsed }: ExcelUploadParserPr
       }
 
       if (colMap.category === undefined && colMap.title === undefined) {
+        const foundHeaders = headerRow.filter(Boolean).slice(0, 8).join(', ') || 'none detected';
         toast({
           title: "Unrecognized Format",
           description:
-            "Could not find 'Category' or 'Title' columns. Please use the template or ensure your headers match.",
+            `Could not find 'Category' or 'Title' columns. Found headers: ${foundHeaders}. Please download and use the template, or rename your columns to match.`,
           variant: "destructive",
         });
         setParsing(false);

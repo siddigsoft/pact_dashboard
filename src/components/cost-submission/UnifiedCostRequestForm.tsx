@@ -922,8 +922,10 @@ export default function UnifiedCostRequestForm({
           {/* MMP — required only when the selected project has MMPs linked to it via project_id */}
           {(() => {
             const isSuperAdmin = currentUser?.role === 'super_admin';
+            const isAdmin = currentUser?.role === 'admin';
+            const canSeeAllMmps = isSuperAdmin || isAdmin;
 
-            // Determine the "latest" MMP month so we can restrict non-super-admins to current month only.
+            // Determine the "latest" MMP month so we can restrict regular users to current month only.
             // mmps is already sorted by uploaded_at DESC, so mmps[0] is the most recent.
             const latestMonth = mmps.length > 0 ? mmps[0].month : null;
 
@@ -939,9 +941,10 @@ export default function UnifiedCostRequestForm({
             // Base pool: project-linked or all
             const poolMmps = isMmpRequired ? projectMmps : mmps;
 
-            // For non-super-admins: only show the most-recent-month MMPs.
+            // Admin & Super Admin see ALL MMPs (all months, all hubs).
+            // Regular users only see the most-recent-month MMPs.
             // Exception: always include the currently-selected MMP (e.g. when editing an old submission).
-            const visibleMmps = isSuperAdmin
+            const visibleMmps = canSeeAllMmps
               ? poolMmps
               : poolMmps.filter(m =>
                   m.month === latestMonth ||   // current month
@@ -962,11 +965,11 @@ export default function UnifiedCostRequestForm({
                       </span>
                   }
                 </Label>
-                {/* Super-admin hint when browsing past months */}
-                {isSuperAdmin && !isMmpDisabled && (
+                {/* Admin/Super-admin hint when browsing all months */}
+                {canSeeAllMmps && !isMmpDisabled && (
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                    Super Admin — all months visible, including closed ones
+                    {isSuperAdmin ? 'Super Admin' : 'Admin'} — all months visible, including closed ones
                   </p>
                 )}
                 <Select
