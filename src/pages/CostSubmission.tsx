@@ -5238,21 +5238,16 @@ const CostSubmission = () => {
                                     })}
                                   </div>
                                 </div>
-                                <div className="flex-none text-right space-y-1.5">
+                                <div className="flex-none text-right">
                                   <p className="font-bold text-base tabular-nums text-white">{currency} {(totalCents / 100).toLocaleString()}</p>
                                   <p className="text-[10px] text-white/50">Total</p>
-                                  {/* Expand/Collapse accordion — separate from the header click (which opens detail) */}
-                                  <button
-                                    className="flex items-center justify-end gap-1 text-white/60 hover:text-white text-[11px] ml-auto transition-colors"
-                                    onClick={(e) => { e.stopPropagation(); toggleGroup(groupId!); }}
-                                    data-testid={`button-group-toggle-${groupId}`}
-                                    title={isExpanded ? 'Collapse items' : 'Expand items'}
-                                  >
-                                    {isExpanded
-                                      ? <><ChevronDown className="h-4 w-4" /><span>Collapse</span></>
-                                      : <><ChevronRight className="h-4 w-4" /><span>Expand</span></>
-                                    }
-                                  </button>
+                                </div>
+                                {/* Chevron toggle — far-right edge */}
+                                <div className="flex-none flex items-center pl-2">
+                                  {isExpanded
+                                    ? <ChevronDown className="h-5 w-5 text-white/60" />
+                                    : <ChevronRight className="h-5 w-5 text-white/60" />
+                                  }
                                 </div>
                               </div>
                             </div>
