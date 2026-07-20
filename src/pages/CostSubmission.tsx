@@ -742,12 +742,15 @@ const CostSubmission = () => {
   const {
     data: operationalCosts = [],
     isLoading: operationalCostsLoading,
+    isFetching: operationalCostsFetching,
+    error: operationalCostsError,
     refetch: fetchOperationalCosts,
   } = useQuery({
     queryKey: _opsQueryKey,
     enabled: !!currentUser?.id,
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
+    retry: 1,
     queryFn: async (): Promise<OperationalCostSubmission[]> => {
       if (!currentUser?.id) return [];
       const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -755,34 +758,32 @@ const CostSubmission = () => {
       const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
       const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
 
-      try {
-        if (shouldFetchAll) {
-          const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
-          if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
-            console.log(`[CostSubmission] RPC fetched ${(rpcResult.data as any[]).length} records (role: ${currentUser.role})`);
-            return rpcResult.data as OperationalCostSubmission[];
-          }
-          if (rpcResult.error) {
-            console.warn('[CostSubmission] RPC error, falling back to direct query:', rpcResult.error.message);
-          } else {
-            console.warn('[CostSubmission] RPC returned empty, trying direct query (role:', currentUser.role, ')');
-          }
-          const directResult = await _fetchAllPages(
-            supabase.from('operational_cost_submissions').select('*').order('created_at', { ascending: false })
-          );
-          console.log(`[CostSubmission] Direct query: ${(directResult.data || []).length} records, error:`, directResult.error?.message || 'none');
-          if (directResult.error) throw directResult.error;
-          return (directResult.data || []) as OperationalCostSubmission[];
-        } else {
-          const result = await _fetchAllPages(
-            supabase.from('operational_cost_submissions').select('*').eq('submitted_by', currentUser.id).order('created_at', { ascending: false })
-          );
-          if (result.error) throw result.error;
-          return (result.data || []) as OperationalCostSubmission[];
+      if (shouldFetchAll) {
+        // Try the SECURITY DEFINER RPC first (bypasses RLS)
+        const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+        console.log(`[CostSubmission] RPC result: ${(rpcResult.data as any[] | null)?.length ?? 'null'} rows, error: ${rpcResult.error?.message ?? 'none'} (role: ${currentUser.role})`);
+        if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+          return rpcResult.data as OperationalCostSubmission[];
         }
-      } catch (err) {
-        console.error('[CostSubmission] Error fetching operational costs:', err);
-        return [];
+        // RPC failed — fall back to direct table query
+        console.warn('[CostSubmission] RPC failed, falling back to direct query:', rpcResult.error?.message);
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5000);
+        console.log(`[CostSubmission] Direct query: ${data?.length ?? 'null'} rows, error: ${error?.message ?? 'none'}`);
+        if (error) throw new Error(`Failed to load submissions: ${error.message}`);
+        return (data || []) as OperationalCostSubmission[];
+      } else {
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('*')
+          .eq('submitted_by', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (error) throw new Error(`Failed to load your submissions: ${error.message}`);
+        return (data || []) as OperationalCostSubmission[];
       }
     },
   });
@@ -3271,6 +3272,32 @@ const CostSubmission = () => {
           </div>
         );
       })()}
+
+      {/* Data load error banners — shown when Supabase returns an error */}
+      {(operationalCostsError || allSubmissionsQuery.error) && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950 px-4 py-3 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-red-700 dark:text-red-400">Could not load submission data</p>
+            {operationalCostsError && (
+              <p className="text-xs text-red-600 dark:text-red-300 mt-0.5 break-words">
+                Operational costs: {(operationalCostsError as Error)?.message || String(operationalCostsError)}
+              </p>
+            )}
+            {allSubmissionsQuery.error && (
+              <p className="text-xs text-red-600 dark:text-red-300 mt-0.5 break-words">
+                Site-visit costs: {(allSubmissionsQuery.error as Error)?.message || String(allSubmissionsQuery.error)}
+              </p>
+            )}
+            <p className="text-xs text-red-500 dark:text-red-400 mt-1">
+              This usually means the migration hasn't been applied in Supabase yet, or the Supabase project is waking up. Try clicking Refresh in a few seconds.
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 shrink-0" onClick={() => { fetchOperationalCosts(); }}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Stats Cards - Cyber Tech Theme */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
