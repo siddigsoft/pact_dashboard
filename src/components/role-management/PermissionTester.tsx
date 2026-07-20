@@ -11,7 +11,7 @@ import { Shield, CheckCircle, XCircle, AlertTriangle, Eye, ChevronsUpDown, Info,
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { ResourceType, ActionType, RESOURCES, ACTIONS, RESOURCE_LABELS, ACTION_LABELS } from '@/types/roles';
+import { ResourceType, ActionType, RESOURCES, ACTIONS, RESOURCE_LABELS, ACTION_LABELS, DEFAULT_ROLE_PERMISSIONS } from '@/types/roles';
 import { cn } from '@/lib/utils';
 
 interface PermissionTesterProps {
@@ -27,14 +27,15 @@ const getActionLabel = (action: ActionType): string =>
   ACTION_LABELS[action] ?? action.charAt(0).toUpperCase() + action.slice(1);
 
 // Determine permission source
-type PermSource = 'superadmin' | 'override-granted' | 'override-blocked' | 'role' | 'none';
+type PermSource = 'superadmin' | 'override-granted' | 'override-blocked' | 'role' | 'profile-role' | 'none';
 
 function resolveSource(
   resource: ResourceType,
   action: ActionType,
   perms: any[],
   overrides: any[],
-  roleName: string | undefined
+  roleName: string | undefined,
+  profileRole: string | undefined
 ): { granted: boolean; source: PermSource; label: string } {
   const hasSuperAdmin = perms.some(p => p.resource === 'system' && p.action === 'override');
   if (hasSuperAdmin) return { granted: true, source: 'superadmin', label: 'Super Admin bypass' };
@@ -51,8 +52,38 @@ function resolveSource(
   const fromRole = perms.some(p => p.resource === resource && p.action === action);
   if (fromRole) return { granted: true, source: 'role', label: `Via role: ${roleName ?? 'assigned role'}` };
 
+  // Fallback: check DEFAULT_ROLE_PERMISSIONS for the profile's primary role
+  if (profileRole) {
+    const normalized = NORMALIZE_ROLE(profileRole);
+    if (normalized && (DEFAULT_ROLE_PERMISSIONS[normalized] || []).some(
+      p => p.resource === resource && p.action === action
+    )) {
+      return { granted: true, source: 'profile-role', label: `Via profile role: ${profileRole}` };
+    }
+  }
+
   return { granted: false, source: 'none', label: 'No permission' };
 }
+
+const NORMALIZE_ROLE = (r: string): import('@/types/roles').AppRole | null => {
+  const map: Record<string, import('@/types/roles').AppRole> = {
+    superadmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'super admin': 'SuperAdmin',
+    admin: 'Admin',
+    countrydirector: 'CountryDirector', country_director: 'CountryDirector',
+    'field operation manager (fom)': 'Field Operation Manager (FOM)', fom: 'Field Operation Manager (FOM)',
+    financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
+    ict: 'ICT',
+    projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
+    senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead',
+    supervisor: 'Supervisor',
+    coordinator: 'Coordinator',
+    datateam: 'DataTeam', data_team: 'DataTeam',
+    datacollector: 'DataCollector', data_collector: 'DataCollector',
+    reviewer: 'Reviewer',
+    auditor: 'Auditor',
+  };
+  return map[r.toLowerCase()] ?? (DEFAULT_ROLE_PERMISSIONS[r as import('@/types/roles').AppRole] ? (r as import('@/types/roles').AppRole) : null);
+};
 
 // Source badge styling
 const SOURCE_STYLES: Record<PermSource, string> = {
@@ -60,6 +91,7 @@ const SOURCE_STYLES: Record<PermSource, string> = {
   'override-granted': 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300',
   'override-blocked': 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400',
   role: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300',
+  'profile-role': 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300',
   none: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800/30 dark:text-gray-500',
 };
 
@@ -299,7 +331,8 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground px-1">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />Super Admin <span className="opacity-60">/ مدير النظام</span></span>
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block" />Override (granted) <span className="opacity-60">/ تجاوز (ممنوح)</span></span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />From role <span className="opacity-60">/ من الدور</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />From role (user_roles) <span className="opacity-60">/ من الدور</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" />Profile role <span className="opacity-60">/ دور الملف الشخصي</span></span>
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />No access <span className="opacity-60">/ لا صلاحية</span></span>
             </div>
 
@@ -307,7 +340,7 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
               {filteredResources.map(resource => {
                 const resolved = ACTIONS.map(action => ({
                   action,
-                  ...resolveSource(resource, action, permsData, overridesData, primaryRoleName),
+                  ...resolveSource(resource, action, permsData, overridesData, primaryRoleName, selectedUser?.role),
                 }));
 
                 const grantedCount = resolved.filter(r => r.granted).length;

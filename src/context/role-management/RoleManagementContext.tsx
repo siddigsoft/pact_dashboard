@@ -55,6 +55,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   const { toast } = useToast();
   const [permissionsCache, setPermissionsCache] = useState<Record<string, Pick<Permission, 'resource' | 'action' | 'conditions'>[]>>({});
   const [overridesCache, setOverridesCache] = useState<Record<string, { resource: string; action: string; is_granted: boolean; expires_at: string | null }[]>>({});
+  const [profileRolesCache, setProfileRolesCache] = useState<Record<string, string>>({});
 
   const fetchRoles = useCallback(async () => {
     setIsLoading(true);
@@ -131,10 +132,43 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, []);
 
+  const normalizeRoleStatic = (r: string): AppRole | null => {
+    const map: Record<string, AppRole> = {
+      superadmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'super admin': 'SuperAdmin',
+      admin: 'Admin',
+      countrydirector: 'CountryDirector', country_director: 'CountryDirector',
+      'field operation manager (fom)': 'Field Operation Manager (FOM)', fom: 'Field Operation Manager (FOM)',
+      financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
+      ict: 'ICT',
+      projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
+      senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead',
+      supervisor: 'Supervisor',
+      coordinator: 'Coordinator',
+      datateam: 'DataTeam', data_team: 'DataTeam',
+      datacollector: 'DataCollector', data_collector: 'DataCollector',
+      reviewer: 'Reviewer',
+      auditor: 'Auditor',
+    };
+    return map[r.toLowerCase()] ?? (DEFAULT_ROLE_PERMISSIONS[r as AppRole] ? (r as AppRole) : null);
+  };
+
   const refreshUserPermissions = useCallback(async (userId: string): Promise<Permission[]> => {
     try {
       const { data, error } = await supabase.rpc('get_user_permissions', { user_uuid: userId });
       if (error) throw error;
+
+      // Fetch the user's primary profile role so hasPermission can also use DEFAULT_ROLE_PERMISSIONS for it
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .single();
+        if (prof?.role) {
+          setProfileRolesCache(prev => ({ ...prev, [userId]: prof.role }));
+        }
+      } catch { /* profile fetch is best-effort */ }
+
       setPermissionsCache(prev => ({ ...prev, [userId]: (data || []) as any }));
 
       // Also fetch per-user overrides so hasPermission can apply them
@@ -479,35 +513,29 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       return perms.some(p => p.resource === resource && p.action === action);
     }
 
-    // ── 4. Fallback to DEFAULT_ROLE_PERMISSIONS (covers offline / unseeded DB) ─
-    // Normalize role strings to match DEFAULT_ROLE_PERMISSIONS keys (PascalCase)
-    const normalizeRole = (r: string): AppRole | null => {
-      const map: Record<string, AppRole> = {
-        superadmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'super admin': 'SuperAdmin',
-        admin: 'Admin',
-        countrydirector: 'CountryDirector', country_director: 'CountryDirector',
-        'field operation manager (fom)': 'Field Operation Manager (FOM)', fom: 'Field Operation Manager (FOM)',
-        financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
-        ict: 'ICT',
-        projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
-        senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead',
-        supervisor: 'Supervisor',
-        coordinator: 'Coordinator',
-        datateam: 'DataTeam', data_team: 'DataTeam',
-        datacollector: 'DataCollector', data_collector: 'DataCollector',
-        reviewer: 'Reviewer',
-        auditor: 'Auditor',
-      };
-      return map[r.toLowerCase()] ?? (DEFAULT_ROLE_PERMISSIONS[r as AppRole] ? (r as AppRole) : null);
-    };
-
-    return uRoles.some(ur => {
-      const normalized = normalizeRole(ur.role as string);
+    // ── 4. Fallback to DEFAULT_ROLE_PERMISSIONS ───────────────────────────────
+    // Check user_roles table entries
+    const fromUserRoles = uRoles.some(ur => {
+      const normalized = normalizeRoleStatic(ur.role as string);
       if (!normalized) return false;
       return (DEFAULT_ROLE_PERMISSIONS[normalized] || []).some(
         p => p.resource === resource && p.action === action
       );
     });
+    if (fromUserRoles) return true;
+
+    // ── 5. Also check the user's primary profile role ─────────────────────────
+    // This covers users whose profile.role differs from user_roles (e.g. role='admin'
+    // in profiles but only 'dataCollector' in user_roles).
+    const profileRole = profileRolesCache[userId];
+    if (profileRole) {
+      const normalizedProfile = normalizeRoleStatic(profileRole);
+      if (normalizedProfile && (DEFAULT_ROLE_PERMISSIONS[normalizedProfile] || []).some(
+        p => p.resource === resource && p.action === action
+      )) return true;
+    }
+
+    return false;
   };
 
   const getUserPermissions = (userId: string): Permission[] => {
