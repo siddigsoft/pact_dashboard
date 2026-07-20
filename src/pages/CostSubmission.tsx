@@ -248,8 +248,10 @@ const CostSubmission = () => {
   
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
 
-  // FOM defaults to Approval Queue; all others default to Submit Request
-  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">(isFOM ? "history" : "submit");
+  // FOM, Admin, SuperAdmin, CountryDirector default to "All Submissions"; submitters default to Submit Request
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">(
+    (isFOM || isSuperAdmin || isAdmin || isCountryDirector || canViewTeamSubmissions) ? "history" : "submit"
+  );
   // Task #56 — top-of-page expense-type selector (operational vs personal reimbursement)
   const [expenseMode, setExpenseMode] = useState<ExpenseMode>("operational");
   const [pendingMode, setPendingMode] = useState<ExpenseMode | null>(null);
