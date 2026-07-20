@@ -151,6 +151,7 @@ export const ActivityManager = ({
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Activities</h3>
         <Button
+          type="button"
           onClick={() => setOpenActivityDialogs({ ...openActivityDialogs, new: true })}
           size="sm"
         >
@@ -184,6 +185,7 @@ export const ActivityManager = ({
               </CollapsibleTrigger>
               <div className="flex items-center gap-2">
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
                   onClick={(e) => {
@@ -194,6 +196,7 @@ export const ActivityManager = ({
                   <Edit className="h-4 w-4" />
                 </Button>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
                   onClick={(e) => {
@@ -237,6 +240,7 @@ export const ActivityManager = ({
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-medium text-muted-foreground">Sub-Activities</h4>
                   <Button
+                    type="button"
                     variant="outline"
                     size="sm"
                     onClick={() =>
@@ -261,6 +265,7 @@ export const ActivityManager = ({
                       </div>
                       <div className="flex items-center gap-1">
                         <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
                           onClick={() =>
