@@ -96,7 +96,7 @@ async function notifyMgmtOfCostEvent(
         type: 'info',
         category: 'financial',
         priority: 'normal',
-        link: '/cost-submission',
+        link: `/cost-submission?open=${submissionId}`,
         relatedEntityType: 'costSubmission',
         relatedEntityId: submissionId,
         sendEmail: true,
@@ -198,10 +198,12 @@ interface OperationalCostSubmission {
 
 const CostSubmission = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Cycle-close context: when arriving from the readiness checklist "Resolve" button
   const cycleContextMmpId   = searchParams.get('mmpId')   || null;
   const cycleContextMmpName = searchParams.get('mmpName') || null;
+  // Deep-link: ?open=<submissionId> auto-opens a specific submission detail sheet
+  const openSubmissionId = searchParams.get('open') || null;
   const { currentUser } = useAppContext();
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
@@ -327,6 +329,21 @@ const CostSubmission = () => {
     }
     return opts.sort((a, b) => a.label.localeCompare(b.label));
   }, [operationalCosts, users]);
+
+  // Auto-open a specific submission when ?open=<id> is in the URL (deep-link from notifications)
+  useEffect(() => {
+    if (!openSubmissionId || operationalCosts.length === 0) return;
+    const found = operationalCosts.find(o => o.id === openSubmissionId);
+    if (found) {
+      setViewingSubmission(found);
+      // Remove the ?open param so refreshing doesn't re-trigger
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('open');
+        return next;
+      }, { replace: true });
+    }
+  }, [openSubmissionId, operationalCosts]);
 
   // Fetch GL bridge log for paid/reconciled operational cost submissions
   useEffect(() => {
@@ -976,6 +993,8 @@ const CostSubmission = () => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
     if (oc.status === 'partially_paid') return 'partially_paid';
+    // Derive partial payment from amount fields (DB constraint may not allow 'partially_paid' status)
+    if ((oc.amount_paid_cents ?? 0) > 0 && (oc.amount_paid_cents ?? 0) < oc.amount_cents) return 'partially_paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.tier4_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (oc.status === 'approved') return 'approved';
 
@@ -2120,7 +2139,7 @@ const CostSubmission = () => {
 
       const now = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
-        status: isFullPayment ? 'paid' : 'partially_paid',
+        ...(isFullPayment ? { status: 'paid' } : {}),
         amount_paid_cents: newAmountPaidCents,
         paid_at: isFullPayment ? now : (oc.paid_at ?? null),
         paid_by: isFullPayment ? currentUser.id : (oc.paid_by ?? null),
@@ -2310,7 +2329,7 @@ const CostSubmission = () => {
         const newPaidCents = (sub.amount_paid_cents ?? 0) + payNowCents;
         const isFullyPaid = newPaidCents >= sub.amount_cents;
         const { error } = await supabase.from('operational_cost_submissions').update({
-          status: isFullyPaid ? 'paid' : 'partially_paid',
+          ...(isFullyPaid ? { status: 'paid' } : {}),
           amount_paid_cents: newPaidCents,
           paid_at: now,
           paid_by: currentUser.id,
