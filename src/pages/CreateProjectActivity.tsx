@@ -73,7 +73,6 @@ const CreateProjectActivity = () => {
           status:      activity.status,
           priority:    activity.priority ?? 'medium',
           progress:    activity.progress ?? 0,
-          is_active:   activity.isActive,
           created_by:  currentUser?.id ?? null,
         })
         .select('id')
@@ -88,7 +87,6 @@ const CreateProjectActivity = () => {
             name:        sub.name,
             description: sub.description ?? null,
             status:      sub.status,
-            is_active:   sub.isActive,
             due_date:    sub.dueDate ?? null,
           }))
         );
