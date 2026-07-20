@@ -415,6 +415,58 @@ export function UserPermissionOverrides() {
             </span>
           </div>
 
+          {/* Save bar — shown inline at top of matrix when there are pending changes */}
+          {hasPendingChanges && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/80 dark:border-amber-700 shadow-sm px-4 py-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-200 text-sm font-semibold whitespace-nowrap">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  {pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}
+                  <span className="opacity-60 font-normal text-xs" dir="rtl">/ تغييرات غير محفوظة</span>
+                </span>
+                <Input
+                  placeholder="Reason / note (optional) / السبب (اختياري)"
+                  value={pendingReason}
+                  onChange={e => setPendingReason(e.target.value)}
+                  className="h-8 text-xs flex-1 min-w-[160px] bg-white dark:bg-amber-950/60 border-amber-300 dark:border-amber-700"
+                  data-testid="input-override-reason"
+                />
+                <div className="relative flex-shrink-0">
+                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    type="datetime-local"
+                    value={pendingExpiry}
+                    onChange={e => setPendingExpiry(e.target.value)}
+                    className="h-8 text-xs pl-8 w-48 bg-white dark:bg-amber-950/60 border-amber-300 dark:border-amber-700"
+                    data-testid="input-override-expiry"
+                    title="Expiry date (optional) / تاريخ الانتهاء (اختياري)"
+                  />
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs border-amber-400 dark:border-amber-600"
+                    onClick={() => setPendingChanges(new Map())}
+                    disabled={saving}
+                  >
+                    Discard <span className="opacity-60 text-[10px]">/ تجاهل</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs bg-purple-600 hover:bg-purple-700"
+                    onClick={saveChanges}
+                    disabled={saving}
+                    data-testid="button-save-overrides"
+                  >
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
+                    Save Overrides <span className="opacity-70 text-[10px]">/ حفظ</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {loadingOverrides ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -541,61 +593,6 @@ export function UserPermissionOverrides() {
             </div>
           )}
 
-          {/* Save bar */}
-          {hasPendingChanges && (
-            <div className="sticky bottom-0 z-20 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/80 dark:border-amber-700 shadow-lg backdrop-blur-sm px-4 py-3">
-              {/* Row 1: status + buttons */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-200 text-sm font-semibold whitespace-nowrap">
-                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                  {pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}
-                  <span className="opacity-60 font-normal text-xs" dir="rtl">/ تغييرات غير محفوظة</span>
-                </span>
-                {/* Reason — grows to fill space */}
-                <Input
-                  placeholder="Reason / note (optional) / السبب (اختياري)"
-                  value={pendingReason}
-                  onChange={e => setPendingReason(e.target.value)}
-                  className="h-8 text-xs flex-1 min-w-[160px] bg-white dark:bg-amber-950/60 border-amber-300 dark:border-amber-700"
-                  data-testid="input-override-reason"
-                />
-                {/* Expiry */}
-                <div className="relative flex-shrink-0">
-                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                  <Input
-                    type="datetime-local"
-                    value={pendingExpiry}
-                    onChange={e => setPendingExpiry(e.target.value)}
-                    className="h-8 text-xs pl-8 w-48 bg-white dark:bg-amber-950/60 border-amber-300 dark:border-amber-700"
-                    data-testid="input-override-expiry"
-                    title="Expiry date (optional) / تاريخ الانتهاء (اختياري)"
-                  />
-                </div>
-                {/* Action buttons */}
-                <div className="flex gap-2 flex-shrink-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs border-amber-400 dark:border-amber-600"
-                    onClick={() => setPendingChanges(new Map())}
-                    disabled={saving}
-                  >
-                    Discard <span className="opacity-60 text-[10px]">/ تجاهل</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-purple-600 hover:bg-purple-700"
-                    onClick={saveChanges}
-                    disabled={saving}
-                    data-testid="button-save-overrides"
-                  >
-                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
-                    Save Overrides <span className="opacity-70 text-[10px]">/ حفظ</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
