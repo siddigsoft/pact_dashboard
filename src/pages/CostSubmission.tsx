@@ -5223,6 +5223,15 @@ const CostSubmission = () => {
                                 <div className="flex-none text-right space-y-1">
                                   <p className="font-bold text-base tabular-nums text-white">{currency} {(totalCents / 100).toLocaleString()}</p>
                                   <p className="text-[10px] text-white/50">Total</p>
+                                  {/* View Details button — opens detail sheet directly from header (stops group toggle) */}
+                                  <button
+                                    className="flex items-center gap-1 text-[11px] text-blue-300 hover:text-white bg-white/10 hover:bg-white/20 rounded px-2 py-0.5 ml-auto transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); setViewingSubmission(groupItems[0]); }}
+                                    data-testid={`button-group-header-view-${groupId}`}
+                                    title="Open submission detail"
+                                  >
+                                    <Eye className="h-3 w-3" /> View
+                                  </button>
                                   <div className="flex items-center justify-end gap-1 text-white/60 text-[11px] mt-1">
                                     {isExpanded
                                       ? <><ChevronDown className="h-4 w-4" /><span>Collapse</span></>
