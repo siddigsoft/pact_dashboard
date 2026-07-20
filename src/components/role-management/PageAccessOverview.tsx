@@ -165,7 +165,8 @@ export function PageAccessOverview() {
         <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 text-xs text-blue-800 dark:text-blue-300">
           <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <div>
-            <span className="font-semibold">Page Access Overrides</span> let you grant or block specific pages for individual users, overriding their default role access. These are the same overrides controlled by the "Manage Access" button in the app header — managed here in one central view.
+            <span className="font-semibold">Page Access Overrides <span className="font-normal opacity-70" dir="rtl">/ تجاوزات صلاحيات الصفحات</span></span> let you grant or block specific pages for individual users, overriding their default role access. These are the same overrides controlled by the "Manage Access" button in the app header — managed here in one central view.
+            <span className="block mt-1 opacity-70" dir="rtl">تتيح لك منح أو حظر صفحات محددة لمستخدمين أفراد، بتجاوز صلاحيات دورهم الافتراضية.</span>
           </div>
         </div>
 
@@ -188,7 +189,7 @@ export function PageAccessOverview() {
                   viewMode === 'by-user' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
                 )}
               >
-                <User className="h-3 w-3" /> By User
+                <User className="h-3 w-3" /> By User <span className="opacity-60">/ حسب المستخدم</span>
               </button>
               <button
                 onClick={() => setViewMode('by-page')}
@@ -196,7 +197,7 @@ export function PageAccessOverview() {
                   viewMode === 'by-page' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
                 )}
               >
-                <FileText className="h-3 w-3" /> By Page
+                <FileText className="h-3 w-3" /> By Page <span className="opacity-60">/ حسب الصفحة</span>
               </button>
             </div>
           </div>
@@ -205,7 +206,7 @@ export function PageAccessOverview() {
             <Badge variant="secondary" className="text-xs">{overrides.length} override{overrides.length !== 1 ? 's' : ''}</Badge>
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setAdding(!adding)}>
               <Plus className="h-3.5 w-3.5" />
-              Add Override
+              Add Override <span className="opacity-60 text-[10px]">/ إضافة تجاوز</span>
             </Button>
           </div>
         </div>
@@ -214,10 +215,10 @@ export function PageAccessOverview() {
         {adding && (
           <Card className="border-blue-200 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20">
             <CardContent className="p-4 space-y-3">
-              <p className="text-sm font-semibold">Add Page Access Override</p>
+              <p className="text-sm font-semibold">Add Page Access Override <span className="text-xs font-normal text-muted-foreground" dir="rtl">/ إضافة تجاوز صلاحية صفحة</span></p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">User</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">User <span className="opacity-60">/ المستخدم</span></label>
                   <Popover open={userPickerOpen} onOpenChange={setUserPickerOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -265,7 +266,7 @@ export function PageAccessOverview() {
                   </Popover>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Page</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">Page <span className="opacity-60">/ الصفحة</span></label>
                   <Select value={newSlug} onValueChange={setNewSlug}>
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Select page…" />
@@ -280,7 +281,7 @@ export function PageAccessOverview() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Effect</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">Effect <span className="opacity-60">/ التأثير</span></label>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setNewBlocked(false)}
@@ -288,7 +289,7 @@ export function PageAccessOverview() {
                         !newBlocked ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-background hover:bg-muted'
                       )}
                     >
-                      <Unlock className="h-3 w-3" /> Grant
+                      <Unlock className="h-3 w-3" /> Grant <span className="opacity-70">/ منح</span>
                     </button>
                     <button
                       onClick={() => setNewBlocked(true)}
@@ -296,16 +297,16 @@ export function PageAccessOverview() {
                         newBlocked ? 'bg-destructive text-destructive-foreground border-destructive' : 'bg-background hover:bg-muted'
                       )}
                     >
-                      <Lock className="h-3 w-3" /> Block
+                      <Lock className="h-3 w-3" /> Block <span className="opacity-70">/ حظر</span>
                     </button>
                   </div>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setAdding(false)}>Cancel</Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setAdding(false)}>Cancel <span className="opacity-60">/ إلغاء</span></Button>
                 <Button size="sm" className="h-8 text-xs" onClick={addOverride} disabled={saving || !newUserId || !newSlug}>
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                  Save Override
+                  Save Override <span className="opacity-70 text-[10px]">/ حفظ</span>
                 </Button>
               </div>
             </CardContent>
@@ -317,7 +318,9 @@ export function PageAccessOverview() {
           <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
             <Globe className="h-12 w-12 mb-3 opacity-30" />
             <p className="text-sm font-medium">No page access overrides</p>
+            <p className="text-xs opacity-70" dir="rtl">لا توجد تجاوزات لصلاحيات الصفحات</p>
             <p className="text-xs mt-1">All users follow their default role access. Use "Add Override" to grant or block specific pages.</p>
+            <p className="text-xs mt-0.5 opacity-70" dir="rtl">جميع المستخدمين يتبعون صلاحيات دورهم الافتراضية. استخدم "إضافة تجاوز" لمنح أو حظر صفحات محددة.</p>
           </div>
         )}
 

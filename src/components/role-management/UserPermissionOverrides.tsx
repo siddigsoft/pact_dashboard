@@ -267,12 +267,13 @@ export function UserPermissionOverrides() {
         <div>
           <h2 className="text-xl font-semibold flex items-center gap-2">
             <Shield className="h-5 w-5 text-purple-600" />
-            User Permission Overrides
+            User Permission Overrides <span className="text-base font-normal text-muted-foreground" dir="rtl">/ تجاوزات صلاحيات المستخدمين</span>
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             Grant or block specific actions for individual users, independent of their role.
             Super Admin access only.
           </p>
+          <p className="text-xs text-muted-foreground/70" dir="rtl">منح أو حظر إجراءات محددة لمستخدمين أفراد، بشكل مستقل عن دورهم. للمدير الأعلى فقط.</p>
         </div>
         {activeOverrides.length > 0 && selectedUserId && (
           <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
@@ -287,7 +288,7 @@ export function UserPermissionOverrides() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search user by name or email..."
+              placeholder="Search user by name or email… / ابحث عن مستخدم بالاسم أو البريد"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9"
@@ -351,7 +352,7 @@ export function UserPermissionOverrides() {
               data-testid="button-view-override-audit"
             >
               <History className="h-4 w-4 mr-1" />
-              Audit Log
+              Audit Log <span className="opacity-60 text-[10px]">/ سجل التدقيق</span>
             </Button>
             {activeOverrides.length > 0 && (
               <Button
@@ -361,7 +362,7 @@ export function UserPermissionOverrides() {
                 data-testid="button-clear-all-overrides"
               >
                 <Trash2 className="h-4 w-4 mr-1" />
-                Clear All
+                Clear All <span className="opacity-60 text-[10px]">/ مسح الكل</span>
               </Button>
             )}
           </div>
@@ -370,20 +371,20 @@ export function UserPermissionOverrides() {
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground px-1">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-400 inline-block" />
-              Role default (allowed)
+              Role default (allowed) <span className="opacity-60">/ افتراضي (مسموح)</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-red-100 dark:bg-red-900/30 border border-red-300 inline-block" />
-              Role default (denied)
+              Role default (denied) <span className="opacity-60">/ افتراضي (محظور)</span>
             </span>
             <span className="flex items-center gap-1 text-emerald-600 font-semibold">
-              <Check className="h-3 w-3" /> Override: Grant
+              <Check className="h-3 w-3" /> Override: Grant <span className="opacity-60 font-normal">/ تجاوز: منح</span>
             </span>
             <span className="flex items-center gap-1 text-red-600 font-semibold">
-              <X className="h-3 w-3" /> Override: Block
+              <X className="h-3 w-3" /> Override: Block <span className="opacity-60 font-normal">/ تجاوز: حظر</span>
             </span>
             <span className="flex items-center gap-1">
-              <Minus className="h-3 w-3" /> Inherit from role
+              <Minus className="h-3 w-3" /> Inherit from role <span className="opacity-60">/ موروث من الدور</span>
             </span>
           </div>
 
@@ -424,10 +425,10 @@ export function UserPermissionOverrides() {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="bg-muted/30">
-                                <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground w-28">Action</th>
-                                <th className="text-center px-2 py-2 text-xs font-medium text-muted-foreground">Role Default</th>
-                                <th className="text-center px-2 py-2 text-xs font-medium text-muted-foreground">Override</th>
-                                <th className="text-center px-2 py-2 text-xs font-medium text-muted-foreground">Effective</th>
+                                <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground w-28">Action <span className="opacity-60">/ الإجراء</span></th>
+                                <th className="text-center px-2 py-2 text-xs font-medium text-muted-foreground">Role Default <span className="opacity-60">/ الافتراضي</span></th>
+                                <th className="text-center px-2 py-2 text-xs font-medium text-muted-foreground">Override <span className="opacity-60">/ تجاوز</span></th>
+                                <th className="text-center px-2 py-2 text-xs font-medium text-muted-foreground">Effective <span className="opacity-60">/ الفعلي</span></th>
                               </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -519,13 +520,13 @@ export function UserPermissionOverrides() {
               <CardContent className="pt-4 pb-4 space-y-3">
                 <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
                   <AlertTriangle className="h-4 w-4" />
-                  <span className="text-sm font-medium">{pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}</span>
+                  <span className="text-sm font-medium">{pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''} <span className="opacity-60 text-xs">/ تغييرات غير محفوظة</span></span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium block mb-1">Reason / Note (optional)</label>
+                    <label className="text-xs font-medium block mb-1">Reason / Note (optional) <span className="opacity-60">/ السبب / ملاحظة (اختياري)</span></label>
                     <Textarea
-                      placeholder="Why are these overrides being set?"
+                      placeholder="Why are these overrides being set? / لماذا يتم تعيين هذه التجاوزات؟"
                       value={pendingReason}
                       onChange={e => setPendingReason(e.target.value)}
                       rows={2}
@@ -534,7 +535,7 @@ export function UserPermissionOverrides() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium block mb-1">Expiry Date (optional)</label>
+                    <label className="text-xs font-medium block mb-1">Expiry Date (optional) <span className="opacity-60">/ تاريخ الانتهاء (اختياري)</span></label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -545,7 +546,7 @@ export function UserPermissionOverrides() {
                         data-testid="input-override-expiry"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Leave blank for no expiry</p>
+                    <p className="text-xs text-muted-foreground mt-1">Leave blank for no expiry <span className="opacity-60">/ اتركه فارغاً لعدم الانتهاء</span></p>
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end">
@@ -555,7 +556,7 @@ export function UserPermissionOverrides() {
                     onClick={() => setPendingChanges(new Map())}
                     disabled={saving}
                   >
-                    Discard
+                    Discard <span className="opacity-60 text-[10px]">/ تجاهل</span>
                   </Button>
                   <Button
                     size="sm"
@@ -565,7 +566,7 @@ export function UserPermissionOverrides() {
                     className="bg-purple-600 hover:bg-purple-700"
                   >
                     {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-                    Save Overrides
+                    Save Overrides <span className="opacity-70 text-[10px]">/ حفظ التجاوزات</span>
                   </Button>
                 </div>
               </CardContent>
@@ -578,9 +579,11 @@ export function UserPermissionOverrides() {
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <User className="h-12 w-12 text-muted-foreground/30 mb-3" />
           <p className="text-muted-foreground font-medium">Select a user above to manage their permission overrides</p>
+          <p className="text-xs text-muted-foreground/60 mt-0.5" dir="rtl">اختر مستخدماً أعلاه لإدارة تجاوزات صلاحياته</p>
           <p className="text-sm text-muted-foreground/70 mt-1">
             Overrides win over role defaults — use them sparingly and always add a reason.
           </p>
+          <p className="text-xs text-muted-foreground/60 mt-0.5" dir="rtl">التجاوزات تسبق افتراضيات الدور — استخدمها بحكمة وأضف دائماً سبباً.</p>
         </div>
       )}
 
@@ -590,7 +593,7 @@ export function UserPermissionOverrides() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="h-5 w-5 text-purple-600" />
-              Override Audit Log — {selectedUser?.name}
+              Override Audit Log <span className="font-normal text-muted-foreground text-sm">/ سجل تدقيق التجاوزات</span> — {selectedUser?.name}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto">
@@ -653,18 +656,19 @@ export function UserPermissionOverrides() {
           <DialogHeader>
             <DialogTitle className="text-red-600 flex items-center gap-2">
               <Trash2 className="h-5 w-5" />
-              Clear All Overrides?
+              Clear All Overrides? <span className="font-normal text-muted-foreground text-sm" dir="rtl">/ مسح جميع التجاوزات؟</span>
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             This will remove all {activeOverrides.length} active permission override{activeOverrides.length !== 1 ? 's' : ''} for <strong>{selectedUser?.name}</strong>.
             They will revert to their role defaults. This action is logged.
           </p>
+          <p className="text-xs text-muted-foreground/70 mt-1" dir="rtl">سيؤدي هذا إلى إزالة جميع التجاوزات النشطة. سيعود المستخدم إلى افتراضيات دوره. يتم تسجيل هذا الإجراء.</p>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm({ open: false })}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirm({ open: false })}>Cancel <span className="opacity-60 text-[10px]">/ إلغاء</span></Button>
             <Button variant="destructive" onClick={clearAllOverrides} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Clear All
+              Clear All <span className="opacity-70 text-[10px]">/ مسح الكل</span>
             </Button>
           </DialogFooter>
         </DialogContent>

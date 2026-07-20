@@ -140,11 +140,12 @@ export function RoleAccessMap() {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Grid3X3 className="h-5 w-5 text-blue-600" />
-                Live Permission Matrix
+                Live Permission Matrix <span className="text-sm font-normal text-muted-foreground" dir="rtl">/ مصفوفة الصلاحيات الحية</span>
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Derived from DEFAULT_ROLE_PERMISSIONS — reflects current role definitions in real time
               </p>
+              <p className="text-xs text-muted-foreground/70" dir="rtl">مستمدة من الصلاحيات الافتراضية — تعكس تعريفات الأدوار الحالية في الوقت الفعلي</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -165,13 +166,13 @@ export function RoleAccessMap() {
             <div className="px-6 border-b">
               <TabsList className="h-9 mb-0 rounded-none border-0 bg-transparent gap-1">
                 <TabsTrigger value="matrix" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none">
-                  <Grid3X3 className="h-3.5 w-3.5 mr-1" /> Permission Matrix
+                  <Grid3X3 className="h-3.5 w-3.5 mr-1" /> Permission Matrix <span className="opacity-60 text-[10px]">/ مصفوفة الصلاحيات</span>
                 </TabsTrigger>
                 <TabsTrigger value="role-detail" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none">
-                  <Shield className="h-3.5 w-3.5 mr-1" /> Role Deep-Dive
+                  <Shield className="h-3.5 w-3.5 mr-1" /> Role Deep-Dive <span className="opacity-60 text-[10px]">/ تفصيل الدور</span>
                 </TabsTrigger>
                 <TabsTrigger value="legend" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none">
-                  <Info className="h-3.5 w-3.5 mr-1" /> Legend
+                  <Info className="h-3.5 w-3.5 mr-1" /> Legend <span className="opacity-60 text-[10px]">/ المفتاح</span>
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -183,7 +184,7 @@ export function RoleAccessMap() {
                   <thead>
                     <tr className="border-b bg-muted/40">
                       <th className="py-2.5 px-4 text-left font-semibold text-muted-foreground w-44 sticky left-0 bg-muted/60 z-10">
-                        Module / Resource
+                        Module / Resource <span className="block text-[9px] font-normal opacity-60" dir="rtl">الوحدة / المورد</span>
                       </th>
                       {ROLES.map(role => (
                         <th key={role} className="py-2 px-1 text-center">
@@ -273,7 +274,8 @@ export function RoleAccessMap() {
             {/* ── Role Deep-Dive Tab ── */}
             <TabsContent value="role-detail" className="mt-0 p-6 space-y-4">
               <div>
-                <p className="text-sm text-muted-foreground mb-3">Select a role to see every action it can perform across all modules.</p>
+                <p className="text-sm text-muted-foreground mb-1">Select a role to see every action it can perform across all modules.</p>
+                <p className="text-xs text-muted-foreground/70 mb-3" dir="rtl">اختر دوراً لرؤية جميع الإجراءات التي يمكنه تنفيذها عبر جميع الوحدات.</p>
                 <div className="flex flex-wrap gap-2">
                   {ROLES.map(role => (
                     <button
@@ -349,7 +351,7 @@ export function RoleAccessMap() {
             {/* ── Legend Tab ── */}
             <TabsContent value="legend" className="mt-0 p-6 space-y-6">
               <div>
-                <h3 className="text-sm font-semibold mb-3">Access Level Key</h3>
+                <h3 className="text-sm font-semibold mb-3">Access Level Key <span className="font-normal text-muted-foreground text-xs" dir="rtl">/ مستويات الوصول</span></h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(Object.entries(ACCESS_CONFIG) as [AccessLevel, any][]).map(([level, cfg]) => {
                     const Icon = cfg.icon;
@@ -359,13 +361,13 @@ export function RoleAccessMap() {
                         <div>
                           <p className="text-sm font-semibold">{cfg.label}</p>
                           <p className="text-xs text-muted-foreground">
-                            {level === 'full' && 'Can create, read, update, delete, and approve. Highest access.'}
-                            {level === 'read+write' && 'Can read and modify records but cannot approve or delete.'}
-                            {level === 'approve' && 'Can approve or reject items submitted by others.'}
-                            {level === 'submit' && 'Can submit items for approval but cannot approve themselves.'}
-                            {level === 'read' && 'Read-only access. Can view and export but not change.'}
-                            {level === 'export' && 'Can only export data. No create/update/delete.'}
-                            {level === 'none' && 'No access. Module is hidden or blocked for this role.'}
+                            {level === 'full' && <span>Can create, read, update, delete, and approve. Highest access. <span className="block text-[10px] opacity-70" dir="rtl">إنشاء وقراءة وتحديث وحذف وموافقة. أعلى مستوى وصول.</span></span>}
+                            {level === 'read+write' && <span>Can read and modify records but cannot approve or delete. <span className="block text-[10px] opacity-70" dir="rtl">القراءة والتعديل دون الموافقة أو الحذف.</span></span>}
+                            {level === 'approve' && <span>Can approve or reject items submitted by others. <span className="block text-[10px] opacity-70" dir="rtl">الموافقة أو رفض العناصر المقدمة من الآخرين.</span></span>}
+                            {level === 'submit' && <span>Can submit items for approval but cannot approve themselves. <span className="block text-[10px] opacity-70" dir="rtl">تقديم العناصر للموافقة دون الموافقة عليها.</span></span>}
+                            {level === 'read' && <span>Read-only access. Can view and export but not change. <span className="block text-[10px] opacity-70" dir="rtl">وصول للقراءة فقط. العرض والتصدير دون تغيير.</span></span>}
+                            {level === 'export' && <span>Can only export data. No create/update/delete. <span className="block text-[10px] opacity-70" dir="rtl">تصدير البيانات فقط. لا إنشاء أو تحديث أو حذف.</span></span>}
+                            {level === 'none' && <span>No access. Module is hidden or blocked for this role. <span className="block text-[10px] opacity-70" dir="rtl">لا وصول. الوحدة مخفية أو محظورة لهذا الدور.</span></span>}
                           </p>
                         </div>
                       </div>
@@ -375,7 +377,7 @@ export function RoleAccessMap() {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold mb-3">Role Codes</h3>
+                <h3 className="text-sm font-semibold mb-3">Role Codes <span className="font-normal text-muted-foreground text-xs" dir="rtl">/ رموز الأدوار</span></h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                   {ROLES.map(role => (
                     <div key={role} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/30">
@@ -392,9 +394,10 @@ export function RoleAccessMap() {
                 <div className="flex items-start gap-2">
                   <Lock className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                   <div className="text-xs text-amber-800 dark:text-amber-300 space-y-1">
-                    <p className="font-semibold">How permissions are applied</p>
+                    <p className="font-semibold">How permissions are applied <span className="font-normal opacity-70" dir="rtl">/ كيف تُطبق الصلاحيات</span></p>
                     <p>This matrix shows default role permissions from the system codebase. Per-user overrides (set in the "User Permission Overrides" tab) can grant or block specific actions for individual users on top of these defaults.</p>
-                    <p>SuperAdmin always bypasses all checks regardless of any override.</p>
+                    <p className="opacity-70" dir="rtl">تُظهر هذه المصفوفة الصلاحيات الافتراضية للأدوار. يمكن للتجاوزات الفردية منح أو حظر إجراءات محددة فوق هذه الافتراضيات.</p>
+                    <p>SuperAdmin always bypasses all checks regardless of any override. <span className="opacity-70" dir="rtl">/ مدير النظام يتجاوز دائماً جميع الفحوصات.</span></p>
                   </div>
                 </div>
               </div>

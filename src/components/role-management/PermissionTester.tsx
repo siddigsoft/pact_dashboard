@@ -188,22 +188,23 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Permission Tester</h3>
+            <h3 className="text-lg font-semibold">Permission Tester <span className="text-sm font-normal text-muted-foreground" dir="rtl">/ اختبار الصلاحيات</span></h3>
             <p className="text-sm text-muted-foreground">
               See every permission for any user — and exactly how they got it
             </p>
+            <p className="text-xs text-muted-foreground/70" dir="rtl">عرض جميع صلاحيات أي مستخدم وكيفية الحصول عليها</p>
           </div>
           <Button onClick={testCurrentUser} variant="outline" size="sm" data-testid="test-current-user-btn">
             <Eye className="h-4 w-4 mr-2" />
-            Test My Account
+            <span>Test My Account <span className="text-[10px] opacity-60">/ اختبار حسابي</span></span>
           </Button>
         </div>
 
         {/* User Selection */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Select User</CardTitle>
-            <CardDescription>Start typing to search across all staff members</CardDescription>
+            <CardTitle className="text-base">Select User <span className="text-xs font-normal text-muted-foreground" dir="rtl">/ اختر مستخدماً</span></CardTitle>
+            <CardDescription>Start typing to search across all staff members / ابدأ الكتابة للبحث عن موظف</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <UserCombobox
@@ -219,7 +220,7 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
                 onClick={() => { setTestUserId(''); setPermsData([]); setOverridesData([]); }}
                 data-testid="clear-user-btn"
               >
-                Clear selection
+                Clear selection <span className="opacity-60">/ مسح الاختيار</span>
               </Button>
             )}
           </CardContent>
@@ -231,15 +232,15 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
             <CardContent className="pt-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Name</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Name <span className="opacity-60">/ الاسم</span></p>
                   <p className="text-sm font-medium">{selectedUser.name}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Email</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Email <span className="opacity-60">/ البريد الإلكتروني</span></p>
                   <p className="text-sm">{selectedUser.email}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Primary Role</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Primary Role <span className="opacity-60">/ الدور الأساسي</span></p>
                   <Badge variant="outline" className="text-xs">{selectedUser.role}</Badge>
                 </div>
               </div>
@@ -280,7 +281,7 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
               <div className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-muted-foreground" />
                 <h4 className="text-base font-semibold">
-                  {isLoading ? 'Loading permissions…' : 'Permission Results'}
+                  {isLoading ? <span>Loading permissions… <span className="text-sm font-normal text-muted-foreground" dir="rtl">/ جارٍ تحميل الصلاحيات</span></span> : <span>Permission Results <span className="text-sm font-normal text-muted-foreground" dir="rtl">/ نتائج الصلاحيات</span></span>}
                 </h4>
               </div>
               <div className="relative w-48">
@@ -296,10 +297,10 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
 
             {/* Legend */}
             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground px-1">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />Super Admin</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block" />Override (granted)</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />From role</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />No access</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />Super Admin <span className="opacity-60">/ مدير النظام</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block" />Override (granted) <span className="opacity-60">/ تجاوز (ممنوح)</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />From role <span className="opacity-60">/ من الدور</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />No access <span className="opacity-60">/ لا صلاحية</span></span>
             </div>
 
             <div className="space-y-3">
@@ -376,9 +377,9 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <UserCircle className="h-4 w-4" />
-                Your Permission Summary
+                Your Permission Summary <span className="text-xs font-normal text-muted-foreground" dir="rtl">/ ملخص صلاحياتك</span>
               </CardTitle>
-              <CardDescription>Modules where you currently have access</CardDescription>
+              <CardDescription>Modules where you currently have access / الوحدات التي لديك صلاحية الوصول إليها</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -408,11 +409,11 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription className="text-xs space-y-1">
-            <p className="font-semibold">How permissions are resolved</p>
-            <p><strong>1. Super Admin</strong> — bypasses all checks if the user has <code>system:override</code>.</p>
-            <p><strong>2. Manual overrides</strong> — per-user grants or blocks set in the "User Permission Overrides" tab win over role defaults.</p>
-            <p><strong>3. Role defaults</strong> — from the user's assigned role(s) in the system.</p>
-            <p>Hover any permission cell to see its exact source.</p>
+            <p className="font-semibold">How permissions are resolved <span className="font-normal opacity-70" dir="rtl">/ كيف تُحسم الصلاحيات</span></p>
+            <p><strong>1. Super Admin</strong> — bypasses all checks if the user has <code>system:override</code>. <span className="opacity-70" dir="rtl">/ يتجاوز جميع الفحوصات</span></p>
+            <p><strong>2. Manual overrides</strong> — per-user grants or blocks set in the "User Permission Overrides" tab win over role defaults. <span className="opacity-70" dir="rtl">/ التجاوزات الفردية تسبق افتراضيات الدور</span></p>
+            <p><strong>3. Role defaults</strong> — from the user's assigned role(s) in the system. <span className="opacity-70" dir="rtl">/ الافتراضيات من أدوار المستخدم</span></p>
+            <p>Hover any permission cell to see its exact source. <span className="opacity-70" dir="rtl">/ مرر الفأرة فوق أي خلية لرؤية مصدر الصلاحية</span></p>
           </AlertDescription>
         </Alert>
       </div>

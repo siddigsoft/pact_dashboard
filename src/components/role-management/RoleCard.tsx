@@ -86,18 +86,18 @@ export const RoleCard: React.FC<RoleCardProps> = ({
                   <TooltipTrigger asChild>
                     <Badge variant="secondary" className="text-xs flex-shrink-0 gap-1">
                       <Lock className="h-2.5 w-2.5" />
-                      System
+                      System <span className="opacity-60">/ نظامي</span>
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent>Built-in system role — cannot be deleted</TooltipContent>
+                  <TooltipContent>Built-in system role — cannot be deleted / دور نظامي مدمج</TooltipContent>
                 </Tooltip>
               )}
               {!role.is_active && (
-                <Badge variant="outline" className="text-xs flex-shrink-0 text-muted-foreground">Inactive</Badge>
+                <Badge variant="outline" className="text-xs flex-shrink-0 text-muted-foreground">Inactive <span className="opacity-60">/ غير نشط</span></Badge>
               )}
             </CardTitle>
             <CardDescription className="text-sm text-muted-foreground line-clamp-2">
-              {role.description || 'No description provided'}
+              {role.description || <span>No description provided <span className="text-xs opacity-60" dir="rtl">/ لا يوجد وصف</span></span>}
             </CardDescription>
           </div>
 
@@ -110,16 +110,16 @@ export const RoleCard: React.FC<RoleCardProps> = ({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onViewUsers(role)} data-testid={`role-view-users-${role.name}`}>
                 <Users className="mr-2 h-4 w-4" />
-                View Users ({userCount})
+                View Users ({userCount}) <span className="text-[10px] text-muted-foreground ml-1">/ عرض المستخدمين</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(role)} data-testid={`role-edit-${role.name}`}>
                 <Edit2 className="mr-2 h-4 w-4" />
-                Edit Role
+                Edit Role <span className="text-[10px] text-muted-foreground ml-1">/ تعديل الدور</span>
               </DropdownMenuItem>
               {onClone && (
                 <DropdownMenuItem onClick={() => onClone(role)} data-testid={`role-clone-${role.name}`}>
                   <Copy className="mr-2 h-4 w-4" />
-                  Clone Role
+                  Clone Role <span className="text-[10px] text-muted-foreground ml-1">/ نسخ الدور</span>
                 </DropdownMenuItem>
               )}
               {!role.is_system_role && (
@@ -131,7 +131,7 @@ export const RoleCard: React.FC<RoleCardProps> = ({
                     data-testid={`role-delete-${role.name}`}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Role
+                    Delete Role <span className="text-[10px] text-red-400 ml-1">/ حذف الدور</span>
                   </DropdownMenuItem>
                 </>
               )}
@@ -145,25 +145,28 @@ export const RoleCard: React.FC<RoleCardProps> = ({
             <div className="bg-muted/40 rounded-md p-2">
               <p className="text-lg font-bold text-foreground">{userCount}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Users</p>
+              <p className="text-[9px] text-muted-foreground/60" dir="rtl">مستخدمون</p>
             </div>
             <div className="bg-muted/40 rounded-md p-2">
               <p className="text-lg font-bold text-foreground">{resourceCount}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Modules</p>
+              <p className="text-[9px] text-muted-foreground/60" dir="rtl">وحدات</p>
             </div>
             <div className="bg-muted/40 rounded-md p-2">
               <p className="text-lg font-bold text-foreground">{role.permissions.length}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Actions</p>
+              <p className="text-[9px] text-muted-foreground/60" dir="rtl">إجراءات</p>
             </div>
           </div>
 
           {/* Status */}
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Status</span>
+            <span className="text-muted-foreground">Status <span className="text-[10px] opacity-60" dir="rtl">/ الحالة</span></span>
             <Badge
               variant={role.is_active ? 'default' : 'secondary'}
               className={`text-xs ${role.is_active ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200' : ''}`}
             >
-              {role.is_active ? 'Active' : 'Inactive'}
+              {role.is_active ? <span>Active <span className="opacity-60">/ نشط</span></span> : <span>Inactive <span className="opacity-60">/ غير نشط</span></span>}
             </Badge>
           </div>
 
@@ -178,7 +181,7 @@ export const RoleCard: React.FC<RoleCardProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>Permissions ({role.permissions.length})</span>
+                    <span>Permissions ({role.permissions.length}) <span className="opacity-60 text-[10px]">/ الصلاحيات</span></span>
                   </div>
                   {isPermissionsExpanded
                     ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -211,7 +214,9 @@ export const RoleCard: React.FC<RoleCardProps> = ({
           )}
 
           {role.permissions.length === 0 && (
-            <p className="text-xs text-muted-foreground italic text-center py-2">No permissions assigned</p>
+            <p className="text-xs text-muted-foreground italic text-center py-2">
+              No permissions assigned <span className="block text-[10px] not-italic" dir="rtl">لم يتم تعيين صلاحيات</span>
+            </p>
           )}
         </CardContent>
       </Card>

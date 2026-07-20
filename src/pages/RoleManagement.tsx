@@ -215,8 +215,11 @@ const RoleManagement = () => {
             <Shield className="h-8 w-8 text-blue-600" />
             Role Management
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-gray-600 dark:text-gray-400 mt-0.5">
             Manage roles, permissions, page access, and per-user overrides
+          </p>
+          <p className="text-sm text-muted-foreground/70 mt-0.5" dir="rtl">
+            إدارة الأدوار والصلاحيات وصلاحيات الصفحات وتجاوزات المستخدمين
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -228,7 +231,7 @@ const RoleManagement = () => {
             className="gap-1.5"
           >
             <FlaskConical className="h-4 w-4" />
-            Test Permissions
+            <span>Test Permissions <span className="text-muted-foreground text-[10px]">/ اختبار الصلاحيات</span></span>
           </Button>
           <Button
             size="sm"
@@ -236,7 +239,7 @@ const RoleManagement = () => {
             data-testid="button-create-role"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Create Role
+            <span>Create Role <span className="text-[10px] opacity-70">/ إنشاء دور</span></span>
           </Button>
         </div>
       </div>
@@ -245,36 +248,39 @@ const RoleManagement = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0" data-testid="card-total-roles">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">Total Roles</CardTitle>
+            <CardTitle className="text-sm font-medium text-white/90">Total Roles <span className="block text-[11px] font-normal text-white/70" dir="rtl">إجمالي الأدوار</span></CardTitle>
             <Shield className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">{roles.length}</div>
             <p className="text-xs text-white/80 mt-1">{systemRoles.length} system + {customRoles.length} custom</p>
+            <p className="text-[10px] text-white/60 mt-0.5" dir="rtl">{systemRoles.length} نظامية + {customRoles.length} مخصصة</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
         <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0" data-testid="card-total-users">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">Total Users</CardTitle>
+            <CardTitle className="text-sm font-medium text-white/90">Total Users <span className="block text-[11px] font-normal text-white/70" dir="rtl">إجمالي المستخدمين</span></CardTitle>
             <Users className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">{users.length}</div>
             <p className="text-xs text-white/80 mt-1">Across all roles</p>
+            <p className="text-[10px] text-white/60 mt-0.5" dir="rtl">عبر جميع الأدوار</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
         <Card className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0" data-testid="card-active-roles">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">Active Roles</CardTitle>
+            <CardTitle className="text-sm font-medium text-white/90">Active Roles <span className="block text-[11px] font-normal text-white/70" dir="rtl">الأدوار النشطة</span></CardTitle>
             <Award className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">{roles.filter(r => r.is_active).length}</div>
             <p className="text-xs text-white/80 mt-1">Currently active</p>
+            <p className="text-[10px] text-white/60 mt-0.5" dir="rtl">نشطة حالياً</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
@@ -285,14 +291,14 @@ const RoleManagement = () => {
         <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="roles" className="gap-2">
             <Shield className="h-4 w-4" />
-            Roles
+            <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
 
           {/* User Permission Overrides — Super Admin only */}
           {isSuperAdmin && (
             <TabsTrigger value="overrides" className="gap-2" data-testid="tab-user-overrides">
               <UserCog className="h-4 w-4" />
-              User Permission Overrides
+              <span>User Permission Overrides <span className="text-[10px] opacity-60">/ تجاوزات الصلاحيات</span></span>
               <Badge variant="secondary" className="ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] px-1.5">
                 Super Admin
               </Badge>
@@ -303,7 +309,7 @@ const RoleManagement = () => {
           {isAdminOrAbove && (
             <TabsTrigger value="cost-submissions" className="gap-2" data-testid="tab-cost-submission-perms">
               <Lock className="h-4 w-4" />
-              Cost Submission Access
+              <span>Cost Submission Access <span className="text-[10px] opacity-60">/ صلاحيات التكاليف</span></span>
               <Badge variant="secondary" className="ml-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] px-1.5">
                 {isSuperAdmin ? 'Super Admin' : 'Admin'}
               </Badge>
@@ -314,7 +320,7 @@ const RoleManagement = () => {
           {isAdminOrAbove && (
             <TabsTrigger value="page-access" className="gap-2" data-testid="tab-page-access">
               <Globe className="h-4 w-4" />
-              Page Access
+              <span>Page Access <span className="text-[10px] opacity-60">/ صلاحيات الصفحات</span></span>
               <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5">
                 {isSuperAdmin ? 'Super Admin' : 'Admin'}
               </Badge>
@@ -325,7 +331,7 @@ const RoleManagement = () => {
           {isAdminOrAbove && (
             <TabsTrigger value="module-control" className="gap-2" data-testid="tab-module-control">
               <LayoutDashboard className="h-4 w-4" />
-              Module Control
+              <span>Module Control <span className="text-[10px] opacity-60">/ التحكم في الوحدات</span></span>
               <Badge variant="secondary" className="ml-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-[10px] px-1.5">
                 {isSuperAdmin ? 'Super Admin' : 'Admin'}
               </Badge>
@@ -335,7 +341,7 @@ const RoleManagement = () => {
           {/* Access Map — visible to all who can manage roles */}
           <TabsTrigger value="access-map" className="gap-2" data-testid="tab-access-map">
             <Grid3X3 className="h-4 w-4" />
-            Access Map
+            <span>Access Map <span className="text-[10px] opacity-60">/ خريطة الصلاحيات</span></span>
           </TabsTrigger>
         </TabsList>
 
@@ -343,8 +349,9 @@ const RoleManagement = () => {
         <TabsContent value="roles" className="space-y-6">
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-semibold">System Roles</h2>
+              <h2 className="text-xl font-semibold">System Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار النظامية</span></h2>
               <p className="text-gray-500">Built-in roles with predefined permissions</p>
+              <p className="text-xs text-muted-foreground/70" dir="rtl">أدوار مدمجة بصلاحيات محددة مسبقاً</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {systemRoles.map(role => (
@@ -363,20 +370,22 @@ const RoleManagement = () => {
 
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-semibold">Custom Roles</h2>
+              <h2 className="text-xl font-semibold">Custom Roles <span className="text-base font-normal text-muted-foreground" dir="rtl">/ الأدوار المخصصة</span></h2>
               <p className="text-gray-500">Organization-specific roles with custom permissions</p>
+              <p className="text-xs text-muted-foreground/70" dir="rtl">أدوار مخصصة للمؤسسة بصلاحيات محددة</p>
             </div>
             {customRoles.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Shield className="h-12 w-12 text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Custom Roles</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">No Custom Roles</h3>
+                  <p className="text-xs text-muted-foreground/70 mb-1" dir="rtl">لا توجد أدوار مخصصة</p>
                   <p className="text-gray-500 text-center mb-4">
                     Create custom roles to define specific permissions for your organization.
                   </p>
                   <Button onClick={() => setShowCreateDialog(true)}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Create First Custom Role
+                    <span>Create First Custom Role <span className="text-[10px] opacity-70">/ إنشاء أول دور مخصص</span></span>
                   </Button>
                 </CardContent>
               </Card>
@@ -425,12 +434,15 @@ const RoleManagement = () => {
             <div className="space-y-2 mb-4">
               <h2 className="text-xl font-semibold flex items-center gap-2">
                 <LayoutDashboard className="h-5 w-5 text-emerald-600" />
-                Module Control Center
+                Module Control Center <span className="text-base font-normal text-muted-foreground" dir="rtl">/ مركز التحكم في الوحدات</span>
               </h2>
               <p className="text-sm text-muted-foreground">
                 Every module, page, button, and report in the system — with role coverage indicators.
-                Click any action row to see exactly which roles can perform it. 
+                Click any action row to see exactly which roles can perform it.
                 {isSuperAdmin && ' Use User Permission Overrides to grant/block access for individual users.'}
+              </p>
+              <p className="text-xs text-muted-foreground/70" dir="rtl">
+                كل وحدة وصفحة وزر وتقرير في النظام — مع مؤشرات تغطية الأدوار. انقر على أي صف لرؤية الأدوار التي يمكنها تنفيذه.
               </p>
             </div>
             <ModuleControlCenter />
@@ -483,9 +495,10 @@ const RoleManagement = () => {
               <div>
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                   <FlaskConical className="h-5 w-5 text-blue-600" />
-                  Permission Tester
+                  Permission Tester <span className="text-base font-normal text-muted-foreground" dir="rtl">/ اختبار الصلاحيات</span>
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Simulate any user's effective permissions including overrides</p>
+                <p className="text-xs text-muted-foreground/70" dir="rtl">محاكاة صلاحيات أي مستخدم بما في ذلك التجاوزات</p>
               </div>
               <Button variant="outline" onClick={() => setShowPermissionTester(false)}>Close</Button>
             </div>
