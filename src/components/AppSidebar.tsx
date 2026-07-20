@@ -783,8 +783,11 @@
       }
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
-    const perms = {
-      // Dashboard isn't a permission ResourceType; keep visible by default.
+    // Memoize perms — each field is a boolean, so deps are the stable booleans
+    // that gate them. Recalculating this inline every render creates a new object
+    // reference which makes menuGroups recompute and useEffect(menuGroups) fire
+    // on every single render.
+    const perms = useMemo(() => ({
       dashboard: true,
       projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
       mmp: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
@@ -799,18 +802,29 @@
       roleManagement: canManageRoles() || isAdmin,
       settings: checkPermission('settings', 'read') || isAdmin,
       financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [isSuperAdmin, isAdmin, currentUser?.id, currentUser?.role]);
 
-    // Merge user_roles table entries + additional JSONB roles from profiles into one list
-    const extraRoles: AppRole[] = Array.isArray(currentUser?.additionalRoles)
-      ? currentUser!.additionalRoles.map((r: any) => r?.role as AppRole).filter(Boolean)
-      : [];
-    const rawMenuGroups = currentUser ? getWorkflowMenuGroups([...(roles || []), ...extraRoles], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess) : [];
+    // Memoize extraRoles — spread/map creates a new array reference every render
+    const extraRoles: AppRole[] = useMemo(
+      () => Array.isArray(currentUser?.additionalRoles)
+        ? (currentUser!.additionalRoles as any[]).map((r: any) => r?.role as AppRole).filter(Boolean)
+        : [],
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [currentUser?.id, currentUser?.additionalRoles]
+    );
 
     // Apply page_access_overrides: granted overrides add items even if the role
     // check denied them; blocked overrides remove items even if the role check
     // would have shown them.
+    // rawMenuGroups is intentionally computed inside this useMemo so the result
+    // is stable — computing it inline (outside useMemo) caused a new array
+    // reference every render, making menuGroups and the useEffect(menuGroups)
+    // fire on every render, creating a continuous sidebar flicker.
     const menuGroups = useMemo(() => {
+      const rawMenuGroups = currentUser
+        ? getWorkflowMenuGroups([...(roles || []), ...extraRoles], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess)
+        : [];
       if (Object.keys(pageOverrideMap).length === 0) return rawMenuGroups;
 
       // Deep-clone the groups array so we don't mutate the cached result.
@@ -851,7 +865,8 @@
       groups.sort((a, b) => a.order - b.order);
       groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
       return groups.filter(g => g.items.length > 0);
-    }, [rawMenuGroups, pageOverrideMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser?.id, currentUser?.role, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, pageOverrideMap]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {
