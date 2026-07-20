@@ -22,8 +22,8 @@ import {
   History, Loader2, AlertTriangle, ChevronDown, ChevronRight,
   Trash2, Calendar,
 } from 'lucide-react';
-import { RESOURCES, ACTIONS, DEFAULT_ROLE_PERMISSIONS, RESOURCE_LABELS, ACTION_LABELS, ResourceType, ActionType } from '@/types/roles';
-import { toDisplayLabel, normalizeRole } from '@/utils/roleMapping';
+import { RESOURCES, ACTIONS, DEFAULT_ROLE_PERMISSIONS, RESOURCE_LABELS, ACTION_LABELS, ResourceType, ActionType, AppRole } from '@/types/roles';
+import { toDisplayLabel } from '@/utils/roleMapping';
 import { cn } from '@/lib/utils';
 
 interface Override {
@@ -55,11 +55,38 @@ interface AuditEntry {
 type OverrideState = 'inherit' | 'grant' | 'block';
 
 
+// Maps any role string format (camelCase RoleCode, PascalCase AppRole, snake_case, etc.)
+// to the AppRole key used in DEFAULT_ROLE_PERMISSIONS.
+// This is necessary because normalizeRole() returns a camelCase RoleCode ('admin')
+// while DEFAULT_ROLE_PERMISSIONS uses PascalCase AppRole ('Admin').
+const toAppRole = (r: string): AppRole | null => {
+  if (!r) return null;
+  // Direct AppRole passthrough (PascalCase already correct)
+  if (r in DEFAULT_ROLE_PERMISSIONS) return r as AppRole;
+  // Comprehensive mapping: camelCase / snake_case / legacy → AppRole
+  const map: Record<string, AppRole> = {
+    superadmin: 'SuperAdmin', superAdmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'Super Admin': 'SuperAdmin',
+    admin: 'Admin', Admin: 'Admin',
+    countryDirector: 'CountryDirector', countrydirector: 'CountryDirector', country_director: 'CountryDirector',
+    fom: 'Field Operation Manager (FOM)', 'Field Operation Manager (FOM)': 'Field Operation Manager (FOM)', fieldOpManager: 'Field Operation Manager (FOM)',
+    financialAdmin: 'FinancialAdmin', financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
+    ict: 'ICT', ICT: 'ICT',
+    projectManager: 'ProjectManager', projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
+    seniorOperationsLead: 'SeniorOperationsLead', senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead',
+    supervisor: 'Supervisor', Supervisor: 'Supervisor',
+    coordinator: 'Coordinator', Coordinator: 'Coordinator',
+    dataTeam: 'DataTeam', datateam: 'DataTeam', data_team: 'DataTeam',
+    dataCollector: 'DataCollector', datacollector: 'DataCollector', data_collector: 'DataCollector',
+    reviewer: 'Reviewer', Reviewer: 'Reviewer',
+    auditor: 'Auditor', Auditor: 'Auditor',
+  };
+  return map[r] ?? map[r.toLowerCase()] ?? null;
+};
+
 const ROLE_HAS_PERM = (role: string, resource: ResourceType, action: ActionType): boolean => {
-  const normalized = normalizeRole(role) as keyof typeof DEFAULT_ROLE_PERMISSIONS;
-  if (!normalized || !(normalized in DEFAULT_ROLE_PERMISSIONS)) return false;
-  return DEFAULT_ROLE_PERMISSIONS[normalized as keyof typeof DEFAULT_ROLE_PERMISSIONS]
-    ?.some(p => p.resource === resource && p.action === action) ?? false;
+  const appRole = toAppRole(role);
+  if (!appRole) return false;
+  return (DEFAULT_ROLE_PERMISSIONS[appRole] || []).some(p => p.resource === resource && p.action === action);
 };
 
 export function UserPermissionOverrides() {
