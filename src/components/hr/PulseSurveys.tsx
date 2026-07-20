@@ -11,13 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  MessageSquare, Plus, Loader2, Trash2, BarChart2, Send, CheckCircle2,
-  ChevronDown, ChevronUp, Edit2, AlertTriangle, ThumbsUp, Minus,
+  MessageSquare, Plus, Loader2, Trash2, Send, CheckCircle2,
+  ChevronDown, ChevronUp, Edit2, ThumbsUp, Minus, LayoutTemplate,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isWithinInterval, parseISO } from 'date-fns';
@@ -39,16 +38,62 @@ interface PulseResponse {
   hub_id: string | null; submitted_at: string;
 }
 interface Hub { id: string; name: string; }
+interface Dept { id: string; name: string; }
 
 const Q_TYPE_LABELS: Record<QuestionType, string> = {
   rating: 'Rating (1–5)', nps: 'NPS (0–10)', text: 'Open Text', yes_no: 'Yes / No',
 };
-
 const COLORS = ['#3b82f6', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444', '#22c55e'];
+
+// ── Survey templates ────────────────────────────────────────────────────────
+const SURVEY_TEMPLATES = [
+  {
+    id: 'enps',
+    label: 'eNPS Standard',
+    description: 'Employee Net Promoter Score — the gold-standard engagement question.',
+    questions: [
+      { id: 'q1', text: 'How likely are you to recommend this organization as a great place to work?', type: 'nps' as QuestionType, required: true },
+      { id: 'q2', text: 'What is the main reason for your score?', type: 'text' as QuestionType, required: false },
+    ],
+  },
+  {
+    id: 'wellbeing',
+    label: 'Wellbeing Check',
+    description: 'Short check-in on staff mental health and workload.',
+    questions: [
+      { id: 'q1', text: 'How would you rate your overall wellbeing this week?', type: 'rating' as QuestionType, required: true },
+      { id: 'q2', text: 'Are you feeling supported by your manager?', type: 'yes_no' as QuestionType, required: true },
+      { id: 'q3', text: 'Is your workload manageable?', type: 'yes_no' as QuestionType, required: true },
+      { id: 'q4', text: 'Any additional comments or concerns?', type: 'text' as QuestionType, required: false },
+    ],
+  },
+  {
+    id: 'manager',
+    label: 'Manager Effectiveness',
+    description: 'Confidential feedback on direct manager.',
+    questions: [
+      { id: 'q1', text: 'My manager gives me clear direction and priorities.', type: 'rating' as QuestionType, required: true },
+      { id: 'q2', text: 'My manager supports my professional development.', type: 'rating' as QuestionType, required: true },
+      { id: 'q3', text: 'My manager recognizes and acknowledges my contributions.', type: 'rating' as QuestionType, required: true },
+      { id: 'q4', text: 'How would you recommend your manager improve?', type: 'text' as QuestionType, required: false },
+    ],
+  },
+  {
+    id: 'field_ops',
+    label: 'Field Operations Pulse',
+    description: 'Monthly field staff check-in on safety, support, and mission clarity.',
+    questions: [
+      { id: 'q1', text: 'I feel safe in my current field assignment.', type: 'yes_no' as QuestionType, required: true },
+      { id: 'q2', text: 'I have the resources and equipment I need to do my job.', type: 'rating' as QuestionType, required: true },
+      { id: 'q3', text: 'I understand the goals and priorities of my current mission.', type: 'rating' as QuestionType, required: true },
+      { id: 'q4', text: 'Any urgent concerns or suggestions for the field support team?', type: 'text' as QuestionType, required: false },
+    ],
+  },
+];
 
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
-function isSurveyOpen(s: PulseSurvey) {
+function isSurveyOpen(s: PulseSurvey): boolean {
   if (!s.is_active) return false;
   try {
     return isWithinInterval(new Date(), { start: parseISO(s.starts_at), end: parseISO(s.ends_at) });
@@ -67,6 +112,7 @@ export default function PulseSurveys() {
   const [form, setForm] = useState({ title: '', description: '', starts_at: '', ends_at: '', target_hub_id: '', is_active: true });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [saving, setSaving] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const [takingSurvey, setTakingSurvey] = useState<PulseSurvey | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -90,8 +136,7 @@ export default function PulseSurveys() {
     queryKey: ['hr-pulse-responses'],
     queryFn: async () => {
       if (!isAdmin) return [];
-      const { data, error } = await supabase
-        .from('hr_pulse_responses' as any).select('*');
+      const { data, error } = await supabase.from('hr_pulse_responses' as any).select('*');
       if (error?.code === '42P01') return [];
       return (data ?? []) as unknown as PulseResponse[];
     },
@@ -108,30 +153,61 @@ export default function PulseSurveys() {
     staleTime: 300_000,
   });
 
+  const { data: depts = [] } = useQuery({
+    queryKey: ['departments-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return (data ?? []) as Dept[];
+    },
+    staleTime: 300_000,
+  });
+
   const hubMap = useMemo(() => Object.fromEntries(hubs.map(h => [h.id, h.name])), [hubs]);
-  const openSurveys = useMemo(() => surveys.filter(isSurveyOpen), [surveys]);
+
   const responsesBySurvey = useMemo(() => {
     const m: Record<string, PulseResponse[]> = {};
     responses.forEach(r => { if (!m[r.survey_id]) m[r.survey_id] = []; m[r.survey_id].push(r); });
     return m;
   }, [responses]);
 
-  // ── Survey CRUD ────────────────────────────────────────────────────────────
+  // ── AUDIENCE-SCOPED open surveys for employees ────────────────────────────
+  // Surveys with no target_hub_id → visible to all authenticated staff.
+  // Surveys with target_hub_id → ONLY visible to staff whose hub matches.
+  const openSurveys = useMemo(() => {
+    const userHubId = (currentUser as any)?.hubId ?? (currentUser as any)?.hub_id ?? null;
+    return surveys.filter(s => {
+      if (!isSurveyOpen(s)) return false;
+      if (!s.target_hub_id) return true; // no target = all staff
+      return s.target_hub_id === userHubId;
+    });
+  }, [surveys, currentUser]);
+
+  // ── Survey CRUD ─────────────────────────────────────────────────────────────
   function openNew() {
     setEditingSurvey(null);
     setForm({ title: '', description: '', starts_at: '', ends_at: '', target_hub_id: '', is_active: true });
     setQuestions([{ id: genId(), text: '', type: 'rating', required: true }]);
+    setShowTemplates(false);
     setDialogOpen(true);
   }
   function openEdit(s: PulseSurvey) {
     setEditingSurvey(s);
     setForm({ title: s.title, description: s.description ?? '', starts_at: s.starts_at, ends_at: s.ends_at, target_hub_id: s.target_hub_id ?? '', is_active: s.is_active });
     setQuestions(s.questions ?? []);
+    setShowTemplates(false);
     setDialogOpen(true);
+  }
+  function applyTemplate(tpl: typeof SURVEY_TEMPLATES[0]) {
+    setForm(f => ({ ...f, title: f.title || tpl.label, description: f.description || tpl.description }));
+    setQuestions(tpl.questions.map(q => ({ ...q, id: genId() })));
+    setShowTemplates(false);
   }
   async function saveSurvey() {
     if (!form.title.trim() || !form.starts_at || !form.ends_at) {
       toast({ title: 'Title, start and end dates are required', variant: 'destructive' }); return;
+    }
+    if (questions.length === 0) {
+      toast({ title: 'Add at least one question', variant: 'destructive' }); return;
     }
     if (questions.some(q => !q.text.trim())) {
       toast({ title: 'All questions need text', variant: 'destructive' }); return;
@@ -160,7 +236,7 @@ export default function PulseSurveys() {
     qc.invalidateQueries({ queryKey: ['hr-pulse-responses'] });
   }
 
-  // ── Question builder ───────────────────────────────────────────────────────
+  // ── Question builder ────────────────────────────────────────────────────────
   function addQuestion() { setQuestions(qs => [...qs, { id: genId(), text: '', type: 'rating', required: true }]); }
   function removeQuestion(id: string) { setQuestions(qs => qs.filter(q => q.id !== id)); }
   function updateQuestion(id: string, patch: Partial<Question>) { setQuestions(qs => qs.map(q => q.id === id ? { ...q, ...patch } : q)); }
@@ -174,11 +250,8 @@ export default function PulseSurveys() {
     });
   }
 
-  // ── Take Survey ────────────────────────────────────────────────────────────
-  function openSurvey(s: PulseSurvey) {
-    setTakingSurvey(s);
-    setAnswers({});
-  }
+  // ── Take Survey ─────────────────────────────────────────────────────────────
+  function openSurveyForTaking(s: PulseSurvey) { setTakingSurvey(s); setAnswers({}); }
   async function submitSurvey() {
     if (!takingSurvey) return;
     const required = takingSurvey.questions.filter(q => q.required);
@@ -188,10 +261,11 @@ export default function PulseSurveys() {
       }
     }
     setSubmitting(true);
+    const userHubId = (currentUser as any)?.hubId ?? (currentUser as any)?.hub_id ?? null;
     const { error } = await supabase.from('hr_pulse_responses' as any).insert({
       survey_id: takingSurvey.id,
       responses: answers,
-      hub_id: (currentUser as any)?.hub_id ?? null,
+      hub_id: userHubId, // coarse grouping only — no user_id for anonymity
     });
     setSubmitting(false);
     if (error) { toast({ title: 'Error submitting', description: error.message, variant: 'destructive' }); return; }
@@ -201,38 +275,62 @@ export default function PulseSurveys() {
     qc.invalidateQueries({ queryKey: ['hr-pulse-responses'] });
   }
 
-  // ── Analytics ──────────────────────────────────────────────────────────────
-  function getAnalytics(survey: PulseSurvey) {
-    const rs = responsesBySurvey[survey.id] ?? [];
+  // ── Analytics helpers ───────────────────────────────────────────────────────
+  function getQuestionAnalytics(survey: PulseSurvey, rs: PulseResponse[]) {
     return survey.questions.map(q => {
       const vals = rs.map(r => r.responses[q.id]).filter(v => v !== undefined && v !== null && v !== '');
       if (q.type === 'rating' || q.type === 'nps') {
         const nums = vals.map(Number).filter(n => !isNaN(n));
-        const avg = nums.length ? (nums.reduce((s, n) => s + n, 0) / nums.length) : null;
-        if (q.type === 'nps') {
+        const avg = nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : null;
+        let nps: number | null = null;
+        if (q.type === 'nps' && nums.length >= 3) {
           const promoters = nums.filter(n => n >= 9).length;
           const detractors = nums.filter(n => n <= 6).length;
-          const nps = nums.length ? Math.round(((promoters - detractors) / nums.length) * 100) : null;
-          const dist = [0,1,2,3,4,5,6,7,8,9,10].map(score => ({ score: String(score), count: nums.filter(n => n === score).length }));
-          return { q, avg, nps, dist, responses: vals.length };
+          nps = Math.round(((promoters - detractors) / nums.length) * 100);
         }
-        const dist = [1,2,3,4,5].map(score => ({ score: String(score), count: nums.filter(n => n === score).length }));
-        return { q, avg, nps: null, dist, responses: vals.length };
+        const maxScale = q.type === 'nps' ? 11 : 5;
+        const startVal = q.type === 'nps' ? 0 : 1;
+        const dist = Array.from({ length: maxScale }, (_, i) => i + startVal).map(score => ({
+          score: String(score), count: nums.filter(n => n === score).length,
+        }));
+        return { q, avg, nps, dist, responses: vals.length, textValues: [] };
       }
       if (q.type === 'yes_no') {
         const yes = vals.filter(v => v === 'yes').length;
         const no = vals.filter(v => v === 'no').length;
-        const dist = [{ score: 'Yes', count: yes }, { score: 'No', count: no }];
-        return { q, avg: null, nps: null, dist, responses: vals.length };
+        return { q, avg: null, nps: null, dist: [{ score: 'Yes', count: yes }, { score: 'No', count: no }], responses: vals.length, textValues: [] };
       }
-      return { q, avg: null, nps: null, dist: [], textValues: vals as string[], responses: vals.length };
+      // text — build word-frequency map for simple word cloud display
+      const textVals = vals as string[];
+      const stopWords = new Set(['the','a','an','is','are','was','were','it','i','to','of','and','in','for','that','this','my','me','we','our','be','not','but','on','at','with','have','has','by','do','or','so','if','as','its']);
+      const wordFreq: Record<string, number> = {};
+      textVals.forEach(text => {
+        text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).forEach(word => {
+          if (word.length >= 3 && !stopWords.has(word)) {
+            wordFreq[word] = (wordFreq[word] ?? 0) + 1;
+          }
+        });
+      });
+      const topWords = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 20);
+      return { q, avg: null, nps: null, dist: [], responses: vals.length, textValues: textVals, topWords };
     });
+  }
+
+  // Department breakdown: group responses by hub_id for a given survey
+  function getDeptBreakdown(survey: PulseSurvey, rs: PulseResponse[]) {
+    // Group responses by hub, count per hub
+    const hubCounts: Record<string, number> = {};
+    rs.forEach(r => {
+      const hub = r.hub_id ? (hubMap[r.hub_id] ?? 'Unknown Hub') : 'No Hub';
+      hubCounts[hub] = (hubCounts[hub] ?? 0) + 1;
+    });
+    return Object.entries(hubCounts).sort((a, b) => b[1] - a[1]).map(([hub, count]) => ({ hub, count }));
   }
 
   function exportResults(s: PulseSurvey) {
     const rs = responsesBySurvey[s.id] ?? [];
     const rows = rs.map((r, i) => {
-      const row: Record<string, any> = { '#': i + 1, 'Submitted At': format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm') };
+      const row: Record<string, any> = { '#': i + 1, 'Submitted At': format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm'), 'Hub': r.hub_id ? (hubMap[r.hub_id] ?? r.hub_id) : '' };
       s.questions.forEach(q => { row[q.text] = r.responses[q.id] ?? ''; });
       return row;
     });
@@ -264,7 +362,9 @@ export default function PulseSurveys() {
 
           <TabsContent value="surveys" className="space-y-3 pt-3">
             {surveys.length === 0 ? (
-              <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No surveys created yet.</CardContent></Card>
+              <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
+                No surveys created yet. Click "New Survey" to get started.
+              </CardContent></Card>
             ) : surveys.map(s => {
               const open = isSurveyOpen(s);
               const count = (responsesBySurvey[s.id] ?? []).length;
@@ -277,12 +377,13 @@ export default function PulseSurveys() {
                         {open ? <Badge className="text-[10px] bg-emerald-600">Open Now</Badge>
                           : !s.is_active ? <Badge variant="outline" className="text-[10px] text-gray-500">Inactive</Badge>
                           : <Badge variant="outline" className="text-[10px]">Scheduled</Badge>}
-                        {s.target_hub_id && <Badge variant="outline" className="text-[10px]">{hubMap[s.target_hub_id]}</Badge>}
+                        {s.target_hub_id && <Badge variant="outline" className="text-[10px]">{hubMap[s.target_hub_id] ?? 'Hub-targeted'}</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {format(parseISO(s.starts_at), 'PP')} – {format(parseISO(s.ends_at), 'PP')}
                         {' · '}{s.questions.length} question{s.questions.length !== 1 ? 's' : ''}
                         {' · '}<strong>{count}</strong> response{count !== 1 ? 's' : ''}
+                        {s.target_hub_id ? '' : ' · All staff'}
                       </p>
                     </div>
                     <div className="flex gap-1.5">
@@ -302,10 +403,12 @@ export default function PulseSurveys() {
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).length === 0 ? (
               <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No responses yet.</CardContent></Card>
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).map(s => {
-              const analytics = getAnalytics(s);
-              const count = (responsesBySurvey[s.id] ?? []).length;
-              const isExpanded = expandedResults === s.id;
+              const rs = responsesBySurvey[s.id] ?? [];
+              const analytics = getQuestionAnalytics(s, rs);
+              const deptBreakdown = getDeptBreakdown(s, rs);
+              const count = rs.length;
               const npsQ = analytics.find(a => a.q.type === 'nps');
+              const isExpanded = expandedResults === s.id;
 
               return (
                 <Card key={s.id}>
@@ -313,7 +416,10 @@ export default function PulseSurveys() {
                     <div className="flex items-center justify-between">
                       <div>
                         <CardTitle className="text-sm">{s.title}</CardTitle>
-                        <p className="text-xs text-muted-foreground">{count} responses · {format(parseISO(s.starts_at), 'PP')} – {format(parseISO(s.ends_at), 'PP')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {count} responses · {format(parseISO(s.starts_at), 'PP')} – {format(parseISO(s.ends_at), 'PP')}
+                          {s.target_hub_id && ` · ${hubMap[s.target_hub_id] ?? 'Hub-targeted'}`}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {npsQ?.nps != null && (
@@ -332,11 +438,29 @@ export default function PulseSurveys() {
                   </CardHeader>
                   {isExpanded && (
                     <CardContent className="space-y-5 pt-0">
+                      {/* Department / Hub breakdown */}
+                      {deptBreakdown.length > 1 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Responses by Hub</p>
+                          <ResponsiveContainer width="100%" height={120}>
+                            <BarChart data={deptBreakdown} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
+                              <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                              <YAxis type="category" dataKey="hub" width={120} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                              <Tooltip contentStyle={{ fontSize: 12 }} />
+                              <Bar dataKey="count" name="Responses" radius={[0, 3, 3, 0]}>
+                                {deptBreakdown.map((_, ci) => <Cell key={ci} fill={COLORS[ci % COLORS.length]} />)}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+
+                      {/* Per-question analytics */}
                       {analytics.map((a, i) => (
-                        <div key={a.q.id}>
+                        <div key={a.q.id} className="border-t pt-4 first:border-t-0 first:pt-0">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                             Q{i + 1}: {a.q.text}
-                            <span className="ml-2 normal-case font-normal">({a.responses} response{a.responses !== 1 ? 's' : ''})</span>
+                            <span className="ml-2 normal-case font-normal text-muted-foreground">({a.responses} response{a.responses !== 1 ? 's' : ''})</span>
                           </p>
                           {(a.q.type === 'rating' || a.q.type === 'nps' || a.q.type === 'yes_no') && a.dist.length > 0 && (
                             <div>
@@ -366,11 +490,33 @@ export default function PulseSurveys() {
                             </div>
                           )}
                           {a.q.type === 'text' && (
-                            <div className="space-y-1 max-h-48 overflow-y-auto">
-                              {(a as any).textValues?.length === 0 && <p className="text-xs text-muted-foreground">No responses yet.</p>}
-                              {(a as any).textValues?.map((v: string, vi: number) => (
-                                <p key={vi} className="text-sm bg-muted/40 rounded px-3 py-1.5 italic">"{v}"</p>
-                              ))}
+                            <div className="space-y-3">
+                              {/* Word frequency cloud */}
+                              {(a as any).topWords?.length > 0 && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground mb-1.5">Top keywords:</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {(a as any).topWords.map(([word, freq]: [string, number], wi: number) => {
+                                      const max = (a as any).topWords[0][1];
+                                      const scale = 0.75 + (freq / max) * 0.75;
+                                      return (
+                                        <span key={wi} className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-0.5"
+                                          style={{ fontSize: `${Math.round(10 * scale)}px`, fontWeight: freq === max ? 700 : 500 }}>
+                                          {word}
+                                          {freq > 1 && <span className="ml-1 opacity-60 text-[9px]">×{freq}</span>}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              {/* Verbatim responses */}
+                              <div className="space-y-1 max-h-48 overflow-y-auto">
+                                {(a as any).textValues?.length === 0 && <p className="text-xs text-muted-foreground">No responses yet.</p>}
+                                {(a as any).textValues?.map((v: string, vi: number) => (
+                                  <p key={vi} className="text-sm bg-muted/40 rounded px-3 py-1.5 italic">"{v}"</p>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -383,12 +529,12 @@ export default function PulseSurveys() {
           </TabsContent>
         </Tabs>
       ) : (
-        /* ── Employee: take open surveys ── */
+        /* ── Employee: take audience-scoped open surveys ── */
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">All responses are anonymous — your identity is never stored with your answers.</p>
           {openSurveys.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No active pulse surveys right now. Check back later.
+              No active pulse surveys for your team right now. Check back later.
             </CardContent></Card>
           ) : openSurveys.map(s => {
             const done = submittedIds.has(s.id);
@@ -405,7 +551,7 @@ export default function PulseSurveys() {
                   {done ? (
                     <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-4 w-4" />Submitted</span>
                   ) : (
-                    <Button size="sm" onClick={() => openSurvey(s)} data-testid={`button-take-${s.id}`}>
+                    <Button size="sm" onClick={() => openSurveyForTaking(s)} data-testid={`button-take-${s.id}`}>
                       <Send className="h-3.5 w-3.5 mr-1" />Take Survey
                     </Button>
                   )}
@@ -423,6 +569,32 @@ export default function PulseSurveys() {
             <DialogTitle>{editingSurvey ? 'Edit Survey' : 'New Pulse Survey'}</DialogTitle>
             <DialogDescription>Responses are anonymous — no user ID is stored with responses.</DialogDescription>
           </DialogHeader>
+
+          {/* Template picker */}
+          {!editingSurvey && (
+            <div className="border rounded-lg overflow-hidden">
+              <button type="button" onClick={() => setShowTemplates(v => !v)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm bg-muted/40 hover:bg-muted/70 transition-colors">
+                <LayoutTemplate className="h-4 w-4 text-blue-500" />
+                <span className="font-medium">Start from a template</span>
+                {showTemplates ? <ChevronUp className="h-3.5 w-3.5 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 ml-auto" />}
+              </button>
+              {showTemplates && (
+                <div className="divide-y">
+                  {SURVEY_TEMPLATES.map(tpl => (
+                    <button key={tpl.id} type="button" onClick={() => applyTemplate(tpl)}
+                      className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors" data-testid={`template-${tpl.id}`}>
+                      <div>
+                        <p className="text-sm font-medium">{tpl.label}</p>
+                        <p className="text-xs text-muted-foreground">{tpl.description} · {tpl.questions.length} questions</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-4">
             <div><Label>Title *</Label><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} data-testid="input-survey-title" /></div>
             <div><Label>Description</Label><Textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -432,14 +604,15 @@ export default function PulseSurveys() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Target Hub (leave empty for all staff)</Label>
+                <Label>Target Audience</Label>
                 <Select value={form.target_hub_id || 'all'} onValueChange={v => setForm(f => ({ ...f, target_hub_id: v === 'all' ? '' : v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger data-testid="select-target-hub"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Staff</SelectItem>
-                    {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                    {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name} hub only</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground mt-1">Only staff in the selected hub see this survey.</p>
               </div>
               <div className="flex items-center gap-3 mt-5">
                 <Switch checked={form.is_active} onCheckedChange={v => setForm(f => ({ ...f, is_active: v }))} id="survey-active" />
@@ -459,12 +632,7 @@ export default function PulseSurveys() {
                   <div key={q.id} className="border rounded-lg p-3 space-y-2" data-testid={`question-${q.id}`}>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-muted-foreground w-5">Q{i + 1}</span>
-                      <Input
-                        className="flex-1"
-                        placeholder="Question text…"
-                        value={q.text}
-                        onChange={e => updateQuestion(q.id, { text: e.target.value })}
-                      />
+                      <Input className="flex-1" placeholder="Question text…" value={q.text} onChange={e => updateQuestion(q.id, { text: e.target.value })} />
                       <button type="button" onClick={() => moveQuestion(i, -1)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronUp className="h-4 w-4" /></button>
                       <button type="button" onClick={() => moveQuestion(i, 1)} disabled={i === questions.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ChevronDown className="h-4 w-4" /></button>
                       <button type="button" onClick={() => removeQuestion(q.id)} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
@@ -483,7 +651,7 @@ export default function PulseSurveys() {
                     </div>
                   </div>
                 ))}
-                {questions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Add at least one question.</p>}
+                {questions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Add at least one question or pick a template above.</p>}
               </div>
             </div>
           </div>

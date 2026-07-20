@@ -436,7 +436,8 @@ export default function Offboarding() {
                     {!successionRisk.primary_successor_id
                       ? 'No successor has been nominated.'
                       : `The nominated successor has only ${successionRisk.successor_readiness ?? 0}% readiness.`}{' '}
-                    Before proceeding, assign or develop a successor in <strong>Positions &amp; Vacancies</strong>.
+                    Before proceeding, assign or develop a successor in{' '}
+                    <a href="/hr?tab=positions" className="underline font-semibold hover:text-red-700">Positions &amp; Vacancies →</a>
                   </p>
                 </div>
               </div>

@@ -41,6 +41,7 @@ import EmployeePoliciesTab from "@/components/hr/EmployeePoliciesTab";
 import EmployeeDocumentsTab from "@/components/hr/EmployeeDocumentsTab";
 import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
+import EmployeeBenefitsTab from "@/components/hr/EmployeeBenefitsTab";
 import { generateEmployeeCV } from "@/utils/employeeCvExport";
 import {
   generateReverseChronologicalCV,
@@ -82,6 +83,7 @@ const TAB_GROUPS = [
     tabs: [
       { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.' },
       { id: 'performance',  emoji: '📊', label: 'Performance',           description: 'Performance review scores, quarterly objectives, and development notes from review cycles.' },
+      { id: 'benefits',     emoji: '🩺', label: 'Benefits',              description: 'Active benefit enrollments, open enrollment requests, and covered dependents for this staff member.' },
     ],
   },
   {
@@ -1907,6 +1909,13 @@ const UserDetail: FC = () => {
                 </div>
               );
             })()}
+
+            {/* ── BENEFITS SECTION ────────────────────────────────────────── */}
+            {activeSection === 'benefits' && (
+              <div className="p-5 sm:p-6">
+                <EmployeeBenefitsTab userId={user.id} viewedBySelf={currentUser?.id === user.id} />
+              </div>
+            )}
 
             {/* ── PERFORMANCE SECTION ─────────────────────────────────────── */}
             {activeSection === 'performance' && (<div className="p-5 sm:p-6 space-y-6">
