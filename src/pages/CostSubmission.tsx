@@ -5118,11 +5118,11 @@ const CostSubmission = () => {
 
                       return (
                         <div>
-                          {/* Navy header row: checkbox + collapse button — entire row is clickable */}
+                          {/* Navy header row: clicking opens detail sheet; Expand button toggles accordion */}
                           <div
                             className="flex items-stretch bg-gradient-to-r from-[#0F2041] to-[#1D3461] cursor-pointer select-none hover:from-[#1a2f58] hover:to-[#243d6e] transition-colors"
                             style={{ borderLeft: `4px solid ${headerBorderColor}` }}
-                            onClick={() => toggleGroup(groupId!)}
+                            onClick={() => setViewingSubmission(groupItems[0])}
                             data-testid={`button-group-toggle-${groupId}`}
                           >
                             {/* Group-level checkbox — stops propagation so it doesn't also toggle expand */}
@@ -5220,24 +5220,21 @@ const CostSubmission = () => {
                                     })}
                                   </div>
                                 </div>
-                                <div className="flex-none text-right space-y-1">
+                                <div className="flex-none text-right space-y-1.5">
                                   <p className="font-bold text-base tabular-nums text-white">{currency} {(totalCents / 100).toLocaleString()}</p>
                                   <p className="text-[10px] text-white/50">Total</p>
-                                  {/* View Details button — opens detail sheet directly from header (stops group toggle) */}
+                                  {/* Expand/Collapse accordion — separate from the header click (which opens detail) */}
                                   <button
-                                    className="flex items-center gap-1 text-[11px] text-blue-300 hover:text-white bg-white/10 hover:bg-white/20 rounded px-2 py-0.5 ml-auto transition-colors"
-                                    onClick={(e) => { e.stopPropagation(); setViewingSubmission(groupItems[0]); }}
-                                    data-testid={`button-group-header-view-${groupId}`}
-                                    title="Open submission detail"
+                                    className="flex items-center justify-end gap-1 text-white/60 hover:text-white text-[11px] ml-auto transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); toggleGroup(groupId!); }}
+                                    data-testid={`button-group-toggle-${groupId}`}
+                                    title={isExpanded ? 'Collapse items' : 'Expand items'}
                                   >
-                                    <Eye className="h-3 w-3" /> View
-                                  </button>
-                                  <div className="flex items-center justify-end gap-1 text-white/60 text-[11px] mt-1">
                                     {isExpanded
                                       ? <><ChevronDown className="h-4 w-4" /><span>Collapse</span></>
                                       : <><ChevronRight className="h-4 w-4" /><span>Expand</span></>
                                     }
-                                  </div>
+                                  </button>
                                 </div>
                               </div>
                             </div>
