@@ -281,7 +281,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             start_date: activity.startDate,
             end_date: activity.endDate,
             status: activity.status,
-            is_active: activity.isActive,
             assigned_to: activity.assignedTo,
             project_id: updatedProject.id,
           };
@@ -307,7 +306,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   name: subActivity.name,
                   description: subActivity.description,
                   status: subActivity.status,
-                  is_active: subActivity.isActive,
                   due_date: subActivity.dueDate,
                   assigned_to: subActivity.assignedTo,
                   activity_id: newActivityId,
@@ -354,7 +352,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   name: subActivity.name,
                   description: subActivity.description,
                   status: subActivity.status,
-                  is_active: subActivity.isActive,
                   due_date: subActivity.dueDate,
                   assigned_to: subActivity.assignedTo,
                   activity_id: activity.id,
