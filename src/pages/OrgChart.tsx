@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Search, ChevronRight, ChevronDown, User, Building2, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Search, ChevronRight, ChevronDown, User, Building2, ChevronsDownUp, ChevronsUpDown, AlertTriangle, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Profile {
@@ -12,6 +12,18 @@ interface Profile {
   department_id: string | null; email: string | null;
 }
 interface Dept { id: string; name: string; }
+interface Position {
+  id: string; title: string; current_holder_id: string | null;
+  is_critical_role: boolean; primary_successor_id: string | null;
+  secondary_successor_id: string | null; successor_readiness: number | null;
+}
+
+interface SuccessionInfo {
+  isCritical: boolean;
+  hasSuccessor: boolean;
+  readiness: number | null;
+  title: string;
+}
 
 interface TreeNode extends Profile { children: TreeNode[] }
 
@@ -34,13 +46,39 @@ function buildForest(profiles: Profile[]): TreeNode[] {
   return roots;
 }
 
-function NodeRow({ node, depth, deptMap, expanded, toggle, highlight }: {
+function SuccessionBadge({ info }: { info: SuccessionInfo }) {
+  if (!info.isCritical) return null;
+  if (!info.hasSuccessor) {
+    return (
+      <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 bg-red-50 flex items-center gap-0.5 py-0" title={`Critical role: ${info.title} — no successor`}>
+        <AlertTriangle className="h-2.5 w-2.5" />No successor
+      </Badge>
+    );
+  }
+  const readiness = info.readiness ?? 0;
+  if (readiness < 50) {
+    return (
+      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50 flex items-center gap-0.5 py-0" title={`Critical role: ${info.title} — successor not ready (${readiness}%)`}>
+        <Shield className="h-2.5 w-2.5" />{readiness}% ready
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 bg-emerald-50 flex items-center gap-0.5 py-0" title={`Critical role: ${info.title} — succession covered`}>
+      <Shield className="h-2.5 w-2.5" />Succession ✓
+    </Badge>
+  );
+}
+
+function NodeRow({ node, depth, deptMap, expanded, toggle, highlight, successionMap }: {
   node: TreeNode; depth: number; deptMap: Record<string, string>;
   expanded: Set<string>; toggle: (id: string) => void; highlight: string;
+  successionMap: Record<string, SuccessionInfo>;
 }) {
   const isOpen = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
   const matches = highlight && (node.full_name ?? '').toLowerCase().includes(highlight.toLowerCase());
+  const succession = successionMap[node.id];
   return (
     <div>
       <div
@@ -51,18 +89,19 @@ function NodeRow({ node, depth, deptMap, expanded, toggle, highlight }: {
         <button onClick={() => hasChildren && toggle(node.id)} className={cn('h-4 w-4 flex items-center justify-center', !hasChildren && 'invisible')}>
           {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </button>
-        <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <User className={cn('h-3.5 w-3.5 shrink-0', succession?.isCritical ? 'text-red-500' : 'text-muted-foreground')} />
         <span className="text-sm font-medium">{node.full_name ?? 'Unnamed'}</span>
         {node.role && <Badge variant="outline" className="text-[10px] py-0">{node.role}</Badge>}
         {node.department_id && deptMap[node.department_id] && (
           <span className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />{deptMap[node.department_id]}</span>
         )}
+        {succession && <SuccessionBadge info={succession} />}
         {hasChildren && <span className="text-xs text-muted-foreground ml-1">({node.children.length} direct report{node.children.length === 1 ? '' : 's'})</span>}
       </div>
       {isOpen && hasChildren && (
         <div>
           {node.children.map(child => (
-            <NodeRow key={child.id} node={child} depth={depth + 1} deptMap={deptMap} expanded={expanded} toggle={toggle} highlight={highlight} />
+            <NodeRow key={child.id} node={child} depth={depth + 1} deptMap={deptMap} expanded={expanded} toggle={toggle} highlight={highlight} successionMap={successionMap} />
           ))}
         </div>
       )}
@@ -77,6 +116,7 @@ function collectIds(nodes: TreeNode[], acc: string[]) {
 export default function OrgChart() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [depts, setDepts] = useState<Dept[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -85,17 +125,39 @@ export default function OrgChart() {
 
   async function fetchAll() {
     setLoading(true);
-    const [profRes, deptRes] = await Promise.all([
+    const [profRes, deptRes, posRes] = await Promise.all([
       supabase.from('profiles').select('id, full_name, role, reports_to, department_id, email').order('full_name'),
       supabase.from('departments').select('id, name'),
+      supabase.from('positions').select('id, title, current_holder_id, is_critical_role, primary_successor_id, secondary_successor_id, successor_readiness'),
     ]);
     if (profRes.data) setProfiles(profRes.data as Profile[]);
     if (deptRes.data) setDepts(deptRes.data as Dept[]);
+    if (posRes.data) setPositions(posRes.data as Position[]);
     setLoading(false);
   }
 
   const forest = useMemo(() => buildForest(profiles), [profiles]);
   const deptMap = useMemo(() => Object.fromEntries(depts.map(d => [d.id, d.name])), [depts]);
+
+  // Build a map of userId → succession info (for those holding critical positions)
+  const successionMap = useMemo<Record<string, SuccessionInfo>>(() => {
+    const m: Record<string, SuccessionInfo> = {};
+    positions.forEach(pos => {
+      if (!pos.is_critical_role || !pos.current_holder_id) return;
+      m[pos.current_holder_id] = {
+        isCritical: true,
+        hasSuccessor: !!(pos.primary_successor_id),
+        readiness: pos.successor_readiness,
+        title: pos.title,
+      };
+    });
+    return m;
+  }, [positions]);
+
+  const criticalAtRisk = useMemo(
+    () => positions.filter(p => p.is_critical_role && p.current_holder_id && (!p.primary_successor_id || (p.successor_readiness ?? 0) < 50)),
+    [positions]
+  );
 
   useEffect(() => {
     if (forest.length && expanded.size === 0) {
@@ -120,6 +182,17 @@ export default function OrgChart() {
 
   return (
     <div className="space-y-4" data-testid="page-org-chart">
+      {criticalAtRisk.length > 0 && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-red-200 bg-red-50/60 dark:bg-red-950/10 text-xs text-red-700">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>
+            <strong>Succession Risk:</strong>{' '}
+            {criticalAtRisk.map(p => p.title).join(', ')} — critical roles without a ready successor.
+            Update in Positions &amp; Vacancies.
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="relative w-64">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -130,6 +203,16 @@ export default function OrgChart() {
           <Button size="sm" variant="outline" onClick={collapseAll} data-testid="button-collapse-all"><ChevronsDownUp className="h-3.5 w-3.5 mr-1" />Collapse all</Button>
         </div>
       </div>
+
+      {Object.keys(successionMap).length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="text-muted-foreground">Succession legend:</span>
+          <span className="flex items-center gap-1 text-red-700"><AlertTriangle className="h-3 w-3" />No successor</span>
+          <span className="flex items-center gap-1 text-amber-700"><Shield className="h-3 w-3" />Not ready (&lt;50%)</span>
+          <span className="flex items-center gap-1 text-emerald-700"><Shield className="h-3 w-3" />Covered</span>
+        </div>
+      )}
+
       <Card>
         <CardContent className="py-4">
           {forest.length === 0 ? (
@@ -137,7 +220,7 @@ export default function OrgChart() {
           ) : (
             <div className="space-y-0.5">
               {forest.map(root => (
-                <NodeRow key={root.id} node={root} depth={0} deptMap={deptMap} expanded={expanded} toggle={toggle} highlight={search} />
+                <NodeRow key={root.id} node={root} depth={0} deptMap={deptMap} expanded={expanded} toggle={toggle} highlight={search} successionMap={successionMap} />
               ))}
             </div>
           )}

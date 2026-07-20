@@ -53,6 +53,7 @@ const PolicyLibraryPanel      = lazy(() => import('./HRPolicyLibrary'));
 const CompensationBandsPanel  = lazy(() => import('@/components/hr/CompensationBands'));
 const PayEquityPanel          = lazy(() => import('@/components/hr/PayEquityReport'));
 const ComplianceReportsPanel  = lazy(() => import('@/components/hr/ComplianceReports'));
+const PulseSurveysPanel       = lazy(() => import('@/components/hr/PulseSurveys'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type HRSection = 'pay' | 'time-leave' | 'people' | 'analytics';
@@ -62,7 +63,7 @@ type HRTab =
   | 'timesheet' | 'leave-requests' | 'leave-calendar' | 'attendance'
   | 'performance' | 'training' | 'contracts' | 'positions' | 'onboarding' | 'offboarding'
   | 'recruitment' | 'disciplinary' | 'org-chart' | 'benefits' | 'headcount'
-  | 'overview' | 'hr-analytics' | 'wa-broadcast' | 'pay-equity'
+  | 'overview' | 'hr-analytics' | 'wa-broadcast' | 'pay-equity' | 'pulse-surveys'
   | 'equipment'
   | 'policy-library'
   // legacy aliases kept for backwards-compat URL links
@@ -108,7 +109,7 @@ const SECTIONS: SectionDef[] = [
       { id: 'recruitment', label: 'Recruitment / ATS',     icon: Briefcase,     adminOnly: true,  description: 'Post open roles, track applicant pipelines from application through offer, schedule interviews, and record hiring decisions.' },
       { id: 'disciplinary',label: 'Disciplinary & Grievance', icon: ShieldCheck, adminOnly: true, description: 'Log and manage disciplinary cases and staff grievances with severity, investigation status, and confidential resolution notes.' },
       { id: 'org-chart',   label: 'Org Chart',             icon: GitBranch,     adminOnly: false, description: 'Visualise the reporting hierarchy across the organisation, expand or collapse teams, and search for any staff member.' },
-      { id: 'benefits',    label: 'Benefits Administration', icon: Wallet,      adminOnly: true,  description: 'Manage health insurance, pension, and other benefit plans, and track which staff are enrolled in each.' },
+      { id: 'benefits',    label: 'Benefits Administration', icon: Wallet,      adminOnly: false, description: 'Enroll in benefit plans during open enrollment periods, or manage health insurance, pension, and other benefit plans (admin).' },
       { id: 'headcount',   label: 'Headcount Planning',    icon: TrendingUp,    adminOnly: true,  description: 'Plan budgeted vs. current headcount by department and quarter, track planned hires, and forecast salary cost impact.' },
       { id: 'equipment',      label: 'Equipment & Assets',   icon: Package,    adminOnly: true,  description: 'Track organizational assets — laptops, phones, radios, vehicles — issue equipment to staff, record returns, and flag unreturned items during offboarding.' },
       { id: 'policy-library', label: 'Policy Library',       icon: BookOpen,   adminOnly: true,  description: 'Manage organizational policies (Code of Conduct, IT, Finance, Safeguarding) and track employee acknowledgements with timestamped sign-off records.' },
@@ -120,7 +121,8 @@ const SECTIONS: SectionDef[] = [
       { id: 'overview',     label: 'HR Overview',  icon: BarChart2,    adminOnly: true, description: 'Aggregate HR dashboard showing live headcount, leave utilisation rates, payroll totals, contract expiry alerts, and key people metrics at a glance.' },
       { id: 'hr-analytics', label: 'HR Analytics', icon: TrendingUp,   adminOnly: true, description: 'Deep-dive analytics on workforce trends — staff turnover rates, salary distributions, contract type breakdown, and departmental staffing levels over time.' },
       { id: 'pay-equity',   label: 'Pay Equity',   icon: BarChart2,    adminOnly: true, description: 'Compa-ratio analysis across all staff — compares each employee\'s salary to their grade midpoint, flags outliers below 80% or above 120%, with Excel export.' },
-      { id: 'wa-broadcast', label: 'HR Broadcast', icon: MessageSquare,adminOnly: true, description: 'Send targeted WhatsApp broadcasts to staff groups — payslip-ready notifications, policy announcements, and important HR communications at scale.' },
+      { id: 'wa-broadcast',   label: 'HR Broadcast',    icon: MessageSquare,adminOnly: true, description: 'Send targeted WhatsApp broadcasts to staff groups — payslip-ready notifications, policy announcements, and important HR communications at scale.' },
+      { id: 'pulse-surveys',  label: 'Pulse Surveys',   icon: Activity,     adminOnly: false, description: 'Anonymous engagement pulse surveys — create, distribute, and analyse staff sentiment. eNPS tracking and response trend charts for HR analytics.' },
     ],
   },
 ];
@@ -242,7 +244,7 @@ export default function HRHub() {
         {tab === 'recruitment' && isAdmin && <Suspense fallback={<PanelLoader />}><RecruitmentPanel /></Suspense>}
         {tab === 'disciplinary' && isAdmin && <Suspense fallback={<PanelLoader />}><DisciplinaryPanel /></Suspense>}
         {tab === 'org-chart' && <Suspense fallback={<PanelLoader />}><OrgChartPanel /></Suspense>}
-        {tab === 'benefits' && isAdmin && <Suspense fallback={<PanelLoader />}><BenefitsPanel /></Suspense>}
+        {tab === 'benefits' && <Suspense fallback={<PanelLoader />}><BenefitsPanel /></Suspense>}
         {tab === 'headcount' && isAdmin && <Suspense fallback={<PanelLoader />}><HeadcountPanel /></Suspense>}
         {tab === 'equipment' && isAdmin && <Suspense fallback={<PanelLoader />}><AssetsPanel /></Suspense>}
         {tab === 'policy-library' && isAdmin && <Suspense fallback={<PanelLoader />}><PolicyLibraryPanel /></Suspense>}
@@ -252,6 +254,7 @@ export default function HRHub() {
         {tab === 'hr-analytics' && isAdmin && <Suspense fallback={<PanelLoader />}><HRAnalyticsPanel /></Suspense>}
         {tab === 'pay-equity' && isAdmin && <Suspense fallback={<PanelLoader />}><PayEquityPanel /></Suspense>}
         {tab === 'wa-broadcast' && isAdmin && <Suspense fallback={<PanelLoader />}><HRBroadcastPanel /></Suspense>}
+        {tab === 'pulse-surveys' && <Suspense fallback={<PanelLoader />}><PulseSurveysPanel /></Suspense>}
       </div>
     </HubLayout>
   );

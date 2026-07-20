@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LogOut, Plus, FileText, Download, CheckCircle2, Package, RotateCcw, AlertTriangle } from 'lucide-react';
+import { LogOut, Plus, FileText, Download, CheckCircle2, Package, RotateCcw, AlertTriangle, Shield } from 'lucide-react';
 import { format, differenceInMonths, parseISO } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -107,6 +107,27 @@ export default function Offboarding() {
       return (data ?? []) as Profile[];
     },
   });
+
+  const { data: criticalPositions = [] } = useQuery({
+    queryKey: ['offboarding-critical-positions'],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('positions')
+        .select('id, title, current_holder_id, is_critical_role, primary_successor_id, successor_readiness')
+        .eq('is_critical_role', true);
+      return (data ?? []) as { id: string; title: string; current_holder_id: string | null; is_critical_role: boolean; primary_successor_id: string | null; successor_readiness: number | null }[];
+    },
+  });
+
+  const successionRisk = useMemo(() => {
+    if (!form.user_id) return null;
+    const pos = criticalPositions.find(p =>
+      p.current_holder_id === form.user_id &&
+      (!p.primary_successor_id || (p.successor_readiness ?? 0) < 50)
+    );
+    return pos ?? null;
+  }, [form.user_id, criticalPositions]);
 
   const final = useMemo(() => {
     const credits = Number(form.pro_rated_salary) + Number(form.leave_encashment) + Number(form.eosb_payout) + Number(form.bonus_or_incentive);
@@ -405,6 +426,21 @@ export default function Offboarding() {
                   data-testid="input-exit-date" />
               </div>
             </div>
+            {successionRisk && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 text-sm" data-testid="succession-risk-alert">
+                <Shield className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-red-700">Succession Risk — Critical Position Unprotected</p>
+                  <p className="text-red-600 text-xs mt-0.5">
+                    This staff member holds the critical role <strong>"{successionRisk.title}"</strong>.{' '}
+                    {!successionRisk.primary_successor_id
+                      ? 'No successor has been nominated.'
+                      : `The nominated successor has only ${successionRisk.successor_readiness ?? 0}% readiness.`}{' '}
+                    Before proceeding, assign or develop a successor in <strong>Positions &amp; Vacancies</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Reason / السبب</Label>
               <Textarea rows={2} value={form.reason}
