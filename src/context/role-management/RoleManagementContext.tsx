@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
- import { 
+import { 
   Role, 
   Permission, 
   RoleWithPermissions, 
@@ -14,7 +14,8 @@ import { ensureValidSession } from '@/lib/session-health';
   ResourceType,
   ActionType,
   RESOURCES,
-  ACTIONS
+  ACTIONS,
+  DEFAULT_ROLE_PERMISSIONS
 } from '@/types/roles';
 
 interface RoleManagementContextType {
@@ -452,20 +453,61 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const hasPermission = (userId: string, resource: ResourceType, action: ActionType): boolean => {
+    // ── 1. Super Admin bypass ────────────────────────────────────────────────
+    // Check both DB-cached perms and the userRoles cache for super-admin strings
     const perms = permissionsCache[userId];
-    if (!perms) return false;
-
-    const hasSuperAdminPerm = perms.some(p => p.resource === 'system' && p.action === 'override');
+    const hasSuperAdminPerm = perms?.some(p => p.resource === 'system' && p.action === 'override');
     if (hasSuperAdminPerm) return true;
 
-    // Check per-user overrides first — they win over role defaults
+    // Also check if their role string indicates SuperAdmin (covers the case where
+    // the DB permissions table hasn't been seeded yet)
+    const uRoles = userRoles.filter(ur => ur.user_id === userId);
+    const isSuperAdminByRole = uRoles.some(ur =>
+      ['SuperAdmin', 'super_admin', 'superAdmin', 'Super Admin'].includes(ur.role as string)
+    );
+    if (isSuperAdminByRole) return true;
+
+    // ── 2. Per-user overrides win over role defaults ──────────────────────────
     const overrides = overridesCache[userId];
     if (overrides && overrides.length > 0) {
       const override = overrides.find(o => o.resource === resource && o.action === action);
       if (override) return override.is_granted;
     }
 
-    return perms.some(p => p.resource === resource && p.action === action);
+    // ── 3. DB-cached role permissions ────────────────────────────────────────
+    if (perms && perms.length > 0) {
+      return perms.some(p => p.resource === resource && p.action === action);
+    }
+
+    // ── 4. Fallback to DEFAULT_ROLE_PERMISSIONS (covers offline / unseeded DB) ─
+    // Normalize role strings to match DEFAULT_ROLE_PERMISSIONS keys (PascalCase)
+    const normalizeRole = (r: string): AppRole | null => {
+      const map: Record<string, AppRole> = {
+        superadmin: 'SuperAdmin', super_admin: 'SuperAdmin', 'super admin': 'SuperAdmin',
+        admin: 'Admin',
+        countrydirector: 'CountryDirector', country_director: 'CountryDirector',
+        'field operation manager (fom)': 'Field Operation Manager (FOM)', fom: 'Field Operation Manager (FOM)',
+        financialadmin: 'FinancialAdmin', financial_admin: 'FinancialAdmin',
+        ict: 'ICT',
+        projectmanager: 'ProjectManager', project_manager: 'ProjectManager',
+        senioroperationslead: 'SeniorOperationsLead', senior_operations_lead: 'SeniorOperationsLead',
+        supervisor: 'Supervisor',
+        coordinator: 'Coordinator',
+        datateam: 'DataTeam', data_team: 'DataTeam',
+        datacollector: 'DataCollector', data_collector: 'DataCollector',
+        reviewer: 'Reviewer',
+        auditor: 'Auditor',
+      };
+      return map[r.toLowerCase()] ?? (DEFAULT_ROLE_PERMISSIONS[r as AppRole] ? (r as AppRole) : null);
+    };
+
+    return uRoles.some(ur => {
+      const normalized = normalizeRole(ur.role as string);
+      if (!normalized) return false;
+      return (DEFAULT_ROLE_PERMISSIONS[normalized] || []).some(
+        p => p.resource === resource && p.action === action
+      );
+    });
   };
 
   const getUserPermissions = (userId: string): Permission[] => {

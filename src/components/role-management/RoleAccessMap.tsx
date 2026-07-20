@@ -35,13 +35,13 @@ const ROLE_COLOR: Record<string, string> = {
   DataCollector: 'bg-sky-600', Reviewer: 'bg-gray-500', Auditor: 'bg-slate-600',
 };
 
-// ─── Resource grouping ───────────────────────────────────────────────────────
+// ─── Resource grouping — must stay in sync with ResourceType in types/roles.ts ──
 const RESOURCE_GROUPS: { group: string; resources: ResourceType[] }[] = [
   { group: 'Administration', resources: ['users', 'roles', 'permissions', 'settings', 'system', 'super_admins', 'audit_logs'] },
   { group: 'Programme', resources: ['projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations'] },
   { group: 'Field Operations', resources: ['safety', 'incidents', 'equipment', 'coverage_map'] },
-  { group: 'Finance', resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions'] },
-  { group: 'HR', resources: ['hr', 'payroll', 'leave'] },
+  { group: 'Finance', resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions', 'pre_funding', 'procurement', 'fixed_assets'] },
+  { group: 'HR & People', resources: ['hr', 'payroll', 'leave', 'benefits', 'succession', 'pulse_surveys', 'hr_analytics'] },
   { group: 'Tools & Communication', resources: ['surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar', 'signatures', 'integrations', 'transactions'] },
   { group: 'CRM & Reports', resources: ['crm', 'reports'] },
 ];
