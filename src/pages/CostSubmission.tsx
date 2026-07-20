@@ -582,21 +582,6 @@ const CostSubmission = () => {
     return next;
   });
   const [showMyActionOnly, setShowMyActionOnly] = useState(false);
-  // Auto-expand flows where the current user is the active approver
-  useEffect(() => {
-    if (!operationalCosts.length || !currentUser?.id) return;
-    const toExpand = operationalCosts
-      .filter(oc => canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc) || canTier4Approve(oc))
-      .map(oc => oc.id);
-    if (toExpand.length > 0) {
-      setExpandedFlows(prev => {
-        const next = new Set(prev);
-        toExpand.forEach(id => next.add(id));
-        return next;
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [operationalCosts.length, currentUser?.id]);
   const toggleOcStatus = (s: string) => setOcStatusFilter(prev => {
     const next = new Set(prev);
     if (next.has(s)) next.delete(s); else next.add(s);
