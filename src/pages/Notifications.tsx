@@ -527,6 +527,14 @@ const Notifications: FC = () => {
 
   const handleOpen = useCallback(async (n: Notification) => {
     await markNotificationAsRead(n.id);
+    const entityType = n.relatedEntityType || (n as any).entity_type || '';
+    const entityId   = n.relatedEntityId   || (n as any).entity_id   || '';
+    // Cost submission notifications: always deep-link to the specific submission
+    // (works for both old notifications with plain link and new ones with ?open=id)
+    if (entityType === 'costSubmission' && entityId) {
+      navigate(`/cost-submission?open=${entityId}`);
+      return;
+    }
     if (n.link) navigate(n.link);
   }, [markNotificationAsRead, navigate]);
 

@@ -59,6 +59,9 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     // Handle different notification types
     if (notification.relatedEntityType === 'chat') {
       navigate('/chat');
+    } else if (notification.relatedEntityType === 'costSubmission' && notification.relatedEntityId) {
+      // Always deep-link to the specific submission (works for old & new notifications)
+      navigate(`/cost-submission?open=${notification.relatedEntityId}`);
     } else if (notification.link) {
       navigate(notification.link);
     }
@@ -392,7 +395,11 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       notification.relatedEntityType === 'downPayment' ||
       notification.relatedEntityType === 'costSubmission';
 
-    if (isApprovalType && notification.link) {
+    if (isApprovalType && (notification.link || notification.relatedEntityId)) {
+      const approvalNavTarget =
+        notification.relatedEntityType === 'costSubmission' && notification.relatedEntityId
+          ? `/cost-submission?open=${notification.relatedEntityId}`
+          : notification.link!;
       return (
         <>
           {renderAcknowledgeButton(notification)}
@@ -402,7 +409,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             className="h-7 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(notification.link!);
+              navigate(approvalNavTarget);
               onClose();
             }}
             data-testid={`button-approve-${notification.id}`}
@@ -416,7 +423,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             className="h-7 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(notification.link!);
+              navigate(approvalNavTarget);
               onClose();
             }}
             data-testid={`button-reject-${notification.id}`}
