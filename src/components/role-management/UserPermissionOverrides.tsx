@@ -101,7 +101,7 @@ export function UserPermissionOverrides() {
   const [pendingChanges, setPendingChanges] = useState<Map<string, OverrideState>>(new Map());
   const [pendingReason, setPendingReason] = useState('');
   const [pendingExpiry, setPendingExpiry] = useState('');
-  const [collapsedResources, setCollapsedResources] = useState<Set<string>>(new Set());
+  const [collapsedResources, setCollapsedResources] = useState<Set<string>>(new Set(RESOURCES));
   const [showAudit, setShowAudit] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
