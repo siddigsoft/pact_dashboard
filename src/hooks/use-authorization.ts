@@ -192,6 +192,159 @@ export const useAuthorization = () => {
     return checkPermission('wallets', 'update') || checkPermission('wallets', 'approve');
   };
 
+  // ── Cost Submissions ────────────────────────────────────────────────────
+  const canSubmitCostRequest = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('cost_submissions', 'submit') ||
+           checkPermission('cost_submissions', 'create') ||
+           hasAnyRole(['admin', 'supervisor', 'coordinator', 'fom', 'dataCollector', 'dataTeam', 'countryDirector',
+                       'Field Operation Manager (FOM)', 'DataCollector', 'DataTeam']);
+  };
+
+  const canApproveCostSubmission = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('cost_submissions', 'approve') ||
+           hasAnyRole(['admin', 'fom', 'supervisor', 'countryDirector',
+                       'Field Operation Manager (FOM)', 'SeniorOperationsLead']);
+  };
+
+  const canMarkCostPaid = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('cost_submissions', 'approve') &&
+           hasAnyRole(['admin', 'financialAdmin', 'FinancialAdmin']);
+  };
+
+  const canExportCostSubmissions = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('cost_submissions', 'export') ||
+           hasAnyRole(['admin', 'financialAdmin', 'auditor', 'fom', 'supervisor', 'countryDirector']);
+  };
+
+  // ── Down Payments ───────────────────────────────────────────────────────
+  const canSubmitDownPayment = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('down_payments', 'submit') ||
+           checkPermission('down_payments', 'create') ||
+           hasAnyRole(['admin', 'fom', 'supervisor', 'coordinator',
+                       'Field Operation Manager (FOM)']);
+  };
+
+  const canApproveDownPayment = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('down_payments', 'approve') ||
+           hasAnyRole(['admin', 'financialAdmin', 'countryDirector',
+                       'FinancialAdmin', 'CountryDirector']);
+  };
+
+  // ── HR / Payroll / Leave ────────────────────────────────────────────────
+  const canManageHR = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('hr', 'read') || checkPermission('hr', 'update') ||
+           hasAnyRole(['admin', 'Admin']);
+  };
+
+  const canManagePayroll = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('payroll', 'read') || checkPermission('payroll', 'approve') ||
+           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+  };
+
+  const canApproveLeave = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('leave', 'approve') ||
+           hasAnyRole(['admin', 'supervisor', 'Admin', 'Supervisor']);
+  };
+
+  // ── Accounting ──────────────────────────────────────────────────────────
+  const canManageAccounting = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('accounting', 'read') || checkPermission('accounting', 'create') ||
+           hasAnyRole(['admin', 'financialAdmin', 'auditor', 'Admin', 'FinancialAdmin', 'Auditor']);
+  };
+
+  const canWriteAccounting = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('accounting', 'create') || checkPermission('accounting', 'update') ||
+           hasAnyRole(['admin', 'financialAdmin', 'Admin', 'FinancialAdmin']);
+  };
+
+  // ── Surveys ─────────────────────────────────────────────────────────────
+  const canManageSurveys = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('surveys', 'create') || checkPermission('surveys', 'update') ||
+           hasAnyRole(['admin', 'ict', 'dataTeam', 'projectManager',
+                       'Admin', 'ICT', 'DataTeam', 'ProjectManager']);
+  };
+
+  const canViewSurveys = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('surveys', 'read') || canManageSurveys();
+  };
+
+  const canSubmitSurveyResponse = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('surveys', 'submit') || checkPermission('surveys', 'read');
+  };
+
+  // ── Portfolio & Analytics ───────────────────────────────────────────────
+  const canViewPortfolio = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('portfolio', 'read') ||
+           hasAnyRole(['admin', 'fom', 'countryDirector', 'projectManager',
+                       'Field Operation Manager (FOM)', 'CountryDirector', 'ProjectManager']);
+  };
+
+  const canViewAnalytics = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('analytics', 'read') ||
+           hasAnyRole(['admin', 'fom', 'countryDirector', 'projectManager', 'dataTeam',
+                       'Field Operation Manager (FOM)', 'SeniorOperationsLead']);
+  };
+
+  // ── Notifications & Communication ───────────────────────────────────────
+  const canBroadcast = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('broadcast', 'create') ||
+           hasAnyRole(['admin', 'Admin']);
+  };
+
+  const canManageWhatsApp = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('whatsapp', 'update') ||
+           hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
+  };
+
+  // ── CRM ─────────────────────────────────────────────────────────────────
+  const canManageCRM = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('crm', 'create') || checkPermission('crm', 'update') ||
+           hasAnyRole(['admin', 'fom', 'projectManager', 'countryDirector',
+                       'Admin', 'Field Operation Manager (FOM)', 'ProjectManager']);
+  };
+
+  // ── Safety & Incidents ──────────────────────────────────────────────────
+  const canReportIncident = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('incidents', 'create') ||
+           hasAnyRole(['admin', 'fom', 'supervisor', 'coordinator', 'dataCollector',
+                       'Field Operation Manager (FOM)', 'Supervisor', 'Coordinator', 'DataCollector']);
+  };
+
+  // ── Tasks ───────────────────────────────────────────────────────────────
+  const canAssignTasks = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('tasks', 'assign') ||
+           hasAnyRole(['admin', 'fom', 'projectManager', 'countryDirector',
+                       'Admin', 'Field Operation Manager (FOM)', 'ProjectManager']);
+  };
+
+  // ── Integrations ────────────────────────────────────────────────────────
+  const canManageIntegrations = (): boolean => {
+    if (isSuperAdmin()) return true;
+    return checkPermission('integrations', 'update') ||
+           hasAnyRole(['admin', 'ict', 'Admin', 'ICT']);
+  };
+
   /**
    * Higher-order component for conditional rendering based on permissions
    */
@@ -218,33 +371,65 @@ export const useAuthorization = () => {
   };
 
   return {
-    // Permission checks
+    // Core permission checks
     checkPermission,
     hasAnyRole,
     hasAllRoles,
     getCurrentUserPermissions,
     isSuperAdmin,
-    
-    // Specific feature permissions
+
+    // Administration
     canManageRoles,
     canManageUsers,
-    canApproveMMP,
-    canManageFinances,
-    canViewAllSiteVisits,
-    canCreateProjects,
-    canEditFeeStructures,
     canManageSuperAdmins,
     canViewAuditLogs,
     canRestoreRecords,
     canOverrideSystem,
+    canEditFeeStructures,
+    canManageIntegrations,
+
+    // Programme & Projects
+    canApproveMMP,
+    canCreateProjects,
+    canViewPortfolio,
+    canViewAnalytics,
+
+    // Finance
+    canManageFinances,
     canManageAllWallets,
-    
+    canSubmitCostRequest,
+    canApproveCostSubmission,
+    canMarkCostPaid,
+    canExportCostSubmissions,
+    canSubmitDownPayment,
+    canApproveDownPayment,
+    canManageAccounting,
+    canWriteAccounting,
+
+    // Field ops
+    canViewAllSiteVisits,
+    canReportIncident,
+
+    // HR
+    canManageHR,
+    canManagePayroll,
+    canApproveLeave,
+
+    // Tools & communication
+    canManageSurveys,
+    canViewSurveys,
+    canSubmitSurveyResponse,
+    canBroadcast,
+    canManageWhatsApp,
+    canManageCRM,
+    canAssignTasks,
+
     // HOCs for conditional rendering
     withPermission,
     withRole,
-    
+
     // User info
     currentUser,
-    isAuthenticated: !!currentUser
+    isAuthenticated: !!currentUser,
   };
 };

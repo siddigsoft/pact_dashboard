@@ -22,7 +22,7 @@ import {
   History, Loader2, AlertTriangle, ChevronDown, ChevronRight,
   Trash2, Calendar,
 } from 'lucide-react';
-import { RESOURCES, ACTIONS, DEFAULT_ROLE_PERMISSIONS, ResourceType, ActionType } from '@/types/roles';
+import { RESOURCES, ACTIONS, DEFAULT_ROLE_PERMISSIONS, RESOURCE_LABELS, ACTION_LABELS, ResourceType, ActionType } from '@/types/roles';
 import { toDisplayLabel, normalizeRole } from '@/utils/roleMapping';
 import { cn } from '@/lib/utils';
 
@@ -54,19 +54,6 @@ interface AuditEntry {
 
 type OverrideState = 'inherit' | 'grant' | 'block';
 
-const RESOURCE_LABELS: Record<string, string> = {
-  users: 'Users', roles: 'Roles', permissions: 'Permissions',
-  projects: 'Projects', mmp: 'MMP', site_visits: 'Site Visits',
-  finances: 'Finances', reports: 'Reports', settings: 'Settings',
-  super_admins: 'Super Admins', audit_logs: 'Audit Logs',
-  wallets: 'Wallets', system: 'System', crm: 'CRM',
-};
-
-const ACTION_LABELS: Record<string, string> = {
-  create: 'Create', read: 'Read', update: 'Update', delete: 'Delete',
-  approve: 'Approve', assign: 'Assign', archive: 'Archive',
-  restore: 'Restore', override: 'Override',
-};
 
 const ROLE_HAS_PERM = (role: string, resource: ResourceType, action: ActionType): boolean => {
   const normalized = normalizeRole(role) as keyof typeof DEFAULT_ROLE_PERMISSIONS;

@@ -1,573 +1,407 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAppContext } from '@/context/AppContext';
-import { toDisplayLabel, normalizeRole } from '@/utils/roleMapping';
-import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   CheckCircle2, MinusCircle, XCircle, Eye, PenLine, BadgeCheck,
-  Users, BarChart3, Map, Grid3X3, Info,
+  Users, BarChart3, Grid3X3, Search, Info, ChevronDown, ChevronUp,
+  Shield, Lock, Download,
 } from 'lucide-react';
+import { DEFAULT_ROLE_PERMISSIONS, RESOURCE_LABELS, ACTION_LABELS, ResourceType, ActionType, AppRole } from '@/types/roles';
+import { cn } from '@/lib/utils';
 
-type AccessLevel = 'full' | 'read' | 'submit' | 'approve' | 'none';
-
-interface Module {
-  name: string;
-  nameAr: string;
-  icon: string;
-  category: string;
-  access: Partial<Record<string, AccessLevel>>;
-}
-
-const ROLES = [
-  'SuperAdmin',
-  'Admin',
-  'CountryDirector',
-  'Field Operation Manager (FOM)',
-  'FinancialAdmin',
-  'ICT',
-  'ProjectManager',
-  'SeniorOperationsLead',
-  'Supervisor',
-  'Coordinator',
-  'DataTeam',
-  'DataCollector',
-  'Reviewer',
-  'Auditor',
-] as const;
+// ─── Role display config ────────────────────────────────────────────────────
+const ROLES: AppRole[] = [
+  'SuperAdmin', 'Admin', 'CountryDirector', 'Field Operation Manager (FOM)',
+  'FinancialAdmin', 'ICT', 'ProjectManager', 'SeniorOperationsLead',
+  'Supervisor', 'Coordinator', 'DataTeam', 'DataCollector', 'Reviewer', 'Auditor',
+];
 
 const ROLE_SHORT: Record<string, string> = {
-  'SuperAdmin': 'SA',
-  'Admin': 'Ad',
-  'CountryDirector': 'CD',
-  'Field Operation Manager (FOM)': 'FOM',
-  'FinancialAdmin': 'FA',
-  'ICT': 'ICT',
-  'ProjectManager': 'PM',
-  'SeniorOperationsLead': 'SOL',
-  'Supervisor': 'Sup',
-  'Coordinator': 'Crd',
-  'DataTeam': 'DT',
-  'DataCollector': 'DC',
-  'Reviewer': 'Rev',
-  'Auditor': 'Aud',
+  SuperAdmin: 'SA', Admin: 'Ad', CountryDirector: 'CD',
+  'Field Operation Manager (FOM)': 'FOM', FinancialAdmin: 'FA', ICT: 'ICT',
+  ProjectManager: 'PM', SeniorOperationsLead: 'SOL', Supervisor: 'Sup',
+  Coordinator: 'Crd', DataTeam: 'DT', DataCollector: 'DC', Reviewer: 'Rev', Auditor: 'Aud',
 };
 
 const ROLE_COLOR: Record<string, string> = {
-  'SuperAdmin': 'bg-red-600',
-  'Admin': 'bg-orange-500',
-  'CountryDirector': 'bg-blue-600',
-  'Field Operation Manager (FOM)': 'bg-teal-600',
-  'FinancialAdmin': 'bg-green-600',
-  'ICT': 'bg-violet-600',
-  'ProjectManager': 'bg-cyan-600',
-  'SeniorOperationsLead': 'bg-indigo-600',
-  'Supervisor': 'bg-amber-600',
-  'Coordinator': 'bg-lime-600',
-  'DataTeam': 'bg-pink-600',
-  'DataCollector': 'bg-sky-600',
-  'Reviewer': 'bg-gray-500',
-  'Auditor': 'bg-slate-600',
+  SuperAdmin: 'bg-red-600', Admin: 'bg-orange-500', CountryDirector: 'bg-blue-600',
+  'Field Operation Manager (FOM)': 'bg-teal-600', FinancialAdmin: 'bg-green-600',
+  ICT: 'bg-violet-600', ProjectManager: 'bg-cyan-600', SeniorOperationsLead: 'bg-indigo-600',
+  Supervisor: 'bg-amber-600', Coordinator: 'bg-lime-600', DataTeam: 'bg-pink-600',
+  DataCollector: 'bg-sky-600', Reviewer: 'bg-gray-500', Auditor: 'bg-slate-600',
 };
 
-const MODULES: Module[] = [
-  {
-    name: 'Dashboard', nameAr: 'لوحة التحكم', icon: '📊', category: 'General',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'full', 'Field Operation Manager (FOM)': 'full', FinancialAdmin: 'read', ICT: 'full', ProjectManager: 'full', SeniorOperationsLead: 'full', Supervisor: 'read', Coordinator: 'read', DataTeam: 'read', DataCollector: 'read', Reviewer: 'read', Auditor: 'read' },
-  },
-  {
-    name: 'MMP Management', nameAr: 'إدارة خطط الرصد', icon: '📋', category: 'Field Operations',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'full', FinancialAdmin: 'none', ICT: 'full', ProjectManager: 'full', SeniorOperationsLead: 'approve', Supervisor: 'read', Coordinator: 'read', DataTeam: 'read', DataCollector: 'read', Reviewer: 'read', Auditor: 'none' },
-  },
-  {
-    name: 'Site Visits', nameAr: 'الزيارات الميدانية', icon: '🗺️', category: 'Field Operations',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'full', FinancialAdmin: 'read', ICT: 'full', ProjectManager: 'full', SeniorOperationsLead: 'approve', Supervisor: 'submit', Coordinator: 'submit', DataTeam: 'read', DataCollector: 'submit', Reviewer: 'read', Auditor: 'none' },
-  },
-  {
-    name: 'Submit Cost Request', nameAr: 'تقديم طلب مصروف', icon: '💰', category: 'Finance',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'submit', 'Field Operation Manager (FOM)': 'submit', FinancialAdmin: 'none', ICT: 'none', ProjectManager: 'none', SeniorOperationsLead: 'none', Supervisor: 'submit', Coordinator: 'submit', DataTeam: 'submit', DataCollector: 'submit', Reviewer: 'none', Auditor: 'none' },
-  },
-  {
-    name: 'Approve Cost (T1–T4)', nameAr: 'موافقة المصروفات (المراحل)', icon: '✅', category: 'Finance',
-    access: { SuperAdmin: 'full', Admin: 'approve', CountryDirector: 'approve', 'Field Operation Manager (FOM)': 'approve', FinancialAdmin: 'none', ICT: 'none', ProjectManager: 'none', SeniorOperationsLead: 'none', Supervisor: 'approve', Coordinator: 'none', DataTeam: 'none', DataCollector: 'none', Reviewer: 'none', Auditor: 'none' },
-  },
-  {
-    name: 'Mark Cost as Paid', nameAr: 'تحديد المصروف كمدفوع', icon: '🏦', category: 'Finance',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'none', 'Field Operation Manager (FOM)': 'none', FinancialAdmin: 'full', ICT: 'none', ProjectManager: 'none', SeniorOperationsLead: 'none', Supervisor: 'none', Coordinator: 'none', DataTeam: 'none', DataCollector: 'none', Reviewer: 'none', Auditor: 'none' },
-  },
-  {
-    name: 'Down Payments', nameAr: 'الدفعات المقدمة', icon: '💳', category: 'Finance',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'submit', FinancialAdmin: 'full', ICT: 'none', ProjectManager: 'read', SeniorOperationsLead: 'read', Supervisor: 'submit', Coordinator: 'submit', DataTeam: 'read', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'Finance Hub (Reports)', nameAr: 'التقارير المالية', icon: '📈', category: 'Finance',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'read', FinancialAdmin: 'full', ICT: 'read', ProjectManager: 'full', SeniorOperationsLead: 'full', Supervisor: 'none', Coordinator: 'none', DataTeam: 'read', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'Project Flow', nameAr: 'تدفق المشاريع', icon: '🔄', category: 'Projects',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'submit', FinancialAdmin: 'none', ICT: 'full', ProjectManager: 'full', SeniorOperationsLead: 'approve', Supervisor: 'none', Coordinator: 'none', DataTeam: 'read', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'CRM (Partners)', nameAr: 'إدارة الشركاء', icon: '🤝', category: 'Projects',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'full', FinancialAdmin: 'read', ICT: 'read', ProjectManager: 'full', SeniorOperationsLead: 'read', Supervisor: 'none', Coordinator: 'none', DataTeam: 'read', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'HR & Finance Hub', nameAr: 'الموارد البشرية', icon: '👥', category: 'HR',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'none', 'Field Operation Manager (FOM)': 'none', FinancialAdmin: 'read', ICT: 'none', ProjectManager: 'none', SeniorOperationsLead: 'none', Supervisor: 'none', Coordinator: 'none', DataTeam: 'none', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'Survey Builder', nameAr: 'بناء الاستبيانات', icon: '📝', category: 'Tools',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'read', FinancialAdmin: 'none', ICT: 'full', ProjectManager: 'full', SeniorOperationsLead: 'read', Supervisor: 'read', Coordinator: 'read', DataTeam: 'full', DataCollector: 'read', Reviewer: 'read', Auditor: 'none' },
-  },
-  {
-    name: 'Staff Directory', nameAr: 'دليل الموظفين', icon: '📔', category: 'Tools',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'read', 'Field Operation Manager (FOM)': 'read', FinancialAdmin: 'read', ICT: 'full', ProjectManager: 'read', SeniorOperationsLead: 'read', Supervisor: 'read', Coordinator: 'read', DataTeam: 'read', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'Audit & Logs', nameAr: 'سجلات التدقيق', icon: '🔍', category: 'Admin',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'none', 'Field Operation Manager (FOM)': 'none', FinancialAdmin: 'none', ICT: 'none', ProjectManager: 'read', SeniorOperationsLead: 'read', Supervisor: 'none', Coordinator: 'none', DataTeam: 'read', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
-  {
-    name: 'Role Management', nameAr: 'إدارة الصلاحيات', icon: '🛡️', category: 'Admin',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'none', 'Field Operation Manager (FOM)': 'none', FinancialAdmin: 'none', ICT: 'full', ProjectManager: 'none', SeniorOperationsLead: 'none', Supervisor: 'none', Coordinator: 'none', DataTeam: 'none', DataCollector: 'none', Reviewer: 'none', Auditor: 'none' },
-  },
-  {
-    name: 'System Settings', nameAr: 'إعدادات النظام', icon: '⚙️', category: 'Admin',
-    access: { SuperAdmin: 'full', Admin: 'full', CountryDirector: 'none', 'Field Operation Manager (FOM)': 'none', FinancialAdmin: 'none', ICT: 'full', ProjectManager: 'read', SeniorOperationsLead: 'read', Supervisor: 'none', Coordinator: 'none', DataTeam: 'none', DataCollector: 'none', Reviewer: 'none', Auditor: 'read' },
-  },
+// ─── Resource grouping ───────────────────────────────────────────────────────
+const RESOURCE_GROUPS: { group: string; resources: ResourceType[] }[] = [
+  { group: 'Administration', resources: ['users', 'roles', 'permissions', 'settings', 'system', 'super_admins', 'audit_logs'] },
+  { group: 'Programme', resources: ['projects', 'portfolio', 'analytics', 'mmp', 'site_visits', 'hub_operations'] },
+  { group: 'Field Operations', resources: ['safety', 'incidents', 'equipment', 'coverage_map'] },
+  { group: 'Finance', resources: ['finances', 'wallets', 'accounting', 'down_payments', 'cost_submissions'] },
+  { group: 'HR', resources: ['hr', 'payroll', 'leave'] },
+  { group: 'Tools & Communication', resources: ['surveys', 'tasks', 'notifications', 'broadcast', 'whatsapp', 'calendar', 'signatures', 'integrations', 'transactions'] },
+  { group: 'CRM & Reports', resources: ['crm', 'reports'] },
 ];
 
-// Cost Submission button-level defaults
-const CS_BUTTONS: { label: string; labelAr: string; roles: string[] }[] = [
-  {
-    label: 'Submit Request', labelAr: 'تقديم طلب',
-    roles: ['SuperAdmin', 'Admin', 'CountryDirector', 'Field Operation Manager (FOM)', 'Supervisor', 'Coordinator', 'DataTeam', 'DataCollector'],
-  },
-  {
-    label: 'Approve T1', labelAr: 'موافقة م1',
-    roles: ['SuperAdmin', 'Admin', 'CountryDirector', 'Field Operation Manager (FOM)', 'Supervisor'],
-  },
-  {
-    label: 'Approve T2', labelAr: 'موافقة م2',
-    roles: ['SuperAdmin', 'Admin', 'CountryDirector', 'Field Operation Manager (FOM)'],
-  },
-  {
-    label: 'Approve T3', labelAr: 'موافقة م3',
-    roles: ['SuperAdmin', 'Admin', 'CountryDirector'],
-  },
-  {
-    label: 'Approve T4', labelAr: 'موافقة م4',
-    roles: ['SuperAdmin', 'Admin'],
-  },
-  {
-    label: 'Mark Paid', labelAr: 'تحديد كمدفوع',
-    roles: ['SuperAdmin', 'Admin', 'FinancialAdmin'],
-  },
-  {
-    label: 'Reconcile', labelAr: 'مطابقة',
-    roles: ['SuperAdmin', 'Admin', 'FinancialAdmin'],
-  },
-  {
-    label: 'Send to Finance', labelAr: 'إرسال للمالية',
-    roles: ['SuperAdmin', 'Admin'],
-  },
-  {
-    label: 'Recall Submission', labelAr: 'سحب الطلب',
-    roles: ['SuperAdmin', 'Admin'],
-  },
-  {
-    label: 'Revert Tier', labelAr: 'إرجاع مرحلة',
-    roles: ['SuperAdmin', 'Admin'],
-  },
-  {
-    label: 'Edit (any status)', labelAr: 'تعديل (أي حالة)',
-    roles: ['SuperAdmin'],
-  },
-  {
-    label: 'Revert Paid', labelAr: 'إرجاع دفعة',
-    roles: ['SuperAdmin', 'Admin'],
-  },
-  {
-    label: 'Delete', labelAr: 'حذف',
-    roles: ['SuperAdmin'],
-  },
-];
+// ─── Derive access level from DEFAULT_ROLE_PERMISSIONS ───────────────────────
+type AccessLevel = 'full' | 'read+write' | 'approve' | 'submit' | 'read' | 'export' | 'none';
 
-const ACCESS_CONFIG: Record<AccessLevel, { label: string; icon: any; cell: string; badge: string }> = {
-  full:    { label: 'Full Access',  icon: CheckCircle2, cell: 'bg-emerald-50 dark:bg-emerald-950/30',  badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
-  read:    { label: 'Read Only',   icon: Eye,           cell: 'bg-blue-50 dark:bg-blue-950/30',        badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
-  submit:  { label: 'Submit/Edit', icon: PenLine,       cell: 'bg-amber-50 dark:bg-amber-950/30',      badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
-  approve: { label: 'Approve',     icon: BadgeCheck,    cell: 'bg-purple-50 dark:bg-purple-950/30',    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' },
-  none:    { label: 'No Access',   icon: XCircle,       cell: 'bg-gray-50/40 dark:bg-gray-900/20',     badge: 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500' },
+function deriveAccessLevel(role: AppRole, resource: ResourceType): AccessLevel {
+  const perms = DEFAULT_ROLE_PERMISSIONS[role] || [];
+  const actions = perms
+    .filter(p => p.resource === resource)
+    .map(p => p.action);
+  if (actions.length === 0) return 'none';
+  if (actions.includes('delete') || (actions.includes('create') && actions.includes('update') && actions.includes('approve'))) return 'full';
+  if (actions.includes('override') || actions.includes('restore')) return 'full';
+  if (actions.includes('approve')) return 'approve';
+  if (actions.includes('create') && actions.includes('update')) return 'read+write';
+  if (actions.includes('submit')) return 'submit';
+  if (actions.includes('update')) return 'read+write';
+  if (actions.includes('read') || actions.includes('export')) return 'read';
+  return 'none';
+}
+
+function hasAction(role: AppRole, resource: ResourceType, action: ActionType): boolean {
+  return (DEFAULT_ROLE_PERMISSIONS[role] || []).some(p => p.resource === resource && p.action === action);
+}
+
+// ─── Access level visual config ───────────────────────────────────────────────
+const ACCESS_CONFIG: Record<AccessLevel, { label: string; icon: any; cell: string; badge: string; dot: string }> = {
+  full:       { label: 'Full',       icon: CheckCircle2, cell: 'bg-emerald-50 dark:bg-emerald-950/40',  badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', dot: 'bg-emerald-500' },
+  'read+write':{ label: 'Read+Write', icon: PenLine,      cell: 'bg-cyan-50 dark:bg-cyan-950/30',        badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300', dot: 'bg-cyan-500' },
+  approve:    { label: 'Approve',    icon: BadgeCheck,    cell: 'bg-violet-50 dark:bg-violet-950/30',    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300', dot: 'bg-violet-500' },
+  submit:     { label: 'Submit',     icon: PenLine,       cell: 'bg-amber-50 dark:bg-amber-950/30',      badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', dot: 'bg-amber-500' },
+  read:       { label: 'Read',       icon: Eye,           cell: 'bg-blue-50 dark:bg-blue-950/30',        badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', dot: 'bg-blue-500' },
+  export:     { label: 'Export',     icon: Download,      cell: 'bg-sky-50 dark:bg-sky-950/30',          badge: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300', dot: 'bg-sky-500' },
+  none:       { label: 'None',       icon: XCircle,       cell: '',                                       badge: 'bg-gray-100 text-gray-400 dark:bg-gray-800/40 dark:text-gray-500', dot: 'bg-gray-300' },
 };
 
-function AccessCell({ level }: { level: AccessLevel }) {
-  const cfg = ACCESS_CONFIG[level];
-  const Icon = cfg.icon;
+// ─── Permission detail popover ────────────────────────────────────────────────
+function PermissionDetail({ role, resource }: { role: AppRole; resource: ResourceType }) {
+  const perms = (DEFAULT_ROLE_PERMISSIONS[role] || []).filter(p => p.resource === resource);
+  if (perms.length === 0) return <span className="text-xs text-muted-foreground">No access</span>;
   return (
-    <div className={cn('w-full h-full flex items-center justify-center py-2', cfg.cell)}>
-      <Icon className={cn(
-        'h-4 w-4',
-        level === 'full'    && 'text-emerald-600 dark:text-emerald-400',
-        level === 'read'    && 'text-blue-500 dark:text-blue-400',
-        level === 'submit'  && 'text-amber-500 dark:text-amber-400',
-        level === 'approve' && 'text-purple-500 dark:text-purple-400',
-        level === 'none'    && 'text-gray-300 dark:text-gray-600',
-      )} />
+    <div className="flex flex-wrap gap-1">
+      {perms.map(p => (
+        <Badge key={p.action} variant="outline" className="text-[10px] px-1.5 py-0">
+          {ACTION_LABELS[p.action as ActionType] || p.action}
+        </Badge>
+      ))}
     </div>
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export function RoleAccessMap() {
-  const { users } = useAppContext();
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(RESOURCE_GROUPS.map(g => g.group)));
+  const [selectedRole, setSelectedRole] = useState<AppRole | null>(null);
+  const [activeTab, setActiveTab] = useState<'matrix' | 'role-detail' | 'legend'>('matrix');
 
-  // Count users per role
-  const userCountByRole = ROLES.reduce((acc, role) => {
-    const normalRole = normalizeRole(role) ?? '';
-    acc[role] = users.filter(u => {
-      const ur = normalizeRole(u.role || '') ?? '';
-      return ur === normalRole;
-    }).length;
-    return acc;
-  }, {} as Record<string, number>);
+  const filteredGroups = useMemo(() => {
+    const q = search.toLowerCase();
+    return RESOURCE_GROUPS.map(g => ({
+      ...g,
+      resources: g.resources.filter(r =>
+        RESOURCE_LABELS[r]?.toLowerCase().includes(q) || r.toLowerCase().includes(q)
+      ),
+    })).filter(g => g.resources.length > 0);
+  }, [search]);
 
-  const categories = Array.from(new Set(MODULES.map(m => m.category)));
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(group) ? next.delete(group) : next.add(group);
+      return next;
+    });
+  };
+
+  // Role detail: show all resources for a selected role with actions
+  const roleDetailGroups = useMemo(() => {
+    if (!selectedRole) return [];
+    return RESOURCE_GROUPS.map(g => ({
+      ...g,
+      resources: g.resources.filter(r => {
+        const perms = (DEFAULT_ROLE_PERMISSIONS[selectedRole] || []).filter(p => p.resource === r);
+        return perms.length > 0;
+      }),
+    })).filter(g => g.resources.length > 0);
+  }, [selectedRole]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Grid3X3 className="h-5 w-5 text-blue-500" />
-          Role Access Map
-        </h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Complete view of what every role can see and do across all modules.
-        </p>
-      </div>
-
-      <Tabs defaultValue="matrix">
-        <TabsList>
-          <TabsTrigger value="matrix" className="gap-2">
-            <Grid3X3 className="h-4 w-4" />
-            Permission Matrix
-          </TabsTrigger>
-          <TabsTrigger value="cost-buttons" className="gap-2">
-            <BadgeCheck className="h-4 w-4" />
-            Cost Submission Buttons
-          </TabsTrigger>
-          <TabsTrigger value="by-role" className="gap-2">
-            <Map className="h-4 w-4" />
-            By Role
-          </TabsTrigger>
-          <TabsTrigger value="users" className="gap-2">
-            <Users className="h-4 w-4" />
-            User Distribution
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ── Tab 1: Full permission matrix ── */}
-        <TabsContent value="matrix" className="pt-4">
-          {/* Legend */}
-          <div className="flex flex-wrap gap-3 mb-4">
-            {(Object.entries(ACCESS_CONFIG) as [AccessLevel, typeof ACCESS_CONFIG[AccessLevel]][]).map(([level, cfg]) => {
-              const Icon = cfg.icon;
-              return (
-                <div key={level} className="flex items-center gap-1.5 text-xs">
-                  <Icon className={cn(
-                    'h-3.5 w-3.5',
-                    level === 'full'    && 'text-emerald-600',
-                    level === 'read'    && 'text-blue-500',
-                    level === 'submit'  && 'text-amber-500',
-                    level === 'approve' && 'text-purple-500',
-                    level === 'none'    && 'text-gray-300',
-                  )} />
-                  <span className="text-muted-foreground">{cfg.label}</span>
-                </div>
-              );
-            })}
+    <TooltipProvider>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Grid3X3 className="h-5 w-5 text-blue-600" />
+                Live Permission Matrix
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Derived from DEFAULT_ROLE_PERMISSIONS — reflects current role definitions in real time
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search module…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-8 h-8 text-xs w-44"
+                />
+              </div>
+            </div>
           </div>
+        </CardHeader>
 
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur px-3 py-2 text-left font-semibold min-w-[180px] border-r">
-                    Module / Feature
-                  </th>
-                  {ROLES.map(role => (
-                    <th
-                      key={role}
-                      className="px-1 py-2 text-center font-semibold min-w-[40px] border-r last:border-r-0 cursor-pointer hover:bg-primary/5"
-                      onClick={() => setSelectedRole(selectedRole === role ? null : role)}
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px]', ROLE_COLOR[role])}>
-                          {ROLE_SHORT[role]}
-                        </div>
-                        {userCountByRole[role] > 0 && (
-                          <span className="text-[9px] text-muted-foreground">{userCountByRole[role]}u</span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map(cat => (
-                  <>
-                    <tr key={`cat-${cat}`} className="border-b bg-muted/30">
-                      <td colSpan={ROLES.length + 1} className="sticky left-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30">
-                        {cat}
-                      </td>
+        <CardContent className="p-0">
+          <Tabs value={activeTab} onValueChange={v => setActiveTab(v as any)}>
+            <div className="px-6 border-b">
+              <TabsList className="h-9 mb-0 rounded-none border-0 bg-transparent gap-1">
+                <TabsTrigger value="matrix" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none">
+                  <Grid3X3 className="h-3.5 w-3.5 mr-1" /> Permission Matrix
+                </TabsTrigger>
+                <TabsTrigger value="role-detail" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none">
+                  <Shield className="h-3.5 w-3.5 mr-1" /> Role Deep-Dive
+                </TabsTrigger>
+                <TabsTrigger value="legend" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none">
+                  <Info className="h-3.5 w-3.5 mr-1" /> Legend
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* ── Matrix Tab ── */}
+            <TabsContent value="matrix" className="mt-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse min-w-[900px]">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="py-2.5 px-4 text-left font-semibold text-muted-foreground w-44 sticky left-0 bg-muted/60 z-10">
+                        Module / Resource
+                      </th>
+                      {ROLES.map(role => (
+                        <th key={role} className="py-2 px-1 text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={cn(
+                                'inline-flex items-center justify-center w-9 h-6 rounded text-[10px] font-bold text-white cursor-default',
+                                ROLE_COLOR[role] || 'bg-gray-500'
+                              )}>
+                                {ROLE_SHORT[role] || role.slice(0, 2)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">{role}</TooltipContent>
+                          </Tooltip>
+                        </th>
+                      ))}
                     </tr>
-                    {MODULES.filter(m => m.category === cat).map((mod, i) => (
-                      <tr key={mod.name} className={cn('border-b hover:bg-muted/20 transition-colors', i % 2 === 0 ? '' : 'bg-muted/10')}>
-                        <td className="sticky left-0 z-10 bg-background px-3 py-1.5 border-r">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-base leading-none">{mod.icon}</span>
-                            <div>
-                              <p className="font-medium leading-tight">{mod.name}</p>
-                              <p className="text-[10px] text-muted-foreground/60 leading-tight">{mod.nameAr}</p>
-                            </div>
-                          </div>
-                        </td>
-                        {ROLES.map(role => {
-                          const level = (mod.access[role] ?? 'none') as AccessLevel;
-                          return (
-                            <td
-                              key={role}
-                              className={cn(
-                                'border-r last:border-r-0 text-center p-0',
-                                selectedRole === role && 'ring-2 ring-inset ring-primary/30',
-                              )}
-                            >
-                              <AccessCell level={level} />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-            <Info className="h-3 w-3" />
-            Click a role header to highlight its column. "Submit/Edit" means the role can create or update (but not approve). Additional access can be granted via per-user overrides.
-          </p>
-        </TabsContent>
-
-        {/* ── Tab 2: Cost Submission buttons per role ── */}
-        <TabsContent value="cost-buttons" className="pt-4">
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur px-3 py-2 text-left font-semibold min-w-[200px] border-r">
-                    Action Button
-                  </th>
-                  {ROLES.map(role => (
-                    <th key={role} className="px-1 py-2 text-center font-semibold min-w-[40px] border-r last:border-r-0">
-                      <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px] mx-auto', ROLE_COLOR[role])}>
-                        {ROLE_SHORT[role]}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {CS_BUTTONS.map((btn, i) => (
-                  <tr key={btn.label} className={cn('border-b hover:bg-muted/20 transition-colors', i % 2 === 0 ? '' : 'bg-muted/10')}>
-                    <td className="sticky left-0 z-10 bg-background px-3 py-2 border-r">
-                      <p className="font-medium">{btn.label}</p>
-                      <p className="text-[10px] text-muted-foreground/60">{btn.labelAr}</p>
-                    </td>
-                    {ROLES.map(role => {
-                      const has = btn.roles.includes(role);
-                      return (
-                        <td key={role} className={cn('border-r last:border-r-0 text-center p-0', has ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-gray-50/40 dark:bg-gray-900/20')}>
-                          <div className="flex items-center justify-center py-2">
-                            {has
-                              ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                              : <MinusCircle className="h-3.5 w-3.5 text-gray-200 dark:text-gray-700" />
-                            }
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-            <Info className="h-3 w-3" />
-            These are the default role-based permissions. Use the "Cost Submission Access" tab to grant extra button access to specific users.
-          </p>
-        </TabsContent>
-
-        {/* ── Tab 3: By Role (card per role) ── */}
-        <TabsContent value="by-role" className="pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {ROLES.map(role => {
-              const accessible = MODULES.filter(m => (m.access[role] ?? 'none') !== 'none');
-              const noAccess   = MODULES.filter(m => (m.access[role] ?? 'none') === 'none');
-              const userCount  = userCountByRole[role] ?? 0;
-              return (
-                <Card key={role} className="overflow-hidden">
-                  <CardHeader className="pb-2 pt-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0', ROLE_COLOR[role])}>
-                          {ROLE_SHORT[role]}
-                        </div>
-                        <div>
-                          <CardTitle className="text-sm leading-tight">{toDisplayLabel(role)}</CardTitle>
-                          <p className="text-[11px] text-muted-foreground">{userCount} user{userCount !== 1 ? 's' : ''}</p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">
-                        {accessible.length}/{MODULES.length} modules
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pb-3 space-y-2">
-                    <div className="space-y-1">
-                      {accessible.map(mod => {
-                        const level = (mod.access[role] ?? 'none') as AccessLevel;
-                        const cfg = ACCESS_CONFIG[level];
-                        return (
-                          <div key={mod.name} className="flex items-center justify-between gap-2">
-                            <span className="text-xs flex items-center gap-1">
-                              <span className="text-sm">{mod.icon}</span>
-                              {mod.name}
+                  </thead>
+                  <tbody>
+                    {filteredGroups.map(({ group, resources }) => (
+                      <>
+                        {/* Group header row */}
+                        <tr
+                          key={`group-${group}`}
+                          className="bg-muted/20 cursor-pointer hover:bg-muted/40 transition-colors"
+                          onClick={() => toggleGroup(group)}
+                        >
+                          <td colSpan={ROLES.length + 1} className="py-1.5 px-4 font-semibold text-muted-foreground text-[11px] uppercase tracking-wider sticky left-0">
+                            <span className="flex items-center gap-1.5">
+                              {expandedGroups.has(group) ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+                              {group}
                             </span>
-                            <Badge className={cn('text-[9px] px-1.5 py-0', cfg.badge)}>
-                              {cfg.label}
-                            </Badge>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {noAccess.length > 0 && (
-                      <details className="group">
-                        <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                          + {noAccess.length} restricted module{noAccess.length !== 1 ? 's' : ''}
-                        </summary>
-                        <div className="mt-1 space-y-0.5">
-                          {noAccess.map(mod => (
-                            <div key={mod.name} className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-                              <XCircle className="h-2.5 w-2.5" />{mod.icon} {mod.name}
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </TabsContent>
+                          </td>
+                        </tr>
 
-        {/* ── Tab 4: User Distribution ── */}
-        <TabsContent value="users" className="pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Bar chart */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                  Users per Role
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2.5">
-                  {ROLES.map(role => {
-                    const count = userCountByRole[role] ?? 0;
-                    const maxCount = Math.max(...Object.values(userCountByRole), 1);
-                    const pct = Math.round((count / maxCount) * 100);
-                    return (
-                      <div key={role} className="space-y-0.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <div className={cn('w-4 h-4 rounded-full shrink-0', ROLE_COLOR[role])} />
-                            <span className="font-medium">{toDisplayLabel(role)}</span>
-                          </div>
-                          <span className="font-semibold tabular-nums">{count}</span>
+                        {/* Resource rows */}
+                        {expandedGroups.has(group) && resources.map(resource => (
+                          <tr key={resource} className="border-b border-border/40 hover:bg-muted/10 transition-colors">
+                            <td className="py-2 px-4 font-medium text-foreground sticky left-0 bg-background z-10 border-r border-border/30">
+                              {RESOURCE_LABELS[resource] || resource}
+                            </td>
+                            {ROLES.map(role => {
+                              const level = deriveAccessLevel(role, resource);
+                              const cfg = ACCESS_CONFIG[level];
+                              const Icon = cfg.icon;
+                              return (
+                                <td key={role} className={cn('py-1.5 px-1 text-center', cfg.cell)}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex flex-col items-center gap-0.5 cursor-default">
+                                        <Icon className={cn('h-3.5 w-3.5', level === 'none' ? 'text-muted-foreground/30' : level === 'full' ? 'text-emerald-600' : level === 'approve' ? 'text-violet-600' : level === 'read+write' ? 'text-cyan-600' : level === 'submit' ? 'text-amber-600' : 'text-blue-500')} />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-xs">
+                                      <div className="space-y-1">
+                                        <p className="font-semibold text-xs">{role} → {RESOURCE_LABELS[resource]}</p>
+                                        <p className="text-[10px] text-muted-foreground">{cfg.label} access</p>
+                                        <PermissionDetail role={role} resource={resource} />
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Legend row */}
+              <div className="px-6 py-3 border-t flex flex-wrap gap-3 text-[10px]">
+                {(Object.entries(ACCESS_CONFIG) as [AccessLevel, any][]).filter(([k]) => k !== 'export').map(([level, cfg]) => {
+                  const Icon = cfg.icon;
+                  return (
+                    <span key={level} className="flex items-center gap-1 text-muted-foreground">
+                      <Icon className="h-3 w-3" />
+                      {cfg.label}
+                    </span>
+                  );
+                })}
+              </div>
+            </TabsContent>
+
+            {/* ── Role Deep-Dive Tab ── */}
+            <TabsContent value="role-detail" className="mt-0 p-6 space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">Select a role to see every action it can perform across all modules.</p>
+                <div className="flex flex-wrap gap-2">
+                  {ROLES.map(role => (
+                    <button
+                      key={role}
+                      onClick={() => setSelectedRole(role === selectedRole ? null : role)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all',
+                        selectedRole === role
+                          ? 'text-white ring-2 ring-offset-1 ' + (ROLE_COLOR[role] || 'bg-gray-500')
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      )}
+                      style={selectedRole === role ? {} : {}}
+                    >
+                      <span className={cn('w-2 h-2 rounded-full', ROLE_COLOR[role] || 'bg-gray-400')} />
+                      {ROLE_SHORT[role] || role}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedRole && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white', ROLE_COLOR[selectedRole])}>
+                      {selectedRole}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      — {(DEFAULT_ROLE_PERMISSIONS[selectedRole] || []).length} permission entries across {roleDetailGroups.length} groups
+                    </span>
+                  </div>
+
+                  {roleDetailGroups.map(({ group, resources }) => (
+                    <Card key={group} className="border-border/60">
+                      <CardHeader className="py-2.5 px-4 pb-2">
+                        <CardTitle className="text-sm font-semibold text-muted-foreground">{group}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3 pt-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {resources.map(resource => {
+                            const actions = (DEFAULT_ROLE_PERMISSIONS[selectedRole] || [])
+                              .filter(p => p.resource === resource)
+                              .map(p => p.action as ActionType);
+                            return (
+                              <div key={resource} className="flex items-start gap-2 p-2 rounded-lg bg-muted/30 border border-border/30">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{RESOURCE_LABELS[resource]}</p>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {actions.map(a => (
+                                      <Badge key={a} variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                                        {ACTION_LABELS[a] || a}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={cn('h-full rounded-full transition-all', ROLE_COLOR[role])}
-                            style={{ width: `${pct}%` }}
-                          />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {!selectedRole && (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                  <Shield className="h-10 w-10 mb-3 opacity-30" />
+                  <p className="text-sm">Select a role above to inspect its full permission set</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── Legend Tab ── */}
+            <TabsContent value="legend" className="mt-0 p-6 space-y-6">
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Access Level Key</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(Object.entries(ACCESS_CONFIG) as [AccessLevel, any][]).map(([level, cfg]) => {
+                    const Icon = cfg.icon;
+                    return (
+                      <div key={level} className={cn('flex items-start gap-3 p-3 rounded-lg border', cfg.cell || 'border-border/40')}>
+                        <Icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold">{cfg.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {level === 'full' && 'Can create, read, update, delete, and approve. Highest access.'}
+                            {level === 'read+write' && 'Can read and modify records but cannot approve or delete.'}
+                            {level === 'approve' && 'Can approve or reject items submitted by others.'}
+                            {level === 'submit' && 'Can submit items for approval but cannot approve themselves.'}
+                            {level === 'read' && 'Read-only access. Can view and export but not change.'}
+                            {level === 'export' && 'Can only export data. No create/update/delete.'}
+                            {level === 'none' && 'No access. Module is hidden or blocked for this role.'}
+                          </p>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Summary stats */}
-            <div className="space-y-3">
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center">
-                      <p className="text-3xl font-bold">{users.length}</p>
-                      <p className="text-xs text-muted-foreground">Total Users</p>
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Role Codes</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {ROLES.map(role => (
+                    <div key={role} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/30">
+                      <span className={cn('inline-flex items-center justify-center w-8 h-6 rounded text-[10px] font-bold text-white flex-shrink-0', ROLE_COLOR[role])}>
+                        {ROLE_SHORT[role]}
+                      </span>
+                      <span className="text-xs truncate">{role}</span>
                     </div>
-                    <div className="text-center">
-                      <p className="text-3xl font-bold">{ROLES.length}</p>
-                      <p className="text-xs text-muted-foreground">System Roles</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-3xl font-bold">
-                        {ROLES.filter(r => (userCountByRole[r] ?? 0) > 0).length}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Populated Roles</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-3xl font-bold">
-                        {users.filter(u => {
-                          const r = normalizeRole(u.role || '');
-                          return !r;
-                        }).length}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Unassigned</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  ))}
+                </div>
+              </div>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Role Coverage</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-1.5">
-                    {ROLES.filter(r => (userCountByRole[r] ?? 0) > 0)
-                      .sort((a, b) => (userCountByRole[b] ?? 0) - (userCountByRole[a] ?? 0))
-                      .map(role => (
-                        <div key={role} className="flex items-center gap-2">
-                          <div className={cn('w-3 h-3 rounded-full shrink-0', ROLE_COLOR[role])} />
-                          <span className="text-xs flex-1">{toDisplayLabel(role)}</span>
-                          <Badge variant="secondary" className="text-xs px-1.5">
-                            {userCountByRole[role]}
-                          </Badge>
-                        </div>
-                      ))}
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20 p-4">
+                <div className="flex items-start gap-2">
+                  <Lock className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                    <p className="font-semibold">How permissions are applied</p>
+                    <p>This matrix shows default role permissions from the system codebase. Per-user overrides (set in the "User Permission Overrides" tab) can grant or block specific actions for individual users on top of these defaults.</p>
+                    <p>SuperAdmin always bypasses all checks regardless of any override.</p>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </TooltipProvider>
   );
 }

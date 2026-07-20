@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3 } from 'lucide-react';
+import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3, FlaskConical, Globe } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -15,6 +15,7 @@ import { PermissionTester } from '@/components/role-management/PermissionTester'
 import { UserPermissionOverrides } from '@/components/role-management/UserPermissionOverrides';
 import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
 import { RoleAccessMap } from '@/components/role-management/RoleAccessMap';
+import { PageAccessOverview } from '@/components/role-management/PageAccessOverview';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +27,7 @@ import { normalizeRole } from '@/utils/roleMapping';
 
 const RoleManagement = () => {
   const { currentUser, users, refreshUsers } = useAppContext();
-  const { canManageRoles: canManageRolesAuth } = useAuthorization();
+  const { canManageRoles: canManageRolesAuth, isSuperAdmin: isSuperAdminFn, hasAnyRole } = useAuthorization();
   const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
   const { toast } = useToast();
   const {
@@ -48,11 +49,12 @@ const RoleManagement = () => {
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
   const [cloneSourceRole, setCloneSourceRole] = useState<RoleWithPermissions | null>(null);
 
-  // Gate by granular permissions (fallback to legacy for backward compatibility)
+  // ── Access gates ─────────────────────────────────────────────────────────
   const canManageRoles = canManageRolesAuth();
-  const isSuperAdmin = normalizeRole(currentUser?.role || '') === 'superAdmin' ||
-    currentUser?.role?.toLowerCase().replace(/[_\s]/g, '') === 'superadmin' ||
-    currentUser?.role?.toLowerCase() === 'admin';
+  // FIX: isSuperAdmin uses the proper hook — Admin is NOT Super Admin
+  const isSuperAdmin = isSuperAdminFn();
+  // Admin can see Cost Submission Access (both SA and Admin)
+  const isAdminOrAbove = isSuperAdmin || hasAnyRole(['admin', 'Admin']);
 
   if (!canManageRoles) {
     return (
@@ -142,10 +144,9 @@ const RoleManagement = () => {
   };
 
   const getAssignedUsers = (role: RoleWithPermissions) => {
-    // Filter users who have this specific role
     return users.filter(user => {
       const userRoles = getUserRolesByUserId(user.id);
-      return userRoles.some(userRole => 
+      return userRoles.some(userRole =>
         (role.is_system_role && userRole.role === role.name) ||
         (!role.is_system_role && userRole.role_id === role.id)
       );
@@ -157,11 +158,9 @@ const RoleManagement = () => {
     return users.filter(user => !assignedUsers.some(assigned => assigned.id === user.id));
   };
 
-  // Keep Users page in sync when assignments change
   const handleAssignRoleToUser = async (data: AssignRoleRequest): Promise<void> => {
     if (!selectedRole) return;
 
-    // Enforce exclusivity: clear existing roles for the target user first
     const { error: clearErr } = await supabase
       .from('user_roles')
       .delete()
@@ -172,13 +171,9 @@ const RoleManagement = () => {
       return;
     }
 
-    // Assign only the selected role (system or custom)
     const ok = await assignRoleToUser(data);
-    if (!ok) {
-      return;
-    }
+    if (!ok) return;
 
-    // Update profiles.role for system roles to reflect primary; set neutral for custom
     if (selectedRole.is_system_role) {
       const { error: profErr } = await supabase
         .from('profiles')
@@ -193,7 +188,6 @@ const RoleManagement = () => {
       if (profErr) console.warn('profiles.role neutral update failed (RLS?):', profErr);
     }
 
-    // Refresh lists so Assigned Users updates immediately
     await fetchUserRoles();
     await refreshUsers();
   };
@@ -221,10 +215,20 @@ const RoleManagement = () => {
             Role Management
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Manage roles, permissions, and per-user overrides
+            Manage roles, permissions, page access, and per-user overrides
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowPermissionTester(true)}
+            data-testid="button-open-permission-tester"
+            className="gap-1.5"
+          >
+            <FlaskConical className="h-4 w-4" />
+            Test Permissions
+          </Button>
           <Button
             size="sm"
             onClick={() => setShowCreateDialog(true)}
@@ -277,11 +281,13 @@ const RoleManagement = () => {
 
       {/* Tabbed content */}
       <Tabs defaultValue="roles">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="roles" className="gap-2">
             <Shield className="h-4 w-4" />
             Roles
           </TabsTrigger>
+
+          {/* User Permission Overrides — Super Admin only */}
           {isSuperAdmin && (
             <TabsTrigger value="overrides" className="gap-2" data-testid="tab-user-overrides">
               <UserCog className="h-4 w-4" />
@@ -291,15 +297,30 @@ const RoleManagement = () => {
               </Badge>
             </TabsTrigger>
           )}
-          {isSuperAdmin && (
+
+          {/* Cost Submission Access — Admin AND Super Admin */}
+          {isAdminOrAbove && (
             <TabsTrigger value="cost-submissions" className="gap-2" data-testid="tab-cost-submission-perms">
               <Lock className="h-4 w-4" />
               Cost Submission Access
               <Badge variant="secondary" className="ml-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] px-1.5">
-                Super Admin
+                {isSuperAdmin ? 'Super Admin' : 'Admin'}
               </Badge>
             </TabsTrigger>
           )}
+
+          {/* Page Access Overview — Admin AND Super Admin */}
+          {isAdminOrAbove && (
+            <TabsTrigger value="page-access" className="gap-2" data-testid="tab-page-access">
+              <Globe className="h-4 w-4" />
+              Page Access
+              <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5">
+                {isSuperAdmin ? 'Super Admin' : 'Admin'}
+              </Badge>
+            </TabsTrigger>
+          )}
+
+          {/* Access Map — visible to all who can manage roles */}
           <TabsTrigger value="access-map" className="gap-2" data-testid="tab-access-map">
             <Grid3X3 className="h-4 w-4" />
             Access Map
@@ -308,7 +329,6 @@ const RoleManagement = () => {
 
         {/* ── Tab 1: Roles ── */}
         <TabsContent value="roles" className="space-y-6">
-          {/* System Roles */}
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-semibold">System Roles</h2>
@@ -329,7 +349,6 @@ const RoleManagement = () => {
             </div>
           </div>
 
-          {/* Custom Roles */}
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-semibold">Custom Roles</h2>
@@ -374,14 +393,21 @@ const RoleManagement = () => {
           </TabsContent>
         )}
 
-        {/* ── Tab 3: Cost Submission Access Control (Super Admin only) ── */}
-        {isSuperAdmin && (
+        {/* ── Tab 3: Cost Submission Access Control (Admin + Super Admin) ── */}
+        {isAdminOrAbove && (
           <TabsContent value="cost-submissions">
             <CostSubmissionPermissions />
           </TabsContent>
         )}
 
-        {/* ── Tab 4: Access Map (all admins) ── */}
+        {/* ── Tab 4: Page Access Overview (Admin + Super Admin) ── */}
+        {isAdminOrAbove && (
+          <TabsContent value="page-access">
+            <PageAccessOverview />
+          </TabsContent>
+        )}
+
+        {/* ── Tab 5: Access Map (all admins) ── */}
         <TabsContent value="access-map">
           <RoleAccessMap />
         </TabsContent>
@@ -419,18 +445,19 @@ const RoleManagement = () => {
         isLoading={isLoading}
       />
 
-      {/* Permission Tester Dialog */}
+      {/* Permission Tester Dialog — now has a real trigger button */}
       <Dialog open={showPermissionTester} onOpenChange={setShowPermissionTester}>
         <DialogContent className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[85vh] overflow-y-auto p-0">
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Permission Testing</h2>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowPermissionTester(false)}
-              >
-                Close
-              </Button>
+              <div>
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FlaskConical className="h-5 w-5 text-blue-600" />
+                  Permission Tester
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Simulate any user's effective permissions including overrides</p>
+              </div>
+              <Button variant="outline" onClick={() => setShowPermissionTester(false)}>Close</Button>
             </div>
             <PermissionTester />
           </div>
