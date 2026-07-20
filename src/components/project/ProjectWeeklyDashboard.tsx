@@ -898,19 +898,36 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-bold text-foreground">Activity Status</p>
-                  {allSubActs.length > 0 && (
-                    <button onClick={() => setIncludeSubActs(p => !p)}
-                      className="flex items-center gap-1 text-[9px] font-semibold text-indigo-500 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2 py-1"
-                      data-testid="include-sub-toggle">
-                      <Layers className="h-2.5 w-2.5" />
-                      {includeSubActs ? 'Sub-tasks on' : 'Top-level'}
+                  <div className="flex items-center gap-1.5">
+                    {allSubActs.length > 0 && (
+                      <button onClick={() => setIncludeSubActs(p => !p)}
+                        className="flex items-center gap-1 text-[9px] font-semibold text-indigo-500 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2 py-1"
+                        data-testid="include-sub-toggle">
+                        <Layers className="h-2.5 w-2.5" />
+                        {includeSubActs ? 'Sub-tasks on' : 'Top-level'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => navigate(`/projects/${project.id}/activities/create`)}
+                      className="flex items-center gap-1 text-[9px] font-semibold text-white bg-[#0F2041] hover:bg-[#1D3461] rounded-lg px-2 py-1 transition-colors"
+                      data-testid="btn-add-activity-dashboard"
+                    >
+                      <Plus className="h-2.5 w-2.5" />
+                      Add
                     </button>
-                  )}
+                  </div>
                 </div>
                 {totalCount === 0 ? (
-                  <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
-                    <CheckCircle className="h-10 w-10 text-muted/50" />
+                  <div className="flex flex-col items-center py-6 text-muted-foreground gap-2">
+                    <CheckCircle className="h-8 w-8 text-muted/50" />
                     <p className="text-xs">No activities yet</p>
+                    <button
+                      onClick={() => navigate(`/projects/${project.id}/activities/create`)}
+                      className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:opacity-80 transition-opacity"
+                      data-testid="btn-add-first-activity"
+                    >
+                      + Add first activity
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -932,7 +949,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
                       <div className="space-y-2.5 flex-1">
                         {[
                           { label: 'Completed',   n: completedCount,  color: 'bg-indigo-500' },
-                          { label: 'In Progress', n: inProgressCount, color: 'bg-violet-500' },
+                          { label: 'Active',      n: inProgressCount, color: 'bg-violet-500' },
                           { label: 'Not Started', n: notStartedCount, color: 'bg-slate-200 dark:bg-slate-700' },
                         ].map(row => (
                           <div key={row.label}>

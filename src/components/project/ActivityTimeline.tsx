@@ -55,7 +55,7 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ activities }) => {
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium">{activity.name}</h4>
                   <Badge variant={activity.status === 'completed' ? 'default' : 'outline'}>
-                    {activity.status}
+                    {{ pending: 'Not Started', inProgress: 'Active', completed: 'Completed', cancelled: 'Deactivated' }[activity.status] ?? activity.status}
                   </Badge>
                 </div>
                 {activity.description && (

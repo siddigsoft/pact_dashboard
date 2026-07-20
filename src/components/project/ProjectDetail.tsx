@@ -1318,10 +1318,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   low:    { label: 'Low',    cls: 'bg-green-100 text-green-700 border-green-200' },
                 }[activity.priority ?? 'medium'];
                 const statusMeta = {
-                  completed: { label: 'Completed', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-                  inProgress:{ label: 'In Progress',cls: 'bg-blue-100 text-blue-700 border-blue-200' },
-                  pending:   { label: 'Pending',   cls: 'bg-gray-100 text-gray-600 border-gray-200' },
-                  cancelled: { label: 'Cancelled', cls: 'bg-orange-100 text-orange-600 border-orange-200' },
+                  completed: { label: 'Completed',   cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+                  inProgress:{ label: 'Active',       cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+                  pending:   { label: 'Not Started',  cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+                  cancelled: { label: 'Deactivated',  cls: 'bg-orange-100 text-orange-600 border-orange-200' },
                 }[activity.status] ?? { label: activity.status, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
                 const isOverdue = activity.dueDate && activity.status !== 'completed' && new Date(activity.dueDate) < new Date();
                 const progress = activity.progress ?? 0;

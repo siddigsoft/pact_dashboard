@@ -38,10 +38,10 @@ interface ActivityFormProps {
 }
 
 const STATUS_CFG = {
-  pending:    { label: 'Pending',     dot: 'bg-slate-400' },
-  inProgress: { label: 'In Progress', dot: 'bg-blue-500' },
-  completed:  { label: 'Completed',   dot: 'bg-emerald-500' },
-  cancelled:  { label: 'Cancelled',   dot: 'bg-rose-500' },
+  pending:    { label: 'Not Started',  dot: 'bg-slate-400' },
+  inProgress: { label: 'Active',       dot: 'bg-blue-500' },
+  completed:  { label: 'Completed',    dot: 'bg-emerald-500' },
+  cancelled:  { label: 'Deactivated',  dot: 'bg-rose-500' },
 };
 
 const PRIORITY_CFG = {
