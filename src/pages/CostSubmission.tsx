@@ -395,20 +395,28 @@ const CostSubmission = () => {
 
   const [viewingSubmission, setViewingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [resolvedProfiles, setResolvedProfiles] = useState<Record<string, { name: string; email: string }>>({});
+  // Ref tracks in-flight profile fetches so we never fire duplicate Supabase queries
+  const fetchingProfileIdsRef = useRef<Set<string>>(new Set());
 
   // Resolve any submitted_by IDs that aren't in the cached `users` array
   // (happens when RLS hides certain profiles from the current viewer's role)
+  // NOTE: resolvedProfiles is intentionally NOT in the dep array — including it
+  // causes an update loop (set state → dep changes → effect re-runs).
+  // The fetchingProfileIdsRef deduplicates in-flight requests instead.
   useEffect(() => {
     const id = viewingSubmission?.submitted_by;
     if (!id) return;
     if (users.find(u => u.id === id)) return;
     if (resolvedProfiles[id]) return;
+    if (fetchingProfileIdsRef.current.has(id)) return;
+    fetchingProfileIdsRef.current.add(id);
     supabase
       .from('profiles')
       .select('id, full_name, username, email')
       .eq('id', id)
       .maybeSingle()
       .then(({ data }) => {
+        fetchingProfileIdsRef.current.delete(id);
         if (data) {
           const p = data as any;
           setResolvedProfiles(prev => ({
@@ -420,7 +428,8 @@ const CostSubmission = () => {
           }));
         }
       });
-  }, [viewingSubmission?.submitted_by, users, resolvedProfiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingSubmission?.submitted_by, users]);
 
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
@@ -5121,11 +5130,11 @@ const CostSubmission = () => {
 
                       return (
                         <div>
-                          {/* Navy header row: clicking opens detail sheet; Expand button toggles accordion */}
+                          {/* Navy header row: clicking expands/collapses the group; use View button inside or footer to open details */}
                           <div
                             className="flex items-stretch bg-gradient-to-r from-[#0F2041] to-[#1D3461] cursor-pointer select-none hover:from-[#1a2f58] hover:to-[#243d6e] transition-colors"
                             style={{ borderLeft: `4px solid ${headerBorderColor}` }}
-                            onClick={() => setViewingSubmission(groupItems[0])}
+                            onClick={() => toggleGroup(groupId!)}
                             data-testid={`button-group-toggle-${groupId}`}
                           >
                             {/* Group-level checkbox — stops propagation so it doesn't also toggle expand */}
