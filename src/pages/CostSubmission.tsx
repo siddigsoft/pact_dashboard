@@ -283,7 +283,60 @@ const CostSubmission = () => {
     return (valid as readonly string[]).includes(t ?? '') ? (t as "all" | "pending" | "under_review" | "approved" | "rejected" | "partially_paid" | "paid" | "reconciled") : "all";
   });
   const [showGuide, setShowGuide] = useState(false);
-  // operationalCosts and operationalCostsLoading come from the useQuery below
+  // ----- Operational Costs (cached via TanStack Query) -----
+  const _opsQueryKey = useMemo(
+    () => ['operationalCosts', currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser] as const,
+    [currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser]
+  );
+  const {
+    data: operationalCosts = [],
+    isLoading: operationalCostsLoading,
+    isFetching: operationalCostsFetching,
+    error: operationalCostsError,
+    refetch: fetchOperationalCosts,
+  } = useQuery({
+    queryKey: _opsQueryKey,
+    enabled: !!currentUser?.id,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    retry: 1,
+    queryFn: async (): Promise<OperationalCostSubmission[]> => {
+      if (!currentUser?.id) return [];
+      const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      const isSuperAdminDirect = userRole === 'superadmin' || userRole === 'superadministrator';
+      const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
+      const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
+
+      if (shouldFetchAll) {
+        // Try SECURITY DEFINER RPC first — bypasses RLS
+        const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+        console.log(`[CostSubmission] RPC: ${(rpcResult.data as any[] | null)?.length ?? 'null'} rows, error: ${rpcResult.error?.message ?? 'none'} (role: ${currentUser.role})`);
+        if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+          return rpcResult.data as OperationalCostSubmission[];
+        }
+        console.warn('[CostSubmission] RPC failed, direct query fallback:', rpcResult.error?.message);
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5000);
+        console.log(`[CostSubmission] Direct: ${data?.length ?? 'null'} rows, error: ${error?.message ?? 'none'}`);
+        if (error) throw new Error(`Failed to load submissions: ${error.message}`);
+        return (data || []) as OperationalCostSubmission[];
+      } else {
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('*')
+          .eq('submitted_by', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (error) throw new Error(`Failed to load your submissions: ${error.message}`);
+        return (data || []) as OperationalCostSubmission[];
+      }
+    },
+  });
+  // ----------------------------------------------------------
+
   const [opsGlLogMap, setOpsGlLogMap] = useState<Map<string, string>>(new Map());
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
@@ -721,72 +774,6 @@ const CostSubmission = () => {
 
     run();
   }, [operationalCosts]);
-
-  // Paginate past Supabase server's 1000-row cap
-  const _fetchAllPages = async (baseQuery: any): Promise<{ data: any[] | null; error: any }> => {
-    const PAGE = 1000;
-    const rows: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await baseQuery.range(from, from + PAGE - 1);
-      if (error) return { data: null, error };
-      if (data && data.length > 0) rows.push(...data);
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
-    }
-    return { data: rows, error: null };
-  };
-
-  const _opsQueryKey = ['operationalCosts', currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser] as const;
-
-  const {
-    data: operationalCosts = [],
-    isLoading: operationalCostsLoading,
-    isFetching: operationalCostsFetching,
-    error: operationalCostsError,
-    refetch: fetchOperationalCosts,
-  } = useQuery({
-    queryKey: _opsQueryKey,
-    enabled: !!currentUser?.id,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-    retry: 1,
-    queryFn: async (): Promise<OperationalCostSubmission[]> => {
-      if (!currentUser?.id) return [];
-      const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
-      const isSuperAdminDirect = userRole === 'superadmin' || userRole === 'superadministrator';
-      const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
-      const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
-
-      if (shouldFetchAll) {
-        // Try the SECURITY DEFINER RPC first (bypasses RLS)
-        const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
-        console.log(`[CostSubmission] RPC result: ${(rpcResult.data as any[] | null)?.length ?? 'null'} rows, error: ${rpcResult.error?.message ?? 'none'} (role: ${currentUser.role})`);
-        if (!rpcResult.error && Array.isArray(rpcResult.data)) {
-          return rpcResult.data as OperationalCostSubmission[];
-        }
-        // RPC failed — fall back to direct table query
-        console.warn('[CostSubmission] RPC failed, falling back to direct query:', rpcResult.error?.message);
-        const { data, error } = await supabase
-          .from('operational_cost_submissions')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5000);
-        console.log(`[CostSubmission] Direct query: ${data?.length ?? 'null'} rows, error: ${error?.message ?? 'none'}`);
-        if (error) throw new Error(`Failed to load submissions: ${error.message}`);
-        return (data || []) as OperationalCostSubmission[];
-      } else {
-        const { data, error } = await supabase
-          .from('operational_cost_submissions')
-          .select('*')
-          .eq('submitted_by', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (error) throw new Error(`Failed to load your submissions: ${error.message}`);
-        return (data || []) as OperationalCostSubmission[];
-      }
-    },
-  });
 
   // Clear cost search and in-card status chips whenever the global status
   // filter tab changes so stale filters don't hide results in a new bucket
