@@ -554,9 +554,9 @@ const CostSubmission = () => {
   const isPdf   = (url: string) => /\.pdf(\?|$)/i.test(url);
 
   const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
-  // Inverted logic: tracks which groups are COLLAPSED. Empty = all expanded (default).
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(new Set());
-  const toggleGroup = (groupId: string) => setCollapsedGroupIds(prev => {
+  // Tracks which groups are EXPANDED. Empty = all collapsed (default).
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
+  const toggleGroup = (groupId: string) => setExpandedGroupIds(prev => {
     const next = new Set(prev);
     if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
     return next;
@@ -5113,7 +5113,7 @@ const CostSubmission = () => {
                        const linkedMmpName = groupItems[0].mmp_file_id ? mmpNameMap.get(groupItems[0].mmp_file_id) || null : null;
                        const projPalette = getProjectPalette(groupItems[0].project_id);
                       const groupApprovableTier = grpApprovableTier;
-                      const isExpanded = !collapsedGroupIds.has(groupId!);
+                      const isExpanded = expandedGroupIds.has(groupId!);
                       // GRP reference: last 8 chars of the UUID, uppercase
                       const grpRef = groupId ? `GRP-${groupId.slice(-8).toUpperCase()}` : '';
                       // Mixed-state border colour: orange stripe if partially rejected, default project colour otherwise
@@ -6983,7 +6983,7 @@ const CostSubmission = () => {
                       return (
                         <div key={groupId} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
                           {GroupHeader}
-                          {!collapsedGroupIds.has(groupId!) && (
+                          {expandedGroupIds.has(groupId!) && (
                             <>
                               <div>{itemElements}</div>
                               {/* Group footer */}
