@@ -108,26 +108,40 @@ export default function Offboarding() {
     },
   });
 
-  const { data: criticalPositions = [] } = useQuery({
-    queryKey: ['offboarding-critical-positions'],
+  // Fetch ALL positions with succession data to detect:
+  //  (a) departing employee holds a critical role with no/low-readiness successor
+  //  (b) departing employee IS a named successor in another position's plan
+  const { data: successionPositions = [] } = useQuery({
+    queryKey: ['offboarding-succession-positions'],
     enabled: isAdmin,
     queryFn: async () => {
       const { data } = await supabase
         .from('positions')
-        .select('id, title, current_holder_id, is_critical_role, primary_successor_id, successor_readiness')
-        .eq('is_critical_role', true);
-      return (data ?? []) as { id: string; title: string; current_holder_id: string | null; is_critical_role: boolean; primary_successor_id: string | null; successor_readiness: number | null }[];
+        .select('id, title, current_holder_id, is_critical_role, primary_successor_id, secondary_successor_id, successor_readiness');
+      return (data ?? []) as {
+        id: string; title: string; current_holder_id: string | null;
+        is_critical_role: boolean; primary_successor_id: string | null;
+        secondary_successor_id: string | null; successor_readiness: number | null;
+      }[];
     },
   });
 
   const successionRisk = useMemo(() => {
     if (!form.user_id) return null;
-    const pos = criticalPositions.find(p =>
+    // Case A: employee holds a critical role with no successor or readiness < 50%
+    const holdsRisk = successionPositions.find(p =>
+      p.is_critical_role &&
       p.current_holder_id === form.user_id &&
       (!p.primary_successor_id || (p.successor_readiness ?? 0) < 50)
     );
-    return pos ?? null;
-  }, [form.user_id, criticalPositions]);
+    if (holdsRisk) return { ...holdsRisk, riskType: 'holder' as const };
+    // Case B: employee is a named successor in any active succession plan
+    const namedSuccessor = successionPositions.find(p =>
+      p.primary_successor_id === form.user_id || p.secondary_successor_id === form.user_id
+    );
+    if (namedSuccessor) return { ...namedSuccessor, riskType: 'successor' as const };
+    return null;
+  }, [form.user_id, successionPositions]);
 
   const final = useMemo(() => {
     const credits = Number(form.pro_rated_salary) + Number(form.leave_encashment) + Number(form.eosb_payout) + Number(form.bonus_or_incentive);
@@ -430,15 +444,29 @@ export default function Offboarding() {
               <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 text-sm" data-testid="succession-risk-alert">
                 <Shield className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-semibold text-red-700">Succession Risk — Critical Position Unprotected</p>
-                  <p className="text-red-600 text-xs mt-0.5">
-                    This staff member holds the critical role <strong>"{successionRisk.title}"</strong>.{' '}
-                    {!successionRisk.primary_successor_id
-                      ? 'No successor has been nominated.'
-                      : `The nominated successor has only ${successionRisk.successor_readiness ?? 0}% readiness.`}{' '}
-                    Before proceeding, assign or develop a successor in{' '}
-                    <a href="/hr?tab=positions" className="underline font-semibold hover:text-red-700">Positions &amp; Vacancies →</a>
-                  </p>
+                  {successionRisk.riskType === 'holder' ? (
+                    <>
+                      <p className="font-semibold text-red-700">Succession Risk — Critical Position Unprotected</p>
+                      <p className="text-red-600 text-xs mt-0.5">
+                        This staff member holds the critical role <strong>"{successionRisk.title}"</strong>.{' '}
+                        {!successionRisk.primary_successor_id
+                          ? 'No successor has been nominated.'
+                          : `The nominated successor has only ${successionRisk.successor_readiness ?? 0}% readiness.`}{' '}
+                        Before proceeding, assign or develop a successor in{' '}
+                        <a href="/hr?tab=positions" className="underline font-semibold hover:text-red-700">Positions &amp; Vacancies →</a>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-red-700">Succession Plan Gap — Named Successor Departing</p>
+                      <p className="text-red-600 text-xs mt-0.5">
+                        This staff member is a named successor in the succession plan for <strong>"{successionRisk.title}"</strong>.{' '}
+                        Their departure will leave that position's succession plan without a ready backup.{' '}
+                        Update the succession plan in{' '}
+                        <a href="/hr?tab=positions" className="underline font-semibold hover:text-red-700">Positions &amp; Vacancies →</a>
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             )}

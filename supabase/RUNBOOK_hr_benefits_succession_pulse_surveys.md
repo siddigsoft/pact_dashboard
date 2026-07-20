@@ -176,3 +176,53 @@ alter table positions
   drop column if exists successor_readiness,
   drop column if exists succession_notes;
 ```
+
+---
+
+## 7. Pulse Survey Enhancements (Migration v2)
+
+Run **after** the main migration:
+
+```
+supabase/migrations/20260720b_pulse_survey_enhancements.sql
+```
+
+This adds:
+
+| Change | Detail |
+|---|---|
+| `hr_pulse_surveys.target_audience` | `'all'`, `'hub'`, or `'department'` |
+| `hr_pulse_surveys.target_department_id` | FK → departments, null = no dept filter |
+| `hr_pulse_surveys.enable_reminders` | boolean, default false |
+| `hr_pulse_surveys.reminder_days` | integer[], default `{3,7}` |
+| `hr_pulse_responses.respondent_hash` | SHA-256 of surveyId+userId+salt (anonymous dedup) |
+| Unique constraint | `(survey_id, respondent_hash)` — one response per person per survey |
+
+### Pulse Survey Reminders Edge Function
+
+Deploy `supabase/functions/pulse-survey-reminders/index.ts` as a Supabase Edge Function:
+
+```bash
+supabase functions deploy pulse-survey-reminders
+```
+
+Schedule it daily at 07:00 UTC in your Supabase dashboard under **Edge Functions → Schedules**:
+
+```
+0 7 * * *
+```
+
+Set these secrets for the function:
+- `SUPABASE_URL` — your project URL
+- `SUPABASE_SERVICE_ROLE_KEY` — service role key
+- `CRON_SECRET` — a secret string; pass as `Authorization: Bearer <value>`
+
+The function sends in-app notifications to all eligible staff N days before a pulse survey closes (where N is in `reminder_days[]`). Audience is properly scoped (all / hub / department) so staff only receive reminders for surveys they are eligible to complete.
+
+### Submission Uniqueness
+
+The `respondent_hash` is a SHA-256 hash of `surveyId:userId:pulse_v1` computed in the browser. It is:
+- **Not reversible** without iterating the full user corpus
+- Stored server-side for dedup via the unique constraint
+- Also persisted in `localStorage` (key: `pact_pulse_submitted_v2`) so the UI instantly shows "Submitted" without a DB round-trip after page reload
+

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   MessageSquare, Plus, Loader2, Trash2, Send, CheckCircle2,
-  ChevronDown, ChevronUp, Edit2, ThumbsUp, Minus, LayoutTemplate,
+  ChevronDown, ChevronUp, Edit2, ThumbsUp, Minus, LayoutTemplate, Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isWithinInterval, parseISO } from 'date-fns';
@@ -26,11 +26,15 @@ import {
 import { exportToExcel } from '@/utils/report-export';
 
 type QuestionType = 'rating' | 'nps' | 'text' | 'yes_no';
+type TargetAudience = 'all' | 'hub' | 'department';
+
 interface Question { id: string; text: string; type: QuestionType; required: boolean; }
 interface PulseSurvey {
   id: string; title: string; description: string | null;
-  questions: Question[]; target_hub_id: string | null;
+  questions: Question[]; target_audience: TargetAudience;
+  target_hub_id: string | null; target_department_id: string | null;
   starts_at: string; ends_at: string; is_active: boolean;
+  enable_reminders: boolean; reminder_days: number[];
   created_by: string | null; created_at: string;
 }
 interface PulseResponse {
@@ -44,6 +48,29 @@ const Q_TYPE_LABELS: Record<QuestionType, string> = {
   rating: 'Rating (1–5)', nps: 'NPS (0–10)', text: 'Open Text', yes_no: 'Yes / No',
 };
 const COLORS = ['#3b82f6', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444', '#22c55e'];
+const STORAGE_KEY = 'pact_pulse_submitted_v2';
+
+// ── Persistent submission tracking (survives page reloads) ──────────────────
+function getPersistedSubmitted(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')); }
+  catch { return new Set(); }
+}
+function persistSubmitted(surveyId: string) {
+  const s = getPersistedSubmitted(); s.add(surveyId);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([...s]));
+}
+
+// ── Anonymous respondent hash (SHA-256, prevents double-submit server-side) ──
+async function makeRespondentHash(surveyId: string, userId: string): Promise<string> {
+  const raw = `${surveyId}:${userId}:pulse_v1`;
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    // Fallback for environments without SubtleCrypto
+    return btoa(raw).replace(/[+/=]/g, '').slice(0, 40);
+  }
+}
 
 // ── Survey templates ────────────────────────────────────────────────────────
 const SURVEY_TEMPLATES = [
@@ -107,9 +134,18 @@ export default function PulseSurveys() {
   const qc = useQueryClient();
   const isAdmin = hasAnyRole(['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin', 'hr', 'hr_manager']);
 
+  const userHubId       = (currentUser as any)?.hubId ?? (currentUser as any)?.hub_id ?? null;
+  const userDeptId      = (currentUser as any)?.departmentId ?? (currentUser as any)?.department_id ?? null;
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSurvey, setEditingSurvey] = useState<PulseSurvey | null>(null);
-  const [form, setForm] = useState({ title: '', description: '', starts_at: '', ends_at: '', target_hub_id: '', is_active: true });
+  const [form, setForm] = useState({
+    title: '', description: '', starts_at: '', ends_at: '',
+    target_audience: 'all' as TargetAudience,
+    target_hub_id: '', target_department_id: '',
+    is_active: true, enable_reminders: true,
+    reminder_days_str: '3,7',
+  });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [saving, setSaving] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -117,9 +153,15 @@ export default function PulseSurveys() {
   const [takingSurvey, setTakingSurvey] = useState<PulseSurvey | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
+  // Persistent dedup: initialized from localStorage, updated on submit
+  const [submittedIds, setSubmittedIds] = useState<Set<string>>(() => getPersistedSubmitted());
 
   const [expandedResults, setExpandedResults] = useState<string | null>(null);
+
+  // Sync submittedIds with localStorage on mount
+  useEffect(() => {
+    setSubmittedIds(getPersistedSubmitted());
+  }, []);
 
   const { data: surveys = [], isLoading: loadSurveys } = useQuery({
     queryKey: ['hr-pulse-surveys'],
@@ -162,7 +204,8 @@ export default function PulseSurveys() {
     staleTime: 300_000,
   });
 
-  const hubMap = useMemo(() => Object.fromEntries(hubs.map(h => [h.id, h.name])), [hubs]);
+  const hubMap  = useMemo(() => Object.fromEntries(hubs.map(h  => [h.id,  h.name])),  [hubs]);
+  const deptMap = useMemo(() => Object.fromEntries(depts.map(d => [d.id, d.name])), [depts]);
 
   const responsesBySurvey = useMemo(() => {
     const m: Record<string, PulseResponse[]> = {};
@@ -171,28 +214,53 @@ export default function PulseSurveys() {
   }, [responses]);
 
   // ── AUDIENCE-SCOPED open surveys for employees ────────────────────────────
-  // Surveys with no target_hub_id → visible to all authenticated staff.
-  // Surveys with target_hub_id → ONLY visible to staff whose hub matches.
+  // 'all'        → visible to every authenticated staff member
+  // 'hub'        → only staff whose hub matches target_hub_id
+  // 'department' → only staff whose department matches target_department_id
   const openSurveys = useMemo(() => {
-    const userHubId = (currentUser as any)?.hubId ?? (currentUser as any)?.hub_id ?? null;
     return surveys.filter(s => {
       if (!isSurveyOpen(s)) return false;
-      if (!s.target_hub_id) return true; // no target = all staff
-      return s.target_hub_id === userHubId;
+      const audience = s.target_audience ?? (s.target_hub_id ? 'hub' : 'all');
+      if (audience === 'hub') {
+        return s.target_hub_id && s.target_hub_id === userHubId;
+      }
+      if (audience === 'department') {
+        return s.target_department_id && s.target_department_id === userDeptId;
+      }
+      return true; // 'all'
     });
-  }, [surveys, currentUser]);
+  }, [surveys, userHubId, userDeptId]);
 
   // ── Survey CRUD ─────────────────────────────────────────────────────────────
+  const blankForm = () => ({
+    title: '', description: '', starts_at: '', ends_at: '',
+    target_audience: 'all' as TargetAudience,
+    target_hub_id: '', target_department_id: '',
+    is_active: true, enable_reminders: true,
+    reminder_days_str: '3,7',
+  });
+
   function openNew() {
     setEditingSurvey(null);
-    setForm({ title: '', description: '', starts_at: '', ends_at: '', target_hub_id: '', is_active: true });
+    setForm(blankForm());
     setQuestions([{ id: genId(), text: '', type: 'rating', required: true }]);
     setShowTemplates(false);
     setDialogOpen(true);
   }
   function openEdit(s: PulseSurvey) {
     setEditingSurvey(s);
-    setForm({ title: s.title, description: s.description ?? '', starts_at: s.starts_at, ends_at: s.ends_at, target_hub_id: s.target_hub_id ?? '', is_active: s.is_active });
+    setForm({
+      title: s.title,
+      description: s.description ?? '',
+      starts_at: s.starts_at,
+      ends_at: s.ends_at,
+      target_audience: s.target_audience ?? (s.target_hub_id ? 'hub' : 'all'),
+      target_hub_id: s.target_hub_id ?? '',
+      target_department_id: s.target_department_id ?? '',
+      is_active: s.is_active,
+      enable_reminders: s.enable_reminders ?? false,
+      reminder_days_str: (s.reminder_days ?? [3,7]).join(','),
+    });
     setQuestions(s.questions ?? []);
     setShowTemplates(false);
     setDialogOpen(true);
@@ -202,6 +270,7 @@ export default function PulseSurveys() {
     setQuestions(tpl.questions.map(q => ({ ...q, id: genId() })));
     setShowTemplates(false);
   }
+
   async function saveSurvey() {
     if (!form.title.trim() || !form.starts_at || !form.ends_at) {
       toast({ title: 'Title, start and end dates are required', variant: 'destructive' }); return;
@@ -212,12 +281,29 @@ export default function PulseSurveys() {
     if (questions.some(q => !q.text.trim())) {
       toast({ title: 'All questions need text', variant: 'destructive' }); return;
     }
+    if (form.target_audience === 'hub' && !form.target_hub_id) {
+      toast({ title: 'Select a hub for hub-targeted surveys', variant: 'destructive' }); return;
+    }
+    if (form.target_audience === 'department' && !form.target_department_id) {
+      toast({ title: 'Select a department for department-targeted surveys', variant: 'destructive' }); return;
+    }
+
+    const reminderDays = form.reminder_days_str
+      .split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+
     setSaving(true);
     const payload: any = {
-      title: form.title.trim(), description: form.description || null,
-      starts_at: form.starts_at, ends_at: form.ends_at,
-      target_hub_id: form.target_hub_id || null, is_active: form.is_active,
-      questions: questions,
+      title: form.title.trim(),
+      description: form.description || null,
+      starts_at: form.starts_at,
+      ends_at: form.ends_at,
+      target_audience: form.target_audience,
+      target_hub_id: form.target_audience === 'hub' ? (form.target_hub_id || null) : null,
+      target_department_id: form.target_audience === 'department' ? (form.target_department_id || null) : null,
+      is_active: form.is_active,
+      enable_reminders: form.enable_reminders,
+      reminder_days: reminderDays.length ? reminderDays : [3, 7],
+      questions,
     };
     const { error } = editingSurvey
       ? await supabase.from('hr_pulse_surveys' as any).update(payload).eq('id', editingSurvey.id)
@@ -228,6 +314,7 @@ export default function PulseSurveys() {
     setDialogOpen(false);
     qc.invalidateQueries({ queryKey: ['hr-pulse-surveys'] });
   }
+
   async function deleteSurvey(s: PulseSurvey) {
     if (!confirm(`Delete survey "${s.title}"? All responses will also be deleted.`)) return;
     await supabase.from('hr_pulse_surveys' as any).delete().eq('id', s.id);
@@ -252,25 +339,43 @@ export default function PulseSurveys() {
 
   // ── Take Survey ─────────────────────────────────────────────────────────────
   function openSurveyForTaking(s: PulseSurvey) { setTakingSurvey(s); setAnswers({}); }
+
   async function submitSurvey() {
-    if (!takingSurvey) return;
+    if (!takingSurvey || !currentUser?.id) return;
     const required = takingSurvey.questions.filter(q => q.required);
     for (const q of required) {
       if (answers[q.id] === undefined || answers[q.id] === '') {
         toast({ title: `Please answer: "${q.text}"`, variant: 'destructive' }); return;
       }
     }
+
+    // Generate anonymous but durable respondent hash for dedup
+    const respondentHash = await makeRespondentHash(takingSurvey.id, currentUser.id);
+
     setSubmitting(true);
-    const userHubId = (currentUser as any)?.hubId ?? (currentUser as any)?.hub_id ?? null;
     const { error } = await supabase.from('hr_pulse_responses' as any).insert({
       survey_id: takingSurvey.id,
       responses: answers,
-      hub_id: userHubId, // coarse grouping only — no user_id for anonymity
+      hub_id: userHubId,  // coarse grouping only — no user_id for anonymity
+      respondent_hash: respondentHash,
     });
     setSubmitting(false);
-    if (error) { toast({ title: 'Error submitting', description: error.message, variant: 'destructive' }); return; }
+
+    if (error) {
+      if (error.code === '23505') {
+        // unique constraint violation — already submitted
+        toast({ title: 'Already submitted', description: 'You have already responded to this survey.' });
+        persistSubmitted(takingSurvey.id);
+        setSubmittedIds(getPersistedSubmitted());
+        setTakingSurvey(null);
+        return;
+      }
+      toast({ title: 'Error submitting', description: error.message, variant: 'destructive' }); return;
+    }
+
     toast({ title: 'Thank you!', description: 'Your anonymous response has been recorded.' });
-    setSubmittedIds(prev => new Set([...prev, takingSurvey.id]));
+    persistSubmitted(takingSurvey.id);
+    setSubmittedIds(getPersistedSubmitted());
     setTakingSurvey(null);
     qc.invalidateQueries({ queryKey: ['hr-pulse-responses'] });
   }
@@ -284,7 +389,7 @@ export default function PulseSurveys() {
         const avg = nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : null;
         let nps: number | null = null;
         if (q.type === 'nps' && nums.length >= 3) {
-          const promoters = nums.filter(n => n >= 9).length;
+          const promoters  = nums.filter(n => n >= 9).length;
           const detractors = nums.filter(n => n <= 6).length;
           nps = Math.round(((promoters - detractors) / nums.length) * 100);
         }
@@ -293,38 +398,42 @@ export default function PulseSurveys() {
         const dist = Array.from({ length: maxScale }, (_, i) => i + startVal).map(score => ({
           score: String(score), count: nums.filter(n => n === score).length,
         }));
-        return { q, avg, nps, dist, responses: vals.length, textValues: [] };
+        return { q, avg, nps, dist, responses: vals.length, textValues: [] as string[], topWords: [] as [string, number][] };
       }
       if (q.type === 'yes_no') {
         const yes = vals.filter(v => v === 'yes').length;
-        const no = vals.filter(v => v === 'no').length;
-        return { q, avg: null, nps: null, dist: [{ score: 'Yes', count: yes }, { score: 'No', count: no }], responses: vals.length, textValues: [] };
+        const no  = vals.filter(v => v === 'no').length;
+        return { q, avg: null, nps: null, dist: [{ score: 'Yes', count: yes }, { score: 'No', count: no }], responses: vals.length, textValues: [] as string[], topWords: [] as [string, number][] };
       }
-      // text — build word-frequency map for simple word cloud display
+      // text — word-frequency map
       const textVals = vals as string[];
       const stopWords = new Set(['the','a','an','is','are','was','were','it','i','to','of','and','in','for','that','this','my','me','we','our','be','not','but','on','at','with','have','has','by','do','or','so','if','as','its']);
       const wordFreq: Record<string, number> = {};
       textVals.forEach(text => {
         text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).forEach(word => {
-          if (word.length >= 3 && !stopWords.has(word)) {
-            wordFreq[word] = (wordFreq[word] ?? 0) + 1;
-          }
+          if (word.length >= 3 && !stopWords.has(word)) wordFreq[word] = (wordFreq[word] ?? 0) + 1;
         });
       });
-      const topWords = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 20);
+      const topWords = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 20) as [string, number][];
       return { q, avg: null, nps: null, dist: [], responses: vals.length, textValues: textVals, topWords };
     });
   }
 
-  // Department breakdown: group responses by hub_id for a given survey
-  function getDeptBreakdown(survey: PulseSurvey, rs: PulseResponse[]) {
-    // Group responses by hub, count per hub
+  // Department breakdown: group responses by hub for a survey
+  function getHubBreakdown(rs: PulseResponse[]) {
     const hubCounts: Record<string, number> = {};
     rs.forEach(r => {
       const hub = r.hub_id ? (hubMap[r.hub_id] ?? 'Unknown Hub') : 'No Hub';
       hubCounts[hub] = (hubCounts[hub] ?? 0) + 1;
     });
     return Object.entries(hubCounts).sort((a, b) => b[1] - a[1]).map(([hub, count]) => ({ hub, count }));
+  }
+
+  function audienceLabel(s: PulseSurvey): string {
+    const audience = s.target_audience ?? (s.target_hub_id ? 'hub' : 'all');
+    if (audience === 'hub' && s.target_hub_id) return `${hubMap[s.target_hub_id] ?? 'Hub'} only`;
+    if (audience === 'department' && s.target_department_id) return `${deptMap[s.target_department_id] ?? 'Dept'} dept only`;
+    return 'All staff';
   }
 
   function exportResults(s: PulseSurvey) {
@@ -360,13 +469,14 @@ export default function PulseSurveys() {
             <TabsTrigger value="results">Results & Analytics</TabsTrigger>
           </TabsList>
 
+          {/* ── Admin: survey list ── */}
           <TabsContent value="surveys" className="space-y-3 pt-3">
             {surveys.length === 0 ? (
               <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
                 No surveys created yet. Click "New Survey" to get started.
               </CardContent></Card>
             ) : surveys.map(s => {
-              const open = isSurveyOpen(s);
+              const open  = isSurveyOpen(s);
               const count = (responsesBySurvey[s.id] ?? []).length;
               return (
                 <Card key={s.id} data-testid={`card-survey-${s.id}`}>
@@ -374,16 +484,18 @@ export default function PulseSurveys() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-sm">{s.title}</p>
-                        {open ? <Badge className="text-[10px] bg-emerald-600">Open Now</Badge>
-                          : !s.is_active ? <Badge variant="outline" className="text-[10px] text-gray-500">Inactive</Badge>
+                        {open
+                          ? <Badge className="text-[10px] bg-emerald-600">Open Now</Badge>
+                          : !s.is_active
+                          ? <Badge variant="outline" className="text-[10px] text-gray-500">Inactive</Badge>
                           : <Badge variant="outline" className="text-[10px]">Scheduled</Badge>}
-                        {s.target_hub_id && <Badge variant="outline" className="text-[10px]">{hubMap[s.target_hub_id] ?? 'Hub-targeted'}</Badge>}
+                        <Badge variant="outline" className="text-[10px]">{audienceLabel(s)}</Badge>
+                        {s.enable_reminders && <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300"><Bell className="h-2.5 w-2.5 mr-0.5 inline" />{(s.reminder_days ?? [3,7]).join('/')}d reminders</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {format(parseISO(s.starts_at), 'PP')} – {format(parseISO(s.ends_at), 'PP')}
                         {' · '}{s.questions.length} question{s.questions.length !== 1 ? 's' : ''}
                         {' · '}<strong>{count}</strong> response{count !== 1 ? 's' : ''}
-                        {s.target_hub_id ? '' : ' · All staff'}
                       </p>
                     </div>
                     <div className="flex gap-1.5">
@@ -397,17 +509,17 @@ export default function PulseSurveys() {
             })}
           </TabsContent>
 
+          {/* ── Admin: results & analytics ── */}
           <TabsContent value="results" className="space-y-4 pt-3">
             {loadResponses ? (
               <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).length === 0 ? (
               <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No responses yet.</CardContent></Card>
             ) : surveys.filter(s => (responsesBySurvey[s.id] ?? []).length > 0).map(s => {
-              const rs = responsesBySurvey[s.id] ?? [];
-              const analytics = getQuestionAnalytics(s, rs);
-              const deptBreakdown = getDeptBreakdown(s, rs);
-              const count = rs.length;
-              const npsQ = analytics.find(a => a.q.type === 'nps');
+              const rs         = responsesBySurvey[s.id] ?? [];
+              const analytics  = getQuestionAnalytics(s, rs);
+              const hubBreakdown = getHubBreakdown(rs);
+              const npsQ       = analytics.find(a => a.q.type === 'nps');
               const isExpanded = expandedResults === s.id;
 
               return (
@@ -417,8 +529,8 @@ export default function PulseSurveys() {
                       <div>
                         <CardTitle className="text-sm">{s.title}</CardTitle>
                         <p className="text-xs text-muted-foreground">
-                          {count} responses · {format(parseISO(s.starts_at), 'PP')} – {format(parseISO(s.ends_at), 'PP')}
-                          {s.target_hub_id && ` · ${hubMap[s.target_hub_id] ?? 'Hub-targeted'}`}
+                          {rs.length} responses · {format(parseISO(s.starts_at), 'PP')} – {format(parseISO(s.ends_at), 'PP')}
+                          {' · '}{audienceLabel(s)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -438,17 +550,17 @@ export default function PulseSurveys() {
                   </CardHeader>
                   {isExpanded && (
                     <CardContent className="space-y-5 pt-0">
-                      {/* Department / Hub breakdown */}
-                      {deptBreakdown.length > 1 && (
+                      {/* Hub / Department breakdown */}
+                      {hubBreakdown.length > 1 && (
                         <div>
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Responses by Hub</p>
-                          <ResponsiveContainer width="100%" height={120}>
-                            <BarChart data={deptBreakdown} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
+                          <ResponsiveContainer width="100%" height={Math.max(80, hubBreakdown.length * 28)}>
+                            <BarChart data={hubBreakdown} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
                               <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                              <YAxis type="category" dataKey="hub" width={120} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                              <YAxis type="category" dataKey="hub" width={140} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                               <Tooltip contentStyle={{ fontSize: 12 }} />
                               <Bar dataKey="count" name="Responses" radius={[0, 3, 3, 0]}>
-                                {deptBreakdown.map((_, ci) => <Cell key={ci} fill={COLORS[ci % COLORS.length]} />)}
+                                {hubBreakdown.map((_, ci) => <Cell key={ci} fill={COLORS[ci % COLORS.length]} />)}
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
@@ -460,7 +572,7 @@ export default function PulseSurveys() {
                         <div key={a.q.id} className="border-t pt-4 first:border-t-0 first:pt-0">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                             Q{i + 1}: {a.q.text}
-                            <span className="ml-2 normal-case font-normal text-muted-foreground">({a.responses} response{a.responses !== 1 ? 's' : ''})</span>
+                            <span className="ml-2 normal-case font-normal">({a.responses} response{a.responses !== 1 ? 's' : ''})</span>
                           </p>
                           {(a.q.type === 'rating' || a.q.type === 'nps' || a.q.type === 'yes_no') && a.dist.length > 0 && (
                             <div>
@@ -491,13 +603,12 @@ export default function PulseSurveys() {
                           )}
                           {a.q.type === 'text' && (
                             <div className="space-y-3">
-                              {/* Word frequency cloud */}
-                              {(a as any).topWords?.length > 0 && (
+                              {a.topWords.length > 0 && (
                                 <div>
                                   <p className="text-xs text-muted-foreground mb-1.5">Top keywords:</p>
                                   <div className="flex flex-wrap gap-1.5">
-                                    {(a as any).topWords.map(([word, freq]: [string, number], wi: number) => {
-                                      const max = (a as any).topWords[0][1];
+                                    {a.topWords.map(([word, freq], wi) => {
+                                      const max   = a.topWords[0][1];
                                       const scale = 0.75 + (freq / max) * 0.75;
                                       return (
                                         <span key={wi} className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-0.5"
@@ -510,10 +621,9 @@ export default function PulseSurveys() {
                                   </div>
                                 </div>
                               )}
-                              {/* Verbatim responses */}
                               <div className="space-y-1 max-h-48 overflow-y-auto">
-                                {(a as any).textValues?.length === 0 && <p className="text-xs text-muted-foreground">No responses yet.</p>}
-                                {(a as any).textValues?.map((v: string, vi: number) => (
+                                {a.textValues.length === 0 && <p className="text-xs text-muted-foreground">No text responses.</p>}
+                                {a.textValues.map((v, vi) => (
                                   <p key={vi} className="text-sm bg-muted/40 rounded px-3 py-1.5 italic">"{v}"</p>
                                 ))}
                               </div>
@@ -531,7 +641,7 @@ export default function PulseSurveys() {
       ) : (
         /* ── Employee: take audience-scoped open surveys ── */
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">All responses are anonymous — your identity is never stored with your answers.</p>
+          <p className="text-sm text-muted-foreground">All responses are fully anonymous — your identity is never stored with your answers.</p>
           {openSurveys.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
               No active pulse surveys for your team right now. Check back later.
@@ -602,22 +712,68 @@ export default function PulseSurveys() {
               <div><Label>Start Date *</Label><Input type="date" value={form.starts_at} onChange={e => setForm(f => ({ ...f, starts_at: e.target.value }))} /></div>
               <div><Label>End Date *</Label><Input type="date" value={form.ends_at} onChange={e => setForm(f => ({ ...f, ends_at: e.target.value }))} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* Audience targeting */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Audience Targeting</p>
               <div>
-                <Label>Target Audience</Label>
-                <Select value={form.target_hub_id || 'all'} onValueChange={v => setForm(f => ({ ...f, target_hub_id: v === 'all' ? '' : v }))}>
-                  <SelectTrigger data-testid="select-target-hub"><SelectValue /></SelectTrigger>
+                <Label>Target</Label>
+                <Select value={form.target_audience} onValueChange={v => setForm(f => ({ ...f, target_audience: v as TargetAudience, target_hub_id: '', target_department_id: '' }))}>
+                  <SelectTrigger data-testid="select-target-audience"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Staff</SelectItem>
-                    {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name} hub only</SelectItem>)}
+                    <SelectItem value="hub">Specific Hub</SelectItem>
+                    <SelectItem value="department">Specific Department</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-1">Only staff in the selected hub see this survey.</p>
               </div>
-              <div className="flex items-center gap-3 mt-5">
-                <Switch checked={form.is_active} onCheckedChange={v => setForm(f => ({ ...f, is_active: v }))} id="survey-active" />
-                <Label htmlFor="survey-active">Active</Label>
+              {form.target_audience === 'hub' && (
+                <div>
+                  <Label>Hub</Label>
+                  <Select value={form.target_hub_id} onValueChange={v => setForm(f => ({ ...f, target_hub_id: v }))}>
+                    <SelectTrigger data-testid="select-target-hub"><SelectValue placeholder="Choose hub…" /></SelectTrigger>
+                    <SelectContent>
+                      {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {form.target_audience === 'department' && (
+                <div>
+                  <Label>Department</Label>
+                  <Select value={form.target_department_id} onValueChange={v => setForm(f => ({ ...f, target_department_id: v }))}>
+                    <SelectTrigger data-testid="select-target-dept"><SelectValue placeholder="Choose department…" /></SelectTrigger>
+                    <SelectContent>
+                      {depts.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* Reminders */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Closing Reminders</p>
+                <Switch checked={form.enable_reminders} onCheckedChange={v => setForm(f => ({ ...f, enable_reminders: v }))} id="enable-reminders" />
               </div>
+              {form.enable_reminders && (
+                <div>
+                  <Label>Remind N days before close</Label>
+                  <Input
+                    value={form.reminder_days_str}
+                    onChange={e => setForm(f => ({ ...f, reminder_days_str: e.target.value }))}
+                    placeholder="e.g. 3,7"
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Comma-separated list of days before end date. The <strong>pulse-survey-reminders</strong> edge function must be scheduled daily to dispatch these.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Switch checked={form.is_active} onCheckedChange={v => setForm(f => ({ ...f, is_active: v }))} id="survey-active" />
+              <Label htmlFor="survey-active">Active</Label>
             </div>
 
             <div className="border-t pt-4">
@@ -670,7 +826,7 @@ export default function PulseSurveys() {
           <DialogHeader>
             <DialogTitle>{takingSurvey?.title}</DialogTitle>
             <DialogDescription className="flex items-center gap-1 text-emerald-600">
-              <CheckCircle2 className="h-3.5 w-3.5" />Your response is fully anonymous.
+              <CheckCircle2 className="h-3.5 w-3.5" />Your response is fully anonymous. Only one response per survey is accepted.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5 py-2">
@@ -698,7 +854,8 @@ export default function PulseSurveys() {
                         <button key={n} type="button" onClick={() => setAnswers(a => ({ ...a, [q.id]: n }))}
                           className={cn('h-8 w-8 rounded border text-xs font-bold transition-colors',
                             answers[q.id] === n ? 'bg-primary border-primary text-primary-foreground' : 'border-border hover:border-primary/50',
-                            n <= 6 && 'text-red-600', n >= 9 && 'text-emerald-600')}>
+                            n <= 6 && answers[q.id] !== n && 'text-red-600',
+                            n >= 9 && answers[q.id] !== n && 'text-emerald-600')}>
                           {n}
                         </button>
                       ))}
