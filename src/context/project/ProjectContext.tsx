@@ -274,14 +274,25 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       if (updatedProject.activities && updatedProject.activities.length > 0) {
+        // Map app status values to DB enum (open/assigned/in_progress/completed/cancelled)
+        const toDbStatus = (s?: string) => {
+          if (!s) return 'open';
+          const map: Record<string, string> = {
+            'not-started': 'open', 'pending': 'open', 'open': 'open',
+            'in-progress': 'in_progress', 'in_progress': 'in_progress', 'assigned': 'assigned',
+            'completed': 'completed', 'done': 'completed',
+            'cancelled': 'cancelled', 'canceled': 'cancelled', 'on-hold': 'cancelled',
+          };
+          return map[s] ?? 'open';
+        };
+
         for (const activity of updatedProject.activities) {
           const dbActivity = {
-            name: activity.name,
-            description: activity.description,
+            title: activity.name,
+            description: activity.description ?? null,
             start_date: activity.startDate,
             end_date: activity.endDate,
-            status: activity.status,
-            assigned_to: activity.assignedTo,
+            status: toDbStatus(activity.status),
             project_id: updatedProject.id,
           };
 
@@ -299,19 +310,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
             const newActivityId = insertedActivity?.id;
 
-            // Insert sub-activities if provided
+            // Insert sub-activities if provided (table may not exist yet — apply migration)
             if (activity.subActivities && activity.subActivities.length > 0 && newActivityId) {
-              for (const subActivity of activity.subActivities) {
-                const dbSubActivity = {
-                  name: subActivity.name,
-                  description: subActivity.description,
-                  status: subActivity.status,
-                  due_date: subActivity.dueDate,
-                  assigned_to: subActivity.assignedTo,
-                  activity_id: newActivityId,
-                };
-                await supabase.from('sub_activities').insert(dbSubActivity);
-              }
+              try {
+                for (const subActivity of activity.subActivities) {
+                  await supabase.from('sub_activities').insert({
+                    name: subActivity.name,
+                    description: subActivity.description ?? null,
+                    status: subActivity.status,
+                    due_date: subActivity.dueDate ?? null,
+                    activity_id: newActivityId,
+                  });
+                }
+              } catch (_) { /* sub_activities table not yet created */ }
             }
           } else {
             // Existing activity: update record
@@ -324,52 +335,43 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
               throw new Error(updateActivityError.message);
             }
 
-            // Upsert sub-activities for existing activity
-            const incomingSubs = activity.subActivities ?? [];
-
-            // Delete sub-activities that were removed in the UI
-            const { data: existingSubs } = await supabase
-              .from('sub_activities')
-              .select('id')
-              .eq('activity_id', activity.id);
-            const incomingIds = new Set(
-              incomingSubs.filter(s => !s.id.startsWith('new-')).map(s => s.id)
-            );
-            const toDelete = (existingSubs ?? [])
-              .map((s: { id: string }) => s.id)
-              .filter((sid: string) => !incomingIds.has(sid));
-            if (toDelete.length > 0) {
-              const { error: delSubErr } = await supabase
+            // Upsert sub-activities for existing activity (table may not exist yet)
+            try {
+              const incomingSubs = activity.subActivities ?? [];
+              const { data: existingSubs } = await supabase
                 .from('sub_activities')
-                .delete()
-                .in('id', toDelete);
-              if (delSubErr) throw new Error(delSubErr.message);
-            }
-
-            if (incomingSubs.length > 0) {
+                .select('id')
+                .eq('activity_id', activity.id);
+              const incomingIds = new Set(
+                incomingSubs.filter(s => !s.id.startsWith('new-')).map(s => s.id)
+              );
+              const toDelete = (existingSubs ?? [])
+                .map((s: { id: string }) => s.id)
+                .filter((sid: string) => !incomingIds.has(sid));
+              if (toDelete.length > 0) {
+                await supabase.from('sub_activities').delete().in('id', toDelete);
+              }
               for (const subActivity of incomingSubs) {
-                const dbSubActivity = {
+                const dbSub = {
                   name: subActivity.name,
-                  description: subActivity.description,
+                  description: subActivity.description ?? null,
                   status: subActivity.status,
-                  due_date: subActivity.dueDate,
-                  assigned_to: subActivity.assignedTo,
+                  due_date: subActivity.dueDate ?? null,
                   activity_id: activity.id,
                 };
-                
                 if (subActivity.id.startsWith('new-')) {
-                  await supabase.from('sub_activities').insert(dbSubActivity);
+                  await supabase.from('sub_activities').insert(dbSub);
                 } else {
                   const { error: updateSubError } = await supabase
                     .from('sub_activities')
-                    .update(dbSubActivity)
+                    .update(dbSub)
                     .eq('id', subActivity.id);
                   if (updateSubError) {
                     throw new Error(updateSubError.message);
                   }
                 }
               }
-            }
+            } catch (_) { /* sub_activities table not yet created — apply migration */ }
           }
         }
       }

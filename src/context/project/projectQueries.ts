@@ -51,10 +51,10 @@ async function fetchProjects(): Promise<Project[]> {
 
   const projectIds = projectsData.map((p: any) => p.id);
 
-  // Fetch activities separately
+  // Fetch activities separately — table uses `title` as primary name column
   const { data: activitiesData } = await supabase
     .from('project_activities')
-    .select('id, project_id, name, description, start_date, end_date, due_date, status, is_active, assigned_to, priority, progress, activity_type_id')
+    .select('id, project_id, title, description, start_date, end_date, status, created_by')
     .in('project_id', projectIds);
 
   const activityIds = (activitiesData || []).map((a: any) => a.id);
@@ -104,18 +104,18 @@ async function fetchProjects(): Promise<Project[]> {
     if (!activitiesByProject[dbActivity.project_id]) activitiesByProject[dbActivity.project_id] = [];
     activitiesByProject[dbActivity.project_id].push({
       id: dbActivity.id,
-      name: dbActivity.name,
+      name: dbActivity.title ?? '',
       description: dbActivity.description,
       startDate: dbActivity.start_date,
       endDate: dbActivity.end_date,
-      dueDate: dbActivity.due_date ?? undefined,
+      dueDate: undefined,
       status: dbActivity.status,
-      priority: dbActivity.priority ?? 'medium',
-      progress: dbActivity.progress ?? 0,
-      isActive: dbActivity.is_active,
-      assignedTo: dbActivity.assigned_to,
+      priority: 'medium',
+      progress: 0,
+      isActive: true,
+      assignedTo: undefined,
       assignees: assigneesByActivity[dbActivity.id] ?? [],
-      activityTypeId: dbActivity.activity_type_id ?? undefined,
+      activityTypeId: undefined,
       subActivities: subByActivity[dbActivity.id] ?? [],
     });
   }

@@ -61,18 +61,26 @@ const CreateProjectActivity = () => {
     if (!project || !id) return;
     setSubmitting(true);
     try {
+      // Map app status to DB enum (open/assigned/in_progress/completed/cancelled)
+      const toDbStatus = (s?: string) => {
+        const map: Record<string, string> = {
+          'not-started': 'open', 'pending': 'open', 'open': 'open',
+          'in-progress': 'in_progress', 'in_progress': 'in_progress', 'assigned': 'assigned',
+          'completed': 'completed', 'done': 'completed',
+          'cancelled': 'cancelled', 'canceled': 'cancelled', 'on-hold': 'cancelled',
+        };
+        return map[s ?? ''] ?? 'open';
+      };
+
       const { data: inserted, error } = await supabase
         .from('project_activities')
         .insert({
           project_id:  id,
-          name:        activity.name,
+          title:       activity.name,
           description: activity.description ?? null,
           start_date:  activity.startDate,
           end_date:    activity.endDate,
-          due_date:    activity.dueDate ?? null,
-          status:      activity.status,
-          priority:    activity.priority ?? 'medium',
-          progress:    activity.progress ?? 0,
+          status:      toDbStatus(activity.status),
           created_by:  currentUser?.id ?? null,
         })
         .select('id')
@@ -81,15 +89,18 @@ const CreateProjectActivity = () => {
       if (error) throw error;
 
       if (activity.subActivities.length > 0 && inserted?.id) {
-        await supabase.from('sub_activities').insert(
-          activity.subActivities.map(sub => ({
-            activity_id: inserted.id,
-            name:        sub.name,
-            description: sub.description ?? null,
-            status:      sub.status,
-            due_date:    sub.dueDate ?? null,
-          }))
-        );
+        // sub_activities table may not exist yet — insert silently, don't block activity creation
+        try {
+          await supabase.from('sub_activities').insert(
+            activity.subActivities.map(sub => ({
+              activity_id: inserted.id,
+              name:        sub.name,
+              description: sub.description ?? null,
+              status:      sub.status,
+              due_date:    sub.dueDate ?? null,
+            }))
+          );
+        } catch (_) { /* sub_activities table not yet created — apply migration */ }
       }
 
       invalidate();
