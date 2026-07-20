@@ -9,11 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Search, Lock, Unlock, Loader2, X, ChevronDown, ChevronRight,
-  Users, FileText, Shield, Info, Plus, Trash2, Globe, User,
+  Users, FileText, Shield, Info, Plus, Globe, User, ChevronsUpDown, UserCircle,
 } from 'lucide-react';
 import { PAGE_DEFS } from '@/pages/PageAccessControl';
 import { cn } from '@/lib/utils';
@@ -62,6 +64,7 @@ export function PageAccessOverview() {
   const [newUserId, setNewUserId] = useState('');
   const [newBlocked, setNewBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [userPickerOpen, setUserPickerOpen] = useState(false);
 
   const { data: overrides = [], isLoading } = useQuery<Override[]>({
     queryKey: ['page-access-overrides'],
@@ -215,18 +218,51 @@ export function PageAccessOverview() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">User</label>
-                  <Select value={newUserId} onValueChange={setNewUserId}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select user…" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {(users as any[]).map((u: any) => (
-                        <SelectItem key={u.id} value={u.id} className="text-xs">
-                          {u.name || u.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={userPickerOpen} onOpenChange={setUserPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full h-8 text-xs justify-between font-normal"
+                        data-testid="page-access-user-picker"
+                      >
+                        {newUserId
+                          ? (() => { const u = (users as any[]).find((u: any) => u.id === newUserId); return u?.name || u?.email || 'Unknown'; })()
+                          : <span className="text-muted-foreground">Search user…</span>
+                        }
+                        <ChevronsUpDown className="ml-1 h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[280px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search by name or email…" className="text-xs h-8" />
+                        <CommandList>
+                          <CommandEmpty className="text-xs py-3 text-center text-muted-foreground">No users found.</CommandEmpty>
+                          <CommandGroup>
+                            {(users as any[]).map((u: any) => (
+                              <CommandItem
+                                key={u.id}
+                                value={`${u.name || ''} ${u.email || ''}`}
+                                onSelect={() => { setNewUserId(u.id); setUserPickerOpen(false); }}
+                                className="text-xs"
+                                data-testid={`page-access-user-option-${u.id}`}
+                              >
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <div className="min-w-0">
+                                    <p className="font-medium truncate">{u.name || u.email}</p>
+                                    {u.name && <p className="text-muted-foreground truncate text-[10px]">{u.email}</p>}
+                                  </div>
+                                  <Badge variant="outline" className="text-[10px] flex-shrink-0 px-1.5">
+                                    {toDisplayLabel(u.role || '')}
+                                  </Badge>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Page</label>
