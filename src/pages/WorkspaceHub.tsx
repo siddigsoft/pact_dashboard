@@ -41,6 +41,8 @@ import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
+import { NavBadgeCountsProvider } from '@/context/NavBadgeCountsContext';
+import Navbar from '@/components/Navbar';
 import { WorkspaceAccessGate } from '@/components/workspace/WorkspaceAccessGate';
 import { WorkspaceAccessManager } from '@/components/workspace/WorkspaceAccessManager';
 
@@ -2204,6 +2206,7 @@ export default function WorkspaceHub() {
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
+    <NavBadgeCountsProvider>
     <WorkspaceAccessGate>
     <TooltipProvider>
       <div className="flex h-screen bg-white dark:bg-background overflow-hidden">
@@ -2316,6 +2319,8 @@ export default function WorkspaceHub() {
             if (entries.length > 0) { setPendingDropEntries(entries); setUploadOpen(true); }
           }}
         >
+          {/* Navbar — notification bell, user menu, theme toggle */}
+          <Navbar />
           {/* Full-area drop overlay */}
           {isExternalDragOver && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#1D3461]/10 backdrop-blur-[2px] border-4 border-dashed border-[#1D3461]/50 rounded-none pointer-events-none">
@@ -3485,5 +3490,6 @@ export default function WorkspaceHub() {
       </div>
     </TooltipProvider>
     </WorkspaceAccessGate>
+    </NavBadgeCountsProvider>
   );
 }

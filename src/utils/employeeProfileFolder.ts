@@ -164,25 +164,28 @@ export async function syncHrDocsToWorkspace(
     for (const doc of hrDocs) {
       const wsPath = doc.file_path; // same path key, different bucket
 
-      // Download from staff-contracts
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from('staff-contracts')
-        .download(doc.file_path);
-      if (dlErr || !blob) {
-        console.warn('[profileFolder] could not download HR doc:', doc.doc_name, dlErr?.message);
-        continue;
-      }
+      // If already registered in workspace_files, skip the expensive download+upload
+      if (!registeredPaths.has(wsPath)) {
+        // Download from staff-contracts
+        const { data: blob, error: dlErr } = await supabase.storage
+          .from('staff-contracts')
+          .download(doc.file_path);
+        if (dlErr || !blob) {
+          console.warn('[profileFolder] could not download HR doc:', doc.doc_name, dlErr?.message);
+          continue;
+        }
 
-      // Upload to workspace-files bucket (upsert so re-syncs are idempotent)
-      const { error: upErr } = await supabase.storage
-        .from('workspace-files')
-        .upload(wsPath, blob, {
-          contentType: doc.file_mime || 'application/octet-stream',
-          upsert: true,
-        });
-      if (upErr) {
-        console.warn('[profileFolder] workspace-files upload failed:', doc.doc_name, upErr.message);
-        continue;
+        // Upload to workspace-files bucket
+        const { error: upErr } = await supabase.storage
+          .from('workspace-files')
+          .upload(wsPath, blob, {
+            contentType: doc.file_mime || 'application/octet-stream',
+            upsert: true,
+          });
+        if (upErr) {
+          console.warn('[profileFolder] workspace-files upload failed:', doc.doc_name, upErr.message);
+          continue;
+        }
       }
 
       if (!registeredPaths.has(wsPath)) {
