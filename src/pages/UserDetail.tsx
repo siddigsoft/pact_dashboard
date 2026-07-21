@@ -511,6 +511,30 @@ const UserDetail: FC = () => {
       });
   }, [user?.id]);
 
+  // Fetch document count independently so the overview card shows real numbers
+  // without requiring the user to visit the Documents tab first
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('hr_employee_documents')
+      .select('id, verification_status')
+      .eq('profile_id', user.id)
+      .then(({ data }) => {
+        if (!data) return;
+        const total    = data.length;
+        const verified = data.filter((d: any) => d.verification_status === 'verified').length;
+        setDocsVerified({ allVerified: total > 0 && verified === total, verified, total });
+      });
+  }, [user?.id]);
+
+  // Auto-create workspace dossier when profile loads with an employee ID but no folder yet
+  useEffect(() => {
+    if (!user?.employeeId || profileFolderPath || folderSyncing) return;
+    // Only auto-trigger once — when the folder doesn't exist yet
+    void triggerFolderSync(user);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.employeeId, profileFolderPath]);
+
   // Load last 4 completed review scores for sparkline trend
   useEffect(() => {
     if (!user?.id) return;
@@ -756,13 +780,12 @@ const UserDetail: FC = () => {
     }
   };
 
-  // ── Workspace folder sync: triggered when profile reaches 100% completeness ──
+  // ── Workspace folder sync: triggered automatically once employeeId is set ──
   const triggerFolderSync = async (freshUser?: any) => {
     const u = freshUser || user;
     if (!u) return;
-    // Require all 8 header-strip fields to be filled (100%)
-    const fields = [u.name, u.email, u.phone, u.hubId, u.employeeId, u.bankAccount, empDepartmentId, empContractStart];
-    if (!fields.every(Boolean)) return;
+    // Only require employeeId + name — other fields enrich the CV but are not blockers
+    if (!u.employeeId || !u.name) return;
     setFolderSyncing(true);
     try {
       const ctx = {
