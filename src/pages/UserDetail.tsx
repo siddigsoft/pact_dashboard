@@ -95,6 +95,58 @@ const TAB_GROUPS = [
   },
 ];
 
+/* ── Location & Work helpers (module-level — never redefined on render) ─── */
+function LocField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
+      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+        {label}
+        {required && <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+interface LocAddressValues { country: string; city: string; address_line1: string; address_line2: string; }
+function LocationAddressForm({ initialValues, saving, onSave, onCancel, isAdmin }: {
+  initialValues: LocAddressValues;
+  saving: boolean;
+  onSave: (v: LocAddressValues) => void;
+  onCancel: () => void;
+  isAdmin: boolean;
+}) {
+  const [v, setV] = useState<LocAddressValues>(initialValues);
+  const upd = (k: keyof LocAddressValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setV(prev => ({ ...prev, [k]: e.target.value }));
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <LocField label="Country">
+          <Input value={v.country} onChange={upd('country')} className="h-11 bg-background" placeholder="e.g. Sudan" />
+        </LocField>
+        <LocField label="City">
+          <Input value={v.city} onChange={upd('city')} className="h-11 bg-background" placeholder="e.g. Khartoum" />
+        </LocField>
+        <LocField label="Address Line 1">
+          <Input value={v.address_line1} onChange={upd('address_line1')} className="h-11 bg-background" placeholder="Street / Block / Area" />
+        </LocField>
+        <LocField label="Address Line 2">
+          <Input value={v.address_line2} onChange={upd('address_line2')} className="h-11 bg-background" placeholder="Apartment / Building (optional)" />
+        </LocField>
+      </div>
+      {isAdmin && (
+        <div className="flex items-center gap-3 pt-2">
+          <Button onClick={() => onSave(v)} disabled={saving}>
+            {saving ? "Saving…" : "Save Location"}
+          </Button>
+          <Button onClick={onCancel} variant="outline">Cancel</Button>
+        </div>
+      )}
+    </>
+  );
+}
+
 const UserDetail: FC = () => {
   const { id } = useParams<{ id: string }>();
   const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers, adminConfirmUserEmail, adminUpdateUserEmail } = useUser();
@@ -1827,16 +1879,6 @@ const UserDetail: FC = () => {
               const FIELD_STAFF = ['datacollector', 'coordinator', 'supervisor'];
               const isFieldStaff = FIELD_STAFF.includes((user.role || '').toLowerCase());
 
-              const LocField = ({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) => (
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                    {label}
-                    {required && <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>}
-                  </h3>
-                  {children}
-                </div>
-              );
-
               return (
                 <div className="p-5 sm:p-6 space-y-5">
                   {isFieldStaff ? (
@@ -1902,59 +1944,43 @@ const UserDetail: FC = () => {
                   ) : (
                     /* ── Non-Field Staff: Country / City / Address ── */
                     <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <LocField label="Country">
-                          {editMode ? (
-                            <Input value={locPersonal.country} onChange={e => setLocPersonal(p => ({ ...p, country: e.target.value }))} className="h-11 bg-background" placeholder="e.g. Sudan" />
-                          ) : (
+                      {editMode ? (
+                        <LocationAddressForm
+                          initialValues={locPersonal}
+                          saving={locSaving}
+                          onSave={async (vals) => {
+                            setLocSaving(true);
+                            try {
+                              const payload = { profile_id: user.id, ...vals };
+                              if (locPersonalId) {
+                                await supabase.from('hr_employee_personal').update(payload).eq('id', locPersonalId);
+                              } else {
+                                const { data } = await supabase.from('hr_employee_personal').insert(payload).select('id').single();
+                                if (data) setLocPersonalId(data.id);
+                              }
+                              setLocPersonal(vals);
+                              toast({ title: "Location saved", description: "Address details updated successfully." });
+                              setEditMode(false);
+                            } catch { toast({ title: "Save failed", variant: "destructive" }); }
+                            finally { setLocSaving(false); }
+                          }}
+                          onCancel={handleEditCancel}
+                          isAdmin={isAdmin}
+                        />
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <LocField label="Country">
                             <p className="font-semibold text-base">{locPersonal.country || <span className="text-muted-foreground">Not set</span>}</p>
-                          )}
-                        </LocField>
-                        <LocField label="City">
-                          {editMode ? (
-                            <Input value={locPersonal.city} onChange={e => setLocPersonal(p => ({ ...p, city: e.target.value }))} className="h-11 bg-background" placeholder="e.g. Khartoum" />
-                          ) : (
+                          </LocField>
+                          <LocField label="City">
                             <p className="font-semibold text-base">{locPersonal.city || <span className="text-muted-foreground">Not set</span>}</p>
-                          )}
-                        </LocField>
-                        <LocField label="Address Line 1">
-                          {editMode ? (
-                            <Input value={locPersonal.address_line1} onChange={e => setLocPersonal(p => ({ ...p, address_line1: e.target.value }))} className="h-11 bg-background" placeholder="Street / Block / Area" />
-                          ) : (
+                          </LocField>
+                          <LocField label="Address Line 1">
                             <p className="font-semibold text-base">{locPersonal.address_line1 || <span className="text-muted-foreground">Not set</span>}</p>
-                          )}
-                        </LocField>
-                        <LocField label="Address Line 2">
-                          {editMode ? (
-                            <Input value={locPersonal.address_line2} onChange={e => setLocPersonal(p => ({ ...p, address_line2: e.target.value }))} className="h-11 bg-background" placeholder="Apartment / Building (optional)" />
-                          ) : (
+                          </LocField>
+                          <LocField label="Address Line 2">
                             <p className="font-semibold text-base">{locPersonal.address_line2 || <span className="text-muted-foreground italic text-sm">—</span>}</p>
-                          )}
-                        </LocField>
-                      </div>
-                      {editMode && isAdmin && (
-                        <div className="flex items-center gap-3 pt-2">
-                          <Button
-                            onClick={async () => {
-                              setLocSaving(true);
-                              try {
-                                const payload = { profile_id: user.id, address_line1: locPersonal.address_line1, address_line2: locPersonal.address_line2, city: locPersonal.city, country: locPersonal.country };
-                                if (locPersonalId) {
-                                  await supabase.from('hr_employee_personal').update(payload).eq('id', locPersonalId);
-                                } else {
-                                  const { data } = await supabase.from('hr_employee_personal').insert(payload).select('id').single();
-                                  if (data) setLocPersonalId(data.id);
-                                }
-                                toast({ title: "Location saved", description: "Address details updated successfully." });
-                                setEditMode(false);
-                              } catch { toast({ title: "Save failed", variant: "destructive" }); }
-                              finally { setLocSaving(false); }
-                            }}
-                            disabled={locSaving}
-                          >
-                            {locSaving ? "Saving…" : "Save Location"}
-                          </Button>
-                          <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
+                          </LocField>
                         </div>
                       )}
                     </>
