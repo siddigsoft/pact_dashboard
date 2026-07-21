@@ -114,6 +114,9 @@ const UserDetail: FC = () => {
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
   const [isSaving, setIsSaving] = useState(false);
+  // Synchronous reentrancy guard — prevents concurrent handleEditSave calls
+  // even when React hasn't yet re-rendered the disabled button state
+  const isSavingRef = useRef(false);
 
   // ── Avatar upload ─────────────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -848,12 +851,16 @@ const UserDetail: FC = () => {
 
   const handleEditSave = async () => {
     if (!updateUser || !user) return;
+    // Synchronous guard — blocks re-entrant calls before React re-renders the button
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
 
     // Location & Work required field validation
     if (activeSection === 'location') {
       const FIELD_STAFF_ROLES = ['datacollector', 'coordinator', 'supervisor'];
       const isFieldStaff = FIELD_STAFF_ROLES.includes((user.role || '').toLowerCase());
       if (isFieldStaff && !editForm.hubId) {
+        isSavingRef.current = false;
         toast({ title: 'Required field missing', description: 'Please select a Hub before saving.', variant: 'destructive' });
         return;
       }
@@ -981,6 +988,7 @@ const UserDetail: FC = () => {
         variant: "destructive"
       });
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };
