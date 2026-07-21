@@ -1499,11 +1499,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedUser));
       }
       
-      toast({
-        title: "User updated",
-        description: `User ${updatedUser.name} has been updated successfully and will persist between sessions.`,
-      });
-      
       return true;
     } catch (error: any) {
       console.error("Update user error:", error);

@@ -932,49 +932,12 @@ const UserDetail: FC = () => {
       }
 
       if (success) {
-        // Fetch the latest user data from the database
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        // finalUser holds whichever version of the user we end up with
-        let finalUser: User = updatedUser;
-
-        if (error || !profile) {
-          setUser(updatedUser);
-          setEditForm(updatedUser);
-        } else {
-          const mappedUser: User = {
-            id: profile.id,
-            name: profile.full_name || profile.username || 'Unknown',
-            email: profile.email || updatedUser.email || '',
-            role: profile.role || updatedUser.role,
-            roles: updatedUser.roles,
-            stateId: profile.state_id || updatedUser.stateId,
-            hubId: profile.hub_id || updatedUser.hubId,
-            secondaryHubId: (profile as any).secondary_hub_id || (profile as any).location?.secondary_hub_id || updatedUser.secondaryHubId || undefined,
-            localityId: profile.locality_id || updatedUser.localityId,
-            avatar: profile.avatar_url || updatedUser.avatar,
-            username: profile.username || updatedUser.username,
-            fullName: profile.full_name || updatedUser.fullName,
-            phone: profile.phone || updatedUser.phone,
-            employeeId: profile.employee_id || updatedUser.employeeId,
-            bankAccount: (profile as any).bank_account || updatedUser.bankAccount,
-            lastActive: updatedUser.lastActive || new Date().toISOString(),
-            isApproved: profile.status === 'approved' || false,
-            availability: profile.availability || updatedUser.availability || 'offline',
-            createdAt: profile.created_at || updatedUser.createdAt || new Date().toISOString(),
-            location: (typeof profile.location === 'string')
-              ? (() => { try { return JSON.parse(profile.location); } catch { return updatedUser.location; } })()
-              : (profile.location || updatedUser.location),
-            performance: updatedUser.performance,
-          };
-          setUser(mappedUser);
-          setEditForm(mappedUser);
-          finalUser = mappedUser;
-        }
+        // Use updatedUser directly — an immediate DB re-fetch can return stale
+        // data if Supabase hasn't flushed the write yet, causing visible revert.
+        // updateUser() already confirmed the DB write succeeded, so local state
+        // is the source of truth at this point.
+        setUser(updatedUser);
+        setEditForm(updatedUser);
 
         toast({
           title: "User updated",
@@ -982,7 +945,7 @@ const UserDetail: FC = () => {
           variant: "success"
         });
         setEditMode(false);
-        void triggerFolderSync(finalUser);
+        void triggerFolderSync(updatedUser);
       } else {
         toast({
           title: "Update failed",
